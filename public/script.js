@@ -4,6 +4,7 @@ const STORAGE_KEYS = {
   currentUser: "nodent_current_user",
   authToken: "nodent_auth_token",
   rememberLogin: "nodent_remember_login",
+  practiceStatePrefix: "nodent_practice_state_",
   mySubjectsPrefix: "nodent_my_subjects_",
   chats: "nodent_public_chats",
   studyPrefix: "nodent_study_",
@@ -13,8 +14,9 @@ const STORAGE_KEYS = {
 };
 
 const LOGO_PATH = "logo.png";
+let adminUnlocked = false;
 
-const baseSubjects = [
+const BASE_SUBJECTS = [
   {
     id: "english",
     name: "English",
@@ -191,355 +193,34 @@ const baseSubjects = [
   }
 ];
 
-const defaultSubjects = ["english", "methods", "general-maths", "biology"];
-let timerInterval = null;
-let adminUnlocked = false;
-
-function getSubjects() {
-  const customQuestions = getJson(STORAGE_KEYS.customQuestions, {});
-  return baseSubjects.map(subject => ({
-    ...subject,
-    quiz: [...subject.quiz, ...(customQuestions[subject.id] || [])]
-  }));
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
-function escapeHtml(text) {
-  const div = document.createElement("div");
-  div.textContent = text;
-  return div.innerHTML;
-}
-
-function getJson(key, fallback) {
-  const raw = localStorage.getItem(key);
-  if (!raw) return fallback;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return fallback;
-  }
-}
-
-function setJson(key, value) {
-  localStorage.setItem(key, JSON.stringify(value));
-}
-
-function normalizeAnswer(text) {
-  return String(text || "")
-    .trim()
+function slugify(value) {
+  return String(value || "")
     .toLowerCase()
-    .replace(/\s+/g, " ")
-    .replace(/[.,!?;:()'"`]/g, "");
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }
 
-function getAuthToken() {
-  return localStorage.getItem(STORAGE_KEYS.authToken) || "";
+function normalizeAnswer(value) {
+  return String(value || "")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, " ");
 }
 
-function setAuthToken(token) {
-  localStorage.setItem(STORAGE_KEYS.authToken, token);
-}
-
-function clearAuthToken() {
-  localStorage.removeItem(STORAGE_KEYS.authToken);
-}
-
-function getCurrentUser() {
-  return getJson(STORAGE_KEYS.currentUser, null);
-}
-
-function setCurrentUser(user) {
-  setJson(STORAGE_KEYS.currentUser, user);
-}
-
-function clearCurrentUser() {
-  localStorage.removeItem(STORAGE_KEYS.currentUser);
-}
-
-function getLoggedIn() {
-  return Boolean(getAuthToken());
-}
-
-function getRememberLogin() {
-  return localStorage.getItem(STORAGE_KEYS.rememberLogin) === "true";
-}
-
-function setRememberLogin(value) {
-  localStorage.setItem(STORAGE_KEYS.rememberLogin, String(value));
-}
-
-function getUserEmail() {
-  const user = getCurrentUser();
-  return user ? user.email : "";
-}
-
-function getUserId() {
-  const user = getCurrentUser();
-  return user ? user.id : null;
-}
-
-async function apiFetch(url, options = {}) {
-  const headers = {
-    "Content-Type": "application/json",
-    ...(options.headers || {})
-  };
-
-  const token = getAuthToken();
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
-
-  const response = await fetch(url, {
-    ...options,
-    headers
-  });
-
-  const data = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    throw new Error(data.error || "Request failed.");
-  }
-
-  return data;
-}
-
-async function signupUser(email, password) {
-  return apiFetch("/api/signup", {
-    method: "POST",
-    body: JSON.stringify({ email, password })
-  });
-}
-
-async function loginUser(email, password) {
-  return apiFetch("/api/login", {
-    method: "POST",
-    body: JSON.stringify({ email, password })
-  });
-}
-
-async function fetchMe() {
-  return apiFetch("/api/me");
-}
-
-async function logoutApi() {
-  return apiFetch("/api/logout", {
-    method: "POST"
-  });
-}
-
-async function submitQuizScore(subjectId, score, totalQuestions) {
-  return apiFetch("/api/quiz/submit", {
-    method: "POST",
-    body: JSON.stringify({ subjectId, score, totalQuestions })
-  });
-}
-
-async function fetchLeaderboard(subjectId) {
-  return apiFetch(`/api/leaderboard/${subjectId}`);
-}
-
-async function hydrateSession() {
-  if (!getAuthToken()) return false;
-
-  try {
-    const data = await fetchMe();
-    setCurrentUser(data.user);
-    return true;
-  } catch {
-    clearAuthToken();
-    clearCurrentUser();
-    return false;
-  }
-}
-
-function getMySubjects() {
-  const userId = getUserId();
-  if (!userId) return defaultSubjects;
-  return getJson(`${STORAGE_KEYS.mySubjectsPrefix}${userId}`, defaultSubjects);
-}
-
-function setMySubjects(list) {
-  const userId = getUserId();
-  if (!userId) return;
-  setJson(`${STORAGE_KEYS.mySubjectsPrefix}${userId}`, list);
-}
-
-function getChats() {
-  return getJson(STORAGE_KEYS.chats, {});
-}
-
-function setChats(chats) {
-  setJson(STORAGE_KEYS.chats, chats);
-}
-
-function getQuizComments() {
-  return getJson(STORAGE_KEYS.quizComments, {});
-}
-
-function setQuizComments(comments) {
-  setJson(STORAGE_KEYS.quizComments, comments);
-}
-
-function addQuizComment(subjectId, questionText, text, parentCommentId = null) {
-  const comments = getQuizComments();
-  const key = `${subjectId}__${questionText}`;
-  if (!comments[key]) comments[key] = [];
-  comments[key].push({
-    id: Date.now() + Math.floor(Math.random() * 1000),
-    parentCommentId,
-    userEmail: getUserEmail(),
-    userId: getUserId(),
-    text,
-    time: new Date().toISOString()
-  });
-  setQuizComments(comments);
-}
-
-function buildCommentTree(commentList) {
-  const map = new Map();
-  const roots = [];
-
-  commentList.forEach(comment => {
-    map.set(comment.id, { ...comment, replies: [] });
-  });
-
-  commentList.forEach(comment => {
-    const item = map.get(comment.id);
-    if (comment.parentCommentId) {
-      const parent = map.get(comment.parentCommentId);
-      if (parent) {
-        parent.replies.push(item);
-      } else {
-        roots.push(item);
-      }
-    } else {
-      roots.push(item);
-    }
-  });
-
-  return roots;
-}
-
-function renderCommentItems(commentTree) {
-  if (!commentTree.length) {
-    return `<div class="empty" style="color:#566474; background:#f6f6f6; border-color:rgba(0,0,0,0.08);">No comments on this question yet.</div>`;
-  }
-
-  return commentTree.map(comment => `
-    <div class="quiz-comment-item">
-      <div class="quiz-comment-meta">${escapeHtml(comment.userEmail)} • ${escapeHtml(formatDateTime(comment.time))}</div>
-      <div class="quiz-comment-text">${escapeHtml(comment.text)}</div>
-
-      <div class="quiz-comment-actions">
-        <button class="btn-secondary quiz-reply-toggle" data-comment-id="${comment.id}" type="button">Reply</button>
-      </div>
-
-      <form class="quiz-reply-form" id="replyForm_${comment.id}" style="display:none;">
-        <input id="replyInput_${comment.id}" type="text" placeholder="Write a reply..." required />
-        <button class="btn-secondary" type="submit">Post Reply</button>
-      </form>
-
-      ${comment.replies.length ? `
-        <div class="quiz-reply-list">
-          ${comment.replies.map(reply => `
-            <div class="quiz-reply-item">
-              <div class="quiz-comment-meta">${escapeHtml(reply.userEmail)} • ${escapeHtml(formatDateTime(reply.time))}</div>
-              <div class="quiz-comment-text">${escapeHtml(reply.text)}</div>
-            </div>
-          `).join("")}
-        </div>
-      ` : ""}
-    </div>
-  `).join("");
-}
-
-function getCustomQuestions() {
-  return getJson(STORAGE_KEYS.customQuestions, {});
-}
-
-function addCustomQuestion(subjectId, question) {
-  const customQuestions = getCustomQuestions();
-  if (!customQuestions[subjectId]) customQuestions[subjectId] = [];
-  customQuestions[subjectId].push({
-    id: Date.now(),
-    ...question
-  });
-  setJson(STORAGE_KEYS.customQuestions, customQuestions);
-}
-
-function getWrittenResponses() {
-  return getJson(STORAGE_KEYS.writtenResponses, {});
-}
-
-function setWrittenResponses(data) {
-  setJson(STORAGE_KEYS.writtenResponses, data);
-}
-
-function saveWrittenResponse(subjectId, questionText, responseText) {
-  const userId = getUserId();
-  const responses = getWrittenResponses();
-  const key = `${userId}__${subjectId}__${questionText}`;
-  responses[key] = {
-    response: responseText,
-    time: new Date().toISOString()
-  };
-  setWrittenResponses(responses);
-}
-
-function getWrittenResponse(subjectId, questionText) {
-  const userId = getUserId();
-  const responses = getWrittenResponses();
-  return responses[`${userId}__${subjectId}__${questionText}`] || null;
-}
-
-function getTodayKey() {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-}
-
-function getStudyData() {
-  const userId = getUserId();
-  const key = `${STORAGE_KEYS.studyPrefix}${userId || "guest"}`;
-  const saved = getJson(key, null);
-
-  const defaultData = {
-    date: getTodayKey(),
-    dailySeconds: 0,
-    goalMinutes: 120,
-    sessionMinutes: 25,
-    remainingSeconds: 25 * 60,
-    isRunning: false,
-    sessionsCompleted: 0
-  };
-
-  if (!saved) return defaultData;
-
-  if (saved.date !== getTodayKey()) {
-    return {
-      ...defaultData,
-      goalMinutes: saved.goalMinutes || 120,
-      sessionMinutes: saved.sessionMinutes || 25,
-      remainingSeconds: (saved.sessionMinutes || 25) * 60
-    };
-  }
-
-  return { ...defaultData, ...saved };
-}
-
-function setStudyData(data) {
-  const userId = getUserId();
-  const key = `${STORAGE_KEYS.studyPrefix}${userId || "guest"}`;
-  setJson(key, data);
-}
-
-function formatDateTime(iso) {
-  return new Date(iso).toLocaleString();
-}
-
-function formatSeconds(totalSeconds) {
-  const safe = Math.max(0, totalSeconds);
-  const hours = Math.floor(safe / 3600);
-  const minutes = Math.floor((safe % 3600) / 60);
-  const seconds = safe % 60;
+function formatTime(totalSeconds) {
+  const safeSeconds = Math.max(0, Number(totalSeconds) || 0);
+  const hours = Math.floor(safeSeconds / 3600);
+  const minutes = Math.floor((safeSeconds % 3600) / 60);
+  const seconds = safeSeconds % 60;
 
   if (hours > 0) {
     return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
@@ -548,794 +229,1332 @@ function formatSeconds(totalSeconds) {
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
-function formatMinutesFromSeconds(totalSeconds) {
-  const minutes = Math.floor(totalSeconds / 60);
-  const hours = Math.floor(minutes / 60);
-  const remainingMinutes = minutes % 60;
-  if (hours === 0) return `${minutes} min`;
-  return `${hours}h ${remainingMinutes}m`;
+function formatDateTime(value) {
+  if (!value) return "Just now";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Just now";
+  return `${date.toLocaleDateString()} ${date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
 }
 
-function getSubjectById(id) {
-  return getSubjects().find(subject => subject.id === id);
+function getAuthToken() {
+  return localStorage.getItem(STORAGE_KEYS.authToken) || "";
 }
 
-function clearTimerInterval() {
-  if (timerInterval) {
-    clearInterval(timerInterval);
-    timerInterval = null;
-  }
+function setAuthSession(token, user, rememberLogin = false) {
+  localStorage.setItem(STORAGE_KEYS.authToken, token);
+  localStorage.setItem(STORAGE_KEYS.currentUser, JSON.stringify(user));
+  localStorage.setItem(STORAGE_KEYS.rememberLogin, rememberLogin ? "1" : "0");
 }
 
-async function logout() {
+function clearAuthSession() {
+  localStorage.removeItem(STORAGE_KEYS.authToken);
+  localStorage.removeItem(STORAGE_KEYS.currentUser);
+  localStorage.removeItem(STORAGE_KEYS.rememberLogin);
+}
+
+function getCurrentUser() {
   try {
-    if (getAuthToken()) {
-      await logoutApi();
-    }
-  } catch {
-    // ignore logout API error
+    return JSON.parse(localStorage.getItem(STORAGE_KEYS.currentUser) || "null");
+  } catch (_error) {
+    return null;
   }
-
-  if (!getRememberLogin()) {
-    clearCurrentUser();
-  }
-
-  clearAuthToken();
-  clearTimerInterval();
-  window.location.hash = "#login";
 }
 
-function buildSubjectFlyout(subjects, mySubjects) {
-  return `
-    <div class="subject-flyout">
-      <button class="subject-flyout-trigger" aria-label="Search subjects">⌕</button>
-      <div class="subject-flyout-panel">
-        <input id="allSubjectsSearch" type="text" placeholder="Search subjects..." />
-        <div class="subject-search-all">
-          <div class="subject-search-all-header">Add subjects</div>
-          <div class="subject-search-list" id="allSubjectsList">
-            ${subjects.map(subject => `
-              <div class="subject-search-item" data-all-name="${subject.name.toLowerCase()}">
-                <div>
-                  <h4>${subject.name}</h4>
-                  <p>${subject.description}</p>
-                </div>
-                <div>
-                  ${
-                    mySubjects.includes(subject.id)
-                      ? `<button class="btn-secondary" disabled>Added</button>`
-                      : `<button class="btn-primary" data-add-subject="${subject.id}">Add</button>`
-                  }
-                </div>
+function getUserId() {
+  const user = getCurrentUser();
+  return user ? user.id : null;
+}
+
+function getUsername() {
+  const user = getCurrentUser();
+  return user ? (user.username || user.email || "Student") : "Student";
+}
+
+function getEmail() {
+  const user = getCurrentUser();
+  return user ? (user.email || "") : "";
+}
+
+function getLoggedIn() {
+  return Boolean(getCurrentUser() && getAuthToken());
+}
+
+async function apiRequest(url, options = {}) {
+  const headers = new Headers(options.headers || {});
+  if (!headers.has("Content-Type") && !(options.body instanceof FormData)) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  const token = getAuthToken();
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  const response = await fetch(url, {
+    ...options,
+    headers
+  });
+
+  const contentType = response.headers.get("content-type") || "";
+  const payload = contentType.includes("application/json")
+    ? await response.json()
+    : await response.text();
+
+  if (!response.ok) {
+    const message = typeof payload === "string"
+      ? payload
+      : payload?.error || "Request failed.";
+    throw new Error(message);
+  }
+
+  return payload;
+}
+
+async function loginRequest(login, password) {
+  return apiRequest("/api/login", {
+    method: "POST",
+    body: JSON.stringify({ email: login, username: login, password })
+  });
+}
+
+async function signupRequest(username, email, password) {
+  return apiRequest("/api/signup", {
+    method: "POST",
+    body: JSON.stringify({ username, email, password })
+  });
+}
+
+async function logoutRequest() {
+  return apiRequest("/api/logout", { method: "POST" });
+}
+
+async function fetchProfile() {
+  return apiRequest("/api/me");
+}
+
+async function fetchComments(subjectId, questionKey) {
+  return apiRequest(`/api/comments/${encodeURIComponent(subjectId)}/${encodeURIComponent(questionKey)}`);
+}
+
+async function postComment(subjectId, questionKey, text, parentCommentId = null) {
+  return apiRequest(`/api/comments/${encodeURIComponent(subjectId)}/${encodeURIComponent(questionKey)}`, {
+    method: "POST",
+    body: JSON.stringify({ text, parentCommentId })
+  });
+}
+
+async function fetchWrittenResponseApi(subjectId, questionKey) {
+  return apiRequest(`/api/written/${encodeURIComponent(subjectId)}/${encodeURIComponent(questionKey)}`);
+}
+
+async function saveWrittenResponseApi(subjectId, questionKey, responseText) {
+  return apiRequest(`/api/written/${encodeURIComponent(subjectId)}/${encodeURIComponent(questionKey)}`, {
+    method: "PUT",
+    body: JSON.stringify({ responseText })
+  });
+}
+
+async function fetchOtherWrittenResponses(subjectId, questionKey) {
+  return apiRequest(`/api/written/${encodeURIComponent(subjectId)}/${encodeURIComponent(questionKey)}/all`);
+}
+
+function getCustomQuestionsMap() {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEYS.customQuestions) || "{}");
+  } catch (_error) {
+    return {};
+  }
+}
+
+function setCustomQuestionsMap(value) {
+  localStorage.setItem(STORAGE_KEYS.customQuestions, JSON.stringify(value));
+}
+
+function getCustomQuestionsForSubject(subjectId) {
+  const map = getCustomQuestionsMap();
+  return Array.isArray(map[subjectId]) ? map[subjectId] : [];
+}
+
+function addCustomQuestion(subjectId, question) {
+  const map = getCustomQuestionsMap();
+  if (!Array.isArray(map[subjectId])) map[subjectId] = [];
+  map[subjectId].push(question);
+  setCustomQuestionsMap(map);
+}
+
+function mergeSubjectsWithCustomQuestions(subjects) {
+  return subjects.map(subject => ({
+    ...subject,
+    quiz: [...subject.quiz, ...getCustomQuestionsForSubject(subject.id)]
+  }));
+}
+
+function getSubjectLibrary() {
+  return mergeSubjectsWithCustomQuestions(BASE_SUBJECTS);
+}
+
+function getMySubjects() {
+  const userId = getUserId() || "guest";
+  try {
+    const stored = JSON.parse(localStorage.getItem(`${STORAGE_KEYS.mySubjectsPrefix}${userId}`) || "null");
+    if (Array.isArray(stored) && stored.length) {
+      return mergeSubjectsWithCustomQuestions(stored);
+    }
+  } catch (_error) {
+    // ignore
+  }
+  const defaultSubjects = getSubjectLibrary();
+  localStorage.setItem(`${STORAGE_KEYS.mySubjectsPrefix}${userId}`, JSON.stringify(defaultSubjects));
+  return defaultSubjects;
+}
+
+function setMySubjects(subjects) {
+  const userId = getUserId() || "guest";
+  localStorage.setItem(`${STORAGE_KEYS.mySubjectsPrefix}${userId}`, JSON.stringify(subjects));
+}
+
+function getSubjectById(subjectId) {
+  return getMySubjects().find(subject => subject.id === subjectId);
+}
+
+function addSubjectToLibrary(subject) {
+  const existing = getMySubjects();
+  if (existing.some(item => item.id === subject.id)) return;
+  setMySubjects([...existing, subject]);
+}
+
+function removeSubjectFromLibrary(subjectId) {
+  setMySubjects(getMySubjects().filter(subject => subject.id !== subjectId));
+}
+
+function getPracticeState(subjectId) {
+  const userId = getUserId() || "guest";
+  try {
+    return JSON.parse(localStorage.getItem(`${STORAGE_KEYS.practiceStatePrefix}${userId}_${subjectId}`) || "null") || {
+      completedQuestionKeys: [],
+      summaryOpen: false
+    };
+  } catch (_error) {
+    return { completedQuestionKeys: [], summaryOpen: false };
+  }
+}
+
+function setPracticeState(subjectId, value) {
+  const userId = getUserId() || "guest";
+  localStorage.setItem(`${STORAGE_KEYS.practiceStatePrefix}${userId}_${subjectId}`, JSON.stringify(value));
+}
+
+function markQuestionCompleted(subjectId, questionKey) {
+  const state = getPracticeState(subjectId);
+  if (!state.completedQuestionKeys.includes(questionKey)) {
+    state.completedQuestionKeys.push(questionKey);
+    setPracticeState(subjectId, state);
+  }
+}
+
+function getWrittenResponses() {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEYS.writtenResponses) || "{}");
+  } catch (_error) {
+    return {};
+  }
+}
+
+function saveWrittenResponse(subjectId, questionKey, response) {
+  const userId = getUserId() || "guest";
+  const allResponses = getWrittenResponses();
+  const compositeKey = `${userId}__${subjectId}__${questionKey}`;
+  allResponses[compositeKey] = {
+    response,
+    time: new Date().toISOString()
+  };
+  localStorage.setItem(STORAGE_KEYS.writtenResponses, JSON.stringify(allResponses));
+}
+
+function getWrittenResponse(subjectId, questionKey) {
+  const userId = getUserId() || "guest";
+  const allResponses = getWrittenResponses();
+  return allResponses[`${userId}__${subjectId}__${questionKey}`] || null;
+}
+
+function getQuizComments() {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEYS.quizComments) || "{}");
+  } catch (_error) {
+    return {};
+  }
+}
+
+function addQuizComment(subjectId, questionKey, text, parentCommentId = null) {
+  const comments = getQuizComments();
+  const compound = `${subjectId}__${questionKey}`;
+  if (!Array.isArray(comments[compound])) comments[compound] = [];
+
+  comments[compound].push({
+    id: Date.now() + Math.random(),
+    parentCommentId,
+    userId: getUserId(),
+    username: getUsername(),
+    text,
+    time: new Date().toISOString()
+  });
+
+  localStorage.setItem(STORAGE_KEYS.quizComments, JSON.stringify(comments));
+}
+
+function buildCommentTree(flatComments) {
+  const nodes = flatComments.map(comment => ({
+    ...comment,
+    children: []
+  }));
+  const lookup = new Map(nodes.map(item => [item.id, item]));
+  const roots = [];
+
+  nodes.forEach(node => {
+    if (node.parentCommentId && lookup.has(node.parentCommentId)) {
+      lookup.get(node.parentCommentId).children.push(node);
+    } else {
+      roots.push(node);
+    }
+  });
+
+  return roots;
+}
+
+function renderCommentItems(comments) {
+  if (!comments.length) {
+    return `<div class="empty">No comments yet. Start the discussion.</div>`;
+  }
+
+  return comments.map(comment => `
+    <article class="quiz-comment-item">
+      <div class="quiz-comment-meta">${escapeHtml(comment.username)} • ${escapeHtml(formatDateTime(comment.time))}</div>
+      <div class="quiz-comment-text">${escapeHtml(comment.text)}</div>
+      <div class="quiz-comment-actions">
+        <button class="btn-secondary quiz-reply-toggle" data-comment-id="${comment.id}" type="button">Reply</button>
+      </div>
+      <form class="quiz-reply-form" id="replyForm_${comment.id}" style="display:none;">
+        <input id="replyInput_${comment.id}" type="text" placeholder="Write a reply..." required />
+        <button class="btn-secondary" type="submit">Post</button>
+      </form>
+      ${
+        comment.children?.length
+          ? `<div class="quiz-reply-list">${comment.children.map(child => `
+              <div class="quiz-reply-item">
+                <div class="quiz-comment-meta">${escapeHtml(child.username)} • ${escapeHtml(formatDateTime(child.time))}</div>
+                <div class="quiz-comment-text">${escapeHtml(child.text)}</div>
               </div>
-            `).join("")}
-          </div>
-        </div>
+            `).join("")}</div>`
+          : ""
+      }
+    </article>
+  `).join("");
+}
+
+function getChats() {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEYS.chats) || "[]");
+  } catch (_error) {
+    return [];
+  }
+}
+
+function setChats(chats) {
+  localStorage.setItem(STORAGE_KEYS.chats, JSON.stringify(chats));
+}
+
+function addChatMessage(text) {
+  const chats = getChats();
+  chats.push({
+    id: Date.now(),
+    userId: getUserId(),
+    username: getUsername(),
+    text,
+    createdAt: new Date().toISOString()
+  });
+  setChats(chats);
+}
+
+function getStudyState() {
+  const userId = getUserId() || "guest";
+  try {
+    return JSON.parse(localStorage.getItem(`${STORAGE_KEYS.studyPrefix}${userId}`) || "null") || {
+      sessionSeconds: 1500,
+      elapsedSeconds: 0,
+      running: false,
+      totalTodaySeconds: 0,
+      totalAllSeconds: 0,
+      sessionsCompleted: 0,
+      updatedAt: new Date().toISOString(),
+      pausedForInactivity: false,
+      inactivityPromptOpen: false
+    };
+  } catch (_error) {
+    return {
+      sessionSeconds: 1500,
+      elapsedSeconds: 0,
+      running: false,
+      totalTodaySeconds: 0,
+      totalAllSeconds: 0,
+      sessionsCompleted: 0,
+      updatedAt: new Date().toISOString(),
+      pausedForInactivity: false,
+      inactivityPromptOpen: false
+    };
+  }
+}
+
+function setStudyState(value) {
+  const userId = getUserId() || "guest";
+  localStorage.setItem(`${STORAGE_KEYS.studyPrefix}${userId}`, JSON.stringify(value));
+}
+
+let studyTimerInterval = null;
+let inactivityTimeout = null;
+let inactivityModalOpen = false;
+
+function clearStudyInterval() {
+  if (studyTimerInterval) {
+    clearInterval(studyTimerInterval);
+    studyTimerInterval = null;
+  }
+}
+
+function startStudyTimerLoop() {
+  clearStudyInterval();
+  studyTimerInterval = setInterval(() => {
+    const state = getStudyState();
+    if (!state.running) return;
+
+    state.elapsedSeconds += 1;
+    state.totalTodaySeconds += 1;
+    state.totalAllSeconds += 1;
+
+    if (state.elapsedSeconds >= state.sessionSeconds) {
+      state.running = false;
+      state.elapsedSeconds = state.sessionSeconds;
+      state.sessionsCompleted += 1;
+    }
+
+    state.updatedAt = new Date().toISOString();
+    setStudyState(state);
+
+    if (window.location.hash === "#study") {
+      renderStudy();
+    }
+  }, 1000);
+}
+
+function stopStudyTimer() {
+  const state = getStudyState();
+  state.running = false;
+  state.pausedForInactivity = false;
+  state.inactivityPromptOpen = false;
+  state.updatedAt = new Date().toISOString();
+  setStudyState(state);
+  clearStudyInterval();
+}
+
+function beginStudyTimer() {
+  const state = getStudyState();
+  state.running = true;
+  state.pausedForInactivity = false;
+  state.inactivityPromptOpen = false;
+  state.updatedAt = new Date().toISOString();
+  setStudyState(state);
+  startStudyTimerLoop();
+}
+
+function resetStudyTimer() {
+  const state = getStudyState();
+  state.elapsedSeconds = 0;
+  state.running = false;
+  state.pausedForInactivity = false;
+  state.inactivityPromptOpen = false;
+  state.updatedAt = new Date().toISOString();
+  setStudyState(state);
+  clearStudyInterval();
+}
+
+function setStudySessionMinutes(minutes) {
+  const state = getStudyState();
+  state.sessionSeconds = Math.max(300, Number(minutes) * 60);
+  state.elapsedSeconds = Math.min(state.elapsedSeconds, state.sessionSeconds);
+  state.updatedAt = new Date().toISOString();
+  setStudyState(state);
+}
+
+function isPracticePageHash(hash) {
+  return /^#practice\//.test(hash || "");
+}
+
+function closeInactivityModal() {
+  const modal = document.getElementById("inactivityModal");
+  if (modal) modal.remove();
+  inactivityModalOpen = false;
+}
+
+function showInactivityPrompt() {
+  if (inactivityModalOpen) return;
+  inactivityModalOpen = true;
+  const state = getStudyState();
+  state.running = false;
+  state.pausedForInactivity = true;
+  state.inactivityPromptOpen = true;
+  state.updatedAt = new Date().toISOString();
+  setStudyState(state);
+
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  overlay.id = "inactivityModal";
+  overlay.innerHTML = `
+    <div class="modal-card inactivity-card">
+      <h3>Are you still there?</h3>
+      <p class="panel-text">Your study timer has paused after 10 minutes of inactivity.</p>
+      <div class="modal-actions" style="justify-content:center;">
+        <button class="btn-primary" id="resumeStudyTimerBtn">Yes</button>
+        <button class="btn-secondary" id="pauseStudyTimerBtn">No</button>
       </div>
     </div>
   `;
+  document.body.appendChild(overlay);
+
+  document.getElementById("resumeStudyTimerBtn").addEventListener("click", () => {
+    closeInactivityModal();
+    beginStudyTimer();
+    resetInactivityWatch();
+  });
+
+  document.getElementById("pauseStudyTimerBtn").addEventListener("click", () => {
+    closeInactivityModal();
+    stopStudyTimer();
+  });
 }
 
-async function render() {
-  const hash = window.location.hash || "#login";
-
-  if (getAuthToken() && !getCurrentUser()) {
-    await hydrateSession();
+function resetInactivityWatch() {
+  if (inactivityTimeout) {
+    clearTimeout(inactivityTimeout);
+    inactivityTimeout = null;
   }
 
-  if (!getLoggedIn() && hash !== "#login") {
-    window.location.hash = "#login";
-    return;
-  }
+  if (!isPracticePageHash(window.location.hash)) return;
 
-  if (getLoggedIn() && hash === "#login") {
-    window.location.hash = "#dashboard";
-    return;
-  }
+  const studyState = getStudyState();
+  if (!studyState.running) return;
 
-  clearTimerInterval();
-
-  if (hash === "#login") return renderLogin();
-  if (hash === "#dashboard") return renderDashboard();
-  if (hash === "#track-study") return renderTrackStudy();
-  if (hash.startsWith("#quiz/")) return renderQuiz(hash.split("/")[1]);
-
-  window.location.hash = getLoggedIn() ? "#dashboard" : "#login";
+  inactivityTimeout = setTimeout(() => {
+    showInactivityPrompt();
+  }, 10 * 60 * 1000);
 }
 
-function renderLogin() {
-  const rememberedUser = getRememberLogin() ? getCurrentUser() : null;
-  const rememberedEmail = rememberedUser ? rememberedUser.email : "";
+["mousemove", "keydown", "click", "scroll", "touchstart"].forEach(eventName => {
+  window.addEventListener(eventName, () => {
+    if (isPracticePageHash(window.location.hash)) {
+      resetInactivityWatch();
+    }
+  }, { passive: true });
+});
 
-  app.innerHTML = `
-    <section class="auth-page">
-      <div class="auth-left">
-        <div class="brand-row">
-          <img src="${LOGO_PATH}" alt="Nodent logo" class="brand-logo-large" />
-          <div>
-            <div class="brand-title">Nodent</div>
-            <div class="brand-sub">Student learning platform</div>
-          </div>
-        </div>
-
-        <h1 class="hero-title">Study feels cleaner when the workspace looks right.</h1>
-        <p class="hero-text">
-          Organise your VCE subjects, run mixed-format quizzes, write essay responses,
-          and keep study progress in one focused space.
-        </p>
-      </div>
-
-      <div class="auth-right">
-        <div class="login-panel">
-          <div style="display:flex; gap:10px; margin-bottom:18px;">
-            <button class="btn-primary" id="showLoginBtn" style="flex:1;">Log In</button>
-            <button class="btn-secondary" id="showSignupBtn" style="flex:1;">Sign Up</button>
-          </div>
-
-          <div id="authContent"></div>
-        </div>
-      </div>
-    </section>
-  `;
-
-  const authContent = document.getElementById("authContent");
-  const showLoginBtn = document.getElementById("showLoginBtn");
-  const showSignupBtn = document.getElementById("showSignupBtn");
-
-  function setMode(mode) {
-    const loginActive = mode === "login";
-    showLoginBtn.className = loginActive ? "btn-primary" : "btn-secondary";
-    showSignupBtn.className = loginActive ? "btn-secondary" : "btn-primary";
-
-    authContent.innerHTML = `
-      <h2>${loginActive ? "Log in" : "Create account"}</h2>
-      <p class="subtext">
-        ${loginActive ? "Use your account to enter Nodent." : "Create a real account stored in the app database."}
-      </p>
-
-      <form id="authForm">
-        <div class="form-group">
-          <label class="label" for="email">Email address</label>
-          <input type="email" id="email" placeholder="student@example.com" value="${escapeHtml(rememberedEmail)}" required />
-        </div>
-
-        <div class="form-group">
-          <label class="label" for="password">Password</label>
-          <input type="password" id="password" placeholder="Enter your password" required />
-        </div>
-
-        <label class="checkbox-line">
-          <input type="checkbox" id="rememberMe" ${getRememberLogin() ? "checked" : ""} />
-          <span>Remember login on this device</span>
-        </label>
-
-        <button class="btn-primary w-full" type="submit">${loginActive ? "Continue" : "Create account"}</button>
-        <div id="authError" class="error-message"></div>
-      </form>
-    `;
-
-    document.getElementById("authForm").addEventListener("submit", async (event) => {
-      event.preventDefault();
-
-      const email = document.getElementById("email").value.trim().toLowerCase();
-      const password = document.getElementById("password").value.trim();
-      const remember = document.getElementById("rememberMe").checked;
-      const errorBox = document.getElementById("authError");
-
-      errorBox.textContent = "";
-
-      const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-
-      if (!validEmail) {
-        errorBox.textContent = "Please enter a valid email address.";
-        return;
-      }
-
-      if (password.length < 4) {
-        errorBox.textContent = "Password must be at least 4 characters.";
-        return;
-      }
-
-      try {
-        const result = loginActive
-          ? await loginUser(email, password)
-          : await signupUser(email, password);
-
-        setAuthToken(result.token);
-        setCurrentUser(result.user);
-        setRememberLogin(remember);
-
-        const existingSubjects = getJson(`${STORAGE_KEYS.mySubjectsPrefix}${result.user.id}`, null);
-        if (!existingSubjects) {
-          setJson(`${STORAGE_KEYS.mySubjectsPrefix}${result.user.id}`, defaultSubjects);
-        }
-
-        window.location.hash = "#dashboard";
-      } catch (error) {
-        errorBox.textContent = error.message;
-      }
-    });
+function ensurePracticeTimerStarted() {
+  const state = getStudyState();
+  if (!state.running && !state.pausedForInactivity) {
+    beginStudyTimer();
+  } else if (state.running) {
+    startStudyTimerLoop();
   }
-
-  showLoginBtn.addEventListener("click", () => setMode("login"));
-  showSignupBtn.addEventListener("click", () => setMode("signup"));
-  setMode("login");
+  resetInactivityWatch();
 }
 
-function buildAppLayout(activePage, content, heading, subheading, extraTopLeft = "") {
+function buildAppLayout(activeKey, mainContent, title, subtitle) {
+  const username = getUsername();
+  const email = getEmail();
+
   app.innerHTML = `
     <div class="app-shell">
       <aside class="sidebar">
         <div class="sidebar-top">
           <div class="sidebar-brand">
-            <img src="${LOGO_PATH}" alt="Nodent logo" class="sidebar-logo" />
+            <img class="sidebar-logo sidebar-logo-blue" src="${LOGO_PATH}" alt="Nodent logo" />
             <div>
               <h2>Nodent</h2>
-              <p>Focused student workspace</p>
+              <p>${escapeHtml(username)}</p>
             </div>
           </div>
 
           <nav class="nav">
-            <button class="nav-btn ${activePage === "dashboard" ? "active" : ""}" id="navDashboard">
-              <span>▣</span>
-              <span>Dashboard</span>
-            </button>
-
-            <button class="nav-btn ${activePage === "track-study" ? "active" : ""}" id="navTrack">
-              <span>◔</span>
-              <span>Track My Study</span>
-            </button>
+            <button class="nav-btn ${activeKey === "dashboard" ? "active" : ""}" data-nav="dashboard">Home</button>
+            <button class="nav-btn ${activeKey === "study" ? "active" : ""}" data-nav="study">Track My Study</button>
+            <button class="nav-btn ${activeKey === "chat" ? "active" : ""}" data-nav="chat">Public Chat</button>
           </nav>
         </div>
 
         <div class="user-card">
           <div class="small">Signed in as</div>
-          <div class="email">${escapeHtml(getUserEmail())}</div>
-          <button class="btn-danger w-full" id="logoutBtn">Log out</button>
+          <div class="email">${escapeHtml(username)}</div>
+          <div class="user-card-sub">${escapeHtml(email)}</div>
+          <button class="btn-secondary w-full" id="logoutBtn">Logout</button>
         </div>
       </aside>
 
       <main class="main">
         <div class="topbar">
           <div class="topbar-left">
-            ${extraTopLeft}
+            <div class="subject-flyout">
+              <button class="subject-flyout-trigger" type="button">☰</button>
+              <div class="subject-flyout-panel">
+                ${renderSubjectSearch(true)}
+              </div>
+            </div>
             <div>
-              <h1>${heading}</h1>
-              <p>${subheading}</p>
+              <h1>${escapeHtml(title)}</h1>
+              <p>${escapeHtml(subtitle)}</p>
             </div>
           </div>
-          <div class="top-pill">Accounts and scores saved in SQLite</div>
+
+          <div class="top-pill">${escapeHtml(username)}</div>
         </div>
-        ${content}
+
+        ${mainContent}
       </main>
     </div>
   `;
 
-  document.getElementById("navDashboard").addEventListener("click", () => {
-    window.location.hash = "#dashboard";
-  });
-
-  document.getElementById("navTrack").addEventListener("click", () => {
-    window.location.hash = "#track-study";
-  });
-
-  document.getElementById("logoutBtn").addEventListener("click", logout);
-}
-
-function attachSubjectSearchLogic(mySubjects) {
-  const searchInput = document.getElementById("allSubjectsSearch");
-  if (!searchInput) return;
-
-  document.querySelectorAll("[data-add-subject]").forEach(button => {
+  document.querySelectorAll("[data-nav]").forEach(button => {
     button.addEventListener("click", () => {
-      const id = button.getAttribute("data-add-subject");
-      const updated = [...new Set([...mySubjects, id])];
-      setMySubjects(updated);
-      renderDashboard();
+      const target = button.dataset.nav;
+      if (target === "dashboard") window.location.hash = "#dashboard";
+      if (target === "study") window.location.hash = "#study";
+      if (target === "chat") window.location.hash = "#chat";
     });
   });
 
-  searchInput.addEventListener("input", (event) => {
-    const value = event.target.value.trim().toLowerCase();
-    let visibleCount = 0;
+  document.getElementById("logoutBtn").addEventListener("click", async () => {
+    try {
+      await logoutRequest();
+    } catch (_error) {}
+    clearAuthSession();
+    render();
+  });
 
-    document.querySelectorAll("#allSubjectsList .subject-search-item").forEach(item => {
-      const name = item.getAttribute("data-all-name");
-      const isVisible = name.includes(value);
-      item.style.display = isVisible ? "flex" : "none";
-      if (isVisible) visibleCount++;
+  bindSubjectSearch();
+}
+
+function renderSubjectSearch(isCompact = false) {
+  const subjects = getMySubjects();
+  return `
+    <div class="subject-search-all">
+      <div class="subject-search-all-header">${isCompact ? "Browse subjects" : "Search all current subjects"}</div>
+      <div class="subject-search-list">
+        ${subjects.map(subject => `
+          <div class="subject-search-item">
+            <div>
+              <h4>${escapeHtml(subject.name)}</h4>
+              <p>${escapeHtml(subject.description)}</p>
+            </div>
+            <button class="btn-secondary subject-search-open" data-subject="${subject.id}">Open</button>
+          </div>
+        `).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function bindSubjectSearch() {
+  document.querySelectorAll(".subject-search-open").forEach(button => {
+    button.addEventListener("click", () => {
+      window.location.hash = `#practice/${button.dataset.subject}`;
     });
-
-    const list = document.getElementById("allSubjectsList");
-    const existingEmpty = document.getElementById("searchEmptyState");
-    if (existingEmpty) existingEmpty.remove();
-
-    if (visibleCount === 0) {
-      const emptyDiv = document.createElement("div");
-      emptyDiv.id = "searchEmptyState";
-      emptyDiv.className = "subject-search-empty";
-      emptyDiv.textContent = "No subjects match your search.";
-      list.appendChild(emptyDiv);
-    }
   });
 }
 
-function renderDashboard() {
-  const subjects = getSubjects();
-  const mySubjects = getMySubjects();
-  const currentSubjects = subjects.filter(subject => mySubjects.includes(subject.id));
-
-  const content = `
-    <div class="dashboard-grid">
-      <section class="panel">
-        <h3>My Subjects</h3>
-        <div class="panel-text">
-          Open the search icon in the top-left to add more VCE subjects.
+function renderAuthPage(mode = "login") {
+  const isLogin = mode === "login";
+  app.innerHTML = `
+    <div class="auth-page">
+      <section class="auth-left">
+        <div class="brand-row">
+          <img class="brand-logo-large brand-logo-white" src="${LOGO_PATH}" alt="Nodent logo" />
+          <div>
+            <div class="brand-title">Nodent</div>
+            <div class="brand-sub">Structured practice, study tracking, and student discussion.</div>
+          </div>
         </div>
 
-        <div class="subject-grid">
-          ${
-            currentSubjects.length
-              ? currentSubjects.map(subject => `
-                <article class="subject-card">
-                  <div class="subject-head">
-                    <h4>${subject.name}</h4>
-                    <div class="subject-head-actions">
-                      <span class="tag">${subject.category}</span>
-                      <button class="subject-remove-btn" data-remove="${subject.id}" aria-label="Remove ${subject.name}" title="Remove ${subject.name}">×</button>
-                    </div>
+        <h1 class="hero-title">Build your study momentum with focused practice.</h1>
+        <p class="hero-text">
+          Practice subject questions, discuss tricky prompts, and track your study sessions in one clean workspace.
+        </p>
+      </section>
+
+      <section class="auth-right">
+        <div class="login-panel">
+          <h2>${isLogin ? "Welcome back" : "Create your account"}</h2>
+          <p class="subtext">
+            ${isLogin
+              ? "Log in to continue your practice, written responses, comments, and study tracking."
+              : "Sign up with your own username so your comments and responses appear under your chosen name."}
+          </p>
+
+          <form id="authForm">
+            ${
+              isLogin
+                ? ""
+                : `
+                  <div class="form-group">
+                    <label class="label" for="authUsername">Username</label>
+                    <input id="authUsername" type="text" placeholder="Choose a username" required />
                   </div>
-                  <div class="subject-desc">${subject.description}</div>
-                  <div class="subject-actions">
-                    <button class="btn-primary" data-quiz="${subject.id}">Quiz</button>
-                                      </div>
-                </article>
-              `).join("")
-              : `<div class="empty">No subjects on your dashboard yet.</div>`
-          }
+                `
+            }
+
+            <div class="form-group">
+              <label class="label" for="authEmail">${isLogin ? "Email or Username" : "Email"}</label>
+              <input id="authEmail" type="${isLogin ? "text" : "email"}" placeholder="${isLogin ? "Enter your email or username" : "Enter your email"}" required />
+            </div>
+
+            <div class="form-group">
+              <label class="label" for="authPassword">Password</label>
+              <div class="password-input-wrap">
+                <input id="authPassword" type="password" placeholder="Enter your password" required />
+                <button class="password-toggle" id="togglePasswordBtn" type="button">Show</button>
+              </div>
+            </div>
+
+            <label class="checkbox-line">
+              <input id="rememberMe" type="checkbox" />
+              <span>Keep me signed in on this device</span>
+            </label>
+
+            <button class="btn-primary w-full" type="submit">${isLogin ? "Log In" : "Create Account"}</button>
+            <div id="authError" class="error-message"></div>
+          </form>
+
+          <div style="margin-top:18px; color:var(--muted);">
+            ${
+              isLogin
+                ? `Need an account? <button id="switchAuthMode" class="btn-secondary" style="padding:8px 12px;">Sign Up</button>`
+                : `Already have an account? <button id="switchAuthMode" class="btn-secondary" style="padding:8px 12px;">Log In</button>`
+            }
+          </div>
         </div>
       </section>
     </div>
   `;
 
-  buildAppLayout(
-    "dashboard",
-    content,
-    "Dashboard",
-    "Manage your study subjects and launch quizzes.",
-    buildSubjectFlyout(subjects, mySubjects)
-  );
+  document.getElementById("switchAuthMode").addEventListener("click", () => {
+    renderAuthPage(isLogin ? "signup" : "login");
+  });
 
-  attachSubjectSearchLogic(mySubjects);
+  document.getElementById("togglePasswordBtn").addEventListener("click", () => {
+    const passwordInput = document.getElementById("authPassword");
+    const isPassword = passwordInput.type === "password";
+    passwordInput.type = isPassword ? "text" : "password";
+    document.getElementById("togglePasswordBtn").textContent = isPassword ? "Hide" : "Show";
+  });
 
-  document.querySelectorAll("[data-remove]").forEach(button => {
+  document.getElementById("authForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const errorBox = document.getElementById("authError");
+    errorBox.textContent = "";
+
+    const login = document.getElementById("authEmail").value.trim();
+    const password = document.getElementById("authPassword").value.trim();
+    const remember = document.getElementById("rememberMe").checked;
+
+    try {
+      let response;
+      if (isLogin) {
+        response = await loginRequest(login, password);
+      } else {
+        const username = document.getElementById("authUsername").value.trim();
+        response = await signupRequest(username, login, password);
+      }
+
+      setAuthSession(response.token, response.user, remember);
+      render();
+    } catch (error) {
+      errorBox.textContent = error.message || (isLogin ? "Could not log in." : "Could not create account.");
+    }
+  });
+}
+
+function renderDashboard() {
+  const subjects = getMySubjects();
+
+  const content = `
+    <div class="dashboard-grid">
+      <section class="panel">
+        <h3>Your current subjects</h3>
+        <p class="panel-text">Open any subject to continue practice, see completed questions, or add your own new questions.</p>
+
+        <div class="subject-grid">
+          ${subjects.map(subject => `
+            <article class="subject-card">
+              <div class="subject-head">
+                <div>
+                  <h4>${escapeHtml(subject.name)}</h4>
+                  <div class="tag">${escapeHtml(subject.category || subject.area || "")}</div>
+                </div>
+                <div class="subject-head-actions">
+                  <button class="subject-remove-btn" data-remove-subject="${subject.id}" type="button" title="Remove subject">−</button>
+                </div>
+              </div>
+
+              <div class="subject-desc">${escapeHtml(subject.description)}</div>
+
+              <div class="subject-actions">
+                <button class="btn-primary open-practice-btn" data-subject="${subject.id}">Open Practice</button>
+                <button class="btn-secondary summary-practice-btn" data-subject="${subject.id}">Completed Summary</button>
+              </div>
+            </article>
+          `).join("")}
+        </div>
+      </section>
+    </div>
+  `;
+
+  buildAppLayout("dashboard", content, "Dashboard", "Choose a subject, continue your practice, or review completed questions.");
+
+  document.querySelectorAll(".open-practice-btn").forEach(button => {
     button.addEventListener("click", () => {
-      const id = button.getAttribute("data-remove");
-      setMySubjects(mySubjects.filter(subjectId => subjectId !== id));
+      window.location.hash = `#practice/${button.dataset.subject}`;
+    });
+  });
+
+  document.querySelectorAll(".summary-practice-btn").forEach(button => {
+    button.addEventListener("click", () => {
+      window.location.hash = `#practice/${button.dataset.subject}?summary=1`;
+    });
+  });
+
+  document.querySelectorAll("[data-remove-subject]").forEach(button => {
+    button.addEventListener("click", () => {
+      removeSubjectFromLibrary(button.dataset.removeSubject);
       renderDashboard();
     });
   });
+}
 
-  document.querySelectorAll("[data-quiz]").forEach(button => {
-    button.addEventListener("click", () => {
-      window.location.hash = `#quiz/${button.getAttribute("data-quiz")}`;
-    });
+function renderStudy() {
+  const state = getStudyState();
+  const remaining = Math.max(0, state.sessionSeconds - state.elapsedSeconds);
+  const progress = Math.min(100, Math.round((state.elapsedSeconds / state.sessionSeconds) * 100));
+  const todayHours = (state.totalTodaySeconds / 3600).toFixed(2);
+  const allHours = (state.totalAllSeconds / 3600).toFixed(2);
+
+  const content = `
+    <div class="study-grid">
+      <section class="timer-card">
+        <h3>Study Timer</h3>
+        <p class="panel-text">Track focused study time, auto-start practice sessions, and pause when inactive.</p>
+
+        <div class="timer-status">${state.running ? "Running" : state.pausedForInactivity ? "Paused for inactivity" : "Not running"}</div>
+        <div class="timer-display">${formatTime(remaining)}</div>
+
+        <div class="timer-controls">
+          <button class="btn-primary" id="startTimerBtn">${state.running ? "Restart Loop" : "Start"}</button>
+          <button class="btn-secondary" id="pauseTimerBtn">Pause</button>
+          <button class="btn-secondary" id="resetTimerBtn">Reset</button>
+        </div>
+
+        <div class="timer-settings">
+          <div>
+            <label class="label" for="sessionMinutesInput">Session length (minutes)</label>
+            <input id="sessionMinutesInput" type="number" min="5" step="5" value="${Math.round(state.sessionSeconds / 60)}" />
+          </div>
+          <div style="display:flex; align-items:flex-end;">
+            <button class="btn-secondary w-full" id="saveSessionMinutesBtn">Save Session Length</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="progress-card">
+        <h3>Track My Study</h3>
+        <p class="panel-text">Your running timer also tracks cumulative study progress.</p>
+
+        <div class="progress-ring-panel">
+          <div class="progress-circle" style="--progress:${progress};">
+            <div class="progress-circle-inner">
+              <strong>${progress}%</strong>
+              <span>current session</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="daily-progress-bar">
+          <div class="daily-progress-fill" style="width:${Math.min(100, Math.round((state.totalTodaySeconds / (4 * 3600)) * 100))}%"></div>
+        </div>
+
+        <div class="stat-list">
+          <div class="stat-row"><span>Today's study time</span><strong>${todayHours} hrs</strong></div>
+          <div class="stat-row"><span>Total study time</span><strong>${allHours} hrs</strong></div>
+          <div class="stat-row"><span>Completed sessions</span><strong>${state.sessionsCompleted}</strong></div>
+        </div>
+      </section>
+    </div>
+  `;
+
+  buildAppLayout("study", content, "Track My Study", "Your timer, session progress, and cumulative study stats.");
+
+  document.getElementById("startTimerBtn").addEventListener("click", () => {
+    beginStudyTimer();
+    resetInactivityWatch();
+    renderStudy();
   });
 
-  if (adminUnlocked) {
-    openAdminPanel();
-  }
+  document.getElementById("pauseTimerBtn").addEventListener("click", () => {
+    stopStudyTimer();
+    renderStudy();
+  });
+
+  document.getElementById("resetTimerBtn").addEventListener("click", () => {
+    resetStudyTimer();
+    renderStudy();
+  });
+
+  document.getElementById("saveSessionMinutesBtn").addEventListener("click", () => {
+    const value = Number(document.getElementById("sessionMinutesInput").value || 25);
+    setStudySessionMinutes(value);
+    renderStudy();
+  });
+}
+
+function renderChat() {
+  const chats = getChats();
+
+  const content = `
+    <div class="chat-shell">
+      <section class="chat-panel">
+        <div class="chat-header">
+          <h2>Public Chat</h2>
+          <p>Talk with other signed-in users in a shared discussion space.</p>
+        </div>
+
+        <div class="chat-box">
+          ${
+            chats.length
+              ? chats.map(message => `
+                  <div class="chat-message ${message.userId === getUserId() ? "own" : ""}">
+                    <div class="chat-meta">${escapeHtml(message.username)} • ${escapeHtml(formatDateTime(message.createdAt))}</div>
+                    <div class="chat-text">${escapeHtml(message.text)}</div>
+                  </div>
+                `).join("")
+              : `<div class="empty">No messages yet. Say hello.</div>`
+          }
+        </div>
+
+        <form class="chat-form" id="chatForm">
+          <input id="chatInput" type="text" placeholder="Write a public message..." required />
+          <button class="btn-primary" type="submit">Send</button>
+        </form>
+      </section>
+    </div>
+  `;
+
+  buildAppLayout("chat", content, "Public Chat", "Shared chat for everyone signed in.");
+
+  document.getElementById("chatForm").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const input = document.getElementById("chatInput");
+    const text = input.value.trim();
+    if (!text) return;
+    addChatMessage(text);
+    renderChat();
+  });
+}
+
+function getQuestionTypeLabel(type) {
+  if (type === "mcq") return "Multiple Choice";
+  if (type === "short") return "Short Answer";
+  return "Written Response";
 }
 
 function openAdminPanel() {
   if (document.getElementById("adminOverlay")) return;
 
-  const subjects = getSubjects();
-  const customQuestions = getCustomQuestions();
-
   const overlay = document.createElement("div");
   overlay.className = "admin-overlay";
   overlay.id = "adminOverlay";
+
   overlay.innerHTML = `
     <div class="admin-modal">
-      <h2>Hidden Question Manager</h2>
-      <p>Add VCE-style mixed-format questions privately. These input tools do not appear in the normal student interface.</p>
+      <h2>Admin Subject Builder</h2>
+      <p>Create a new subject and add it directly to your dashboard.</p>
 
-      <form id="adminQuestionForm">
-        <div class="admin-grid">
-          <div>
-            <label class="label" for="adminSubject">Subject</label>
-            <select id="adminSubject">
-              ${subjects.map(subject => `<option value="${subject.id}">${subject.name}</option>`).join("")}
-            </select>
-          </div>
-
-          <div>
-            <label class="label" for="adminQuestionType">Question type</label>
-            <select id="adminQuestionType">
-              <option value="mcq">Multiple choice</option>
-              <option value="short">Short answer</option>
-              <option value="long">Written / essay</option>
-            </select>
-          </div>
-
-          <div class="admin-grid-full">
-            <label class="label" for="adminQuestion">Question</label>
-            <textarea id="adminQuestion" rows="3" placeholder="Paste your VCE question here..." required></textarea>
-          </div>
-
-          <div class="admin-grid-full">
-            <label class="label" for="adminPassage">Passage / extract (optional)</label>
-            <textarea id="adminPassage" rows="5" placeholder="Paste any stimulus passage, quote, or extract here if needed..."></textarea>
-          </div>
-
-          <div class="admin-grid-full">
-            <label class="label" for="adminGuidance">Writing guidance (optional)</label>
-            <input id="adminGuidance" type="text" placeholder="e.g. Write a structured essay with textual evidence" />
-          </div>
-
-          <div id="mcqFields">
-            <label class="label" for="adminOption1">Option 1</label>
-            <input id="adminOption1" type="text" />
-          </div>
-
-          <div id="mcqFields2">
-            <label class="label" for="adminOption2">Option 2</label>
-            <input id="adminOption2" type="text" />
-          </div>
-
-          <div id="mcqFields3">
-            <label class="label" for="adminOption3">Option 3</label>
-            <input id="adminOption3" type="text" />
-          </div>
-
-          <div id="mcqFields4">
-            <label class="label" for="adminOption4">Option 4</label>
-            <input id="adminOption4" type="text" />
-          </div>
-
-          <div id="mcqCorrectWrap">
-            <label class="label" for="adminCorrect">Correct option number</label>
-            <select id="adminCorrect">
-              <option value="1">Option 1</option>
-              <option value="2">Option 2</option>
-              <option value="3">Option 3</option>
-              <option value="4">Option 4</option>
-            </select>
-          </div>
-
-          <div class="admin-grid-full" id="shortAnswerWrap" style="display:none;">
-            <label class="label" for="adminAcceptedAnswers">Accepted short answers</label>
-            <textarea id="adminAcceptedAnswers" rows="3" placeholder="Enter accepted answers separated by commas"></textarea>
-          </div>
+      <div class="admin-grid">
+        <div>
+          <label class="label" for="adminSubjectName">Subject name</label>
+          <input id="adminSubjectName" type="text" placeholder="e.g. Sociology" />
         </div>
-
-        <div class="admin-actions">
-          <button class="btn-primary" type="submit">Save Question</button>
-          <button class="btn-secondary" type="button" id="closeAdminPanelBtn">Close</button>
+        <div>
+          <label class="label" for="adminSubjectArea">Category</label>
+          <input id="adminSubjectArea" type="text" placeholder="e.g. VCE" />
         </div>
+        <div class="admin-grid-full">
+          <label class="label" for="adminSubjectDescription">Description</label>
+          <textarea id="adminSubjectDescription" rows="4" placeholder="Describe this subject."></textarea>
+        </div>
+      </div>
 
-        <div class="admin-note">Saved questions are still local to this device unless you build more backend endpoints for them too.</div>
-      </form>
+      <div class="admin-note">
+        Add questions one at a time after creating the subject by opening its practice page and using “Add Question”.
+      </div>
 
-      <div class="admin-saved-list">
-        ${Object.entries(customQuestions).flatMap(([subjectId, questionList]) =>
-          questionList.map(question => {
-            const subject = subjects.find(s => s.id === subjectId);
-            return `
-              <div class="admin-saved-item">
-                <strong>${escapeHtml(subject ? subject.name : subjectId)} • ${escapeHtml(question.type || "mcq")}</strong>
-                <div>${escapeHtml(question.question)}</div>
-              </div>
-            `;
-          })
-        ).join("") || `<div class="empty">No custom questions added yet.</div>`}
+      <div class="admin-actions">
+        <button class="btn-secondary" id="closeAdminBtn">Close</button>
+        <button class="btn-primary" id="saveAdminSubjectBtn">Save Subject</button>
       </div>
     </div>
   `;
 
   document.body.appendChild(overlay);
 
-  const typeSelect = document.getElementById("adminQuestionType");
+  document.getElementById("closeAdminBtn").addEventListener("click", () => {
+    overlay.remove();
+  });
 
-  function updateAdminFields() {
-    const type = typeSelect.value;
-    const mcqIds = ["mcqFields", "mcqFields2", "mcqFields3", "mcqFields4", "mcqCorrectWrap"];
-    mcqIds.forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.style.display = type === "mcq" ? "" : "none";
-    });
-    document.getElementById("shortAnswerWrap").style.display = type === "short" ? "" : "none";
+  document.getElementById("saveAdminSubjectBtn").addEventListener("click", () => {
+    const name = document.getElementById("adminSubjectName").value.trim();
+    const category = document.getElementById("adminSubjectArea").value.trim() || "VCE";
+    const description = document.getElementById("adminSubjectDescription").value.trim();
+
+    if (!name || !description) return;
+
+    const subject = {
+      id: slugify(name),
+      name,
+      category,
+      description,
+      quiz: []
+    };
+
+    addSubjectToLibrary(subject);
+    overlay.remove();
+    renderDashboard();
+  });
+}
+
+function render() {
+  const hash = window.location.hash || "#dashboard";
+
+  if (!getLoggedIn()) {
+    clearStudyInterval();
+    if (inactivityTimeout) clearTimeout(inactivityTimeout);
+    closeInactivityModal();
+    renderAuthPage("login");
+    return;
   }
 
-  typeSelect.addEventListener("change", updateAdminFields);
-  updateAdminFields();
+  if (hash === "#dashboard" || hash === "#") {
+    clearStudyInterval();
+    if (inactivityTimeout) clearTimeout(inactivityTimeout);
+    closeInactivityModal();
+    renderDashboard();
+    return;
+  }
 
-  document.getElementById("closeAdminPanelBtn").addEventListener("click", () => {
-    adminUnlocked = false;
-    overlay.remove();
-  });
-
-  overlay.addEventListener("click", (event) => {
-    if (event.target === overlay) {
-      adminUnlocked = false;
-      overlay.remove();
+  if (hash === "#study") {
+    renderStudy();
+    if (getStudyState().running) {
+      startStudyTimerLoop();
     }
-  });
+    return;
+  }
 
-  document.getElementById("adminQuestionForm").addEventListener("submit", (event) => {
-    event.preventDefault();
+  if (hash === "#chat") {
+    clearStudyInterval();
+    if (inactivityTimeout) clearTimeout(inactivityTimeout);
+    closeInactivityModal();
+    renderChat();
+    return;
+  }
 
-    const subjectId = document.getElementById("adminSubject").value;
-    const type = document.getElementById("adminQuestionType").value;
-    const questionText = document.getElementById("adminQuestion").value.trim();
-    const passage = document.getElementById("adminPassage").value.trim();
-    const guidance = document.getElementById("adminGuidance").value.trim();
+  if (hash.startsWith("#practice/")) {
+    const [pathPart, queryPart] = hash.split("?");
+    const subjectId = decodeURIComponent(pathPart.replace("#practice/", ""));
+    const params = new URLSearchParams(queryPart || "");
+    const summary = params.get("summary") === "1";
+    renderPractice(subjectId, summary);
+    return;
+  }
 
-    if (!questionText) return;
-
-    if (type === "mcq") {
-      const option1 = document.getElementById("adminOption1").value.trim();
-      const option2 = document.getElementById("adminOption2").value.trim();
-      const option3 = document.getElementById("adminOption3").value.trim();
-      const option4 = document.getElementById("adminOption4").value.trim();
-      const correctIndex = Number(document.getElementById("adminCorrect").value) - 1;
-      const options = [option1, option2, option3, option4];
-
-      if (options.some(option => !option)) return;
-
-      addCustomQuestion(subjectId, {
-        type: "mcq",
-        question: questionText,
-        passage,
-        guidance,
-        options,
-        answer: options[correctIndex]
-      });
-    }
-
-    if (type === "short") {
-      const acceptedAnswers = document.getElementById("adminAcceptedAnswers").value
-        .split(",")
-        .map(answer => answer.trim())
-        .filter(Boolean);
-
-      if (!acceptedAnswers.length) return;
-
-      addCustomQuestion(subjectId, {
-        type: "short",
-        question: questionText,
-        passage,
-        guidance,
-        acceptedAnswers
-      });
-    }
-
-    if (type === "long") {
-      addCustomQuestion(subjectId, {
-        type: "long",
-        question: questionText,
-        passage,
-        guidance
-      });
-    }
-
-    overlay.remove();
-    openAdminPanel();
-  });
+  window.location.hash = "#dashboard";
 }
 
-function renderTrackStudy() {
-  const studyData = getStudyData();
-  const progressPercent = Math.min(100, Math.round((studyData.dailySeconds / (studyData.goalMinutes * 60)) * 100));
-
-  const content = `
-    <div class="study-grid">
-      <section class="timer-card">
-        <h3>Study Timer</h3>
-        <div class="panel-text">
-          Run a focused study session, track today’s total study time, and keep your daily progress saved automatically.
-        </div>
-
-        <div class="timer-status">
-          <span>●</span>
-          <span>${studyData.isRunning ? "Session running" : "Timer paused"}</span>
-        </div>
-
-        <div class="timer-display" id="timerDisplay">${formatSeconds(studyData.remainingSeconds)}</div>
-
-        <div class="timer-settings">
-          <div>
-            <label class="label" for="sessionMinutes">Focus session length</label>
-            <select id="sessionMinutes">
-              ${[15, 25, 30, 45, 60, 90].map(min => `
-                <option value="${min}" ${studyData.sessionMinutes === min ? "selected" : ""}>${min} minutes</option>
-              `).join("")}
-            </select>
-          </div>
-
-          <div>
-            <label class="label" for="goalMinutes">Daily study goal</label>
-            <select id="goalMinutes">
-              ${[30, 60, 90, 120, 180, 240].map(min => `
-                <option value="${min}" ${studyData.goalMinutes === min ? "selected" : ""}>${min} minutes</option>
-              `).join("")}
-            </select>
-          </div>
-        </div>
-
-        <div class="timer-controls">
-          <button class="btn-primary" id="startPauseBtn">${studyData.isRunning ? "Pause" : "Start"}</button>
-          <button class="btn-neutral" id="resetSessionBtn">Reset Session</button>
-          <button class="btn-amber" id="completeSessionBtn">Complete Session</button>
-        </div>
-      </section>
-
-      <aside class="progress-card">
-        <h3>Daily Progress</h3>
-        <div class="panel-text">Your study time today resets automatically each new day.</div>
-
-        <div class="progress-ring-panel">
-          <div class="progress-circle" style="--progress:${progressPercent}">
-            <div class="progress-circle-inner">
-              <strong>${progressPercent}%</strong>
-              <span>goal reached</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="daily-progress-bar">
-          <div class="daily-progress-fill" style="width:${progressPercent}%"></div>
-        </div>
-
-        <div class="stat-list">
-          <div class="stat-row">
-            <span>Today studied</span>
-            <strong id="todayStudiedValue">${formatMinutesFromSeconds(studyData.dailySeconds)}</strong>
-          </div>
-          <div class="stat-row">
-            <span>Daily goal</span>
-            <strong>${studyData.goalMinutes} min</strong>
-          </div>
-          <div class="stat-row">
-            <span>Sessions completed</span>
-            <strong id="sessionsCompletedValue">${studyData.sessionsCompleted}</strong>
-          </div>
-          <div class="stat-row">
-            <span>Current session left</span>
-            <strong id="remainingValue">${formatSeconds(studyData.remainingSeconds)}</strong>
-          </div>
-        </div>
-      </aside>
-    </div>
-  `;
-
-  buildAppLayout("track-study", content, "Track My Study", "Run a focus timer and track your daily study progress.");
-
-  const sessionSelect = document.getElementById("sessionMinutes");
-  const goalSelect = document.getElementById("goalMinutes");
-  const startPauseBtn = document.getElementById("startPauseBtn");
-  const resetSessionBtn = document.getElementById("resetSessionBtn");
-  const completeSessionBtn = document.getElementById("completeSessionBtn");
-
-  sessionSelect.addEventListener("change", () => {
-    const data = getStudyData();
-    data.sessionMinutes = Number(sessionSelect.value);
-    if (!data.isRunning) data.remainingSeconds = data.sessionMinutes * 60;
-    setStudyData(data);
-    renderTrackStudy();
-  });
-
-  goalSelect.addEventListener("change", () => {
-    const data = getStudyData();
-    data.goalMinutes = Number(goalSelect.value);
-    setStudyData(data);
-    renderTrackStudy();
-  });
-
-  startPauseBtn.addEventListener("click", () => {
-    const data = getStudyData();
-    data.isRunning = !data.isRunning;
-    setStudyData(data);
-    renderTrackStudy();
-  });
-
-  resetSessionBtn.addEventListener("click", () => {
-    const data = getStudyData();
-    data.isRunning = false;
-    data.remainingSeconds = data.sessionMinutes * 60;
-    setStudyData(data);
-    renderTrackStudy();
-  });
-
-  completeSessionBtn.addEventListener("click", () => {
-    const data = getStudyData();
-    const completedSeconds = data.sessionMinutes * 60 - data.remainingSeconds;
-    data.dailySeconds += completedSeconds > 0 ? completedSeconds : data.sessionMinutes * 60;
-    data.sessionsCompleted += 1;
-    data.isRunning = false;
-    data.remainingSeconds = data.sessionMinutes * 60;
-    setStudyData(data);
-    renderTrackStudy();
-  });
-
-  startTimerTick();
-}
-
-function startTimerTick() {
-  clearTimerInterval();
-
-  const data = getStudyData();
-  if (!data.isRunning) return;
-
-  timerInterval = setInterval(() => {
-    const latest = getStudyData();
-
-    if (!latest.isRunning) {
-      clearTimerInterval();
-      return;
-    }
-
-    if (latest.remainingSeconds > 0) {
-      latest.remainingSeconds -= 1;
-      latest.dailySeconds += 1;
-      setStudyData(latest);
-
-      const timerDisplay = document.getElementById("timerDisplay");
-      const todayStudiedValue = document.getElementById("todayStudiedValue");
-      const remainingValue = document.getElementById("remainingValue");
-
-      if (timerDisplay) timerDisplay.textContent = formatSeconds(latest.remainingSeconds);
-      if (todayStudiedValue) todayStudiedValue.textContent = formatMinutesFromSeconds(latest.dailySeconds);
-      if (remainingValue) remainingValue.textContent = formatSeconds(latest.remainingSeconds);
-
-      const goalSeconds = latest.goalMinutes * 60;
-      const progressPercent = Math.min(100, Math.round((latest.dailySeconds / goalSeconds) * 100));
-
-      const circle = document.querySelector(".progress-circle");
-      const fill = document.querySelector(".daily-progress-fill");
-      const circleText = document.querySelector(".progress-circle-inner strong");
-
-      if (circle) circle.style.setProperty("--progress", progressPercent);
-      if (fill) fill.style.width = `${progressPercent}%`;
-      if (circleText) circleText.textContent = `${progressPercent}%`;
-    } else {
-      latest.isRunning = false;
-      latest.sessionsCompleted += 1;
-      latest.remainingSeconds = latest.sessionMinutes * 60;
-      setStudyData(latest);
-      renderTrackStudy();
-    }
-  }, 1000);
-}
-
-function getQuestionTypeLabel(type) {
-  if (type === "mcq") return "Multiple Choice";
-  if (type === "short") return "Short Answer";
-  if (type === "long") return "Written Response";
-  return "Question";
-}
-
-function renderQuiz(subjectId) {
+async function renderPractice(subjectId, openSummary = false) {
   const subject = getSubjectById(subjectId);
+
   if (!subject) {
     window.location.hash = "#dashboard";
     return;
   }
 
-  const questions = subject.quiz;
-  let currentIndex = 0;
-  let score = 0;
-  let autoMarkedCount = 0;
-  let answerLocked = false;
+  ensurePracticeTimerStarted();
 
-  function showQuestion() {
-    const question = questions[currentIndex];
+  const practiceState = getPracticeState(subjectId);
+  if (openSummary) {
+    practiceState.summaryOpen = true;
+    setPracticeState(subjectId, practiceState);
+  }
+
+  let currentIndex = 0;
+  let answerLocked = false;
+  const questions = subject.quiz;
+  const nextIncompleteIndex = questions.findIndex(question => !practiceState.completedQuestionKeys.includes(question.question));
+  currentIndex = nextIncompleteIndex >= 0 ? nextIncompleteIndex : 0;
+
+  function renderCompletedSummary() {
+    const refreshedSubject = getSubjectById(subjectId);
+    const refreshedQuestions = refreshedSubject.quiz;
+    const state = getPracticeState(subjectId);
+    const completedQuestions = refreshedQuestions.filter(question => state.completedQuestionKeys.includes(question.question));
+
+    const content = `
+      <div class="page-wide">
+        <div class="back-row practice-top-actions">
+          <button class="btn-secondary" id="backBtn">← Back to Dashboard</button>
+          <div class="practice-top-actions-right">
+            <button class="btn-primary" id="backToPracticeBtn">Continue Practice</button>
+            <button class="btn-secondary" id="restartPracticeBtn">Restart Completed List</button>
+          </div>
+        </div>
+
+        <section class="panel">
+          <div class="practice-summary-head">
+            <div>
+              <h3>${subject.name} Practice Summary</h3>
+              <p class="panel-text">Review your completed questions and continue the ongoing practice whenever you are ready.</p>
+            </div>
+          </div>
+
+          ${
+            completedQuestions.length
+              ? `<div class="practice-summary-list">
+                  ${completedQuestions.map((question, index) => {
+                    const savedResponse = getWrittenResponse(subjectId, question.question);
+                    return `
+                      <article class="practice-summary-item">
+                        <div class="practice-summary-number">${index + 1}</div>
+                        <div>
+                          <div class="quiz-type-badge">${getQuestionTypeLabel(question.type || "mcq")}</div>
+                          <h4>${escapeHtml(question.question)}</h4>
+                          ${
+                            savedResponse
+                              ? `<div class="saved-response"><strong>Your response:</strong><br>${escapeHtml(savedResponse.response)}</div>`
+                              : question.type === "mcq"
+                                ? `<p class="panel-text">Marked as completed in practice.</p>`
+                                : `<p class="panel-text">Completed.</p>`
+                          }
+                        </div>
+                      </article>
+                    `;
+                  }).join("")}
+                </div>`
+              : `<div class="empty">You have not completed any practice questions yet.</div>`
+          }
+        </section>
+      </div>
+    `;
+
+    buildAppLayout("", content, `${subject.name} Practice`, "Review completed questions and continue when ready.");
+
+    document.getElementById("backBtn").addEventListener("click", () => {
+      window.location.hash = "#dashboard";
+    });
+
+    document.getElementById("backToPracticeBtn").addEventListener("click", () => {
+      const refreshed = getPracticeState(subjectId);
+      const nextIncompleteIndex = questions.findIndex(question => !refreshed.completedQuestionKeys.includes(question.question));
+      currentIndex = nextIncompleteIndex >= 0 ? nextIncompleteIndex : 0;
+      showQuestion();
+    });
+
+    document.getElementById("restartPracticeBtn").addEventListener("click", () => {
+      setPracticeState(subjectId, { completedQuestionKeys: [], summaryOpen: false });
+      currentIndex = 0;
+      answerLocked = false;
+      showQuestion();
+    });
+  }
+
+  function openAddQuestionModal() {
+    if (document.getElementById("practiceQuestionModal")) return;
+
+    const overlay = document.createElement("div");
+    overlay.className = "modal-overlay";
+    overlay.id = "practiceQuestionModal";
+    overlay.innerHTML = `
+      <div class="modal-card">
+        <h3>Add a practice question</h3>
+        <form id="practiceQuestionForm" class="modal-form">
+          <label class="label" for="practiceQuestionType">Question type</label>
+          <select id="practiceQuestionType">
+            <option value="mcq">Multiple Choice</option>
+            <option value="short">Short Answer</option>
+            <option value="long">Written Response</option>
+          </select>
+
+          <label class="label" for="practiceQuestionText">Question</label>
+          <textarea id="practiceQuestionText" rows="4" placeholder="Enter the question" required></textarea>
+
+          <div id="practiceQuestionExtra"></div>
+
+          <div class="modal-actions">
+            <button class="btn-secondary" type="button" id="closePracticeQuestionModal">Cancel</button>
+            <button class="btn-primary" type="submit">Add Question</button>
+          </div>
+          <div id="practiceQuestionError" class="error-message"></div>
+        </form>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const extra = document.getElementById("practiceQuestionExtra");
+    const typeSelect = document.getElementById("practiceQuestionType");
+
+    function renderExtraFields() {
+      const value = typeSelect.value;
+      if (value === "mcq") {
+        extra.innerHTML = `
+          <label class="label" for="practiceQuestionOptions">Options (one per line)</label>
+          <textarea id="practiceQuestionOptions" rows="5" placeholder="Option 1&#10;Option 2&#10;Option 3&#10;Option 4"></textarea>
+          <label class="label" for="practiceQuestionAnswer">Correct answer</label>
+          <input id="practiceQuestionAnswer" type="text" placeholder="Exact correct answer" />
+        `;
+        return;
+      }
+
+      if (value === "short") {
+        extra.innerHTML = `
+          <label class="label" for="practiceQuestionAnswers">Accepted answers (one per line)</label>
+          <textarea id="practiceQuestionAnswers" rows="4" placeholder="Accepted answer 1&#10;Accepted answer 2"></textarea>
+        `;
+        return;
+      }
+
+      extra.innerHTML = `
+        <label class="label" for="practiceQuestionGuidance">Guidance</label>
+        <textarea id="practiceQuestionGuidance" rows="4" placeholder="Optional writing guidance"></textarea>
+      `;
+    }
+
+    renderExtraFields();
+    typeSelect.addEventListener("change", renderExtraFields);
+
+    document.getElementById("closePracticeQuestionModal").addEventListener("click", () => overlay.remove());
+
+    document.getElementById("practiceQuestionForm").addEventListener("submit", (event) => {
+      event.preventDefault();
+      const type = typeSelect.value;
+      const questionText = document.getElementById("practiceQuestionText").value.trim();
+      const errorBox = document.getElementById("practiceQuestionError");
+
+      errorBox.textContent = "";
+
+      if (!questionText) {
+        errorBox.textContent = "Please enter a question.";
+        return;
+      }
+
+      if (type === "mcq") {
+        const options = document.getElementById("practiceQuestionOptions").value.split("\n").map(item => item.trim()).filter(Boolean);
+        const answer = document.getElementById("practiceQuestionAnswer").value.trim();
+        if (options.length < 2 || !answer) {
+          errorBox.textContent = "Please add at least two options and a correct answer.";
+          return;
+        }
+        addCustomQuestion(subjectId, { type, question: questionText, options, answer });
+      } else if (type === "short") {
+        const acceptedAnswers = document.getElementById("practiceQuestionAnswers").value.split("\n").map(item => item.trim()).filter(Boolean);
+        if (!acceptedAnswers.length) {
+          errorBox.textContent = "Please add at least one accepted answer.";
+          return;
+        }
+        addCustomQuestion(subjectId, { type, question: questionText, acceptedAnswers });
+      } else {
+        const guidance = document.getElementById("practiceQuestionGuidance").value.trim();
+        addCustomQuestion(subjectId, { type, question: questionText, guidance });
+      }
+
+      overlay.remove();
+      const refreshedQuestions = getSubjectById(subjectId).quiz;
+      currentIndex = refreshedQuestions.findIndex(question => question.question === questionText);
+      showQuestion();
+    });
+  }
+
+  async function showOtherResponses(question) {
+    const overlay = document.createElement("div");
+    overlay.className = "modal-overlay";
+    overlay.id = "otherResponsesModal";
+    overlay.innerHTML = `
+      <div class="modal-card modal-card-wide">
+        <div class="practice-summary-head">
+          <div>
+            <h3>Other responses</h3>
+            <p class="panel-text">See how other students approached this written response.</p>
+          </div>
+          <button class="btn-secondary" id="closeOtherResponsesBtn">Close</button>
+        </div>
+        <div id="otherResponsesBody"><div class="empty">Loading responses...</div></div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    document.getElementById("closeOtherResponsesBtn").addEventListener("click", () => overlay.remove());
+
+    try {
+      const data = await fetchOtherWrittenResponses(subject.id, question.question);
+      const body = document.getElementById("otherResponsesBody");
+      const responses = (data.responses || []).filter(item => item.userId !== getUserId());
+
+      body.innerHTML = responses.length
+        ? `<div class="other-response-list">
+            ${responses.map(item => `
+              <article class="other-response-item">
+                <div class="quiz-comment-meta">${escapeHtml(item.username)} • ${escapeHtml(formatDateTime(item.updatedAt))}</div>
+                <div class="other-response-text">${escapeHtml(item.text)}</div>
+              </article>
+            `).join("")}
+          </div>`
+        : `<div class="empty">No other responses have been shared for this question yet.</div>`;
+    } catch (error) {
+      document.getElementById("otherResponsesBody").innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
+    }
+  }
+
+  async function showQuestion() {
+    const refreshedSubject = getSubjectById(subjectId);
+    const liveQuestions = refreshedSubject.quiz;
+    if (!liveQuestions.length) {
+      renderCompletedSummary();
+      return;
+    }
+    if (currentIndex >= liveQuestions.length) currentIndex = liveQuestions.length - 1;
+
+    const question = liveQuestions[currentIndex];
     const type = question.type || "mcq";
-    const progressPercent = Math.round((currentIndex / questions.length) * 100);
-    const flatComments = getQuizComments()[`${subject.id}__${question.question}`] || [];
-    const commentTree = buildCommentTree(flatComments);
-    const savedResponse = getWrittenResponse(subject.id, question.question);
+    const progressPercent = liveQuestions.length ? Math.round((currentIndex / liveQuestions.length) * 100) : 0;
+    let commentTree = [];
+    let savedResponse = getWrittenResponse(subject.id, question.question);
+
+    try {
+      const [commentsData, writtenData] = await Promise.all([
+        fetchComments(subject.id, question.question),
+        type === "mcq" ? Promise.resolve({ response: null }) : fetchWrittenResponseApi(subject.id, question.question)
+      ]);
+      commentTree = buildCommentTree(commentsData.comments || []);
+      if (writtenData && writtenData.response) {
+        savedResponse = {
+          response: writtenData.response.text,
+          time: writtenData.response.updatedAt
+        };
+        saveWrittenResponse(subject.id, question.question, writtenData.response.text);
+      }
+    } catch (_error) {
+      const flatComments = getQuizComments()[`${subject.id}__${question.question}`] || [];
+      commentTree = buildCommentTree(flatComments);
+    }
 
     const answerUI = type === "mcq"
       ? `
@@ -1347,29 +1566,38 @@ function renderQuiz(subjectId) {
       `
       : `
         <div class="quiz-answer-block">
-          <textarea id="writtenAnswerInput" rows="${type === "short" ? 3 : 10}" placeholder="${type === "short" ? "Type your short answer..." : "Write your response here..."}">${savedResponse ? escapeHtml(savedResponse.response) : ""}</textarea>
+          <textarea id="writtenAnswerInput" rows="${type === "short" ? 5 : 12}" placeholder="${type === "short" ? "Type your short answer..." : "Write your response here..."}">${savedResponse ? escapeHtml(savedResponse.response) : ""}</textarea>
           <div class="quiz-answer-helper">
-            ${
-              type === "short"
-                ? "Short answers are auto-checked against accepted answers."
-                : "Written responses are saved for review and are not auto-marked."
-            }
+            <span>
+              ${type === "short"
+                ? "Short answers are checked against accepted responses and saved for review."
+                : "Written responses are saved for review and are not auto-marked."}
+            </span>
+            <div class="inline-action-row">
+              <button class="btn-secondary" id="saveWrittenBtn" type="button">Save Response</button>
+              <button class="btn-secondary" id="viewOtherResponsesBtn" type="button">View Other Responses</button>
+            </div>
           </div>
         </div>
       `;
 
     const content = `
-      <div class="page-narrow page-wide">
-        <div class="back-row">
+      <div class="page-wide">
+        <div class="back-row practice-top-actions">
           <button class="btn-secondary" id="backBtn">← Back to Dashboard</button>
+          <div class="practice-top-actions-right">
+            <button class="btn-secondary" id="viewCompletedBtn">Completed Summary</button>
+            <button class="btn-primary" id="addQuestionBtn">Add Question</button>
+          </div>
         </div>
 
         <div class="quiz-meta">
           <span>${subject.name}</span>
-          <span>Question ${currentIndex + 1} of ${questions.length}</span>
+          <span>${getPracticeState(subjectId).completedQuestionKeys.length} completed</span>
+          <span>Question ${currentIndex + 1} of ${liveQuestions.length}</span>
         </div>
 
-        <div class="quiz-layout">
+        <div class="quiz-layout quiz-layout-wide">
           <section class="quiz-card quiz-main-card">
             <div class="quiz-type-badge">${getQuestionTypeLabel(type)}</div>
             <h2>${escapeHtml(question.question)}</h2>
@@ -1390,18 +1618,16 @@ function renderQuiz(subjectId) {
 
             ${
               savedResponse && type !== "mcq"
-                ? `<div class="saved-response"><strong>Saved response:</strong>
-
-${escapeHtml(savedResponse.response)}</div>`
+                ? `<div class="saved-response"><strong>Saved response:</strong><br>${escapeHtml(savedResponse.response)}</div>`
                 : ""
             }
 
             <div style="display:flex; gap:12px; flex-wrap:wrap; margin-top:18px;">
-              <button class="btn-primary" id="nextBtn" ${type === "mcq" ? "disabled" : ""}>${currentIndex === questions.length - 1 ? "Finish Quiz" : "Next Question"}</button>
+              <button class="btn-primary" id="nextBtn" ${type === "mcq" ? "disabled" : ""}>${currentIndex === liveQuestions.length - 1 ? "Finish Practice" : "Next Question"}</button>
             </div>
           </section>
 
-          <aside class="quiz-comments-side">
+          <aside class="quiz-comments-side quiz-comments-side-wide">
             <div class="quiz-comment-wrap quiz-comment-wrap-side">
               <h3>Question Comments</h3>
               <p>Discuss this exact question here.</p>
@@ -1420,18 +1646,27 @@ ${escapeHtml(savedResponse.response)}</div>`
       </div>
     `;
 
-    buildAppLayout("", content, `${subject.name} Quiz`, "Mixed-format subject practice from your dashboard.");
+    buildAppLayout("", content, `${subject.name} Practice`, "Mixed-format subject practice from your dashboard.");
 
     document.getElementById("backBtn").addEventListener("click", () => {
       window.location.hash = "#dashboard";
     });
 
-    document.getElementById("quizCommentForm").addEventListener("submit", (event) => {
+    document.getElementById("viewCompletedBtn").addEventListener("click", renderCompletedSummary);
+    document.getElementById("addQuestionBtn").addEventListener("click", openAddQuestionModal);
+
+    document.getElementById("quizCommentForm").addEventListener("submit", async (event) => {
       event.preventDefault();
       const input = document.getElementById("quizCommentInput");
       const text = input.value.trim();
       if (!text) return;
-      addQuizComment(subject.id, question.question, text, null);
+
+      try {
+        await postComment(subject.id, question.question, text, null);
+      } catch (_error) {
+        addQuizComment(subject.id, question.question, text, null);
+      }
+
       showQuestion();
     });
 
@@ -1443,19 +1678,51 @@ ${escapeHtml(savedResponse.response)}</div>`
     });
 
     document.querySelectorAll(".quiz-reply-form").forEach(form => {
-      form.addEventListener("submit", (event) => {
+      form.addEventListener("submit", async (event) => {
         event.preventDefault();
         const commentId = Number(form.id.replace("replyForm_", ""));
         const input = document.getElementById(`replyInput_${commentId}`);
         const text = input.value.trim();
         if (!text) return;
-        addQuizComment(subject.id, question.question, text, commentId);
+
+        try {
+          await postComment(subject.id, question.question, text, commentId);
+        } catch (_error) {
+          addQuizComment(subject.id, question.question, text, commentId);
+        }
+
         showQuestion();
       });
     });
 
     const nextBtn = document.getElementById("nextBtn");
     const feedback = document.getElementById("feedback");
+
+    if (type !== "mcq") {
+      const saveButton = document.getElementById("saveWrittenBtn");
+      const viewResponsesButton = document.getElementById("viewOtherResponsesBtn");
+
+      saveButton.addEventListener("click", async () => {
+        const input = document.getElementById("writtenAnswerInput");
+        const typed = input.value.trim();
+        if (!typed) {
+          feedback.innerHTML = `<div class="quiz-feedback incorrect">Please enter a response before saving.</div>`;
+          return;
+        }
+
+        try {
+          await saveWrittenResponseApi(subject.id, question.question, typed);
+        } catch (_error) {
+          saveWrittenResponse(subject.id, question.question, typed);
+        }
+        saveWrittenResponse(subject.id, question.question, typed);
+        feedback.innerHTML = `<div class="quiz-feedback saved">Written response saved.</div>`;
+      });
+
+      viewResponsesButton.addEventListener("click", () => {
+        showOtherResponses(question);
+      });
+    }
 
     if (type === "mcq") {
       document.querySelectorAll(".quiz-option").forEach(button => {
@@ -1465,7 +1732,6 @@ ${escapeHtml(savedResponse.response)}</div>`
 
           const selectedAnswer = button.textContent;
           const isCorrect = selectedAnswer === question.answer;
-          autoMarkedCount += 1;
 
           document.querySelectorAll(".quiz-option").forEach(btn => {
             btn.disabled = true;
@@ -1481,18 +1747,15 @@ ${escapeHtml(savedResponse.response)}</div>`
             }
           });
 
-          if (isCorrect) {
-            score++;
-            feedback.innerHTML = `<div class="quiz-feedback correct">Correct answer.</div>`;
-          } else {
-            feedback.innerHTML = `<div class="quiz-feedback incorrect">Incorrect. Correct answer: ${escapeHtml(question.answer)}</div>`;
-          }
+          feedback.innerHTML = isCorrect
+            ? `<div class="quiz-feedback correct">Correct answer.</div>`
+            : `<div class="quiz-feedback incorrect">Incorrect. Correct answer: ${escapeHtml(question.answer)}</div>`;
 
           nextBtn.disabled = false;
         });
       });
     } else {
-      nextBtn.addEventListener("click", () => {
+      nextBtn.addEventListener("click", async () => {
         if (answerLocked) return;
 
         const input = document.getElementById("writtenAnswerInput");
@@ -1506,18 +1769,18 @@ ${escapeHtml(savedResponse.response)}</div>`
         answerLocked = true;
         input.disabled = true;
 
+        try {
+          await saveWrittenResponseApi(subject.id, question.question, typed);
+        } catch (_error) {}
+
         if (type === "short") {
           const normalizedTyped = normalizeAnswer(typed);
           const accepted = (question.acceptedAnswers || []).map(normalizeAnswer);
-          autoMarkedCount += 1;
           saveWrittenResponse(subject.id, question.question, typed);
 
-          if (accepted.includes(normalizedTyped)) {
-            score++;
-            feedback.innerHTML = `<div class="quiz-feedback correct">Accepted short answer.</div>`;
-          } else {
-            feedback.innerHTML = `<div class="quiz-feedback incorrect">Saved, but not matched to the accepted short answers.</div>`;
-          }
+          feedback.innerHTML = accepted.includes(normalizedTyped)
+            ? `<div class="quiz-feedback correct">Accepted short answer.</div>`
+            : `<div class="quiz-feedback incorrect">Saved, but not matched to the accepted short answers.</div>`;
         }
 
         if (type === "long") {
@@ -1525,12 +1788,17 @@ ${escapeHtml(savedResponse.response)}</div>`
           feedback.innerHTML = `<div class="quiz-feedback saved">Written response saved for later review.</div>`;
         }
 
-        if (currentIndex < questions.length - 1) {
-          currentIndex++;
+        markQuestionCompleted(subject.id, question.question);
+
+        const latestQuestions = getSubjectById(subjectId).quiz;
+        const nextIncompleteIndex = latestQuestions.findIndex(item => !getPracticeState(subjectId).completedQuestionKeys.includes(item.question));
+
+        if (nextIncompleteIndex >= 0) {
+          currentIndex = nextIncompleteIndex;
           answerLocked = false;
           showQuestion();
         } else {
-          showResult();
+          renderCompletedSummary();
         }
       });
 
@@ -1538,94 +1806,26 @@ ${escapeHtml(savedResponse.response)}</div>`
     }
 
     nextBtn.addEventListener("click", () => {
-      currentIndex++;
+      markQuestionCompleted(subject.id, question.question);
+      const latestQuestions = getSubjectById(subjectId).quiz;
+      const nextIncompleteIndex = latestQuestions.findIndex(item => !getPracticeState(subjectId).completedQuestionKeys.includes(item.question));
       answerLocked = false;
 
-      if (currentIndex < questions.length) {
+      if (nextIncompleteIndex >= 0) {
+        currentIndex = nextIncompleteIndex;
         showQuestion();
       } else {
-        showResult();
+        renderCompletedSummary();
       }
     });
   }
 
-  async function showResult() {
-    const percent = autoMarkedCount > 0 ? Math.round((score / autoMarkedCount) * 100) : 0;
-    const longCount = questions.filter(q => (q.type || "mcq") === "long").length;
-    let leaderboardHtml = `<div class="leaderboard-meta">Leaderboard unavailable.</div>`;
-
-    try {
-      if (autoMarkedCount > 0) {
-        await submitQuizScore(subject.id, score, autoMarkedCount);
-      }
-
-      const leaderboardData = await fetchLeaderboard(subject.id);
-      const board = leaderboardData.leaderboard || [];
-
-      leaderboardHtml = board.length
-        ? `
-          <div class="leaderboard-list">
-            ${board.map((entry, index) => `
-              <div class="leaderboard-row">
-                <div>
-                  <div><span class="leaderboard-rank">#${index + 1}</span> ${escapeHtml(entry.email)}</div>
-                  <div class="leaderboard-meta">${entry.attempts} attempt${Number(entry.attempts) === 1 ? "" : "s"}</div>
-                </div>
-                <strong>${entry.best_percent}% (${entry.best_score}/${entry.best_total})</strong>
-              </div>
-            `).join("")}
-          </div>
-        `
-        : `<div class="leaderboard-meta">No scores yet for this subject.</div>`;
-    } catch (error) {
-      leaderboardHtml = `<div class="leaderboard-meta">${escapeHtml(error.message)}</div>`;
-    }
-
-    const content = `
-      <div class="page-narrow">
-        <div class="back-row">
-          <button class="btn-secondary" id="backBtn">← Back to Dashboard</button>
-        </div>
-
-        <section class="quiz-card">
-          <h2>${subject.name} Quiz Complete</h2>
-          <div class="result-score">${score} / ${autoMarkedCount}</div>
-          <div class="result-sub">
-            Auto-marked score: ${percent}%.
-            ${longCount > 0 ? ` This quiz also included ${longCount} written response ${longCount === 1 ? "question" : "questions"} saved separately.` : ""}
-          </div>
-
-          <div style="display:flex; gap:12px; flex-wrap:wrap;">
-            <button class="btn-primary" id="retryBtn">Retry Quiz</button>
-          </div>
-
-          <div class="leaderboard-block">
-            <h3>Leaderboard</h3>
-            <p>Top scores for ${subject.name}.</p>
-            ${leaderboardHtml}
-          </div>
-        </section>
-      </div>
-    `;
-
-    buildAppLayout("", content, `${subject.name} Quiz`, "Review your result and continue revising.");
-
-    document.getElementById("backBtn").addEventListener("click", () => {
-      window.location.hash = "#dashboard";
-    });
-
-    document.getElementById("retryBtn").addEventListener("click", () => {
-      currentIndex = 0;
-      score = 0;
-      autoMarkedCount = 0;
-      answerLocked = false;
-      showQuestion();
-    });
+  if (getPracticeState(subjectId).summaryOpen) {
+    renderCompletedSummary();
+  } else {
+    showQuestion();
   }
-
-  showQuestion();
 }
-
 
 window.addEventListener("keydown", (event) => {
   if (
@@ -1641,5 +1841,16 @@ window.addEventListener("keydown", (event) => {
   }
 });
 
-window.addEventListener("load", render);
+window.addEventListener("load", async () => {
+  if (getLoggedIn()) {
+    try {
+      const profile = await fetchProfile();
+      setAuthSession(getAuthToken(), profile.user, localStorage.getItem(STORAGE_KEYS.rememberLogin) === "1");
+    } catch (_error) {
+      clearAuthSession();
+    }
+  }
+  render();
+});
+
 window.addEventListener("hashchange", render);

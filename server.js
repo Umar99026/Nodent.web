@@ -37,6 +37,14 @@ function all(sql, params = []) {
   });
 }
 
+async function ensureColumn(table, column, definition) {
+  const columns = await all(`PRAGMA table_info(${table})`);
+  const exists = columns.some((item) => item.name === column);
+  if (!exists) {
+    await run(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
+}
+
 function nowIso() {
   return new Date().toISOString();
 }
@@ -63,12 +71,16 @@ async function initDb() {
   await run(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT NOT NULL UNIQUE DEFAULT "",
       email TEXT NOT NULL UNIQUE,
       password_hash TEXT NOT NULL,
       password_salt TEXT NOT NULL,
       created_at TEXT NOT NULL
     )
   `);
+
+  await ensureColumn("users", "username", 'TEXT NOT NULL DEFAULT ""');
+  await run(`UPDATE users SET username = email WHERE username IS NULL OR TRIM(username) = ""`);
 
   await run(`
     CREATE TABLE IF NOT EXISTS sessions (
@@ -131,7 +143,7 @@ async function authMiddleware(req, res, next) {
 
     const session = await get(
       `
-      SELECT sessions.token, users.id, users.email
+      SELECT sessions.token, users.id, users.email, users.username
       FROM sessions
       JOIN users ON users.id = sessions.user_id
       WHERE sessions.token = ?
@@ -146,6 +158,7 @@ async function authMiddleware(req, res, next) {
     req.user = {
       id: session.id,
       email: session.email,
+      username: session.username || session.email,
       token: session.token
     };
 
@@ -158,8 +171,13 @@ async function authMiddleware(req, res, next) {
 
 app.post("/api/signup", async (req, res) => {
   try {
+    const username = cleanText(req.body.username, 40);
     const email = String(req.body.email || "").trim().toLowerCase();
     const password = String(req.body.password || "").trim();
+
+    if (username.length < 2) {
+      return res.status(400).json({ error: "Username must be at least 2 characters." });
+    }
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return res.status(400).json({ error: "Please enter a valid email address." });
@@ -174,12 +192,17 @@ app.post("/api/signup", async (req, res) => {
       return res.status(400).json({ error: "An account with this email already exists." });
     }
 
+    const existingUsername = await get(`SELECT id FROM users WHERE LOWER(username) = LOWER(?)`, [username]);
+    if (existingUsername) {
+      return res.status(400).json({ error: "That username is already taken." });
+    }
+
     const { salt, hash } = hashPassword(password);
     const createdAt = nowIso();
 
     const result = await run(
-      `INSERT INTO users (email, password_hash, password_salt, created_at) VALUES (?, ?, ?, ?)`,
-      [email, hash, salt, createdAt]
+      `INSERT INTO users (username, email, password_hash, password_salt, created_at) VALUES (?, ?, ?, ?, ?)`,
+      [username, email, hash, salt, createdAt]
     );
 
     const token = createToken();
@@ -192,6 +215,7 @@ app.post("/api/signup", async (req, res) => {
       token,
       user: {
         id: result.lastID,
+        username,
         email
       }
     });
@@ -203,13 +227,30 @@ app.post("/api/signup", async (req, res) => {
 
 app.post("/api/login", async (req, res) => {
   try {
-    const email = String(req.body.email || "").trim().toLowerCase();
+    const loginValue = String(req.body.email || req.body.username || "").trim().toLowerCase();
     const password = String(req.body.password || "").trim();
 
-    const user = await get(`SELECT * FROM users WHERE email = ?`, [email]);
+    if (!loginValue || !password) {
+      return res.status(400).json({ error: "Please enter your email or username and password." });
+    }
 
-    if (!user || !verifyPassword(password, user.password_salt, user.password_hash)) {
-      return res.status(400).json({ error: "Invalid email or password." });
+    const user = await get(
+      `SELECT * FROM users WHERE LOWER(email) = ? OR LOWER(username) = ?`,
+      [loginValue, loginValue]
+    );
+
+    if (!user) {
+      return res.status(400).json({ error: "Invalid login details." });
+    }
+
+    if (!user.password_salt || !user.password_hash) {
+      return res.status(400).json({ error: "This account is missing password data. Please sign up again." });
+    }
+
+    const validPassword = verifyPassword(password, user.password_salt, user.password_hash);
+
+    if (!validPassword) {
+      return res.status(400).json({ error: "Invalid login details." });
     }
 
     const token = createToken();
@@ -222,6 +263,7 @@ app.post("/api/login", async (req, res) => {
       token,
       user: {
         id: user.id,
+        username: user.username || user.email,
         email: user.email
       }
     });
@@ -231,11 +273,12 @@ app.post("/api/login", async (req, res) => {
   }
 });
 
-app.get("/api/me", authMiddleware, async (req, res) => {
+app.get("/api/me", authMiddleware, async (_req, res) => {
   res.json({
     user: {
-      id: req.user.id,
-      email: req.user.email
+      id: _req.user.id,
+      username: _req.user.username,
+      email: _req.user.email
     }
   });
 });
@@ -282,7 +325,7 @@ app.get("/api/leaderboard/:subjectId", async (req, res) => {
     const leaderboard = await all(
       `
       SELECT
-        users.email,
+        users.username,
         MAX(quiz_attempts.percent) AS best_percent,
         MAX(quiz_attempts.score) AS best_score,
         MAX(quiz_attempts.total_questions) AS best_total,
@@ -291,7 +334,7 @@ app.get("/api/leaderboard/:subjectId", async (req, res) => {
       JOIN users ON users.id = quiz_attempts.user_id
       WHERE quiz_attempts.subject_id = ?
       GROUP BY quiz_attempts.user_id
-      ORDER BY best_percent DESC, best_score DESC, attempts ASC, users.email ASC
+      ORDER BY best_percent DESC, best_score DESC, attempts ASC, users.username ASC
       LIMIT 10
       `,
       [req.params.subjectId]
@@ -313,7 +356,7 @@ app.get("/api/comments/:subjectId/:questionKey", authMiddleware, async (req, res
         quiz_comments.parent_comment_id,
         quiz_comments.text,
         quiz_comments.created_at,
-        users.email,
+        users.username,
         users.id AS user_id
       FROM quiz_comments
       JOIN users ON users.id = quiz_comments.user_id
@@ -329,7 +372,7 @@ app.get("/api/comments/:subjectId/:questionKey", authMiddleware, async (req, res
         parentCommentId: row.parent_comment_id,
         text: row.text,
         time: row.created_at,
-        userEmail: row.email,
+        username: row.username,
         userId: row.user_id
       }))
     });
@@ -381,7 +424,7 @@ app.post("/api/comments/:subjectId/:questionKey", authMiddleware, async (req, re
         quiz_comments.parent_comment_id,
         quiz_comments.text,
         quiz_comments.created_at,
-        users.email,
+        users.username,
         users.id AS user_id
       FROM quiz_comments
       JOIN users ON users.id = quiz_comments.user_id
@@ -396,7 +439,7 @@ app.post("/api/comments/:subjectId/:questionKey", authMiddleware, async (req, re
         parentCommentId: created.parent_comment_id,
         text: created.text,
         time: created.created_at,
-        userEmail: created.email,
+        username: created.username,
         userId: created.user_id
       }
     });
@@ -454,6 +497,33 @@ app.put("/api/written/:subjectId/:questionKey", authMiddleware, async (req, res)
   } catch (error) {
     console.error("Save written response error:", error);
     res.status(500).json({ error: "Could not save written response." });
+  }
+});
+
+app.get("/api/written/:subjectId/:questionKey/all", authMiddleware, async (req, res) => {
+  try {
+    const rows = await all(
+      `
+      SELECT written_responses.response_text, written_responses.updated_at, users.username, users.id AS user_id
+      FROM written_responses
+      JOIN users ON users.id = written_responses.user_id
+      WHERE written_responses.subject_id = ? AND written_responses.question_key = ?
+      ORDER BY written_responses.updated_at DESC
+      `,
+      [req.params.subjectId, req.params.questionKey]
+    );
+
+    res.json({
+      responses: rows.map((row) => ({
+        text: row.response_text,
+        updatedAt: row.updated_at,
+        username: row.username,
+        userId: row.user_id
+      }))
+    });
+  } catch (error) {
+    console.error("Load all written responses error:", error);
+    res.status(500).json({ error: "Could not load written responses." });
   }
 });
 
