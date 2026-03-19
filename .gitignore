@@ -1,0 +1,4 @@
+node_modules
+nodent.db
+.env
+.DS_Store
