@@ -765,19 +765,15 @@ async function loadWrittenResponse(subjectId, questionKey) {
     const data = await apiFetch(API.written(subjectId, questionKey), { method: "GET" });
     return data.response || null;
   } catch {
-    return getWrittenResponse(subjectId, questionKey);
+    return null;
   }
 }
 
 async function saveWrittenResponse(subjectId, questionKey, responseText) {
-  try {
-    await apiFetch(API.written(subjectId, questionKey), {
-      method: "PUT",
-      body: JSON.stringify({ responseText })
-    });
-  } catch {
-    saveWrittenResponseLocal(subjectId, questionKey, responseText);
-  }
+  await apiFetch(API.written(subjectId, questionKey), {
+    method: "PUT",
+    body: JSON.stringify({ responseText })
+  });
 }
 
 /* -------------------------------- comments -------------------------------- */
@@ -795,34 +791,16 @@ async function fetchQuestionComments(subjectId, questionKey) {
     const data = await apiFetch(API.comments(subjectId, questionKey), { method: "GET" });
     return data.comments || [];
   } catch {
-    const comments = getQuizComments();
-    return comments[`${subjectId}__${questionKey}`] || [];
+    return [];
   }
 }
 
 async function createQuestionComment(subjectId, questionKey, text, parentCommentId = null) {
-  try {
-    const data = await apiFetch(API.comments(subjectId, questionKey), {
-      method: "POST",
-      body: JSON.stringify({ text, parentCommentId })
-    });
-    return data.comment;
-  } catch {
-    const comments = getQuizComments();
-    const key = `${subjectId}__${questionKey}`;
-    if (!comments[key]) comments[key] = [];
-    const created = {
-      id: Date.now() + Math.floor(Math.random() * 1000),
-      parentCommentId,
-      text,
-      time: new Date().toISOString(),
-      username: getUserUsername(),
-      userId: getUserId()
-    };
-    comments[key].push(created);
-    setQuizComments(comments);
-    return created;
-  }
+  const data = await apiFetch(API.comments(subjectId, questionKey), {
+    method: "POST",
+    body: JSON.stringify({ text, parentCommentId })
+  });
+  return data.comment;
 }
 
 function buildCommentTree(flatComments) {
@@ -1934,7 +1912,10 @@ async function renderQuiz(subjectId, openSummary = false) {
       const input = document.getElementById("quizCommentInput");
       const text = input.value.trim();
       if (!text) return;
-      await createQuestionComment(subject.id, question.question, text, null);
+      try {
+        await createQuestionComment(subject.id, question.question, text, null);
+      } catch { /* server unavailable */ }
+      input.value = "";
       showQuestion();
     });
 
@@ -1952,7 +1933,10 @@ async function renderQuiz(subjectId, openSummary = false) {
         const input = document.getElementById(`replyInput_${commentId}`);
         const text = input.value.trim();
         if (!text) return;
-        await createQuestionComment(subject.id, question.question, text, commentId);
+        try {
+          await createQuestionComment(subject.id, question.question, text, commentId);
+        } catch { /* server unavailable */ }
+        input.value = "";
         showQuestion();
       });
     });
@@ -1968,10 +1952,14 @@ async function renderQuiz(subjectId, openSummary = false) {
           if (saveFeedback) saveFeedback.innerHTML = `<div class="quiz-feedback incorrect">Nothing to save yet.</div>`;
           return;
         }
-        await saveWrittenResponse(subject.id, question.question, typed);
-        if (saveFeedback) {
-          saveFeedback.innerHTML = `<div class="quiz-feedback saved">Answer saved.</div>`;
-          setTimeout(() => { if (saveFeedback) saveFeedback.innerHTML = ""; }, 2000);
+        try {
+          await saveWrittenResponse(subject.id, question.question, typed);
+          if (saveFeedback) {
+            saveFeedback.innerHTML = `<div class="quiz-feedback saved">Answer saved.</div>`;
+            setTimeout(() => { if (saveFeedback) saveFeedback.innerHTML = ""; }, 2000);
+          }
+        } catch {
+          if (saveFeedback) saveFeedback.innerHTML = `<div class="quiz-feedback incorrect">Could not save — server unreachable.</div>`;
         }
       });
     }
@@ -2073,7 +2061,9 @@ async function renderQuiz(subjectId, openSummary = false) {
         }
 
         const latestState = getPracticeState(subjectId);
-        await saveWrittenResponse(subject.id, question.question, typed);
+        try {
+          await saveWrittenResponse(subject.id, question.question, typed);
+        } catch { /* server unavailable — practice state still saved locally */ }
 
         if (!latestState.completedQuestionKeys.includes(question.question)) {
           latestState.completedQuestionKeys.push(question.question);
