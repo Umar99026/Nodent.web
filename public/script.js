@@ -34,6 +34,7 @@ const API = {
   quizSubmit: "/api/quiz/submit",
   adminQuestions: "/api/admin/questions",
   adminDeleteQuestion: (id) => `/api/admin/questions/${id}`,
+  chat: (subjectId) => `/api/chat/${encodeURIComponent(subjectId)}`,
   leaderboard: (subjectId) => `/api/leaderboard/${encodeURIComponent(subjectId)}`,
   comments: (subjectId, questionKey) =>
     `/api/comments/${encodeURIComponent(subjectId)}/${encodeURIComponent(questionKey)}`,
@@ -1245,7 +1246,6 @@ function buildAppLayout(activePage, content, heading, subheading, extraTopLeft =
           </div>
           <div class="topbar-right-group">
             <div class="topbar-username-pill">👤 ${escapeHtml(username)}</div>
-            <div class="top-pill">Accounts and scores saved locally</div>
           </div>
         </div>
         ${content}
@@ -1429,7 +1429,7 @@ function renderDashboard() {
                   </div>
                   <div class="subject-desc">${escapeHtml(subject.description)}</div>
                   <div class="subject-actions">
-                    <button class="btn-primary" data-quiz="${subject.id}" type="button">Quiz</button>
+                    <button class="btn-primary" data-quiz="${subject.id}" type="button">Practice</button>
                     <button class="btn-secondary" data-summary="${subject.id}" type="button">Completed Summary</button>
                     <button class="btn-success" data-chat="${subject.id}" type="button">Public Chat</button>
                   </div>
@@ -1448,7 +1448,7 @@ function renderDashboard() {
     "dashboard",
     content,
     "Dashboard",
-    "Manage your study subjects, launch quizzes, and open subject discussion spaces.",
+    "Manage your study subjects, launch practice, and open subject discussion spaces.",
     buildSubjectFlyout(subjects, mySubjects)
   );
 
@@ -2313,15 +2313,21 @@ function renderStudyMode(subjectId) {
 
 /* --------------------------------- chat --------------------------------- */
 
-function renderChat(subjectId) {
+async function renderChat(subjectId) {
   const subject = getSubjectById(subjectId);
   if (!subject) {
     window.location.hash = "#dashboard";
     return;
   }
 
-  const chats = getChats();
-  const messages = chats[subjectId] || [];
+  let messages = [];
+  try {
+    const data = await apiFetch(API.chat(subjectId));
+    messages = data.messages || [];
+  } catch {
+    messages = [];
+  }
+
   const currentUserId = getUserId();
 
   const content = `
@@ -2343,7 +2349,7 @@ function renderChat(subjectId) {
                   .map(
                     (message) => `
                 <div class="chat-message ${message.userId === currentUserId ? "own" : ""}">
-                  <div class="chat-meta"><strong>${escapeHtml(message.username || message.userEmail || "User")}</strong> • ${escapeHtml(formatDateTime(message.time))}</div>
+                  <div class="chat-meta"><strong>${escapeHtml(message.username || "User")}</strong> • ${escapeHtml(formatDateTime(message.time))}</div>
                   <div class="chat-text">${escapeHtml(message.text)}</div>
                 </div>
               `
@@ -2367,30 +2373,23 @@ function renderChat(subjectId) {
     window.location.hash = "#dashboard";
   });
 
-  document.getElementById("chatForm").addEventListener("submit", (event) => {
+  document.getElementById("chatForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     const input = document.getElementById("chatInput");
     const text = input.value.trim();
     if (!text) return;
-
-    const updatedChats = getChats();
-    if (!updatedChats[subjectId]) updatedChats[subjectId] = [];
-
-    updatedChats[subjectId].push({
-      id: Date.now(),
-      username: getUserUsername(),
-      userEmail: getUserEmail(),
-      userId: getUserId(),
-      text,
-      time: new Date().toISOString()
-    });
-
-    setChats(updatedChats);
+    input.value = "";
+    try {
+      await apiFetch(API.chat(subjectId), {
+        method: "POST",
+        body: JSON.stringify({ text })
+      });
+    } catch { /* ignore */ }
     renderChat(subjectId);
   });
 
   const chatBox = document.getElementById("chatBox");
-  chatBox.scrollTop = chatBox.scrollHeight;
+  if (chatBox) chatBox.scrollTop = chatBox.scrollHeight;
 }
 
 /* -------------------------------- admin -------------------------------- */

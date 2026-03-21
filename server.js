@@ -148,6 +148,18 @@ async function initDb() {
       created_at TEXT NOT NULL
     )
   `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS chat_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      subject_id TEXT NOT NULL,
+      user_id INTEGER NOT NULL,
+      username TEXT NOT NULL,
+      text TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    )
+  `);
 }
 
 async function authMiddleware(req, res, next) {
@@ -563,6 +575,55 @@ app.get("/api/written/:subjectId/:questionKey/all", authMiddleware, async (req, 
   } catch (error) {
     console.error("Load all written responses error:", error);
     res.status(500).json({ error: "Could not load written responses." });
+  }
+});
+
+/* ── chat ── */
+
+app.get("/api/chat/:subjectId", authMiddleware, async (req, res) => {
+  try {
+    const rows = await all(
+      `SELECT id, user_id, username, text, created_at FROM chat_messages
+       WHERE subject_id = ? ORDER BY created_at ASC, id ASC LIMIT 200`,
+      [req.params.subjectId]
+    );
+    res.json({
+      messages: rows.map(r => ({
+        id: r.id,
+        userId: r.user_id,
+        username: r.username,
+        text: r.text,
+        time: r.created_at
+      }))
+    });
+  } catch (error) {
+    console.error("Load chat error:", error);
+    res.status(500).json({ error: "Could not load chat." });
+  }
+});
+
+app.post("/api/chat/:subjectId", authMiddleware, async (req, res) => {
+  try {
+    const text = cleanText(req.body.text, 1000);
+    if (!text) return res.status(400).json({ error: "Message cannot be empty." });
+
+    const result = await run(
+      `INSERT INTO chat_messages (subject_id, user_id, username, text, created_at) VALUES (?, ?, ?, ?, ?)`,
+      [req.params.subjectId, req.user.id, req.user.username, text, nowIso()]
+    );
+
+    res.json({
+      message: {
+        id: result.lastID,
+        userId: req.user.id,
+        username: req.user.username,
+        text,
+        time: nowIso()
+      }
+    });
+  } catch (error) {
+    console.error("Send chat error:", error);
+    res.status(500).json({ error: "Could not send message." });
   }
 });
 
