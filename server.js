@@ -7,6 +7,9 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const db = new sqlite3.Database(path.join(__dirname, "nodent.db"));
 
+// Change this to your own secret passphrase. Set ADMIN_KEY env var in production.
+const ADMIN_KEY = process.env.ADMIN_KEY || "nodent-admin-2025";
+
 app.use(express.json({ limit: "1mb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
@@ -130,6 +133,21 @@ async function initDb() {
       FOREIGN KEY (parent_comment_id) REFERENCES quiz_comments(id)
     )
   `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS custom_questions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      subject_id TEXT NOT NULL,
+      type TEXT NOT NULL,
+      question TEXT NOT NULL,
+      options TEXT,
+      answer TEXT,
+      accepted_answers TEXT,
+      guidance TEXT,
+      passage TEXT,
+      created_at TEXT NOT NULL
+    )
+  `);
 }
 
 async function authMiddleware(req, res, next) {
@@ -169,7 +187,42 @@ async function authMiddleware(req, res, next) {
   }
 }
 
-app.post("/api/signup", async (req, res) => {
+/* ── bootstrap (session hydration) ── */
+
+app.get("/api/bootstrap", authMiddleware, async (req, res) => {
+  try {
+    const rows = await all(`SELECT * FROM custom_questions ORDER BY subject_id, created_at ASC`);
+    const customQuestions = {};
+    for (const row of rows) {
+      if (!customQuestions[row.subject_id]) customQuestions[row.subject_id] = [];
+      customQuestions[row.subject_id].push({
+        id: row.id,
+        type: row.type,
+        question: row.question,
+        options: row.options ? JSON.parse(row.options) : undefined,
+        answer: row.answer || undefined,
+        acceptedAnswers: row.accepted_answers ? JSON.parse(row.accepted_answers) : undefined,
+        guidance: row.guidance || undefined,
+        passage: row.passage || undefined
+      });
+    }
+    res.json({
+      user: {
+        id: req.user.id,
+        email: req.user.email,
+        username: req.user.username
+      },
+      customQuestions
+    });
+  } catch (error) {
+    console.error("Bootstrap error:", error);
+    res.status(500).json({ error: "Could not load session." });
+  }
+});
+
+/* ── signup — registered at both /api/signup and /api/auth/signup ── */
+
+async function handleSignup(req, res) {
   try {
     const username = cleanText(req.body.username, 40);
     const email = String(req.body.email || "").trim().toLowerCase();
@@ -213,19 +266,20 @@ app.post("/api/signup", async (req, res) => {
 
     res.json({
       token,
-      user: {
-        id: result.lastID,
-        username,
-        email
-      }
+      user: { id: result.lastID, username, email }
     });
   } catch (error) {
     console.error("Signup error:", error);
     res.status(500).json({ error: "Could not create account." });
   }
-});
+}
 
-app.post("/api/login", async (req, res) => {
+app.post("/api/signup", handleSignup);
+app.post("/api/auth/signup", handleSignup);
+
+/* ── login — registered at both /api/login and /api/auth/login ── */
+
+async function handleLogin(req, res) {
   try {
     const loginValue = String(req.body.email || req.body.username || "").trim().toLowerCase();
     const password = String(req.body.password || "").trim();
@@ -261,29 +315,20 @@ app.post("/api/login", async (req, res) => {
 
     res.json({
       token,
-      user: {
-        id: user.id,
-        username: user.username || user.email,
-        email: user.email
-      }
+      user: { id: user.id, username: user.username || user.email, email: user.email }
     });
   } catch (error) {
     console.error("Login error:", error);
     res.status(500).json({ error: "Could not log in." });
   }
-});
+}
 
-app.get("/api/me", authMiddleware, async (_req, res) => {
-  res.json({
-    user: {
-      id: _req.user.id,
-      username: _req.user.username,
-      email: _req.user.email
-    }
-  });
-});
+app.post("/api/login", handleLogin);
+app.post("/api/auth/login", handleLogin);
 
-app.post("/api/logout", authMiddleware, async (req, res) => {
+/* ── logout — registered at both /api/logout and /api/auth/logout ── */
+
+async function handleLogout(req, res) {
   try {
     await run(`DELETE FROM sessions WHERE token = ?`, [req.user.token]);
     res.json({ ok: true });
@@ -291,7 +336,12 @@ app.post("/api/logout", authMiddleware, async (req, res) => {
     console.error("Logout error:", error);
     res.status(500).json({ error: "Could not log out." });
   }
-});
+}
+
+app.post("/api/logout", authMiddleware, handleLogout);
+app.post("/api/auth/logout", authMiddleware, handleLogout);
+
+/* ── quiz submit ── */
 
 app.post("/api/quiz/submit", authMiddleware, async (req, res) => {
   try {
@@ -320,6 +370,8 @@ app.post("/api/quiz/submit", authMiddleware, async (req, res) => {
   }
 });
 
+/* ── leaderboard ── */
+
 app.get("/api/leaderboard/:subjectId", async (req, res) => {
   try {
     const leaderboard = await all(
@@ -346,6 +398,8 @@ app.get("/api/leaderboard/:subjectId", async (req, res) => {
     res.status(500).json({ error: "Could not load leaderboard." });
   }
 });
+
+/* ── comments ── */
 
 app.get("/api/comments/:subjectId/:questionKey", authMiddleware, async (req, res) => {
   try {
@@ -396,14 +450,9 @@ app.post("/api/comments/:subjectId/:questionKey", authMiddleware, async (req, re
 
     if (parentCommentId !== null) {
       const parent = await get(
-        `
-        SELECT id
-        FROM quiz_comments
-        WHERE id = ? AND subject_id = ? AND question_key = ?
-        `,
+        `SELECT id FROM quiz_comments WHERE id = ? AND subject_id = ? AND question_key = ?`,
         [parentCommentId, req.params.subjectId, req.params.questionKey]
       );
-
       if (!parent) {
         return res.status(400).json({ error: "Reply target not found." });
       }
@@ -419,13 +468,8 @@ app.post("/api/comments/:subjectId/:questionKey", authMiddleware, async (req, re
 
     const created = await get(
       `
-      SELECT
-        quiz_comments.id,
-        quiz_comments.parent_comment_id,
-        quiz_comments.text,
-        quiz_comments.created_at,
-        users.username,
-        users.id AS user_id
+      SELECT quiz_comments.id, quiz_comments.parent_comment_id, quiz_comments.text,
+             quiz_comments.created_at, users.username, users.id AS user_id
       FROM quiz_comments
       JOIN users ON users.id = quiz_comments.user_id
       WHERE quiz_comments.id = ?
@@ -449,24 +493,18 @@ app.post("/api/comments/:subjectId/:questionKey", authMiddleware, async (req, re
   }
 });
 
+/* ── written responses ── */
+
 app.get("/api/written/:subjectId/:questionKey", authMiddleware, async (req, res) => {
   try {
     const row = await get(
-      `
-      SELECT response_text, updated_at
-      FROM written_responses
-      WHERE user_id = ? AND subject_id = ? AND question_key = ?
-      `,
+      `SELECT response_text, updated_at FROM written_responses
+       WHERE user_id = ? AND subject_id = ? AND question_key = ?`,
       [req.user.id, req.params.subjectId, req.params.questionKey]
     );
 
     res.json({
-      response: row
-        ? {
-            text: row.response_text,
-            updatedAt: row.updated_at
-          }
-        : null
+      response: row ? { text: row.response_text, updatedAt: row.updated_at } : null
     });
   } catch (error) {
     console.error("Load written response error:", error);
@@ -504,7 +542,8 @@ app.get("/api/written/:subjectId/:questionKey/all", authMiddleware, async (req, 
   try {
     const rows = await all(
       `
-      SELECT written_responses.response_text, written_responses.updated_at, users.username, users.id AS user_id
+      SELECT written_responses.response_text, written_responses.updated_at,
+             users.username, users.id AS user_id
       FROM written_responses
       JOIN users ON users.id = written_responses.user_id
       WHERE written_responses.subject_id = ? AND written_responses.question_key = ?
@@ -526,6 +565,82 @@ app.get("/api/written/:subjectId/:questionKey/all", authMiddleware, async (req, 
     res.status(500).json({ error: "Could not load written responses." });
   }
 });
+
+/* ── admin middleware ── */
+
+function adminMiddleware(req, res, next) {
+  const key = req.headers["x-admin-key"] || "";
+  if (key !== ADMIN_KEY) {
+    return res.status(403).json({ error: "Invalid admin key." });
+  }
+  next();
+}
+
+/* ── custom questions ── */
+
+app.get("/api/admin/questions", adminMiddleware, async (req, res) => {
+  try {
+    const rows = await all(`SELECT * FROM custom_questions ORDER BY subject_id, created_at ASC`);
+    const grouped = {};
+    for (const row of rows) {
+      if (!grouped[row.subject_id]) grouped[row.subject_id] = [];
+      grouped[row.subject_id].push({
+        id: row.id,
+        type: row.type,
+        question: row.question,
+        options: row.options ? JSON.parse(row.options) : undefined,
+        answer: row.answer || undefined,
+        acceptedAnswers: row.accepted_answers ? JSON.parse(row.accepted_answers) : undefined,
+        guidance: row.guidance || undefined,
+        passage: row.passage || undefined
+      });
+    }
+    res.json({ customQuestions: grouped });
+  } catch (error) {
+    console.error("Load custom questions error:", error);
+    res.status(500).json({ error: "Could not load custom questions." });
+  }
+});
+
+app.post("/api/admin/questions", adminMiddleware, async (req, res) => {
+  try {
+    const subjectId = cleanText(req.body.subjectId, 80);
+    const type = cleanText(req.body.type, 20);
+    const question = cleanText(req.body.question, 1000);
+    const options = req.body.options ? JSON.stringify(req.body.options) : null;
+    const answer = req.body.answer ? cleanText(req.body.answer, 500) : null;
+    const acceptedAnswers = req.body.acceptedAnswers ? JSON.stringify(req.body.acceptedAnswers) : null;
+    const guidance = req.body.guidance ? cleanText(req.body.guidance, 500) : null;
+    const passage = req.body.passage ? cleanText(req.body.passage, 3000) : null;
+
+    if (!subjectId || !type || !question) {
+      return res.status(400).json({ error: "subjectId, type, and question are required." });
+    }
+
+    const result = await run(
+      `INSERT INTO custom_questions (subject_id, type, question, options, answer, accepted_answers, guidance, passage, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [subjectId, type, question, options, answer, acceptedAnswers, guidance, passage, nowIso()]
+    );
+
+    res.json({ ok: true, id: result.lastID });
+  } catch (error) {
+    console.error("Add custom question error:", error);
+    res.status(500).json({ error: "Could not add question." });
+  }
+});
+
+app.delete("/api/admin/questions/:id", adminMiddleware, async (req, res) => {
+  try {
+    await run(`DELETE FROM custom_questions WHERE id = ?`, [req.params.id]);
+    res.json({ ok: true });
+  } catch (error) {
+    console.error("Delete custom question error:", error);
+    res.status(500).json({ error: "Could not delete question." });
+  }
+});
+
+/* ── health / catch-all ── */
 
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true });
