@@ -1,23 +1,43 @@
 const express = require("express");
 const path = require("path");
+const fs = require("fs");
 const sqlite3 = require("sqlite3").verbose();
 const crypto = require("crypto");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const db = new sqlite3.Database(path.join(__dirname, "nodent.db"));
 
 // Change this to your own secret passphrase. Set ADMIN_KEY env var in production.
 const ADMIN_KEY = process.env.ADMIN_KEY || "nodent-admin-2025";
 
-app.use(express.json({ limit: "1mb" }));
-app.use(express.static(path.join(__dirname, "public")));
+// ── DB path: always next to server.js, never inside public/ ──────────────────
+const DB_PATH = process.env.DB_PATH || path.join(__dirname, "nodent.db");
+console.log(`[DB] Using database at: ${DB_PATH}`);
+
+const db = new sqlite3.Database(DB_PATH, (err) => {
+  if (err) {
+    console.error("[DB] Failed to open database:", err.message);
+    process.exit(1);
+  }
+  console.log("[DB] Connected successfully.");
+});
+
+// WAL mode = much better concurrent write performance across multiple devices
+db.run("PRAGMA journal_mode=WAL");
+db.run("PRAGMA foreign_keys=ON");
+db.run("PRAGMA synchronous=NORMAL");
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function run(sql, params = []) {
   return new Promise((resolve, reject) => {
     db.run(sql, params, function (err) {
-      if (err) reject(err);
-      else resolve(this);
+      if (err) {
+        console.error("[DB run error]", sql.slice(0, 80), err.message);
+        reject(err);
+      } else {
+        resolve(this);
+      }
     });
   });
 }
@@ -25,8 +45,12 @@ function run(sql, params = []) {
 function get(sql, params = []) {
   return new Promise((resolve, reject) => {
     db.get(sql, params, (err, row) => {
-      if (err) reject(err);
-      else resolve(row);
+      if (err) {
+        console.error("[DB get error]", sql.slice(0, 80), err.message);
+        reject(err);
+      } else {
+        resolve(row);
+      }
     });
   });
 }
@@ -34,8 +58,12 @@ function get(sql, params = []) {
 function all(sql, params = []) {
   return new Promise((resolve, reject) => {
     db.all(sql, params, (err, rows) => {
-      if (err) reject(err);
-      else resolve(rows);
+      if (err) {
+        console.error("[DB all error]", sql.slice(0, 80), err.message);
+        reject(err);
+      } else {
+        resolve(rows);
+      }
     });
   });
 }
@@ -44,6 +72,7 @@ async function ensureColumn(table, column, definition) {
   const columns = await all(`PRAGMA table_info(${table})`);
   const exists = columns.some((item) => item.name === column);
   if (!exists) {
+    console.log(`[DB] Adding column ${column} to ${table}`);
     await run(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
   }
 }
@@ -70,7 +99,11 @@ function cleanText(value, maxLength = 2000) {
   return String(value || "").replace(/\u0000/g, "").trim().slice(0, maxLength);
 }
 
+// ── DB init ───────────────────────────────────────────────────────────────────
+
 async function initDb() {
+  console.log("[DB] Initialising tables...");
+
   await run(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -90,9 +123,13 @@ async function initDb() {
       token TEXT PRIMARY KEY,
       user_id INTEGER NOT NULL,
       created_at TEXT NOT NULL,
-      FOREIGN KEY (user_id) REFERENCES users(id)
+      expires_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )
   `);
+
+  // Add expires_at to existing sessions tables that don't have it
+  await ensureColumn("sessions", "expires_at", "TEXT NOT NULL DEFAULT '2099-01-01T00:00:00.000Z'");
 
   await run(`
     CREATE TABLE IF NOT EXISTS quiz_attempts (
@@ -103,7 +140,7 @@ async function initDb() {
       total_questions INTEGER NOT NULL,
       percent INTEGER NOT NULL,
       created_at TEXT NOT NULL,
-      FOREIGN KEY (user_id) REFERENCES users(id)
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )
   `);
 
@@ -116,7 +153,7 @@ async function initDb() {
       response_text TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       UNIQUE(user_id, subject_id, question_key),
-      FOREIGN KEY (user_id) REFERENCES users(id)
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )
   `);
 
@@ -129,8 +166,8 @@ async function initDb() {
       parent_comment_id INTEGER,
       text TEXT NOT NULL,
       created_at TEXT NOT NULL,
-      FOREIGN KEY (user_id) REFERENCES users(id),
-      FOREIGN KEY (parent_comment_id) REFERENCES quiz_comments(id)
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (parent_comment_id) REFERENCES quiz_comments(id) ON DELETE CASCADE
     )
   `);
 
@@ -157,10 +194,46 @@ async function initDb() {
       username TEXT NOT NULL,
       text TEXT NOT NULL,
       created_at TEXT NOT NULL,
-      FOREIGN KEY (user_id) REFERENCES users(id)
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )
   `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS question_attempts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      subject_id TEXT NOT NULL,
+      question_key TEXT NOT NULL,
+      topic TEXT NOT NULL DEFAULT 'General',
+      is_correct INTEGER NOT NULL,
+      answered_at TEXT NOT NULL,
+      UNIQUE(user_id, subject_id, question_key),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+
+  // Clean up expired sessions on startup
+  await run(`DELETE FROM sessions WHERE expires_at < ?`, [nowIso()]);
+
+  const userCount = await get(`SELECT COUNT(*) as count FROM users`);
+  const sessionCount = await get(`SELECT COUNT(*) as count FROM sessions`);
+  const chatCount = await get(`SELECT COUNT(*) as count FROM chat_messages`);
+  const commentCount = await get(`SELECT COUNT(*) as count FROM quiz_comments`);
+  const attemptCount = await get(`SELECT COUNT(*) as count FROM question_attempts`);
+
+  console.log(`[DB] Ready. Users: ${userCount.count} | Sessions: ${sessionCount.count} | Chats: ${chatCount.count} | Comments: ${commentCount.count} | Attempts: ${attemptCount.count}`);
 }
+
+// ── Middleware ─────────────────────────────────────────────────────────────────
+
+app.use(express.json({ limit: "1mb" }));
+app.use(express.static(path.join(__dirname, "public")));
+
+// Log every API request so you can see what's happening
+app.use("/api", (req, _res, next) => {
+  console.log(`[API] ${req.method} ${req.path}`);
+  next();
+});
 
 async function authMiddleware(req, res, next) {
   try {
@@ -172,17 +245,22 @@ async function authMiddleware(req, res, next) {
     }
 
     const session = await get(
-      `
-      SELECT sessions.token, users.id, users.email, users.username
-      FROM sessions
-      JOIN users ON users.id = sessions.user_id
-      WHERE sessions.token = ?
-      `,
+      `SELECT sessions.token, sessions.expires_at, users.id, users.email, users.username
+       FROM sessions
+       JOIN users ON users.id = sessions.user_id
+       WHERE sessions.token = ?`,
       [token]
     );
 
     if (!session) {
-      return res.status(401).json({ error: "Invalid session." });
+      console.log(`[Auth] Token not found in DB`);
+      return res.status(401).json({ error: "Invalid session. Please log in again." });
+    }
+
+    if (session.expires_at && session.expires_at < nowIso()) {
+      await run(`DELETE FROM sessions WHERE token = ?`, [token]);
+      console.log(`[Auth] Token expired`);
+      return res.status(401).json({ error: "Session expired. Please log in again." });
     }
 
     req.user = {
@@ -194,12 +272,48 @@ async function authMiddleware(req, res, next) {
 
     next();
   } catch (error) {
-    console.error("Auth middleware error:", error);
+    console.error("[Auth] Middleware error:", error);
     res.status(500).json({ error: "Authentication failed." });
   }
 }
 
-/* ── bootstrap (session hydration) ── */
+function adminMiddleware(req, res, next) {
+  const key = req.headers["x-admin-key"] || "";
+  if (key !== ADMIN_KEY) {
+    return res.status(403).json({ error: "Invalid admin key." });
+  }
+  next();
+}
+
+// 30 days from now
+function sessionExpiry() {
+  const d = new Date();
+  d.setDate(d.getDate() + 30);
+  return d.toISOString();
+}
+
+// ── Debug / health ─────────────────────────────────────────────────────────────
+
+app.get("/api/health", async (_req, res) => {
+  try {
+    const userCount = await get(`SELECT COUNT(*) as count FROM users`);
+    const sessionCount = await get(`SELECT COUNT(*) as count FROM sessions`);
+    const chatCount = await get(`SELECT COUNT(*) as count FROM chat_messages`);
+    const commentCount = await get(`SELECT COUNT(*) as count FROM quiz_comments`);
+    res.json({
+      ok: true,
+      db: DB_PATH,
+      users: userCount.count,
+      sessions: sessionCount.count,
+      chats: chatCount.count,
+      comments: commentCount.count
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ── Bootstrap ─────────────────────────────────────────────────────────────────
 
 app.get("/api/bootstrap", authMiddleware, async (req, res) => {
   try {
@@ -219,20 +333,16 @@ app.get("/api/bootstrap", authMiddleware, async (req, res) => {
       });
     }
     res.json({
-      user: {
-        id: req.user.id,
-        email: req.user.email,
-        username: req.user.username
-      },
+      user: { id: req.user.id, email: req.user.email, username: req.user.username },
       customQuestions
     });
   } catch (error) {
-    console.error("Bootstrap error:", error);
+    console.error("[Bootstrap] Error:", error);
     res.status(500).json({ error: "Could not load session." });
   }
 });
 
-/* ── signup — registered at both /api/signup and /api/auth/signup ── */
+// ── Signup ─────────────────────────────────────────────────────────────────────
 
 async function handleSignup(req, res) {
   try {
@@ -243,11 +353,9 @@ async function handleSignup(req, res) {
     if (username.length < 2) {
       return res.status(400).json({ error: "Username must be at least 2 characters." });
     }
-
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return res.status(400).json({ error: "Please enter a valid email address." });
     }
-
     if (password.length < 4) {
       return res.status(400).json({ error: "Password must be at least 4 characters." });
     }
@@ -271,17 +379,17 @@ async function handleSignup(req, res) {
     );
 
     const token = createToken();
+    const expiresAt = sessionExpiry();
     await run(
-      `INSERT INTO sessions (token, user_id, created_at) VALUES (?, ?, ?)`,
-      [token, result.lastID, createdAt]
+      `INSERT INTO sessions (token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)`,
+      [token, result.lastID, createdAt, expiresAt]
     );
 
-    res.json({
-      token,
-      user: { id: result.lastID, username, email }
-    });
+    console.log(`[Signup] New user: ${username} <${email}> id=${result.lastID}`);
+
+    res.json({ token, user: { id: result.lastID, username, email } });
   } catch (error) {
-    console.error("Signup error:", error);
+    console.error("[Signup] Error:", error);
     res.status(500).json({ error: "Could not create account." });
   }
 }
@@ -289,7 +397,7 @@ async function handleSignup(req, res) {
 app.post("/api/signup", handleSignup);
 app.post("/api/auth/signup", handleSignup);
 
-/* ── login — registered at both /api/login and /api/auth/login ── */
+// ── Login ──────────────────────────────────────────────────────────────────────
 
 async function handleLogin(req, res) {
   try {
@@ -314,23 +422,22 @@ async function handleLogin(req, res) {
     }
 
     const validPassword = verifyPassword(password, user.password_salt, user.password_hash);
-
     if (!validPassword) {
       return res.status(400).json({ error: "Invalid login details." });
     }
 
     const token = createToken();
+    const expiresAt = sessionExpiry();
     await run(
-      `INSERT INTO sessions (token, user_id, created_at) VALUES (?, ?, ?)`,
-      [token, user.id, nowIso()]
+      `INSERT INTO sessions (token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)`,
+      [token, user.id, nowIso(), expiresAt]
     );
 
-    res.json({
-      token,
-      user: { id: user.id, username: user.username || user.email, email: user.email }
-    });
+    console.log(`[Login] User: ${user.username} <${user.email}> id=${user.id}`);
+
+    res.json({ token, user: { id: user.id, username: user.username || user.email, email: user.email } });
   } catch (error) {
-    console.error("Login error:", error);
+    console.error("[Login] Error:", error);
     res.status(500).json({ error: "Could not log in." });
   }
 }
@@ -338,14 +445,15 @@ async function handleLogin(req, res) {
 app.post("/api/login", handleLogin);
 app.post("/api/auth/login", handleLogin);
 
-/* ── logout — registered at both /api/logout and /api/auth/logout ── */
+// ── Logout ─────────────────────────────────────────────────────────────────────
 
 async function handleLogout(req, res) {
   try {
     await run(`DELETE FROM sessions WHERE token = ?`, [req.user.token]);
+    console.log(`[Logout] User: ${req.user.email}`);
     res.json({ ok: true });
   } catch (error) {
-    console.error("Logout error:", error);
+    console.error("[Logout] Error:", error);
     res.status(500).json({ error: "Could not log out." });
   }
 }
@@ -353,7 +461,7 @@ async function handleLogout(req, res) {
 app.post("/api/logout", authMiddleware, handleLogout);
 app.post("/api/auth/logout", authMiddleware, handleLogout);
 
-/* ── quiz submit ── */
+// ── Quiz submit ────────────────────────────────────────────────────────────────
 
 app.post("/api/quiz/submit", authMiddleware, async (req, res) => {
   try {
@@ -366,69 +474,54 @@ app.post("/api/quiz/submit", authMiddleware, async (req, res) => {
     }
 
     const percent = Math.round((score / totalQuestions) * 100);
-
     await run(
-      `
-      INSERT INTO quiz_attempts (user_id, subject_id, score, total_questions, percent, created_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-      `,
+      `INSERT INTO quiz_attempts (user_id, subject_id, score, total_questions, percent, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
       [req.user.id, subjectId, score, totalQuestions, percent, nowIso()]
     );
 
     res.json({ ok: true, percent });
   } catch (error) {
-    console.error("Quiz submit error:", error);
+    console.error("[Quiz submit] Error:", error);
     res.status(500).json({ error: "Could not save quiz score." });
   }
 });
 
-/* ── leaderboard ── */
+// ── Leaderboard ────────────────────────────────────────────────────────────────
 
 app.get("/api/leaderboard/:subjectId", async (req, res) => {
   try {
     const leaderboard = await all(
-      `
-      SELECT
-        users.username,
-        MAX(quiz_attempts.percent) AS best_percent,
-        MAX(quiz_attempts.score) AS best_score,
-        MAX(quiz_attempts.total_questions) AS best_total,
-        COUNT(quiz_attempts.id) AS attempts
-      FROM quiz_attempts
-      JOIN users ON users.id = quiz_attempts.user_id
-      WHERE quiz_attempts.subject_id = ?
-      GROUP BY quiz_attempts.user_id
-      ORDER BY best_percent DESC, best_score DESC, attempts ASC, users.username ASC
-      LIMIT 10
-      `,
+      `SELECT users.username,
+              MAX(quiz_attempts.percent) AS best_percent,
+              MAX(quiz_attempts.score) AS best_score,
+              MAX(quiz_attempts.total_questions) AS best_total,
+              COUNT(quiz_attempts.id) AS attempts
+       FROM quiz_attempts
+       JOIN users ON users.id = quiz_attempts.user_id
+       WHERE quiz_attempts.subject_id = ?
+       GROUP BY quiz_attempts.user_id
+       ORDER BY best_percent DESC, best_score DESC, attempts ASC, users.username ASC
+       LIMIT 10`,
       [req.params.subjectId]
     );
-
     res.json({ leaderboard });
   } catch (error) {
-    console.error("Leaderboard error:", error);
+    console.error("[Leaderboard] Error:", error);
     res.status(500).json({ error: "Could not load leaderboard." });
   }
 });
 
-/* ── comments ── */
+// ── Comments ───────────────────────────────────────────────────────────────────
 
 app.get("/api/comments/:subjectId/:questionKey", authMiddleware, async (req, res) => {
   try {
     const rows = await all(
-      `
-      SELECT
-        quiz_comments.id,
-        quiz_comments.parent_comment_id,
-        quiz_comments.text,
-        quiz_comments.created_at,
-        users.username,
-        users.id AS user_id
-      FROM quiz_comments
-      JOIN users ON users.id = quiz_comments.user_id
-      WHERE quiz_comments.subject_id = ? AND quiz_comments.question_key = ?
-      ORDER BY quiz_comments.created_at ASC, quiz_comments.id ASC
-      `,
+      `SELECT quiz_comments.id, quiz_comments.parent_comment_id, quiz_comments.text,
+              quiz_comments.created_at, users.username, users.id AS user_id
+       FROM quiz_comments
+       JOIN users ON users.id = quiz_comments.user_id
+       WHERE quiz_comments.subject_id = ? AND quiz_comments.question_key = ?
+       ORDER BY quiz_comments.created_at ASC, quiz_comments.id ASC`,
       [req.params.subjectId, req.params.questionKey]
     );
 
@@ -443,7 +536,7 @@ app.get("/api/comments/:subjectId/:questionKey", authMiddleware, async (req, res
       }))
     });
   } catch (error) {
-    console.error("Load comments error:", error);
+    console.error("[Comments GET] Error:", error);
     res.status(500).json({ error: "Could not load comments." });
   }
 });
@@ -452,9 +545,10 @@ app.post("/api/comments/:subjectId/:questionKey", authMiddleware, async (req, re
   try {
     const text = cleanText(req.body.text, 1000);
     const rawParent = req.body.parentCommentId;
-    const parentCommentId = rawParent === null || rawParent === undefined || rawParent === ""
-      ? null
-      : Number(rawParent);
+    const parentCommentId =
+      rawParent === null || rawParent === undefined || rawParent === ""
+        ? null
+        : Number(rawParent);
 
     if (!text) {
       return res.status(400).json({ error: "Comment cannot be empty." });
@@ -471,23 +565,21 @@ app.post("/api/comments/:subjectId/:questionKey", authMiddleware, async (req, re
     }
 
     const result = await run(
-      `
-      INSERT INTO quiz_comments (subject_id, question_key, user_id, parent_comment_id, text, created_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-      `,
+      `INSERT INTO quiz_comments (subject_id, question_key, user_id, parent_comment_id, text, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
       [req.params.subjectId, req.params.questionKey, req.user.id, parentCommentId, text, nowIso()]
     );
 
     const created = await get(
-      `
-      SELECT quiz_comments.id, quiz_comments.parent_comment_id, quiz_comments.text,
-             quiz_comments.created_at, users.username, users.id AS user_id
-      FROM quiz_comments
-      JOIN users ON users.id = quiz_comments.user_id
-      WHERE quiz_comments.id = ?
-      `,
+      `SELECT quiz_comments.id, quiz_comments.parent_comment_id, quiz_comments.text,
+              quiz_comments.created_at, users.username, users.id AS user_id
+       FROM quiz_comments
+       JOIN users ON users.id = quiz_comments.user_id
+       WHERE quiz_comments.id = ?`,
       [result.lastID]
     );
+
+    console.log(`[Comment] ${req.user.username} on ${req.params.subjectId}`);
 
     res.json({
       comment: {
@@ -500,12 +592,12 @@ app.post("/api/comments/:subjectId/:questionKey", authMiddleware, async (req, re
       }
     });
   } catch (error) {
-    console.error("Create comment error:", error);
+    console.error("[Comments POST] Error:", error);
     res.status(500).json({ error: "Could not add comment." });
   }
 });
 
-/* ── written responses ── */
+// ── Written responses ──────────────────────────────────────────────────────────
 
 app.get("/api/written/:subjectId/:questionKey", authMiddleware, async (req, res) => {
   try {
@@ -514,12 +606,9 @@ app.get("/api/written/:subjectId/:questionKey", authMiddleware, async (req, res)
        WHERE user_id = ? AND subject_id = ? AND question_key = ?`,
       [req.user.id, req.params.subjectId, req.params.questionKey]
     );
-
-    res.json({
-      response: row ? { text: row.response_text, updatedAt: row.updated_at } : null
-    });
+    res.json({ response: row ? { text: row.response_text, updatedAt: row.updated_at } : null });
   } catch (error) {
-    console.error("Load written response error:", error);
+    console.error("[Written GET] Error:", error);
     res.status(500).json({ error: "Could not load written response." });
   }
 });
@@ -527,25 +616,23 @@ app.get("/api/written/:subjectId/:questionKey", authMiddleware, async (req, res)
 app.put("/api/written/:subjectId/:questionKey", authMiddleware, async (req, res) => {
   try {
     const responseText = cleanText(req.body.responseText, 12000);
-
     if (!responseText) {
       return res.status(400).json({ error: "Response cannot be empty." });
     }
 
     await run(
-      `
-      INSERT INTO written_responses (user_id, subject_id, question_key, response_text, updated_at)
-      VALUES (?, ?, ?, ?, ?)
-      ON CONFLICT(user_id, subject_id, question_key) DO UPDATE SET
-        response_text = excluded.response_text,
-        updated_at = excluded.updated_at
-      `,
+      `INSERT INTO written_responses (user_id, subject_id, question_key, response_text, updated_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(user_id, subject_id, question_key) DO UPDATE SET
+         response_text = excluded.response_text,
+         updated_at = excluded.updated_at`,
       [req.user.id, req.params.subjectId, req.params.questionKey, responseText, nowIso()]
     );
 
+    console.log(`[Written] Saved for ${req.user.username} on ${req.params.subjectId}`);
     res.json({ ok: true });
   } catch (error) {
-    console.error("Save written response error:", error);
+    console.error("[Written PUT] Error:", error);
     res.status(500).json({ error: "Could not save written response." });
   }
 });
@@ -553,14 +640,12 @@ app.put("/api/written/:subjectId/:questionKey", authMiddleware, async (req, res)
 app.get("/api/written/:subjectId/:questionKey/all", authMiddleware, async (req, res) => {
   try {
     const rows = await all(
-      `
-      SELECT written_responses.response_text, written_responses.updated_at,
-             users.username, users.id AS user_id
-      FROM written_responses
-      JOIN users ON users.id = written_responses.user_id
-      WHERE written_responses.subject_id = ? AND written_responses.question_key = ?
-      ORDER BY written_responses.updated_at DESC
-      `,
+      `SELECT written_responses.response_text, written_responses.updated_at,
+              users.id AS user_id
+       FROM written_responses
+       JOIN users ON users.id = written_responses.user_id
+       WHERE written_responses.subject_id = ? AND written_responses.question_key = ?
+       ORDER BY written_responses.updated_at DESC`,
       [req.params.subjectId, req.params.questionKey]
     );
 
@@ -568,17 +653,16 @@ app.get("/api/written/:subjectId/:questionKey/all", authMiddleware, async (req, 
       responses: rows.map((row) => ({
         text: row.response_text,
         updatedAt: row.updated_at,
-        username: row.username,
         userId: row.user_id
       }))
     });
   } catch (error) {
-    console.error("Load all written responses error:", error);
+    console.error("[Written ALL] Error:", error);
     res.status(500).json({ error: "Could not load written responses." });
   }
 });
 
-/* ── chat ── */
+// ── Chat ───────────────────────────────────────────────────────────────────────
 
 app.get("/api/chat/:subjectId", authMiddleware, async (req, res) => {
   try {
@@ -588,7 +672,7 @@ app.get("/api/chat/:subjectId", authMiddleware, async (req, res) => {
       [req.params.subjectId]
     );
     res.json({
-      messages: rows.map(r => ({
+      messages: rows.map((r) => ({
         id: r.id,
         userId: r.user_id,
         username: r.username,
@@ -597,7 +681,7 @@ app.get("/api/chat/:subjectId", authMiddleware, async (req, res) => {
       }))
     });
   } catch (error) {
-    console.error("Load chat error:", error);
+    console.error("[Chat GET] Error:", error);
     res.status(500).json({ error: "Could not load chat." });
   }
 });
@@ -612,6 +696,8 @@ app.post("/api/chat/:subjectId", authMiddleware, async (req, res) => {
       [req.params.subjectId, req.user.id, req.user.username, text, nowIso()]
     );
 
+    console.log(`[Chat] ${req.user.username} → ${req.params.subjectId}`);
+
     res.json({
       message: {
         id: result.lastID,
@@ -622,22 +708,154 @@ app.post("/api/chat/:subjectId", authMiddleware, async (req, res) => {
       }
     });
   } catch (error) {
-    console.error("Send chat error:", error);
+    console.error("[Chat POST] Error:", error);
     res.status(500).json({ error: "Could not send message." });
   }
 });
 
-/* ── admin middleware ── */
+// ── Competition ────────────────────────────────────────────────────────────────
 
-function adminMiddleware(req, res, next) {
-  const key = req.headers["x-admin-key"] || "";
-  if (key !== ADMIN_KEY) {
-    return res.status(403).json({ error: "Invalid admin key." });
+// Record a single question answer (upsert — one row per user per question)
+app.post("/api/competition/answer", authMiddleware, async (req, res) => {
+  try {
+    const subjectId = cleanText(req.body.subjectId, 80);
+    const questionKey = cleanText(req.body.questionKey, 1000);
+    const topic = cleanText(req.body.topic || "General", 100);
+    const isCorrect = req.body.isCorrect ? 1 : 0;
+
+    if (!subjectId || !questionKey) {
+      return res.status(400).json({ error: "subjectId and questionKey required." });
+    }
+
+    await run(
+      `INSERT INTO question_attempts (user_id, subject_id, question_key, topic, is_correct, answered_at)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(user_id, subject_id, question_key) DO UPDATE SET
+         is_correct = excluded.is_correct,
+         topic = excluded.topic,
+         answered_at = excluded.answered_at`,
+      [req.user.id, subjectId, questionKey, topic, isCorrect, nowIso()]
+    );
+
+    res.json({ ok: true });
+  } catch (error) {
+    console.error("[Competition answer] Error:", error);
+    res.status(500).json({ error: "Could not record answer." });
   }
-  next();
-}
+});
 
-/* ── custom questions ── */
+// Get full competition stats for a subject for the requesting user
+app.get("/api/competition/:subjectId/stats", authMiddleware, async (req, res) => {
+  try {
+    const subjectId = req.params.subjectId;
+
+    // Total distinct students who have answered at least one question in this subject
+    const studentRow = await get(
+      `SELECT COUNT(DISTINCT user_id) as count FROM question_attempts WHERE subject_id = ?`,
+      [subjectId]
+    );
+    const totalStudents = studentRow.count;
+
+    if (totalStudents < 2) {
+      return res.json({ totalStudents, percentile: null, rank: null, leaderboard: [], questionStats: [], topicStats: [] });
+    }
+
+    // Per-user score: count correct answers out of all their answered questions (excl. long-form = no isCorrect set for long, but we only record 0/1)
+    const allScores = await all(
+      `SELECT user_id, username,
+              SUM(is_correct) as correct,
+              COUNT(*) as total
+       FROM question_attempts
+       JOIN users ON users.id = question_attempts.user_id
+       WHERE subject_id = ?
+       GROUP BY user_id`,
+      [subjectId]
+    );
+
+    // My row
+    const myRow = allScores.find(r => r.user_id === req.user.id);
+    const myPercent = myRow && myRow.total > 0 ? Math.round((myRow.correct / myRow.total) * 100) : 0;
+
+    // Sort for leaderboard
+    const sorted = [...allScores].sort((a, b) => {
+      const pa = a.total > 0 ? a.correct / a.total : 0;
+      const pb = b.total > 0 ? b.correct / b.total : 0;
+      return pb - pa;
+    });
+
+    const rank = sorted.findIndex(r => r.user_id === req.user.id) + 1;
+    const below = sorted.filter(r => {
+      const p = r.total > 0 ? Math.round((r.correct / r.total) * 100) : 0;
+      return p < myPercent;
+    }).length;
+    const percentile = totalStudents > 1 ? Math.round((below / (totalStudents - 1)) * 100) : 100;
+
+    const leaderboard = sorted.slice(0, 10).map(r => ({
+      userId: r.user_id,
+      username: r.username,
+      correct: r.correct,
+      total: r.total,
+      percent: r.total > 0 ? Math.round((r.correct / r.total) * 100) : 0
+    }));
+
+    // Per-question class stats
+    const qRows = await all(
+      `SELECT question_key, topic,
+              SUM(is_correct) as correctCount,
+              COUNT(*) as totalAnswered
+       FROM question_attempts
+       WHERE subject_id = ?
+       GROUP BY question_key`,
+      [subjectId]
+    );
+
+    const questionStats = qRows.map(r => ({
+      questionKey: r.question_key,
+      topic: r.topic,
+      correctCount: r.correctCount,
+      totalAnswered: r.totalAnswered
+    }));
+
+    // Per-topic class + my stats
+    const topicClassRows = await all(
+      `SELECT topic,
+              SUM(is_correct) as correctCount,
+              COUNT(*) as totalAnswered
+       FROM question_attempts
+       WHERE subject_id = ?
+       GROUP BY topic`,
+      [subjectId]
+    );
+
+    const topicMyRows = await all(
+      `SELECT topic,
+              SUM(is_correct) as myCorrect,
+              COUNT(*) as myTotal
+       FROM question_attempts
+       WHERE subject_id = ? AND user_id = ?
+       GROUP BY topic`,
+      [subjectId, req.user.id]
+    );
+
+    const myTopicMap = {};
+    topicMyRows.forEach(r => { myTopicMap[r.topic] = { myCorrect: r.myCorrect, myTotal: r.myTotal }; });
+
+    const topicStats = topicClassRows.map(r => ({
+      topic: r.topic,
+      correctCount: r.correctCount,
+      totalAnswered: r.totalAnswered,
+      myCorrect: myTopicMap[r.topic]?.myCorrect ?? null,
+      myTotal: myTopicMap[r.topic]?.myTotal ?? 0
+    }));
+
+    res.json({ totalStudents, percentile, rank, leaderboard, questionStats, topicStats });
+  } catch (error) {
+    console.error("[Competition stats] Error:", error);
+    res.status(500).json({ error: "Could not load competition stats." });
+  }
+});
+
+// ── Admin: custom questions ────────────────────────────────────────────────────
 
 app.get("/api/admin/questions", adminMiddleware, async (req, res) => {
   try {
@@ -658,7 +876,7 @@ app.get("/api/admin/questions", adminMiddleware, async (req, res) => {
     }
     res.json({ customQuestions: grouped });
   } catch (error) {
-    console.error("Load custom questions error:", error);
+    console.error("[Admin questions GET] Error:", error);
     res.status(500).json({ error: "Could not load custom questions." });
   }
 });
@@ -686,7 +904,7 @@ app.post("/api/admin/questions", adminMiddleware, async (req, res) => {
 
     res.json({ ok: true, id: result.lastID });
   } catch (error) {
-    console.error("Add custom question error:", error);
+    console.error("[Admin questions POST] Error:", error);
     res.status(500).json({ error: "Could not add question." });
   }
 });
@@ -696,27 +914,28 @@ app.delete("/api/admin/questions/:id", adminMiddleware, async (req, res) => {
     await run(`DELETE FROM custom_questions WHERE id = ?`, [req.params.id]);
     res.json({ ok: true });
   } catch (error) {
-    console.error("Delete custom question error:", error);
+    console.error("[Admin questions DELETE] Error:", error);
     res.status(500).json({ error: "Could not delete question." });
   }
 });
 
-/* ── health / catch-all ── */
+// ── Catch-all ──────────────────────────────────────────────────────────────────
 
-app.get("/api/health", (_req, res) => {
-  res.json({ ok: true });
-});
-
-app.get("/", (_req, res) => {
+app.get("*", (_req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
+
+// ── Start ──────────────────────────────────────────────────────────────────────
 
 initDb()
   .then(() => {
     app.listen(PORT, () => {
-      console.log(`Nodent running at http://localhost:${PORT}`);
+      console.log(`\n✅ Nodent running at http://localhost:${PORT}`);
+      console.log(`   Database: ${DB_PATH}`);
+      console.log(`   Visit http://localhost:${PORT}/api/health to confirm DB is live\n`);
     });
   })
   .catch((error) => {
-    console.error("Failed to initialise database:", error);
+    console.error("❌ Failed to initialise database:", error);
+    process.exit(1);
   });
