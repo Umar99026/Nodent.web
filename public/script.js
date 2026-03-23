@@ -36,6 +36,8 @@ const API = {
   adminDeleteQuestion: (id) => `/api/admin/questions/${id}`,
   chat: (subjectId) => `/api/chat/${encodeURIComponent(subjectId)}`,
   leaderboard: (subjectId) => `/api/leaderboard/${encodeURIComponent(subjectId)}`,
+  competitionStats: (subjectId) => `/api/competition/${encodeURIComponent(subjectId)}/stats`,
+  submitAnswer: "/api/competition/answer",
   comments: (subjectId, questionKey) =>
     `/api/comments/${encodeURIComponent(subjectId)}/${encodeURIComponent(questionKey)}`,
   written: (subjectId, questionKey) =>
@@ -52,50 +54,31 @@ const baseSubjects = [
     description: "Text response, argument analysis, comparative writing, and language development.",
     quiz: [
       {
-        type: "long",
-        question:
-          "Read the passage below and explain how language choices shape the reader's response. Refer closely to tone, persuasive devices, and intended audience.",
-        passage:
-          `'We cannot keep calling these changes temporary when they are already shaping the future of entire communities. Every season of delay comes with another cost, another loss, another opportunity abandoned. The question is no longer whether action is necessary, but whether we are prepared to act with courage rather than convenience.'`,
-        guidance:
-          "Write a sustained analytical response. Aim for a clear contention, close analysis of language, and logical paragraphing."
+        type: "long", topic: "Argument Analysis",
+        question: "Read the passage below and explain how language choices shape the reader's response. Refer closely to tone, persuasive devices, and intended audience.",
+        passage: `'We cannot keep calling these changes temporary when they are already shaping the future of entire communities. Every season of delay comes with another cost, another loss, another opportunity abandoned. The question is no longer whether action is necessary, but whether we are prepared to act with courage rather than convenience.'`,
+        guidance: "Write a sustained analytical response. Aim for a clear contention, close analysis of language, and logical paragraphing."
       },
       {
-        type: "long",
+        type: "long", topic: "Essay Writing",
         question: "Discuss how a strong introduction establishes the direction of an English essay.",
-        guidance:
-          "Write an essay-style response with a clear central argument and developed explanation."
+        guidance: "Write an essay-style response with a clear central argument and developed explanation."
       },
       {
-        type: "short",
+        type: "short", topic: "Essay Writing",
         question: "What is the main purpose of a thesis statement?",
-        acceptedAnswers: [
-          "to provide a clear central argument",
-          "to state the main argument",
-          "to present the main argument",
-          "to establish the essay's argument"
-        ]
+        acceptedAnswers: ["to provide a clear central argument","to state the main argument","to present the main argument","to establish the essay's argument"]
       },
       {
-        type: "mcq",
+        type: "mcq", topic: "Argument Analysis",
         question: "Argument analysis mainly focuses on:",
-        options: [
-          "Counting paragraphs only",
-          "How persuasive techniques shape the reader",
-          "Memorising every sentence",
-          "Ignoring tone and contention"
-        ],
+        options: ["Counting paragraphs only","How persuasive techniques shape the reader","Memorising every sentence","Ignoring tone and contention"],
         answer: "How persuasive techniques shape the reader"
       },
       {
-        type: "mcq",
+        type: "mcq", topic: "Language Devices",
         question: "A metaphor is best described as:",
-        options: [
-          "A direct comparison",
-          "A punctuation mark",
-          "A summary paragraph",
-          "A topic sentence"
-        ],
+        options: ["A direct comparison","A punctuation mark","A summary paragraph","A topic sentence"],
         answer: "A direct comparison"
       }
     ]
@@ -106,10 +89,10 @@ const baseSubjects = [
     category: "VCE",
     description: "Functions, calculus, probability, algebra, graphs, and mathematical modelling.",
     quiz: [
-      { type: "mcq", question: "What is the derivative of x²?", options: ["x", "2x", "x²", "2"], answer: "2x" },
-      { type: "short", question: "State the gradient of a horizontal line.", acceptedAnswers: ["0", "zero"] },
-      { type: "mcq", question: "What is sin(90°)?", options: ["0", "1", "-1", "0.5"], answer: "1" },
-      { type: "mcq", question: "3 + 5 × 2 equals:", options: ["16", "13", "10", "8"], answer: "13" }
+      { type: "mcq", topic: "Calculus", question: "What is the derivative of x²?", options: ["x","2x","x²","2"], answer: "2x" },
+      { type: "short", topic: "Functions & Graphs", question: "State the gradient of a horizontal line.", acceptedAnswers: ["0","zero"] },
+      { type: "mcq", topic: "Trigonometry", question: "What is sin(90°)?", options: ["0","1","-1","0.5"], answer: "1" },
+      { type: "mcq", topic: "Algebra", question: "3 + 5 × 2 equals:", options: ["16","13","10","8"], answer: "13" }
     ]
   },
   {
@@ -118,9 +101,9 @@ const baseSubjects = [
     category: "VCE",
     description: "Statistics, finance, networks, matrices, measurement, and applied problem solving.",
     quiz: [
-      { type: "mcq", question: "25% of 200 is:", options: ["25", "50", "75", "100"], answer: "50" },
-      { type: "short", question: "What is the mean of 4, 6 and 8?", acceptedAnswers: ["6", "6.0"] },
-      { type: "mcq", question: "Angles in a triangle add to:", options: ["90°", "180°", "270°", "360°"], answer: "180°" }
+      { type: "mcq", topic: "Statistics", question: "25% of 200 is:", options: ["25","50","75","100"], answer: "50" },
+      { type: "short", topic: "Statistics", question: "What is the mean of 4, 6 and 8?", acceptedAnswers: ["6","6.0"] },
+      { type: "mcq", topic: "Measurement", question: "Angles in a triangle add to:", options: ["90°","180°","270°","360°"], answer: "180°" }
     ]
   },
   {
@@ -129,13 +112,9 @@ const baseSubjects = [
     category: "VCE",
     description: "Cells, genetics, evolution, immunity, and biological systems.",
     quiz: [
-      { type: "mcq", question: "The basic unit of life is the:", options: ["Cell", "Organ", "Tissue", "Atom"], answer: "Cell" },
-      { type: "short", question: "What molecule carries genetic information in most organisms?", acceptedAnswers: ["dna", "deoxyribonucleic acid"] },
-      {
-        type: "long",
-        question: "Explain how structure supports function in one biological organelle of your choice.",
-        guidance: "Use a developed scientific explanation with correct terminology."
-      }
+      { type: "mcq", topic: "Cell Biology", question: "The basic unit of life is the:", options: ["Cell","Organ","Tissue","Atom"], answer: "Cell" },
+      { type: "short", topic: "Genetics", question: "What molecule carries genetic information in most organisms?", acceptedAnswers: ["dna","deoxyribonucleic acid"] },
+      { type: "long", topic: "Cell Biology", question: "Explain how structure supports function in one biological organelle of your choice.", guidance: "Use a developed scientific explanation with correct terminology." }
     ]
   },
   {
@@ -144,15 +123,11 @@ const baseSubjects = [
     category: "VCE",
     description: "Atomic theory, chemical bonding, reactions, energy, organic chemistry, and electrochemistry.",
     quiz: [
-      { type: "mcq", question: "The atomic number of an element equals:", options: ["Number of neutrons", "Number of protons", "Mass number", "Number of electrons only"], answer: "Number of protons" },
-      { type: "short", question: "What is the pH of a neutral solution at 25°C?", acceptedAnswers: ["7", "7.0"] },
-      { type: "mcq", question: "Which bond involves the sharing of electrons?", options: ["Ionic", "Covalent", "Metallic", "Hydrogen"], answer: "Covalent" },
-      { type: "short", question: "What gas is produced when an acid reacts with a carbonate?", acceptedAnswers: ["carbon dioxide", "co2"] },
-      {
-        type: "long",
-        question: "Explain the difference between exothermic and endothermic reactions, with one example of each.",
-        guidance: "Use correct chemical terminology and relate energy changes to bond breaking and forming."
-      }
+      { type: "mcq", topic: "Atomic Theory", question: "The atomic number of an element equals:", options: ["Number of neutrons","Number of protons","Mass number","Number of electrons only"], answer: "Number of protons" },
+      { type: "short", topic: "Acids & Bases", question: "What is the pH of a neutral solution at 25°C?", acceptedAnswers: ["7","7.0"] },
+      { type: "mcq", topic: "Chemical Bonding", question: "Which bond involves the sharing of electrons?", options: ["Ionic","Covalent","Metallic","Hydrogen"], answer: "Covalent" },
+      { type: "short", topic: "Chemical Reactions", question: "What gas is produced when an acid reacts with a carbonate?", acceptedAnswers: ["carbon dioxide","co2"] },
+      { type: "long", topic: "Energy & Reactions", question: "Explain the difference between exothermic and endothermic reactions, with one example of each.", guidance: "Use correct chemical terminology and relate energy changes to bond breaking and forming." }
     ]
   },
   {
@@ -161,15 +136,11 @@ const baseSubjects = [
     category: "VCE",
     description: "Motion, forces, energy, electricity, fields, thermodynamics, and quantum physics.",
     quiz: [
-      { type: "mcq", question: "Newton's second law states that force equals:", options: ["mass × velocity", "mass × acceleration", "mass × distance", "velocity / time"], answer: "mass × acceleration" },
-      { type: "short", question: "What is the SI unit of electric current?", acceptedAnswers: ["ampere", "amp", "a"] },
-      { type: "mcq", question: "Which type of wave does not require a medium to travel?", options: ["Sound", "Water", "Electromagnetic", "Seismic"], answer: "Electromagnetic" },
-      { type: "short", question: "State the law of conservation of energy in one sentence.", acceptedAnswers: ["energy cannot be created or destroyed", "energy is conserved", "total energy remains constant"] },
-      {
-        type: "long",
-        question: "A car accelerates from rest to 20 m/s in 8 seconds. Calculate its acceleration and the net force if its mass is 1200 kg. Show all working.",
-        guidance: "Use F = ma and a = Δv/Δt. Show units at every step."
-      }
+      { type: "mcq", topic: "Forces & Motion", question: "Newton's second law states that force equals:", options: ["mass × velocity","mass × acceleration","mass × distance","velocity / time"], answer: "mass × acceleration" },
+      { type: "short", topic: "Electricity", question: "What is the SI unit of electric current?", acceptedAnswers: ["ampere","amp","a"] },
+      { type: "mcq", topic: "Waves", question: "Which type of wave does not require a medium to travel?", options: ["Sound","Water","Electromagnetic","Seismic"], answer: "Electromagnetic" },
+      { type: "short", topic: "Energy", question: "State the law of conservation of energy in one sentence.", acceptedAnswers: ["energy cannot be created or destroyed","energy is conserved","total energy remains constant"] },
+      { type: "long", topic: "Forces & Motion", question: "A car accelerates from rest to 20 m/s in 8 seconds. Calculate its acceleration and the net force if its mass is 1200 kg. Show all working.", guidance: "Use F = ma and a = Δv/Δt. Show units at every step." }
     ]
   },
   {
@@ -178,15 +149,11 @@ const baseSubjects = [
     category: "VCE",
     description: "Biological, cognitive, and sociocultural approaches to behaviour, consciousness, learning, and mental health.",
     quiz: [
-      { type: "mcq", question: "The part of the brain most associated with memory formation is the:", options: ["Cerebellum", "Hippocampus", "Amygdala", "Frontal lobe"], answer: "Hippocampus" },
-      { type: "mcq", question: "Classical conditioning was first demonstrated by:", options: ["Skinner", "Freud", "Pavlov", "Bandura"], answer: "Pavlov" },
-      { type: "short", question: "What does REM stand for in sleep research?", acceptedAnswers: ["rapid eye movement"] },
-      {
-        type: "long",
-        question: "Explain how the fight-or-flight response is triggered and describe its physiological effects on the body.",
-        guidance: "Refer to the role of the nervous system and hormones such as adrenaline."
-      },
-      { type: "mcq", question: "Which research method best establishes cause and effect?", options: ["Case study", "Survey", "Experiment", "Observation"], answer: "Experiment" }
+      { type: "mcq", topic: "Brain & Neuroscience", question: "The part of the brain most associated with memory formation is the:", options: ["Cerebellum","Hippocampus","Amygdala","Frontal lobe"], answer: "Hippocampus" },
+      { type: "mcq", topic: "Learning", question: "Classical conditioning was first demonstrated by:", options: ["Skinner","Freud","Pavlov","Bandura"], answer: "Pavlov" },
+      { type: "short", topic: "States of Consciousness", question: "What does REM stand for in sleep research?", acceptedAnswers: ["rapid eye movement"] },
+      { type: "long", topic: "Stress & Physiology", question: "Explain how the fight-or-flight response is triggered and describe its physiological effects on the body.", guidance: "Refer to the role of the nervous system and hormones such as adrenaline." },
+      { type: "mcq", topic: "Research Methods", question: "Which research method best establishes cause and effect?", options: ["Case study","Survey","Experiment","Observation"], answer: "Experiment" }
     ]
   },
   {
@@ -195,14 +162,10 @@ const baseSubjects = [
     category: "VCE",
     description: "Causes, course, and consequences of major revolutions including France, Russia, America, and China.",
     quiz: [
-      { type: "mcq", question: "The storming of the Bastille occurred in:", options: ["1776", "1789", "1799", "1815"], answer: "1789" },
-      { type: "short", question: "Who led the Bolshevik Revolution in Russia in 1917?", acceptedAnswers: ["vladimir lenin", "lenin"] },
-      { type: "mcq", question: "The Declaration of Independence was signed in:", options: ["1773", "1775", "1776", "1781"], answer: "1776" },
-      {
-        type: "long",
-        question: "To what extent were long-term causes more important than short-term causes in bringing about a revolution of your choice?",
-        guidance: "Construct an argument with a clear contention, at least two long-term and one short-term cause, and a conclusion."
-      }
+      { type: "mcq", topic: "French Revolution", question: "The storming of the Bastille occurred in:", options: ["1776","1789","1799","1815"], answer: "1789" },
+      { type: "short", topic: "Russian Revolution", question: "Who led the Bolshevik Revolution in Russia in 1917?", acceptedAnswers: ["vladimir lenin","lenin"] },
+      { type: "mcq", topic: "American Revolution", question: "The Declaration of Independence was signed in:", options: ["1773","1775","1776","1781"], answer: "1776" },
+      { type: "long", topic: "Causes of Revolution", question: "To what extent were long-term causes more important than short-term causes in bringing about a revolution of your choice?", guidance: "Construct an argument with a clear contention, at least two long-term and one short-term cause, and a conclusion." }
     ]
   },
   {
@@ -211,14 +174,10 @@ const baseSubjects = [
     category: "VCE",
     description: "The Australian legal system, rights, justice, parliament, courts, and dispute resolution.",
     quiz: [
-      { type: "mcq", question: "Statute law is law made by:", options: ["Courts", "Parliament", "Police", "The Governor-General"], answer: "Parliament" },
-      { type: "short", question: "What is the highest court in Australia?", acceptedAnswers: ["high court", "high court of australia"] },
-      { type: "mcq", question: "The presumption of innocence means:", options: ["All accused are guilty", "The accused is assumed innocent until proven guilty", "Evidence is not required", "The judge decides without a jury"], answer: "The accused is assumed innocent until proven guilty" },
-      {
-        type: "long",
-        question: "Evaluate the effectiveness of mediation as a method of dispute resolution compared to litigation.",
-        guidance: "Discuss cost, time, outcomes, and suitability for different types of disputes."
-      }
+      { type: "mcq", topic: "Sources of Law", question: "Statute law is law made by:", options: ["Courts","Parliament","Police","The Governor-General"], answer: "Parliament" },
+      { type: "short", topic: "Court Hierarchy", question: "What is the highest court in Australia?", acceptedAnswers: ["high court","high court of australia"] },
+      { type: "mcq", topic: "Rights & Justice", question: "The presumption of innocence means:", options: ["All accused are guilty","The accused is assumed innocent until proven guilty","Evidence is not required","The judge decides without a jury"], answer: "The accused is assumed innocent until proven guilty" },
+      { type: "long", topic: "Dispute Resolution", question: "Evaluate the effectiveness of mediation as a method of dispute resolution compared to litigation.", guidance: "Discuss cost, time, outcomes, and suitability for different types of disputes." }
     ]
   },
   {
@@ -227,14 +186,10 @@ const baseSubjects = [
     category: "VCE",
     description: "Microeconomics, macroeconomics, markets, government policy, globalisation, and the Australian economy.",
     quiz: [
-      { type: "mcq", question: "When price rises and quantity demanded falls, this shows:", options: ["Elastic supply", "The law of demand", "A supply shift", "Market failure"], answer: "The law of demand" },
-      { type: "short", question: "What does GDP stand for?", acceptedAnswers: ["gross domestic product"] },
-      { type: "mcq", question: "Inflation is best described as:", options: ["A fall in unemployment", "A sustained rise in the general price level", "A decrease in exports", "A budget surplus"], answer: "A sustained rise in the general price level" },
-      {
-        type: "long",
-        question: "Explain how the Reserve Bank of Australia uses interest rates to manage inflation. In your response, discuss both the transmission mechanism and limitations of monetary policy.",
-        guidance: "Use economic concepts and relevant Australian examples where possible."
-      }
+      { type: "mcq", topic: "Microeconomics", question: "When price rises and quantity demanded falls, this shows:", options: ["Elastic supply","The law of demand","A supply shift","Market failure"], answer: "The law of demand" },
+      { type: "short", topic: "Macroeconomics", question: "What does GDP stand for?", acceptedAnswers: ["gross domestic product"] },
+      { type: "mcq", topic: "Macroeconomics", question: "Inflation is best described as:", options: ["A fall in unemployment","A sustained rise in the general price level","A decrease in exports","A budget surplus"], answer: "A sustained rise in the general price level" },
+      { type: "long", topic: "Monetary Policy", question: "Explain how the Reserve Bank of Australia uses interest rates to manage inflation. In your response, discuss both the transmission mechanism and limitations of monetary policy.", guidance: "Use economic concepts and relevant Australian examples where possible." }
     ]
   },
   {
@@ -243,14 +198,10 @@ const baseSubjects = [
     category: "VCE",
     description: "Financial reporting, double-entry bookkeeping, cash flows, balance sheets, and business decision-making.",
     quiz: [
-      { type: "mcq", question: "The accounting equation is:", options: ["Assets = Liabilities + Equity", "Revenue = Expenses + Profit", "Assets = Revenue - Expenses", "Liabilities = Assets + Equity"], answer: "Assets = Liabilities + Equity" },
-      { type: "short", question: "What financial report shows revenue and expenses for a period?", acceptedAnswers: ["income statement", "profit and loss statement", "profit and loss"] },
-      { type: "mcq", question: "A credit entry in the accounts increases:", options: ["Assets", "Expenses", "Liabilities", "Drawings"], answer: "Liabilities" },
-      {
-        type: "long",
-        question: "Explain the difference between cash accounting and accrual accounting, and discuss when each would be most appropriate for a small business.",
-        guidance: "Include examples of how each method records a sale on credit."
-      }
+      { type: "mcq", topic: "Accounting Equation", question: "The accounting equation is:", options: ["Assets = Liabilities + Equity","Revenue = Expenses + Profit","Assets = Revenue - Expenses","Liabilities = Assets + Equity"], answer: "Assets = Liabilities + Equity" },
+      { type: "short", topic: "Financial Statements", question: "What financial report shows revenue and expenses for a period?", acceptedAnswers: ["income statement","profit and loss statement","profit and loss"] },
+      { type: "mcq", topic: "Double-Entry Bookkeeping", question: "A credit entry in the accounts increases:", options: ["Assets","Expenses","Liabilities","Drawings"], answer: "Liabilities" },
+      { type: "long", topic: "Accounting Methods", question: "Explain the difference between cash accounting and accrual accounting, and discuss when each would be most appropriate for a small business.", guidance: "Include examples of how each method records a sale on credit." }
     ]
   },
   {
@@ -259,14 +210,10 @@ const baseSubjects = [
     category: "VCE",
     description: "Business planning, management styles, operations, human resources, finance, and change management.",
     quiz: [
-      { type: "mcq", question: "A SWOT analysis examines:", options: ["Sales, Wages, Operations, Technology", "Strengths, Weaknesses, Opportunities, Threats", "Strategy, Work, Output, Targets", "Staff, Workflow, Outcomes, Training"], answer: "Strengths, Weaknesses, Opportunities, Threats" },
-      { type: "short", question: "What management style involves employees in decision-making?", acceptedAnswers: ["participative", "democratic", "consultative"] },
-      { type: "mcq", question: "Staff turnover refers to:", options: ["Training new employees", "The rate at which employees leave and are replaced", "Promoting staff internally", "Annual performance reviews"], answer: "The rate at which employees leave and are replaced" },
-      {
-        type: "long",
-        question: "Evaluate the effectiveness of transformational leadership in managing change within a business. Use examples to support your response.",
-        guidance: "Refer to key features of transformational leadership and contrast with at least one other style."
-      }
+      { type: "mcq", topic: "Business Planning", question: "A SWOT analysis examines:", options: ["Sales, Wages, Operations, Technology","Strengths, Weaknesses, Opportunities, Threats","Strategy, Work, Output, Targets","Staff, Workflow, Outcomes, Training"], answer: "Strengths, Weaknesses, Opportunities, Threats" },
+      { type: "short", topic: "Management Styles", question: "What management style involves employees in decision-making?", acceptedAnswers: ["participative","democratic","consultative"] },
+      { type: "mcq", topic: "Human Resources", question: "Staff turnover refers to:", options: ["Training new employees","The rate at which employees leave and are replaced","Promoting staff internally","Annual performance reviews"], answer: "The rate at which employees leave and are replaced" },
+      { type: "long", topic: "Change Management", question: "Evaluate the effectiveness of transformational leadership in managing change within a business. Use examples to support your response.", guidance: "Refer to key features of transformational leadership and contrast with at least one other style." }
     ]
   },
   {
@@ -275,14 +222,10 @@ const baseSubjects = [
     category: "VCE",
     description: "Natural environments, human populations, tourism, globalisation, and geographical inquiry and skills.",
     quiz: [
-      { type: "mcq", question: "Plate tectonics explains:", options: ["Weather patterns", "Ocean salinity", "Movement of Earth's lithospheric plates", "River formation"], answer: "Movement of Earth's lithospheric plates" },
-      { type: "short", question: "What term describes the movement of people from rural areas to cities?", acceptedAnswers: ["urbanisation", "rural-urban migration"] },
-      { type: "mcq", question: "A renewable resource is one that:", options: ["Cannot be reused", "Replenishes naturally over time", "Is found only underground", "Is man-made"], answer: "Replenishes naturally over time" },
-      {
-        type: "long",
-        question: "To what extent does tourism development bring more benefits than costs to a destination of your choice? Refer to economic, social, and environmental impacts.",
-        guidance: "Use specific place-based examples and a clear evaluative structure."
-      }
+      { type: "mcq", topic: "Natural Environments", question: "Plate tectonics explains:", options: ["Weather patterns","Ocean salinity","Movement of Earth's lithospheric plates","River formation"], answer: "Movement of Earth's lithospheric plates" },
+      { type: "short", topic: "Population", question: "What term describes the movement of people from rural areas to cities?", acceptedAnswers: ["urbanisation","rural-urban migration"] },
+      { type: "mcq", topic: "Resources", question: "A renewable resource is one that:", options: ["Cannot be reused","Replenishes naturally over time","Is found only underground","Is man-made"], answer: "Replenishes naturally over time" },
+      { type: "long", topic: "Tourism", question: "To what extent does tourism development bring more benefits than costs to a destination of your choice? Refer to economic, social, and environmental impacts.", guidance: "Use specific place-based examples and a clear evaluative structure." }
     ]
   },
   {
@@ -291,10 +234,10 @@ const baseSubjects = [
     category: "VCE",
     description: "Data analysis, recursion and financial modelling, matrices, networks, geometry, and statistics.",
     quiz: [
-      { type: "mcq", question: "The median of 3, 7, 9, 12, 15 is:", options: ["7", "9", "10", "12"], answer: "9" },
-      { type: "short", question: "What is the name of the graph that displays the five-number summary?", acceptedAnswers: ["box plot", "boxplot", "box-and-whisker plot", "box and whisker plot"] },
-      { type: "mcq", question: "Simple interest is calculated using:", options: ["I = Prn", "I = P(1 + r)^n", "I = P/rn", "I = P + rn"], answer: "I = Prn" },
-      { type: "short", question: "In a network graph, what is the term for the number of edges connected to a vertex?", acceptedAnswers: ["degree", "valency"] }
+      { type: "mcq", topic: "Data Analysis", question: "The median of 3, 7, 9, 12, 15 is:", options: ["7","9","10","12"], answer: "9" },
+      { type: "short", topic: "Data Analysis", question: "What is the name of the graph that displays the five-number summary?", acceptedAnswers: ["box plot","boxplot","box-and-whisker plot","box and whisker plot"] },
+      { type: "mcq", topic: "Financial Modelling", question: "Simple interest is calculated using:", options: ["I = Prn","I = P(1 + r)^n","I = P/rn","I = P + rn"], answer: "I = Prn" },
+      { type: "short", topic: "Networks", question: "In a network graph, what is the term for the number of edges connected to a vertex?", acceptedAnswers: ["degree","valency"] }
     ]
   },
   {
@@ -303,14 +246,10 @@ const baseSubjects = [
     category: "VCE",
     description: "Complex numbers, vectors, mechanics, advanced calculus, probability distributions, and proof.",
     quiz: [
-      { type: "mcq", question: "The modulus of the complex number 3 + 4i is:", options: ["3", "4", "5", "7"], answer: "5" },
-      { type: "short", question: "What is the derivative of sin(x)?", acceptedAnswers: ["cos(x)", "cos x"] },
-      { type: "mcq", question: "A vector quantity has:", options: ["Magnitude only", "Direction only", "Both magnitude and direction", "Neither magnitude nor direction"], answer: "Both magnitude and direction" },
-      {
-        type: "long",
-        question: "Prove by mathematical induction that the sum of the first n positive integers is n(n+1)/2.",
-        guidance: "Clearly show the base case, inductive hypothesis, and inductive step."
-      }
+      { type: "mcq", topic: "Complex Numbers", question: "The modulus of the complex number 3 + 4i is:", options: ["3","4","5","7"], answer: "5" },
+      { type: "short", topic: "Calculus", question: "What is the derivative of sin(x)?", acceptedAnswers: ["cos(x)","cos x"] },
+      { type: "mcq", topic: "Vectors", question: "A vector quantity has:", options: ["Magnitude only","Direction only","Both magnitude and direction","Neither magnitude nor direction"], answer: "Both magnitude and direction" },
+      { type: "long", topic: "Proof", question: "Prove by mathematical induction that the sum of the first n positive integers is n(n+1)/2.", guidance: "Clearly show the base case, inductive hypothesis, and inductive step." }
     ]
   },
   {
@@ -319,14 +258,10 @@ const baseSubjects = [
     category: "VCE",
     description: "Energy systems, training principles, biomechanics, skill acquisition, and sport science.",
     quiz: [
-      { type: "mcq", question: "The ATP-PC energy system predominantly fuels activities lasting:", options: ["Under 10 seconds", "1–3 minutes", "More than 20 minutes", "Exactly 5 minutes"], answer: "Under 10 seconds" },
-      { type: "short", question: "What term describes the body's ability to return to homeostasis after exercise?", acceptedAnswers: ["recovery", "post-exercise recovery"] },
-      { type: "mcq", question: "Which training principle ensures the body is challenged beyond its current level?", options: ["Reversibility", "Specificity", "Overload", "Variety"], answer: "Overload" },
-      {
-        type: "long",
-        question: "Analyse how the aerobic energy system contributes to performance in a sport of your choice. Refer to the role of oxygen and the production of ATP.",
-        guidance: "Link physiological concepts clearly to the demands of the chosen sport."
-      }
+      { type: "mcq", topic: "Energy Systems", question: "The ATP-PC energy system predominantly fuels activities lasting:", options: ["Under 10 seconds","1–3 minutes","More than 20 minutes","Exactly 5 minutes"], answer: "Under 10 seconds" },
+      { type: "short", topic: "Recovery", question: "What term describes the body's ability to return to homeostasis after exercise?", acceptedAnswers: ["recovery","post-exercise recovery"] },
+      { type: "mcq", topic: "Training Principles", question: "Which training principle ensures the body is challenged beyond its current level?", options: ["Reversibility","Specificity","Overload","Variety"], answer: "Overload" },
+      { type: "long", topic: "Energy Systems", question: "Analyse how the aerobic energy system contributes to performance in a sport of your choice. Refer to the role of oxygen and the production of ATP.", guidance: "Link physiological concepts clearly to the demands of the chosen sport." }
     ]
   },
   {
@@ -335,14 +270,10 @@ const baseSubjects = [
     category: "VCE",
     description: "Global health, Australia's health system, health promotion, dimensions of health, and the SDGs.",
     quiz: [
-      { type: "mcq", question: "The five dimensions of health are physical, social, emotional, mental, and:", options: ["Cultural", "Spiritual", "Economic", "Environmental"], answer: "Spiritual" },
-      { type: "short", question: "What does WHO stand for?", acceptedAnswers: ["world health organization", "world health organisation"] },
-      { type: "mcq", question: "Primary prevention in health refers to:", options: ["Treating existing illness", "Early detection of disease", "Preventing disease before it occurs", "Rehabilitation after illness"], answer: "Preventing disease before it occurs" },
-      {
-        type: "long",
-        question: "Explain how the Ottawa Charter's action areas can be applied to reduce rates of type 2 diabetes in Australia.",
-        guidance: "Refer to at least three action areas with specific examples."
-      }
+      { type: "mcq", topic: "Dimensions of Health", question: "The five dimensions of health are physical, social, emotional, mental, and:", options: ["Cultural","Spiritual","Economic","Environmental"], answer: "Spiritual" },
+      { type: "short", topic: "Global Health", question: "What does WHO stand for?", acceptedAnswers: ["world health organization","world health organisation"] },
+      { type: "mcq", topic: "Health Promotion", question: "Primary prevention in health refers to:", options: ["Treating existing illness","Early detection of disease","Preventing disease before it occurs","Rehabilitation after illness"], answer: "Preventing disease before it occurs" },
+      { type: "long", topic: "Health Promotion", question: "Explain how the Ottawa Charter's action areas can be applied to reduce rates of type 2 diabetes in Australia.", guidance: "Refer to at least three action areas with specific examples." }
     ]
   },
   {
@@ -351,9 +282,9 @@ const baseSubjects = [
     category: "VCE",
     description: "Musicianship, performance practice, music theory, aural skills, and music history.",
     quiz: [
-      { type: "mcq", question: "A time signature of 3/4 means:", options: ["3 beats per bar, quarter note gets one beat", "4 beats per bar, dotted quarter gets one beat", "3 eighth notes per bar", "4 beats with triplet feel"], answer: "3 beats per bar, quarter note gets one beat" },
-      { type: "short", question: "What Italian term indicates a gradual increase in speed?", acceptedAnswers: ["accelerando", "accel"] },
-      { type: "mcq", question: "A semitone is:", options: ["Two whole steps", "The smallest interval in Western music", "A half note", "A type of scale"], answer: "The smallest interval in Western music" }
+      { type: "mcq", topic: "Music Theory", question: "A time signature of 3/4 means:", options: ["3 beats per bar, quarter note gets one beat","4 beats per bar, dotted quarter gets one beat","3 eighth notes per bar","4 beats with triplet feel"], answer: "3 beats per bar, quarter note gets one beat" },
+      { type: "short", topic: "Music Theory", question: "What Italian term indicates a gradual increase in speed?", acceptedAnswers: ["accelerando","accel"] },
+      { type: "mcq", topic: "Music Theory", question: "A semitone is:", options: ["Two whole steps","The smallest interval in Western music","A half note","A type of scale"], answer: "The smallest interval in Western music" }
     ]
   },
   {
@@ -362,13 +293,9 @@ const baseSubjects = [
     category: "VCE",
     description: "Art practice, the folio, studio processes, art theories, and critical analysis of artworks.",
     quiz: [
-      { type: "mcq", question: "A studio folio in VCE Studio Arts documents:", options: ["Only final artworks", "The full creative process from exploration to resolution", "Research essays only", "Art history notes"], answer: "The full creative process from exploration to resolution" },
-      { type: "short", question: "What term describes the arrangement of visual elements in an artwork?", acceptedAnswers: ["composition"] },
-      {
-        type: "long",
-        question: "Analyse how an artist of your choice has used materials and techniques to convey meaning in one of their works.",
-        guidance: "Use formal analysis language and reference specific visual elements and principles."
-      }
+      { type: "mcq", topic: "Studio Folio", question: "A studio folio in VCE Studio Arts documents:", options: ["Only final artworks","The full creative process from exploration to resolution","Research essays only","Art history notes"], answer: "The full creative process from exploration to resolution" },
+      { type: "short", topic: "Visual Elements", question: "What term describes the arrangement of visual elements in an artwork?", acceptedAnswers: ["composition"] },
+      { type: "long", topic: "Art Analysis", question: "Analyse how an artist of your choice has used materials and techniques to convey meaning in one of their works.", guidance: "Use formal analysis language and reference specific visual elements and principles." }
     ]
   },
   {
@@ -377,14 +304,10 @@ const baseSubjects = [
     category: "VCE",
     description: "Ecosystems, biodiversity, climate change, pollution, resource management, and sustainability.",
     quiz: [
-      { type: "mcq", question: "The greenhouse effect is caused by:", options: ["Ozone depletion", "Greenhouse gases trapping heat in the atmosphere", "Ocean acidification only", "Solar flares"], answer: "Greenhouse gases trapping heat in the atmosphere" },
-      { type: "short", question: "What term describes the variety of life in a given area?", acceptedAnswers: ["biodiversity"] },
-      { type: "mcq", question: "A keystone species is one that:", options: ["Is the largest in an ecosystem", "Has a disproportionately large effect on its ecosystem", "Is endangered", "Migrates seasonally"], answer: "Has a disproportionately large effect on its ecosystem" },
-      {
-        type: "long",
-        question: "Evaluate the effectiveness of two strategies used to manage a specific environmental issue such as land degradation or water pollution.",
-        guidance: "Include both advantages and limitations of each strategy and use real-world examples."
-      }
+      { type: "mcq", topic: "Climate Change", question: "The greenhouse effect is caused by:", options: ["Ozone depletion","Greenhouse gases trapping heat in the atmosphere","Ocean acidification only","Solar flares"], answer: "Greenhouse gases trapping heat in the atmosphere" },
+      { type: "short", topic: "Biodiversity", question: "What term describes the variety of life in a given area?", acceptedAnswers: ["biodiversity"] },
+      { type: "mcq", topic: "Ecosystems", question: "A keystone species is one that:", options: ["Is the largest in an ecosystem","Has a disproportionately large effect on its ecosystem","Is endangered","Migrates seasonally"], answer: "Has a disproportionately large effect on its ecosystem" },
+      { type: "long", topic: "Environmental Management", question: "Evaluate the effectiveness of two strategies used to manage a specific environmental issue such as land degradation or water pollution.", guidance: "Include both advantages and limitations of each strategy and use real-world examples." }
     ]
   },
   {
@@ -393,13 +316,9 @@ const baseSubjects = [
     category: "VCE",
     description: "Social structures, culture, inequality, institutions, and sociological theory.",
     quiz: [
-      { type: "mcq", question: "Socialisation refers to:", options: ["Making friends", "The process by which individuals learn social norms and values", "Government policy", "Economic mobility"], answer: "The process by which individuals learn social norms and values" },
-      { type: "short", question: "What sociologist introduced the concept of the 'sociological imagination'?", acceptedAnswers: ["c wright mills", "mills"] },
-      {
-        type: "long",
-        question: "Using sociological concepts, explain how social class influences educational outcomes. Refer to at least one theoretical perspective.",
-        guidance: "Consider cultural capital, structural factors, and relevant evidence."
-      }
+      { type: "mcq", topic: "Socialisation", question: "Socialisation refers to:", options: ["Making friends","The process by which individuals learn social norms and values","Government policy","Economic mobility"], answer: "The process by which individuals learn social norms and values" },
+      { type: "short", topic: "Sociological Theory", question: "What sociologist introduced the concept of the 'sociological imagination'?", acceptedAnswers: ["c wright mills","mills"] },
+      { type: "long", topic: "Inequality", question: "Using sociological concepts, explain how social class influences educational outcomes. Refer to at least one theoretical perspective.", guidance: "Consider cultural capital, structural factors, and relevant evidence." }
     ]
   },
   {
@@ -408,14 +327,10 @@ const baseSubjects = [
     category: "VCE",
     description: "Databases, spreadsheets, user interface design, project management, and digital solutions.",
     quiz: [
-      { type: "mcq", question: "A primary key in a database table:", options: ["Can contain duplicate values", "Uniquely identifies each record", "Is always a number", "Links to another table"], answer: "Uniquely identifies each record" },
-      { type: "short", question: "What does SQL stand for?", acceptedAnswers: ["structured query language"] },
-      { type: "mcq", question: "Which of the following is an example of validation in a database?", options: ["Encrypting data", "Checking that an entered date is in the correct format", "Backing up data", "Sorting records"], answer: "Checking that an entered date is in the correct format" },
-      {
-        type: "long",
-        question: "Describe the phases of a systems development life cycle (SDLC) and explain why each phase is important in delivering a quality digital solution.",
-        guidance: "Cover at least four phases with examples of activities within each."
-      }
+      { type: "mcq", topic: "Databases", question: "A primary key in a database table:", options: ["Can contain duplicate values","Uniquely identifies each record","Is always a number","Links to another table"], answer: "Uniquely identifies each record" },
+      { type: "short", topic: "Databases", question: "What does SQL stand for?", acceptedAnswers: ["structured query language"] },
+      { type: "mcq", topic: "Databases", question: "Which of the following is an example of validation in a database?", options: ["Encrypting data","Checking that an entered date is in the correct format","Backing up data","Sorting records"], answer: "Checking that an entered date is in the correct format" },
+      { type: "long", topic: "Systems Development", question: "Describe the phases of a systems development life cycle (SDLC) and explain why each phase is important in delivering a quality digital solution.", guidance: "Cover at least four phases with examples of activities within each." }
     ]
   },
   {
@@ -424,14 +339,10 @@ const baseSubjects = [
     category: "VCE",
     description: "Programming, algorithms, data structures, software design, testing, and project management.",
     quiz: [
-      { type: "mcq", question: "Which data structure operates on a Last-In, First-Out basis?", options: ["Queue", "Stack", "Array", "Linked list"], answer: "Stack" },
-      { type: "short", question: "What is the term for finding and fixing errors in code?", acceptedAnswers: ["debugging"] },
-      { type: "mcq", question: "An algorithm that sorts a list by repeatedly swapping adjacent elements is called:", options: ["Merge sort", "Selection sort", "Bubble sort", "Binary sort"], answer: "Bubble sort" },
-      {
-        type: "long",
-        question: "Explain the difference between white-box and black-box testing. When would each be used in a software project?",
-        guidance: "Include definitions, examples of test cases for each type, and a comparison."
-      }
+      { type: "mcq", topic: "Data Structures", question: "Which data structure operates on a Last-In, First-Out basis?", options: ["Queue","Stack","Array","Linked list"], answer: "Stack" },
+      { type: "short", topic: "Programming", question: "What is the term for finding and fixing errors in code?", acceptedAnswers: ["debugging"] },
+      { type: "mcq", topic: "Algorithms", question: "An algorithm that sorts a list by repeatedly swapping adjacent elements is called:", options: ["Merge sort","Selection sort","Bubble sort","Binary sort"], answer: "Bubble sort" },
+      { type: "long", topic: "Testing", question: "Explain the difference between white-box and black-box testing. When would each be used in a software project?", guidance: "Include definitions, examples of test cases for each type, and a comparison." }
     ]
   },
   {
@@ -440,13 +351,9 @@ const baseSubjects = [
     category: "VCE",
     description: "Media production, media texts, representation, audience, narrative, and media industries.",
     quiz: [
-      { type: "mcq", question: "The term 'mise-en-scène' refers to:", options: ["Sound editing", "Everything visible within the frame of a shot", "The film's screenplay", "Post-production colour grading"], answer: "Everything visible within the frame of a shot" },
-      { type: "short", question: "What is the name for a camera shot that shows a character from the waist up?", acceptedAnswers: ["medium shot", "mid shot"] },
-      {
-        type: "long",
-        question: "Analyse how a media text of your choice constructs a representation of a particular social group. Refer to specific media codes and conventions.",
-        guidance: "Use the language of media analysis and refer to at least three codes or conventions."
-      }
+      { type: "mcq", topic: "Media Language", question: "The term 'mise-en-scène' refers to:", options: ["Sound editing","Everything visible within the frame of a shot","The film's screenplay","Post-production colour grading"], answer: "Everything visible within the frame of a shot" },
+      { type: "short", topic: "Media Language", question: "What is the name for a camera shot that shows a character from the waist up?", acceptedAnswers: ["medium shot","mid shot"] },
+      { type: "long", topic: "Representation", question: "Analyse how a media text of your choice constructs a representation of a particular social group. Refer to specific media codes and conventions.", guidance: "Use the language of media analysis and refer to at least three codes or conventions." }
     ]
   },
   {
@@ -455,14 +362,10 @@ const baseSubjects = [
     category: "VCE",
     description: "Australian government, global actors, international relations, human rights, and power.",
     quiz: [
-      { type: "mcq", question: "Australia's system of government is best described as a:", options: ["Presidential republic", "Constitutional monarchy and federal parliamentary democracy", "Unitary state", "Autocracy"], answer: "Constitutional monarchy and federal parliamentary democracy" },
-      { type: "short", question: "What body is the primary organ of the United Nations responsible for international peace and security?", acceptedAnswers: ["security council", "un security council"] },
-      { type: "mcq", question: "The concept of state sovereignty means:", options: ["Citizens have supreme power", "A state has supreme authority within its borders", "The military controls government", "International law overrides domestic law"], answer: "A state has supreme authority within its borders" },
-      {
-        type: "long",
-        question: "To what extent do non-state actors challenge the power of nation-states in global politics? Use specific examples to support your argument.",
-        guidance: "Consider at least two types of non-state actors and evaluate their influence."
-      }
+      { type: "mcq", topic: "Australian Government", question: "Australia's system of government is best described as a:", options: ["Presidential republic","Constitutional monarchy and federal parliamentary democracy","Unitary state","Autocracy"], answer: "Constitutional monarchy and federal parliamentary democracy" },
+      { type: "short", topic: "Global Institutions", question: "What body is the primary organ of the United Nations responsible for international peace and security?", acceptedAnswers: ["security council","un security council"] },
+      { type: "mcq", topic: "Global Politics", question: "The concept of state sovereignty means:", options: ["Citizens have supreme power","A state has supreme authority within its borders","The military controls government","International law overrides domestic law"], answer: "A state has supreme authority within its borders" },
+      { type: "long", topic: "Non-State Actors", question: "To what extent do non-state actors challenge the power of nation-states in global politics? Use specific examples to support your argument.", guidance: "Consider at least two types of non-state actors and evaluate their influence." }
     ]
   }
 ];
@@ -632,9 +535,13 @@ async function hydrateSession() {
     if (data?.customQuestions) {
       setJson(STORAGE_KEYS.customQuestions, data.customQuestions);
     }
-  } catch {
-    clearAuthToken();
-    clearCurrentUser();
+  } catch (err) {
+    // Only clear the session if the server explicitly rejected it (401)
+    // Don't clear on network errors (server down, etc.) so login persists
+    if (err.message && (err.message.includes("Invalid session") || err.message.includes("Missing auth"))) {
+      clearAuthToken();
+      clearCurrentUser();
+    }
   }
 }
 
@@ -1611,7 +1518,7 @@ function renderTrackStudy() {
 
 /* ------------------------------- summary -------------------------------- */
 
-function renderCompletedSummary(subjectId) {
+async function renderCompletedSummary(subjectId) {
   const subject = getSubjectById(subjectId);
   if (!subject) {
     window.location.hash = "#dashboard";
@@ -1620,21 +1527,153 @@ function renderCompletedSummary(subjectId) {
 
   const state = getPracticeState(subjectId);
   const questions = subject.quiz;
-  const completedQuestions = questions.filter((question) =>
-    state.completedQuestionKeys.includes(question.question)
+  const completedQuestions = questions.filter((q) =>
+    state.completedQuestionKeys.includes(q.question)
   );
 
   const totalQuestions = questions.length;
   const completedCount = completedQuestions.length;
-  const correctCount = completedQuestions.filter(
-    (q) => state.answers?.[q.question]?.isCorrect === true
-  ).length;
-  const incorrectCount = completedQuestions.filter(
-    (q) => state.answers?.[q.question]?.isCorrect === false
-  ).length;
-  const savedCount = completedQuestions.filter(
-    (q) => state.answers?.[q.question]?.isCorrect === null
-  ).length;
+  const correctCount = completedQuestions.filter((q) => state.answers?.[q.question]?.isCorrect === true).length;
+  const incorrectCount = completedQuestions.filter((q) => state.answers?.[q.question]?.isCorrect === false).length;
+  const savedCount = completedQuestions.filter((q) => state.answers?.[q.question]?.isCorrect === null).length;
+  const autoMarked = completedQuestions.filter((q) => state.answers?.[q.question]?.isCorrect !== null && state.answers?.[q.question]?.isCorrect !== undefined);
+  const myPercent = autoMarked.length > 0 ? Math.round((correctCount / autoMarked.length) * 100) : null;
+
+  // Fetch competition stats from server
+  let compStats = null;
+  try {
+    compStats = await apiFetch(API.competitionStats(subjectId));
+  } catch { compStats = null; }
+
+  const hasEnoughStudents = compStats && compStats.totalStudents >= 2;
+
+  // Build percentile / rank section
+  function buildCompetitionSection() {
+    if (!hasEnoughStudents) {
+      return `
+        <section class="panel comp-panel" style="margin-top:20px;">
+          <h3>🏆 Competition Stats</h3>
+          <p class="panel-text">Stats appear once at least 2 students have attempted this subject. Complete your practice to be included when others join!</p>
+        </section>
+      `;
+    }
+
+    const { percentile, rank, totalStudents, leaderboard, questionStats, topicStats } = compStats;
+
+    const percentileLabel =
+      percentile >= 90 ? "🥇 Top 10%" :
+      percentile >= 75 ? "🥈 Top 25%" :
+      percentile >= 50 ? "🥉 Top 50%" : "Keep going!";
+
+    const leaderboardRows = leaderboard.map((entry, i) => {
+      const isMe = entry.userId === getUserId();
+      const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}.`;
+      return `
+        <tr class="${isMe ? "leaderboard-me" : ""}">
+          <td class="leaderboard-rank">${medal}</td>
+          <td class="leaderboard-name">${isMe ? "<strong>You</strong>" : escapeHtml(entry.username)}</td>
+          <td class="leaderboard-score">${entry.percent}%</td>
+          <td class="leaderboard-correct">${entry.correct} / ${entry.total}</td>
+        </tr>
+      `;
+    }).join("");
+
+    const questionRows = questionStats.map((q) => {
+      const myAnswer = state.answers?.[q.questionKey];
+      const myResult =
+        myAnswer?.isCorrect === true ? `<span class="comp-correct">✓ Correct</span>` :
+        myAnswer?.isCorrect === false ? `<span class="comp-incorrect">✗ Incorrect</span>` :
+        myAnswer?.isCorrect === null ? `<span class="comp-saved">Written</span>` :
+        `<span class="comp-muted">—</span>`;
+      const pct = q.totalAnswered > 0 ? Math.round((q.correctCount / q.totalAnswered) * 100) : null;
+      const difficultyLabel = pct === null ? "No data" : pct >= 80 ? "Easy" : pct >= 50 ? "Medium" : "Hard";
+      const difficultyClass = pct === null ? "" : pct >= 80 ? "diff-easy" : pct >= 50 ? "diff-medium" : "diff-hard";
+      return `
+        <tr>
+          <td class="qstat-question">${escapeHtml(q.questionKey.length > 80 ? q.questionKey.slice(0, 80) + "…" : q.questionKey)}</td>
+          <td>${myResult}</td>
+          <td>
+            ${pct !== null ? `
+              <div class="qstat-bar-wrap">
+                <div class="qstat-bar" style="width:${pct}%"></div>
+              </div>
+              <span class="qstat-pct">${pct}%</span>
+            ` : "—"}
+          </td>
+          <td><span class="diff-badge ${difficultyClass}">${difficultyLabel}</span></td>
+        </tr>
+      `;
+    }).join("");
+
+    const topicRows = topicStats.map((t) => {
+      const myTopicPct = t.myCorrect !== null && t.myTotal > 0
+        ? Math.round((t.myCorrect / t.myTotal) * 100) : null;
+      const classTopicPct = t.totalAnswered > 0
+        ? Math.round((t.correctCount / t.totalAnswered) * 100) : null;
+      const isWeak = myTopicPct !== null && classTopicPct !== null && myTopicPct < classTopicPct - 10;
+      const isStrength = myTopicPct !== null && classTopicPct !== null && myTopicPct > classTopicPct + 10;
+      const badge = isWeak ? `<span class="topic-badge weak">⚠ Weak area</span>` :
+                    isStrength ? `<span class="topic-badge strength">★ Strength</span>` : "";
+      return `
+        <tr class="${isWeak ? "topic-row-weak" : isStrength ? "topic-row-strength" : ""}">
+          <td class="topic-name">${escapeHtml(t.topic)} ${badge}</td>
+          <td>${myTopicPct !== null ? myTopicPct + "%" : "—"}</td>
+          <td>${classTopicPct !== null ? classTopicPct + "%" : "—"}</td>
+        </tr>
+      `;
+    }).join("");
+
+    return `
+      <section class="panel comp-panel" style="margin-top:20px;">
+        <h3>🏆 Competition Stats</h3>
+
+        <div class="comp-rank-hero">
+          <div class="comp-rank-card">
+            <div class="comp-rank-num">${rank !== null ? `#${rank}` : "—"}</div>
+            <div class="comp-rank-label">Your rank</div>
+          </div>
+          <div class="comp-rank-card">
+            <div class="comp-rank-num">${percentile !== null ? percentile + "th" : "—"}</div>
+            <div class="comp-rank-label">Percentile ${percentileLabel}</div>
+          </div>
+          <div class="comp-rank-card">
+            <div class="comp-rank-num">${totalStudents}</div>
+            <div class="comp-rank-label">Students competing</div>
+          </div>
+          <div class="comp-rank-card">
+            <div class="comp-rank-num">${myPercent !== null ? myPercent + "%" : "—"}</div>
+            <div class="comp-rank-label">Your score</div>
+          </div>
+        </div>
+
+        <h4 style="margin-top:28px; margin-bottom:12px;">Leaderboard</h4>
+        <div class="comp-table-wrap">
+          <table class="comp-table">
+            <thead><tr><th>Rank</th><th>Student</th><th>Score</th><th>Correct</th></tr></thead>
+            <tbody>${leaderboardRows}</tbody>
+          </table>
+        </div>
+
+        <h4 style="margin-top:28px; margin-bottom:12px;">Question Breakdown</h4>
+        <p class="panel-text" style="margin-bottom:12px;">How the class performed on each auto-marked question, compared to your result.</p>
+        <div class="comp-table-wrap">
+          <table class="comp-table qstat-table">
+            <thead><tr><th>Question</th><th>Your result</th><th>Class correct rate</th><th>Difficulty</th></tr></thead>
+            <tbody>${questionRows}</tbody>
+          </table>
+        </div>
+
+        <h4 style="margin-top:28px; margin-bottom:12px;">Topic Breakdown</h4>
+        <p class="panel-text" style="margin-bottom:12px;">Your score vs the class average per topic. Weak areas and strengths are highlighted.</p>
+        <div class="comp-table-wrap">
+          <table class="comp-table">
+            <thead><tr><th>Topic</th><th>Your %</th><th>Class avg %</th></tr></thead>
+            <tbody>${topicRows}</tbody>
+          </table>
+        </div>
+      </section>
+    `;
+  }
 
   const content = `
     <div class="page-wide">
@@ -1676,54 +1715,36 @@ function renderCompletedSummary(subjectId) {
         ${
           completedQuestions.length
             ? `<div class="practice-summary-list">
-                ${completedQuestions
-                  .map((question, index) => {
-                    const savedResponse = getWrittenResponse(subjectId, question.question);
-                    const answerState = state.answers?.[question.question];
-                    const statusLabel =
-                      answerState?.isCorrect === true
-                        ? "Correct"
-                        : answerState?.isCorrect === false
-                          ? "Incorrect"
-                          : "Saved";
-
-                    const statusClass =
-                      answerState?.isCorrect === true
-                        ? "correct"
-                        : answerState?.isCorrect === false
-                          ? "incorrect"
-                          : "saved";
-
-                    return `
-                      <article class="practice-summary-item">
-                        <div class="practice-summary-number">${index + 1}</div>
-                        <div>
-                          <div class="quiz-type-badge">${escapeHtml(getQuestionTypeLabel(question.type || "mcq"))}</div>
-                          <h4>${escapeHtml(question.question)}</h4>
-                          <div class="quiz-feedback ${statusClass}" style="display:inline-block; margin-top:10px;">
-                            ${statusLabel}
-                          </div>
-                          ${
-                            savedResponse
-                              ? `<div class="saved-response"><strong>Your response:</strong><br>${escapeHtml(savedResponse.response)}</div>`
-                              : answerState?.answer
-                                ? `<div class="saved-response"><strong>Your answer:</strong><br>${escapeHtml(answerState.answer)}</div>`
-                                : `<p class="panel-text">Completed.</p>`
-                          }
-                          ${
-                            question.type === "mcq" && question.answer
-                              ? `<div class="saved-response"><strong>Correct answer:</strong><br>${escapeHtml(question.answer)}</div>`
-                              : ""
-                          }
-                        </div>
-                      </article>
-                    `;
-                  })
-                  .join("")}
+                ${completedQuestions.map((question, index) => {
+                  const savedResponse = getWrittenResponse(subjectId, question.question);
+                  const answerState = state.answers?.[question.question];
+                  const statusLabel = answerState?.isCorrect === true ? "Correct" : answerState?.isCorrect === false ? "Incorrect" : "Saved";
+                  const statusClass = answerState?.isCorrect === true ? "correct" : answerState?.isCorrect === false ? "incorrect" : "saved";
+                  return `
+                    <article class="practice-summary-item">
+                      <div class="practice-summary-number">${index + 1}</div>
+                      <div>
+                        <div class="quiz-type-badge">${escapeHtml(getQuestionTypeLabel(question.type || "mcq"))}</div>
+                        <h4>${escapeHtml(question.question)}</h4>
+                        <div class="quiz-feedback ${statusClass}" style="display:inline-block; margin-top:10px;">${statusLabel}</div>
+                        ${savedResponse
+                          ? `<div class="saved-response"><strong>Your response:</strong><br>${escapeHtml(savedResponse.response)}</div>`
+                          : answerState?.answer
+                            ? `<div class="saved-response"><strong>Your answer:</strong><br>${escapeHtml(answerState.answer)}</div>`
+                            : `<p class="panel-text">Completed.</p>`}
+                        ${question.type === "mcq" && question.answer
+                          ? `<div class="saved-response"><strong>Correct answer:</strong><br>${escapeHtml(question.answer)}</div>`
+                          : ""}
+                      </div>
+                    </article>
+                  `;
+                }).join("")}
               </div>`
             : `<div class="empty">You have not completed any practice questions yet.</div>`
         }
       </section>
+
+      ${buildCompetitionSection()}
     </div>
   `;
 
@@ -2039,6 +2060,17 @@ async function renderQuiz(subjectId, openSummary = false) {
 
         setPracticeState(subjectId, latestState);
 
+        // Record answer for competition stats
+        apiFetch(API.submitAnswer, {
+          method: "POST",
+          body: JSON.stringify({
+            subjectId: subject.id,
+            questionKey: question.question,
+            topic: question.topic || "General",
+            isCorrect: isCorrect ? 1 : 0
+          })
+        }).catch(() => {});
+
         feedback.innerHTML = isCorrect
           ? `<div class="quiz-feedback correct">Correct answer.</div>`
           : `<div class="quiz-feedback incorrect">Incorrect. Correct answer: ${escapeHtml(question.answer)}</div>`;
@@ -2082,6 +2114,17 @@ async function renderQuiz(subjectId, openSummary = false) {
             answer: typed,
             isCorrect
           };
+
+          // Record answer for competition stats
+          apiFetch(API.submitAnswer, {
+            method: "POST",
+            body: JSON.stringify({
+              subjectId: subject.id,
+              questionKey: question.question,
+              topic: question.topic || "General",
+              isCorrect: isCorrect ? 1 : 0
+            })
+          }).catch(() => {});
 
           feedback.innerHTML = isCorrect
             ? `<div class="quiz-feedback correct">Accepted short answer.</div>`
