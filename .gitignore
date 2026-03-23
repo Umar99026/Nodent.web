@@ -1,4 +1,5 @@
 node_modules
 nodent.db
 .env
-.DS_Store
+.DS_Store*.db-shm
+*.db-wal
