@@ -5,3 +5,8 @@ nodent.db
 *.db-wal
 backend/.wrangler/
 frontend/dist/
+pages-deploy/assets/
+pages-deploy/*.html
+pages-deploy/*.svg
+pages-deploy/*.png
+pages-deploy/package-lock.json
