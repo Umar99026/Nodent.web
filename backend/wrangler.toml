@@ -1,0 +1,9 @@
+name = "nodent-api"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+account_id = "d7dc5ee8b666f8267eba35bca09bcfba"
+
+[vars]
+ADMIN_KEY = "nodent-admin-2025"
+FRONTEND_URL = "https://nodent.pages.dev"

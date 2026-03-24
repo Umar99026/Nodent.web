@@ -1,5 +1,7 @@
 node_modules
 nodent.db
-.env
-.DS_Store*.db-shm
+.DS_Store
+*.db-shm
 *.db-wal
+backend/.wrangler/
+frontend/dist/

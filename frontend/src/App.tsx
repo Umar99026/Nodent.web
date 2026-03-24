@@ -1,0 +1,170 @@
+import { Routes, Route, Navigate } from "react-router-dom";
+import { AuthProvider, useAuth } from "@/context/AuthContext";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { lazy, Suspense, type ReactNode } from "react";
+
+// Lazy-load page components — stubs will be replaced with real implementations
+const LoginPage = lazy(() => import("@/pages/LoginPage"));
+const DashboardPage = lazy(() => import("@/pages/DashboardPage"));
+const QuizPage = lazy(() => import("@/pages/QuizPage"));
+const SummaryPage = lazy(() => import("@/pages/SummaryPage"));
+const StudyModePage = lazy(() => import("@/pages/StudyModePage"));
+const TrackStudyPage = lazy(() => import("@/pages/TrackStudyPage"));
+const ChatPage = lazy(() => import("@/pages/ChatPage"));
+const AdminPage = lazy(() => import("@/pages/AdminPage"));
+
+function LoadingFallback() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-[#f8f5f0]">
+      <div className="text-center">
+        <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-[#56abe6] border-t-transparent" />
+        <p className="mt-4 font-['Source_Sans_3'] text-gray-600">
+          Loading...
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Protects a route — redirects unauthenticated users to /login.
+ */
+function ProtectedRoute({ children }: { children: ReactNode }) {
+  const { isAuthenticated, isLoading } = useAuth();
+
+  if (isLoading) {
+    return <LoadingFallback />;
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <>{children}</>;
+}
+
+/**
+ * Redirects authenticated users away from guest-only pages (e.g. /login).
+ */
+function GuestRoute({ children }: { children: ReactNode }) {
+  const { isAuthenticated, isLoading } = useAuth();
+
+  if (isLoading) {
+    return <LoadingFallback />;
+  }
+
+  if (isAuthenticated) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return <>{children}</>;
+}
+
+function RootRedirect() {
+  const { isAuthenticated, isLoading } = useAuth();
+
+  if (isLoading) {
+    return <LoadingFallback />;
+  }
+
+  return isAuthenticated ? (
+    <Navigate to="/dashboard" replace />
+  ) : (
+    <Navigate to="/login" replace />
+  );
+}
+
+function AppRoutes() {
+  return (
+    <Suspense fallback={<LoadingFallback />}>
+      <Routes>
+        <Route path="/" element={<RootRedirect />} />
+
+        <Route
+          path="/login"
+          element={
+            <GuestRoute>
+              <LoginPage />
+            </GuestRoute>
+          }
+        />
+
+        <Route
+          path="/dashboard"
+          element={
+            <ProtectedRoute>
+              <DashboardPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/quiz/:subjectId"
+          element={
+            <ProtectedRoute>
+              <QuizPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/quiz/:subjectId/summary"
+          element={
+            <ProtectedRoute>
+              <SummaryPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/study/:subjectId"
+          element={
+            <ProtectedRoute>
+              <StudyModePage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/track"
+          element={
+            <ProtectedRoute>
+              <TrackStudyPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/chat/:subjectId"
+          element={
+            <ProtectedRoute>
+              <ChatPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute>
+              <AdminPage />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Catch-all: redirect to root */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Suspense>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <TooltipProvider>
+        <AppRoutes />
+      </TooltipProvider>
+    </AuthProvider>
+  );
+}
