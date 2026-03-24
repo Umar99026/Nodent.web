@@ -45,6 +45,7 @@ import {
   Loader2,
   GraduationCap,
   BarChart3,
+  Clock,
 } from "lucide-react";
 
 import { baseSubjects } from "@/lib/subjects";
@@ -341,7 +342,7 @@ export default function DashboardPage() {
                 </CardDescription>
               </CardHeader>
 
-              <CardFooter className="gap-2">
+              <CardFooter className="flex-wrap gap-2">
                 <Button
                   size="sm"
                   className="flex-1 bg-brand text-white hover:bg-brand-dark"
@@ -349,6 +350,15 @@ export default function DashboardPage() {
                 >
                   <BookOpen className="size-3.5" />
                   Practice
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => navigate(`/study/${subject.id}`)}
+                >
+                  <Clock className="size-3.5" />
+                  Study
                 </Button>
                 <Button
                   variant="outline"
