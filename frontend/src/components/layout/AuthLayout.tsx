@@ -1,0 +1,85 @@
+import { cn } from "@/lib/utils";
+import { GraduationCap, BookOpen, Trophy } from "lucide-react";
+
+interface AuthLayoutProps {
+  children: React.ReactNode;
+  className?: string;
+}
+
+export function AuthLayout({ children, className }: AuthLayoutProps) {
+  return (
+    <div className="grid min-h-dvh grid-cols-1 lg:grid-cols-2">
+      {/* Left: Brand hero — deep navy with floating orbs */}
+      <div className="gradient-bg relative hidden flex-col items-center justify-center overflow-hidden px-12 lg:flex">
+        {/* Animated background orbs */}
+        <div className="orb-float-slow pointer-events-none absolute -top-20 -left-20 h-72 w-72 rounded-full bg-brand/15 blur-3xl" />
+        <div className="orb-float-medium pointer-events-none absolute -right-16 bottom-20 h-56 w-56 rounded-full bg-gold/10 blur-3xl" />
+        <div className="orb-float-slow pointer-events-none absolute top-1/2 left-1/3 h-40 w-40 rounded-full bg-brand/10 blur-2xl" />
+
+        {/* Grid pattern overlay */}
+        <div
+          className="pointer-events-none absolute inset-0 opacity-[0.03]"
+          style={{
+            backgroundImage: `linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)`,
+            backgroundSize: "60px 60px",
+          }}
+        />
+
+        <div className="relative z-10 flex max-w-md flex-col items-center text-center">
+          {/* Logo mark */}
+          <div className="relative mb-8">
+            <img
+              src="/logo.png"
+              alt="Nodent logo"
+              className="h-20 w-20 drop-shadow-2xl"
+            />
+            <div className="absolute -inset-2 -z-10 rounded-3xl bg-brand/20 blur-xl" />
+          </div>
+
+          <h1 className="font-display text-4xl tracking-tight text-white">
+            Nodent
+          </h1>
+          <p className="mt-3 text-lg leading-relaxed text-white/70">
+            Your scholarly companion for VCE excellence
+          </p>
+
+          {/* Feature pills */}
+          <div className="mt-10 flex flex-wrap justify-center gap-3">
+            {[
+              { icon: GraduationCap, label: "27 VCE Subjects" },
+              { icon: BookOpen, label: "Practice Quizzes" },
+              { icon: Trophy, label: "Leaderboards" },
+            ].map(({ icon: Icon, label }) => (
+              <div
+                key={label}
+                className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/60 backdrop-blur-sm"
+              >
+                <Icon className="size-4 text-brand-light" />
+                {label}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Right: Form area */}
+      <div className="flex items-center justify-center bg-cream px-4 py-12 sm:px-8">
+        {/* Mobile logo */}
+        <div className="absolute top-6 left-6 flex items-center gap-2.5 lg:hidden">
+          <img src="/logo.png" alt="Nodent logo" className="h-8 w-8" />
+          <span className="font-display text-lg text-navy">Nodent</span>
+        </div>
+
+        <div
+          className={cn(
+            "w-full max-w-md rounded-2xl border border-black/[0.04] bg-white/80 p-8 shadow-xl shadow-navy/[0.03] backdrop-blur-md sm:p-10",
+            "grain-texture",
+            className
+          )}
+        >
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
