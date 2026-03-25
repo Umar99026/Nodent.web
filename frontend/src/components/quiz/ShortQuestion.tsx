@@ -12,6 +12,27 @@ interface ShortQuestionProps {
   disabled?: boolean;
 }
 
+function QuestionImages({ urls }: { urls?: string[] }) {
+  if (!urls?.length) return null;
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      {urls.slice(0, 4).map((src) => (
+        <div
+          key={src}
+          className="overflow-hidden rounded-xl border border-black/10 bg-white shadow-sm"
+        >
+          <img
+            src={src}
+            alt="Question image"
+            className="h-44 w-full object-cover"
+            loading="lazy"
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function ShortQuestion({
   question,
   onAnswer,
@@ -59,6 +80,8 @@ export function ShortQuestion({
           {question.question}
         </h3>
       </div>
+
+      <QuestionImages urls={question.imageUrls} />
 
       {/* Guidance */}
       {question.guidance && (

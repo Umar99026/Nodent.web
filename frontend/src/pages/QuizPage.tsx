@@ -14,6 +14,13 @@ import { CommentThread } from "@/components/quiz/CommentThread";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   AlertDialog,
   AlertDialogContent,
   AlertDialogHeader,
@@ -115,6 +122,7 @@ export default function QuizPage() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, boolean | null>>({});
   const [initialized, setInitialized] = useState(false);
+  const [topicFilter, setTopicFilter] = useState<string>("all");
 
   // Find subject
   const subject: Subject | undefined = useMemo(() => {
@@ -128,6 +136,17 @@ export default function QuizPage() {
     const custom = getCustomQuestions(subjectId);
     return [...base, ...custom];
   }, [subject, subjectId]);
+
+  const availableTopics = useMemo(() => {
+    const set = new Set<string>();
+    questions.forEach((q) => set.add((q.topic || "General").trim() || "General"));
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [questions]);
+
+  const filteredQuestions = useMemo(() => {
+    if (topicFilter === "all") return questions;
+    return questions.filter((q) => (q.topic || "General") === topicFilter);
+  }, [questions, topicFilter]);
 
   // Load persisted state on mount
   useEffect(() => {
@@ -174,7 +193,7 @@ export default function QuizPage() {
 
         // Check completion
         const answeredCount = Object.keys(next).length;
-        if (answeredCount >= questions.length && questions.length > 0) {
+        if (answeredCount >= filteredQuestions.length && filteredQuestions.length > 0) {
           // All answered — mark complete and redirect
           if (user && subjectId) {
             savePracticeState(user.id, subjectId, {
@@ -210,17 +229,22 @@ export default function QuizPage() {
         });
       }
     },
-    [questions.length, currentIndex, persistState, user, subjectId, navigate]
+    [filteredQuestions.length, currentIndex, persistState, user, subjectId, navigate]
   );
 
   // Navigation
   const goTo = (index: number) => {
-    const clamped = Math.max(0, Math.min(questions.length - 1, index));
+    const clamped = Math.max(0, Math.min(filteredQuestions.length - 1, index));
     setCurrentIndex(clamped);
     persistState(clamped, answers);
   };
 
-  const currentQuestion = questions[currentIndex] ?? null;
+  useEffect(() => {
+    // When switching topic sets, keep index in-range.
+    setCurrentIndex((prev) => Math.max(0, Math.min(filteredQuestions.length - 1, prev)));
+  }, [filteredQuestions.length]);
+
+  const currentQuestion = filteredQuestions[currentIndex] ?? null;
   const currentMarks =
     currentQuestion && typeof currentQuestion.marks === "number"
       ? currentQuestion.marks
@@ -300,17 +324,46 @@ export default function QuizPage() {
     <AppShell title={subject ? `${subject.name} Practice` : "Practice"}>
       <div className="space-y-6">
         {/* Progress bar + Study Mode quick access */}
-        <QuizProgress current={answeredCount} total={questions.length} />
+        <QuizProgress current={answeredCount} total={filteredQuestions.length} />
 
-        <div className="flex justify-end">
-          <Button
-            variant="outline"
-            onClick={() => navigate(`/study/${subjectId}`)}
-            className="gap-2"
-          >
-            <Clock className="size-4" />
-            Study Mode
-          </Button>
+        <div className="h-px w-full bg-white/20" />
+
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center justify-end gap-3 sm:justify-start">
+            {/* Topic filter (top-right like screenshot) */}
+            <div className="w-56">
+              <Select
+                value={topicFilter}
+                onValueChange={(val) => {
+                  if (!val) return;
+                  setTopicFilter(val);
+                }}
+              >
+                <SelectTrigger className="h-10 bg-white border-black/10 text-[#0b0f19]">
+                  <SelectValue placeholder="Topic" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All topics</SelectItem>
+                  {availableTopics.map((t) => (
+                    <SelectItem key={t} value={t}>
+                      {t}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="flex justify-end">
+            <Button
+              variant="outline"
+              onClick={() => navigate(`/study/${subjectId}`)}
+              className="gap-2 border-transparent bg-[#0b0f19] text-white hover:bg-[#0b0f19]/90"
+            >
+              <Clock className="size-4" />
+              Study Mode
+            </Button>
+          </div>
         </div>
 
         {/* Two-column layout */}
@@ -375,7 +428,7 @@ export default function QuizPage() {
                 variant="outline"
                 onClick={() => goTo(currentIndex - 1)}
                 disabled={currentIndex === 0}
-                className="gap-2"
+                className="gap-2 border-transparent bg-[#0b0f19] text-white hover:bg-[#0b0f19]/90 disabled:opacity-40"
               >
                 <ChevronLeft className="size-4" />
                 Previous
@@ -410,7 +463,7 @@ export default function QuizPage() {
                 variant="outline"
                 onClick={() => goTo(currentIndex + 1)}
                 disabled={currentIndex === questions.length - 1}
-                className="gap-2"
+                className="gap-2 border-transparent bg-[#0b0f19] text-white hover:bg-[#0b0f19]/90 disabled:opacity-40"
               >
                 Next
                 <ChevronRight className="size-4" />

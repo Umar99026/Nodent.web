@@ -32,7 +32,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
-  { label: "Track Study", icon: Clock, path: "/track" },
+  { label: "Track My Study", icon: Clock, path: "/track" },
   { label: "Admin", icon: Settings, path: "/admin", adminOnly: true },
 ];
 
@@ -64,28 +64,30 @@ export function AppSidebar() {
   return (
     <SidebarRoot
       collapsible="icon"
-      className="border-r-0"
+      className="border-r-0 overflow-hidden"
       style={
         {
-          "--sidebar-background": "#0f172a",
-          "--sidebar-foreground": "rgba(255, 255, 255, 0.9)",
-          "--sidebar-accent": "rgba(55, 151, 211, 0.08)",
+          "--sidebar-background": "#000000",
+          "--sidebar-foreground": "#ffffff",
+          "--sidebar-accent": "rgba(255, 255, 255, 0.08)",
           "--sidebar-accent-foreground": "rgba(255, 255, 255, 0.95)",
-          "--sidebar-border": "rgba(255, 255, 255, 0.06)",
-          "--sidebar-primary": "#3797D3",
+          "--sidebar-border": "rgba(255, 255, 255, 0.08)",
+          "--sidebar-primary": "#56abe6",
           "--sidebar-primary-foreground": "#ffffff",
-          "--sidebar-ring": "#3797D3",
+          "--sidebar-ring": "#56abe6",
         } as React.CSSProperties
       }
     >
       {/* Logo */}
-      <SidebarHeader className="px-4 pt-5 pb-0">
-        <div className="flex items-center gap-3">
-          <img
-            src="/logo.png"
-            alt="Nodent logo"
-            className="h-9 w-9 shrink-0 rounded-lg object-contain"
-          />
+      <SidebarHeader className="px-4 pt-5 pb-0 group-data-[collapsible=icon]:px-2">
+        <div className="flex items-center gap-3 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand group-data-[collapsible=icon]:h-9 group-data-[collapsible=icon]:w-9">
+            <img
+              src="/logo.png"
+              alt="Nodent logo"
+              className="h-7 w-7 object-contain"
+            />
+          </div>
           <div className="flex flex-col group-data-[collapsible=icon]:hidden">
             <span className="font-display text-lg tracking-tight text-white">
               Nodent
@@ -103,7 +105,7 @@ export function AppSidebar() {
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupContent>
-            <SidebarMenu>
+            <SidebarMenu className="gap-2">
               {navItems.map((item) => {
                 if (
                   item.adminOnly &&
@@ -121,18 +123,20 @@ export function AppSidebar() {
                       onClick={() => handleNav(item.path)}
                       className={
                         isActive
-                          ? "bg-brand/12 text-brand-light hover:bg-brand/16 hover:text-brand-light"
-                          : "text-white/50 hover:text-white/80 hover:bg-white/5"
+                          ? "bg-white/10 text-white hover:bg-white/15"
+                          : "text-white/60 hover:text-white/90 hover:bg-white/5"
                       }
                     >
                       <item.icon
                         className={
-                          isActive ? "text-brand" : "text-white/35"
+                          isActive ? "text-white" : "text-white/40"
                         }
                       />
-                      <span className="font-medium">{item.label}</span>
+                      <span className="font-medium group-data-[collapsible=icon]:hidden">
+                        {item.label}
+                      </span>
                       {isActive && (
-                        <span className="ml-auto h-1.5 w-1.5 rounded-full bg-brand shadow-[0_0_8px_rgba(55,151,211,0.6)] group-data-[collapsible=icon]:hidden" />
+                        <span className="ml-auto h-1.5 w-1.5 rounded-full bg-white shadow-[0_0_8px_rgba(255,255,255,0.35)] group-data-[collapsible=icon]:hidden" />
                       )}
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -147,25 +151,29 @@ export function AppSidebar() {
       <SidebarFooter className="border-t border-white/6">
         <SidebarMenu>
           <SidebarMenuItem>
-            <div className="flex items-center gap-3 rounded-lg px-2 py-2">
-              <Avatar className="size-8 shrink-0">
-                <AvatarFallback className="bg-brand/15 text-xs font-bold text-brand-light">
-                  {initials}
-                </AvatarFallback>
-              </Avatar>
-              <div className="flex min-w-0 flex-1 flex-col group-data-[collapsible=icon]:hidden">
-                <span className="truncate text-sm font-medium text-white/85">
-                  {user?.username ?? "Guest"}
-                </span>
-                <span className="truncate text-[11px] text-white/35">
-                  {user?.email ?? ""}
-                </span>
+            <div className="flex flex-col gap-3 px-2 pb-3 pt-2 group-data-[collapsible=icon]:px-1">
+              <div className="flex items-center gap-3 rounded-lg px-2 py-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-1">
+                <Avatar className="size-8 shrink-0">
+                  <AvatarFallback className="bg-brand/15 text-xs font-bold text-brand-light">
+                    {initials}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex min-w-0 flex-1 flex-col group-data-[collapsible=icon]:hidden">
+                  <span className="truncate text-sm font-medium text-white/85">
+                    {user?.username ?? "Guest"}
+                  </span>
+                  <span className="truncate text-[11px] text-white/35">
+                    {user?.email ?? ""}
+                  </span>
+                </div>
               </div>
+
               <button
                 onClick={handleLogout}
-                className="rounded-md p-1.5 text-white/25 transition-colors hover:bg-white/6 hover:text-red-400 group-data-[collapsible=icon]:hidden"
+                className="flex w-full items-center justify-center gap-2 rounded-md bg-red-500 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-red-600 group-data-[collapsible=icon]:px-2"
               >
                 <LogOut className="size-4" />
+                <span className="group-data-[collapsible=icon]:hidden">Log out</span>
               </button>
             </div>
           </SidebarMenuItem>

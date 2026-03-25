@@ -13,7 +13,6 @@ import {
   CardContent,
   CardFooter,
 } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
@@ -22,17 +21,14 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import {
   BookOpen,
-  MessageSquare,
-  FileText,
   Plus,
   Search,
   X,
-  GraduationCap,
-  BarChart3,
   Star,
+  User,
 } from "lucide-react";
 
 import { baseSubjects } from "@/lib/subjects";
@@ -59,22 +55,6 @@ function saveMySubjects(userId: string, subjects: Subject[]) {
   );
 }
 
-function getCompletedQuizCount(): number {
-  let count = 0;
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (key?.startsWith(STORAGE_KEYS.practiceStatePrefix)) {
-      try {
-        const state = JSON.parse(localStorage.getItem(key) ?? "{}");
-        if (state.completed) count++;
-      } catch {
-        // ignore malformed entries
-      }
-    }
-  }
-  return count;
-}
-
 /* ------------------------------------------------------------------ */
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
@@ -88,8 +68,6 @@ export default function DashboardPage() {
     getMySubjects(userId),
   );
   const [searchQuery, setSearchQuery] = useState("");
-
-  const quizCount = useMemo(() => getCompletedQuizCount(), []);
 
   /* ------ subject management ------ */
 
@@ -187,35 +165,21 @@ export default function DashboardPage() {
     <AppShell
       title="Dashboard"
       subtitle={`Welcome back, ${user?.username ?? "Student"}`}
-    >
-      {/* Scorecard toggle */}
-      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      headerRight={
         <button
           type="button"
           onClick={() => setScoreCardOpen((v) => !v)}
-          className="flex items-center gap-3 rounded-xl border border-border/50 bg-card/60 px-4 py-3 text-left transition-colors hover:bg-card"
+          className="flex items-center gap-2 rounded-full border border-white/25 bg-white/15 px-3 py-2 text-left transition-colors hover:bg-white/20"
         >
-          <Avatar className="size-10">
-            <AvatarFallback className="bg-brand/15 text-xs font-bold text-brand-light">
-              {(user?.username ?? "Student")
-                .split(" ")
-                .map((n) => n[0])
-                .join("")
-                .toUpperCase()
-                .slice(0, 2) || "S"}
-            </AvatarFallback>
-          </Avatar>
-          <div>
-            <div className="font-display text-lg font-semibold">
-              {user?.username ?? "Student"}
-            </div>
-            <div className="text-xs text-muted-foreground">
-              Tap to {scoreCardOpen ? "hide" : "view"} scorecard
-            </div>
-          </div>
+          <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/15 border border-white/20">
+            <User className="size-4 text-white/90" />
+          </span>
+          <span className="text-sm font-semibold text-white">
+            {user?.username ?? "Student"}
+          </span>
         </button>
-      </div>
-
+      }
+    >
       {scoreCardOpen && (
         <Card className="paper-texture mb-8 overflow-hidden">
           <CardHeader className="flex flex-row items-center justify-between gap-4">
@@ -298,106 +262,80 @@ export default function DashboardPage() {
         </Card>
       )}
 
-      {/* Stats row */}
-      <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <Card className="paper-texture">
-          <CardContent className="flex items-center gap-4 pt-1">
-            <div className="flex size-10 items-center justify-center rounded-lg bg-brand/10">
-              <GraduationCap className="size-5 text-brand" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-foreground">
-                {mySubjects.length}
-              </p>
-              <p className="text-sm text-muted-foreground">Subjects</p>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Section container */}
+      <div className="mt-2 rounded-3xl bg-white/10 backdrop-blur-md border border-white/20 p-8 sm:mt-3">
+        {/* Section header */}
+        <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="flex items-center gap-3">
+              <h2 className="font-display text-xl font-semibold tracking-tight text-white">
+                My Subjects
+              </h2>
 
-        <Card className="paper-texture">
-          <CardContent className="flex items-center gap-4 pt-1">
-            <div className="flex size-10 items-center justify-center rounded-lg bg-success/10">
-              <BarChart3 className="size-5 text-success" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-foreground">{quizCount}</p>
-              <p className="text-sm text-muted-foreground">Quizzes</p>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="paper-texture sm:col-span-2 lg:col-span-1">
-          <CardContent className="flex items-center gap-4 pt-1">
-            <div className="flex size-10 items-center justify-center rounded-lg bg-amber/10">
-              <BookOpen className="size-5 text-amber" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-foreground">VCE</p>
-              <p className="text-sm text-muted-foreground">Curriculum</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Section header */}
-      <div className="mb-5 flex items-center justify-between">
-        <h2 className="font-display text-xl font-semibold tracking-tight">
-          My Subjects
-        </h2>
-
-        <DropdownMenu>
-          <DropdownMenuTrigger {...({ asChild: true } as any)}>
-            <Button variant="outline" className="gap-1.5">
-              <Plus className="size-4" />
-              Add Subject
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent className="w-[420px] p-0">
-            <div className="px-4 pb-2 pt-3">
-              <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search subjects..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="h-9 pl-8"
-                />
-              </div>
-            </div>
-            <ScrollArea className="max-h-[320px] px-4 pb-4">
-              {availableSubjects.length === 0 ? (
-                <p className="py-6 text-center text-sm text-muted-foreground">
-                  {baseSubjects.length === 0
-                    ? "No subjects available yet."
-                    : "All subjects have been added or none match your search."}
-                </p>
-              ) : (
-                <div className="space-y-2">
-                  {availableSubjects.map((subject) => (
-                    <button
-                      key={subject.id}
-                      onClick={() => addSubject(subject)}
-                      className="flex w-full items-center justify-between rounded-lg border border-border/50 bg-card/60 px-4 py-3 text-left transition-colors hover:bg-card"
-                    >
-                      <div>
-                        <p className="font-medium text-foreground">
-                          {subject.name}
-                        </p>
-                        <p className="mt-0.5 text-xs text-muted-foreground">
-                          {subject.description}
-                        </p>
+              {/* Add subjects icon */}
+              <DropdownMenu>
+                <DropdownMenuTrigger>
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    aria-label="Add subjects"
+                    className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-white/30 bg-white/15 text-white hover:bg-white/20"
+                  >
+                    <Plus className="size-4" />
+                  </div>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-[420px] p-0">
+                  <div className="px-4 pb-2 pt-3">
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        placeholder="Search subjects..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="h-9 pl-8"
+                      />
+                    </div>
+                  </div>
+                  <ScrollArea className="max-h-[320px] px-4 pb-4">
+                    {availableSubjects.length === 0 ? (
+                      <p className="py-6 text-center text-sm text-muted-foreground">
+                        {baseSubjects.length === 0
+                          ? "No subjects available yet."
+                          : "All subjects have been added or none match your search."}
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {availableSubjects.map((subject) => (
+                          <button
+                            key={subject.id}
+                            onClick={() => addSubject(subject)}
+                            className="flex w-full items-center justify-between rounded-lg border border-border/50 bg-card/60 px-4 py-3 text-left transition-colors hover:bg-card"
+                          >
+                            <div>
+                              <p className="font-medium text-foreground">
+                                {subject.name}
+                              </p>
+                              <p className="mt-0.5 text-xs text-muted-foreground">
+                                {subject.description}
+                              </p>
+                            </div>
+                            <Plus className="size-4 shrink-0 text-brand" />
+                          </button>
+                        ))}
                       </div>
-                      <Plus className="size-4 shrink-0 text-brand" />
-                    </button>
-                  ))}
-                </div>
-              )}
-            </ScrollArea>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+                    )}
+                  </ScrollArea>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
 
-      {/* Subject grid */}
+            <p className="mt-1 text-sm text-white/70">
+              Manage your daily study, launch practice, and open subject discussion today.
+            </p>
+          </div>
+        </div>
+
+        {/* Subject grid */}
       {mySubjects.length === 0 ? (
         <Card className="paper-texture flex flex-col items-center justify-center py-16">
           <CardContent className="flex flex-col items-center text-center">
@@ -422,55 +360,61 @@ export default function DashboardPage() {
           }}
         >
           {mySubjects.map((subject) => (
-            <Card key={subject.id} className="paper-texture relative">
-              <CardHeader>
-                <div className="flex items-start justify-between">
-                  <div className="space-y-1">
-                    <CardTitle className="font-display text-lg">
+            <Card
+              key={subject.id}
+              className="group relative flex flex-col gap-0 overflow-hidden rounded-2xl border border-black/10 bg-white p-0 py-0 shadow-sm transition-shadow hover:shadow-md"
+            >
+              <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-brand/10 via-transparent to-transparent" />
+              <CardHeader className="relative z-10 border-b-0 p-5 pb-2">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 space-y-1">
+                    <CardTitle className="font-display text-xl text-[#0b0f19]">
                       {subject.name}
                     </CardTitle>
-                    <Badge variant="secondary" className="text-[11px]">
-                      VCE
-                    </Badge>
+                    <CardDescription className="text-sm text-[#0b0f19]/70">
+                      {subject.description}
+                    </CardDescription>
                   </div>
-                  <button
-                    onClick={() => removeSubject(subject.id)}
-                    className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-danger/10 hover:text-danger"
-                    aria-label={`Remove ${subject.name}`}
-                  >
-                    <X className="size-4" />
-                  </button>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Badge
+                      variant="secondary"
+                      className="rounded-full bg-[#faf8f5] border border-black/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-black"
+                    >
+                      vce
+                    </Badge>
+
+                    <button
+                      onClick={() => removeSubject(subject.id)}
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-red-500/85 text-white border border-red-500/25 transition-colors hover:bg-red-500"
+                      aria-label={`Remove ${subject.name}`}
+                    >
+                      <X className="size-4 text-white" />
+                    </button>
+                  </div>
                 </div>
-                <CardDescription className="mt-1">
-                  {subject.description}
-                </CardDescription>
               </CardHeader>
 
-              <CardFooter className="flex-wrap gap-2">
+              <CardFooter className="relative z-10 mt-auto grid grid-cols-3 gap-3 border-t-0 bg-transparent p-5 pt-0">
                 <Button
                   size="sm"
-                  className="flex-1 bg-brand text-white hover:bg-brand-dark"
+                  className="h-11 bg-[#0b0f19] text-white hover:bg-[#0b0f19]/90 px-3 text-sm rounded-lg"
                   onClick={() => navigate(`/quiz/${subject.id}`)}
                 >
-                  <BookOpen className="size-3.5" />
                   Practice
                 </Button>
                 <Button
-                  variant="outline"
                   size="sm"
-                  className="flex-1"
+                  className="h-11 bg-[#0b0f19] text-white hover:bg-[#0b0f19]/90 px-3 text-sm rounded-lg whitespace-normal leading-tight"
                   onClick={() => navigate(`/quiz/${subject.id}/summary`)}
                 >
-                  <FileText className="size-3.5" />
                   Summary
                 </Button>
                 <Button
-                  variant="outline"
                   size="sm"
-                  className="flex-1"
+                  className="h-11 bg-success text-white hover:bg-success/90 px-3 text-sm rounded-lg"
                   onClick={() => navigate(`/chat/${subject.id}`)}
                 >
-                  <MessageSquare className="size-3.5" />
                   Chat
                 </Button>
               </CardFooter>
@@ -478,6 +422,7 @@ export default function DashboardPage() {
           ))}
         </div>
       )}
+      </div>
 
     </AppShell>
   );

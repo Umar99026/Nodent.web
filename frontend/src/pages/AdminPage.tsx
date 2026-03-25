@@ -57,6 +57,7 @@ interface AdminQuestion {
   subjectName?: string;
   type: QuestionType;
   question: string;
+  imageUrls?: string[];
   options?: string[];
   correctAnswer?: string;
   acceptedAnswers?: string[];
@@ -92,6 +93,8 @@ export default function AdminPage() {
   const [questionType, setQuestionType] = useState<QuestionType>("mcq");
   const [questionText, setQuestionText] = useState("");
   const [passage, setPassage] = useState("");
+  const [topic, setTopic] = useState("");
+  const [imageUrlsText, setImageUrlsText] = useState("");
   const [marks, setMarks] = useState<number>(1);
 
   // MCQ
@@ -147,6 +150,8 @@ export default function AdminPage() {
   const resetForm = () => {
     setQuestionText("");
     setPassage("");
+    setTopic("");
+    setImageUrlsText("");
     setOptions(["", "", "", ""]);
     setCorrectAnswer("");
     setAcceptedAnswers("");
@@ -208,6 +213,12 @@ export default function AdminPage() {
     };
 
     if (passage.trim()) body.passage = passage.trim();
+    body.topic = topic.trim() || "General";
+    const imageUrls = imageUrlsText
+      .split("\n")
+      .map((u) => u.trim())
+      .filter(Boolean);
+    if (imageUrls.length) body.imageUrls = imageUrls;
 
     if (questionType === "mcq") {
       body.options = options.map((o) => o.trim());
@@ -390,6 +401,45 @@ export default function AdminPage() {
               />
             </div>
 
+            {/* Images (optional) */}
+            <div className="space-y-1.5">
+              <Label>
+                Question Images{" "}
+                <span className="text-muted-foreground">(optional)</span>
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Paste one image URL per line (e.g. `https://...png`). Students will see it under the question.
+              </p>
+              <Textarea
+                placeholder={"https://example.com/image1.png\nhttps://example.com/image2.jpg"}
+                value={imageUrlsText}
+                onChange={(e) => setImageUrlsText(e.target.value)}
+                rows={3}
+              />
+              {imageUrlsText.trim() && (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {imageUrlsText
+                    .split("\n")
+                    .map((u) => u.trim())
+                    .filter(Boolean)
+                    .slice(0, 4)
+                    .map((u) => (
+                      <div
+                        key={u}
+                        className="overflow-hidden rounded-xl border border-black/10 bg-white"
+                      >
+                        <img
+                          src={u}
+                          alt="Question media"
+                          className="h-40 w-full object-cover"
+                          loading="lazy"
+                        />
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+
             {/* Passage (optional) */}
             <div className="space-y-1.5">
               <Label>
@@ -401,6 +451,16 @@ export default function AdminPage() {
                 value={passage}
                 onChange={(e) => setPassage(e.target.value)}
                 rows={3}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Topic</Label>
+              <Input
+                placeholder="e.g. Calculus, Argument Analysis..."
+                value={topic}
+                onChange={(e) => setTopic(e.target.value)}
+                className="h-9"
               />
             </div>
 

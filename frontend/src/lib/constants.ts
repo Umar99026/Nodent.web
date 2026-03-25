@@ -34,6 +34,13 @@ export const API_PATHS = {
     `/api/study/${subjectId}`,
   chat: (subjectId: number | string) =>
     `/api/chat/${subjectId}`,
+  forum: {
+    posts: (subjectId: number | string) => `/api/forum/${subjectId}/posts`,
+    post: (subjectId: number | string, postId: number | string) =>
+      `/api/forum/${subjectId}/posts/${postId}`,
+    replies: (subjectId: number | string, postId: number | string) =>
+      `/api/forum/${subjectId}/posts/${postId}/replies`,
+  },
   track: "/api/track",
   admin: {
     subjects: "/api/admin/subjects",

@@ -265,8 +265,8 @@ export default function StudyModePage() {
   const totalSeconds = durationMinutes * 60;
   const elapsed = totalSeconds - remainingSeconds;
   const progress = totalSeconds > 0 ? (elapsed / totalSeconds) * 100 : 0;
-  const ringSize = 160;
-  const strokeWidth = 8;
+  const ringSize = 140;
+  const strokeWidth = 9;
   const radius = (ringSize - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
   const offset = circumference - (progress / 100) * circumference;
@@ -276,9 +276,9 @@ export default function StudyModePage() {
       <div className="h-full overflow-auto p-4 sm:p-8">
         <div className="mx-auto max-w-5xl">
           {/* Dark study area */}
-          <div className="rounded-2xl bg-white/5 p-6 shadow-xl sm:p-8">
+          <div className="rounded-2xl bg-white/5 p-8 shadow-xl sm:p-10">
           {/* Timer row */}
-          <div className="mb-8 flex flex-col items-center gap-6 sm:flex-row sm:justify-between">
+          <div className="mb-6 flex flex-col items-center gap-6 sm:flex-row sm:justify-between">
             {/* Timer ring */}
             <div className="relative flex items-center justify-center">
               <svg
@@ -301,7 +301,7 @@ export default function StudyModePage() {
                   cy={ringSize / 2}
                   r={radius}
                   fill="none"
-                  stroke="#3797D3"
+                  stroke="#56abe6"
                   strokeWidth={strokeWidth}
                   strokeLinecap="round"
                   strokeDasharray={circumference}
@@ -398,7 +398,7 @@ export default function StudyModePage() {
               </p>
             </div>
           ) : currentQuestion ? (
-            <div className="mt-6 space-y-6">
+            <div className="mt-8 space-y-8">
               {/* Question header */}
               <div className="flex items-center justify-between">
                 <span className="text-sm text-white/50">
@@ -417,16 +417,37 @@ export default function StudyModePage() {
                   <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-white/40">
                     Passage
                   </p>
-                  <p className="text-sm leading-relaxed text-white/80">
+              <p className="text-base leading-relaxed text-white/85">
                     {currentQuestion.passage}
                   </p>
                 </div>
               )}
 
               {/* Question text */}
-              <p className="font-display text-lg font-semibold leading-relaxed">
+              <p className="font-display text-2xl font-semibold leading-relaxed sm:text-3xl">
                 {currentQuestion.question}
               </p>
+
+              {/* Images */}
+              {"imageUrls" in currentQuestion &&
+                Array.isArray((currentQuestion as any).imageUrls) &&
+                (currentQuestion as any).imageUrls.length > 0 && (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {(currentQuestion as any).imageUrls.slice(0, 4).map((src: string) => (
+                      <div
+                        key={src}
+                        className="overflow-hidden rounded-xl border border-white/15 bg-white/5"
+                      >
+                        <img
+                          src={src}
+                          alt="Question image"
+                          className="h-56 w-full object-cover"
+                          loading="lazy"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
 
               {/* Answer area */}
               {currentQuestion.type === "mcq" &&
@@ -436,7 +457,7 @@ export default function StudyModePage() {
                     <button
                       key={i}
                       onClick={() => handleOptionSelect(option)}
-                      className={`w-full rounded-lg border p-3 text-left text-sm transition-colors ${
+                      className={`w-full rounded-lg border p-4 text-left text-base transition-colors ${
                         currentAnswer === option
                           ? "border-brand bg-brand/20 text-white"
                           : "border-white/10 bg-white/5 text-white/80 hover:border-white/20 hover:bg-white/10"
@@ -454,16 +475,16 @@ export default function StudyModePage() {
                   placeholder="Write your answer here..."
                   value={currentAnswer}
                   onChange={(e) => handleAnswerChange(e.target.value)}
-                  rows={6}
-                  className="border-white/20 bg-white/5 text-white placeholder:text-white/30"
+                  rows={10}
+                  className="border-white/20 bg-white/5 text-base leading-relaxed text-white placeholder:text-white/30"
                 />
               ) : (
                 <Textarea
                   placeholder="Type your answer..."
                   value={currentAnswer}
                   onChange={(e) => handleAnswerChange(e.target.value)}
-                  rows={3}
-                  className="border-white/20 bg-white/5 text-white placeholder:text-white/30"
+                  rows={6}
+                  className="border-white/20 bg-white/5 text-base leading-relaxed text-white placeholder:text-white/30"
                 />
               )}
 

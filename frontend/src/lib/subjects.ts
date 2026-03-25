@@ -4,6 +4,7 @@ export interface BaseQuestion {
   type: QuestionType;
   topic: string;
   question: string;
+  imageUrls?: string[];
   marks?: number;
   guidance?: string;
   passage?: string;

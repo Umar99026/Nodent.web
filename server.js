@@ -180,7 +180,9 @@ async function initDb() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       subject_id TEXT NOT NULL,
       type TEXT NOT NULL,
+      topic TEXT NOT NULL DEFAULT 'General',
       question TEXT NOT NULL,
+      image_urls TEXT,
       options TEXT,
       answer TEXT,
       accepted_answers TEXT,
@@ -190,6 +192,12 @@ async function initDb() {
       created_at TEXT NOT NULL
     )
   `);
+
+  // Ensure topic column exists on older DBs.
+  await ensureColumn("custom_questions", "topic", "TEXT NOT NULL DEFAULT 'General'");
+
+  // Optional images (JSON array of URLs).
+  await ensureColumn("custom_questions", "image_urls", "TEXT");
 
   // Ensure marks column exists on older DBs.
   await ensureColumn("custom_questions", "marks", "INTEGER NOT NULL DEFAULT 1");
@@ -211,6 +219,37 @@ async function initDb() {
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )
   `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS forum_posts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      subject_id TEXT NOT NULL,
+      user_id INTEGER NOT NULL,
+      username TEXT NOT NULL,
+      title TEXT NOT NULL,
+      body TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS forum_replies (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      post_id INTEGER NOT NULL,
+      subject_id TEXT NOT NULL,
+      user_id INTEGER NOT NULL,
+      username TEXT NOT NULL,
+      body TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (post_id) REFERENCES forum_posts(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+
+  await run(`CREATE INDEX IF NOT EXISTS idx_forum_posts_subject_updated ON forum_posts(subject_id, updated_at)`);
+  await run(`CREATE INDEX IF NOT EXISTS idx_forum_replies_post_created ON forum_replies(post_id, created_at)`);
 
   await run(`
     CREATE TABLE IF NOT EXISTS question_attempts (
@@ -351,7 +390,9 @@ app.get("/api/bootstrap", authMiddleware, async (req, res) => {
             : row.type === "long_answer"
               ? "long"
               : row.type,
+        topic: row.topic || "General",
         question: row.question,
+        imageUrls: row.image_urls ? JSON.parse(row.image_urls) : undefined,
         options: row.options ? JSON.parse(row.options) : undefined,
         answer: row.answer || undefined,
         acceptedAnswers: row.accepted_answers ? JSON.parse(row.accepted_answers) : undefined,
@@ -779,6 +820,182 @@ app.post("/api/chat/:subjectId", authMiddleware, async (req, res) => {
   }
 });
 
+// ── Forum (posts + replies) ────────────────────────────────────────────────────
+
+app.get("/api/forum/:subjectId/posts", authMiddleware, async (req, res) => {
+  try {
+    const subjectId = req.params.subjectId;
+    const rows = await all(
+      `
+      SELECT
+        p.id,
+        p.subject_id,
+        p.user_id,
+        p.username,
+        p.title,
+        p.body,
+        p.created_at,
+        p.updated_at,
+        (SELECT COUNT(*) FROM forum_replies r WHERE r.post_id = p.id) AS reply_count,
+        (
+          SELECT MAX(created_at) FROM (
+            SELECT p.updated_at AS created_at
+            UNION ALL
+            SELECT r.created_at AS created_at FROM forum_replies r WHERE r.post_id = p.id
+          )
+        ) AS last_activity_at
+      FROM forum_posts p
+      WHERE p.subject_id = ?
+      ORDER BY last_activity_at DESC, p.id DESC
+      LIMIT 200
+      `,
+      [subjectId]
+    );
+
+    res.json({
+      posts: rows.map((r) => ({
+        id: String(r.id),
+        subjectId: r.subject_id,
+        userId: String(r.user_id),
+        username: r.username,
+        title: r.title,
+        body: r.body,
+        createdAt: r.created_at,
+        updatedAt: r.updated_at,
+        replyCount: Number(r.reply_count ?? 0),
+        lastActivityAt: r.last_activity_at || r.updated_at
+      }))
+    });
+  } catch (error) {
+    console.error("[Forum posts GET] Error:", error);
+    res.status(500).json({ error: "Could not load forum posts." });
+  }
+});
+
+app.post("/api/forum/:subjectId/posts", authMiddleware, async (req, res) => {
+  try {
+    const subjectId = req.params.subjectId;
+    const title = cleanText(req.body.title, 140);
+    const body = cleanText(req.body.body, 4000);
+    if (!title) return res.status(400).json({ error: "Title is required." });
+    if (!body) return res.status(400).json({ error: "Post text is required." });
+
+    const createdAt = nowIso();
+    const result = await run(
+      `INSERT INTO forum_posts (subject_id, user_id, username, title, body, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [subjectId, req.user.id, req.user.username, title, body, createdAt, createdAt]
+    );
+
+    res.json({
+      post: {
+        id: String(result.lastID),
+        subjectId,
+        userId: String(req.user.id),
+        username: req.user.username,
+        title,
+        body,
+        createdAt,
+        updatedAt: createdAt,
+        replyCount: 0,
+        lastActivityAt: createdAt
+      }
+    });
+  } catch (error) {
+    console.error("[Forum posts POST] Error:", error);
+    res.status(500).json({ error: "Could not create post." });
+  }
+});
+
+app.get("/api/forum/:subjectId/posts/:postId", authMiddleware, async (req, res) => {
+  try {
+    const subjectId = req.params.subjectId;
+    const postId = Number(req.params.postId);
+    if (!postId || Number.isNaN(postId)) return res.status(400).json({ error: "Invalid post id." });
+
+    const post = await get(
+      `SELECT id, subject_id, user_id, username, title, body, created_at, updated_at
+       FROM forum_posts
+       WHERE id = ? AND subject_id = ?`,
+      [postId, subjectId]
+    );
+    if (!post) return res.status(404).json({ error: "Post not found." });
+
+    const replies = await all(
+      `SELECT id, post_id, user_id, username, body, created_at
+       FROM forum_replies
+       WHERE post_id = ? AND subject_id = ?
+       ORDER BY created_at ASC, id ASC
+       LIMIT 500`,
+      [postId, subjectId]
+    );
+
+    res.json({
+      post: {
+        id: String(post.id),
+        subjectId: post.subject_id,
+        userId: String(post.user_id),
+        username: post.username,
+        title: post.title,
+        body: post.body,
+        createdAt: post.created_at,
+        updatedAt: post.updated_at
+      },
+      replies: replies.map((r) => ({
+        id: String(r.id),
+        postId: String(r.post_id),
+        userId: String(r.user_id),
+        username: r.username,
+        body: r.body,
+        createdAt: r.created_at
+      }))
+    });
+  } catch (error) {
+    console.error("[Forum post GET] Error:", error);
+    res.status(500).json({ error: "Could not load post." });
+  }
+});
+
+app.post("/api/forum/:subjectId/posts/:postId/replies", authMiddleware, async (req, res) => {
+  try {
+    const subjectId = req.params.subjectId;
+    const postId = Number(req.params.postId);
+    if (!postId || Number.isNaN(postId)) return res.status(400).json({ error: "Invalid post id." });
+
+    const body = cleanText(req.body.body, 4000);
+    if (!body) return res.status(400).json({ error: "Reply text is required." });
+
+    const post = await get(
+      `SELECT id FROM forum_posts WHERE id = ? AND subject_id = ?`,
+      [postId, subjectId]
+    );
+    if (!post) return res.status(404).json({ error: "Post not found." });
+
+    const createdAt = nowIso();
+    const result = await run(
+      `INSERT INTO forum_replies (post_id, subject_id, user_id, username, body, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [postId, subjectId, req.user.id, req.user.username, body, createdAt]
+    );
+
+    await run(`UPDATE forum_posts SET updated_at = ? WHERE id = ?`, [createdAt, postId]);
+
+    res.json({
+      reply: {
+        id: String(result.lastID),
+        postId: String(postId),
+        userId: String(req.user.id),
+        username: req.user.username,
+        body,
+        createdAt
+      }
+    });
+  } catch (error) {
+    console.error("[Forum replies POST] Error:", error);
+    res.status(500).json({ error: "Could not add reply." });
+  }
+});
+
 // ── Competition ────────────────────────────────────────────────────────────────
 
 // Record a single question answer (upsert — one row per user per question)
@@ -1028,22 +1245,23 @@ app.get("/api/scorecard", authMiddleware, async (req, res) => {
 app.get("/api/admin/questions", authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const rows = await all(`SELECT * FROM custom_questions ORDER BY subject_id, created_at ASC`);
-    const grouped = {};
-    for (const row of rows) {
-      if (!grouped[row.subject_id]) grouped[row.subject_id] = [];
-      grouped[row.subject_id].push({
-        id: row.id,
+    res.json(
+      rows.map((row) => ({
+        id: String(row.id),
+        subjectId: String(row.subject_id),
+        subjectName: String(row.subject_id),
         type: row.type,
+        topic: row.topic || "General",
         question: row.question,
+        imageUrls: row.image_urls ? JSON.parse(row.image_urls) : undefined,
         options: row.options ? JSON.parse(row.options) : undefined,
-        answer: row.answer || undefined,
+        correctAnswer: row.answer || undefined,
         acceptedAnswers: row.accepted_answers ? JSON.parse(row.accepted_answers) : undefined,
         marks: typeof row.marks === "number" ? row.marks : 1,
         guidance: row.guidance || undefined,
         passage: row.passage || undefined
-      });
-    }
-    res.json({ customQuestions: grouped });
+      }))
+    );
   } catch (error) {
     console.error("[Admin questions GET] Error:", error);
     res.status(500).json({ error: "Could not load custom questions." });
@@ -1055,8 +1273,18 @@ app.post("/api/admin/questions", authMiddleware, adminMiddleware, async (req, re
     const subjectId = cleanText(req.body.subjectId, 80);
     const type = cleanText(req.body.type, 20);
     const question = cleanText(req.body.question, 1000);
+    const topic = cleanText(req.body.topic || "General", 100);
+    const imageUrlsRaw = Array.isArray(req.body.imageUrls) ? req.body.imageUrls : null;
+    const imageUrls = imageUrlsRaw
+      ? imageUrlsRaw
+          .map((u) => String(u || "").trim())
+          .filter(Boolean)
+          .slice(0, 6)
+      : null;
+    const imageUrlsJson = imageUrls && imageUrls.length ? JSON.stringify(imageUrls) : null;
     const options = req.body.options ? JSON.stringify(req.body.options) : null;
-    const answer = req.body.answer ? cleanText(req.body.answer, 500) : null;
+    const answerRaw = req.body.correctAnswer ?? req.body.answer;
+    const answer = answerRaw ? cleanText(String(answerRaw), 500) : null;
     const acceptedAnswers = req.body.acceptedAnswers ? JSON.stringify(req.body.acceptedAnswers) : null;
     const guidance = req.body.guidance ? cleanText(req.body.guidance, 500) : null;
     const passage = req.body.passage ? cleanText(req.body.passage, 3000) : null;
@@ -1075,12 +1303,14 @@ app.post("/api/admin/questions", authMiddleware, adminMiddleware, async (req, re
     }
 
     const result = await run(
-      `INSERT INTO custom_questions (subject_id, type, question, options, answer, accepted_answers, guidance, passage, marks, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO custom_questions (subject_id, type, topic, question, image_urls, options, answer, accepted_answers, guidance, passage, marks, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         subjectId,
         type,
+        topic,
         question,
+        imageUrlsJson,
         options,
         answer,
         acceptedAnswers,

@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { useStudyTimer } from "@/context/StudyTimerContext";
 import { STORAGE_KEYS } from "@/lib/constants";
 import { formatSeconds } from "@/lib/utils";
 import { baseSubjects } from "@/lib/subjects";
 import type { Subject } from "@/lib/subjects";
+import { AppShell } from "@/components/layout/AppShell";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -40,7 +40,7 @@ import {
   Line,
   CartesianGrid,
 } from "recharts";
-import { ChevronLeft, Clock, Coffee, Flame, Target } from "lucide-react";
+import { Clock, Coffee, Flame, Target, Play, Pause, Maximize2, X } from "lucide-react";
 
 type RangeMode = "day" | "week";
 
@@ -65,23 +65,24 @@ function loadDay(userId: string, date: string): any | null {
 }
 
 export default function TrackStudyPageNew() {
-  const navigate = useNavigate();
   const { user } = useAuth();
   const userId = user ? String(user.id) : null;
-  const { state, setBreakMinutes, setGoalMinutes, setSessionMinutes, selectSubject } =
-    useStudyTimer();
+  const {
+    state,
+    setBreakMinutes,
+    setGoalMinutes,
+    setSessionMinutes,
+    selectSubject,
+    setRunningSession,
+  } = useStudyTimer();
 
   const [rangeMode, setRangeMode] = useState<RangeMode>("day");
+  const [timerFullscreen, setTimerFullscreen] = useState(false);
 
   const activeSubject: Subject | undefined = useMemo(() => {
     if (!state.activeSubjectId) return undefined;
     return baseSubjects.find((s) => s.id === state.activeSubjectId);
   }, [state.activeSubjectId]);
-
-  const handleBack = () => {
-    if (window.history.length > 1) navigate(-1);
-    else navigate("/dashboard");
-  };
 
   const phaseLabel = state.phase === "break" ? "Break" : "Study";
   const totalSeconds =
@@ -186,35 +187,22 @@ export default function TrackStudyPageNew() {
   }, [userId, state.goalMinutes]);
 
   return (
-    <div className="fixed inset-0 z-40 bg-navy text-white">
-      <div className="h-full overflow-auto p-4 sm:p-8">
-        <div className="mx-auto max-w-6xl space-y-6">
-          {/* Header */}
-          <div className="flex items-center justify-between">
-            <Button
-              variant="ghost"
-              className="gap-2 text-white/70 hover:text-white"
-              onClick={handleBack}
-            >
-              <ChevronLeft className="size-4" />
-              Back
-            </Button>
-
-            <div className="flex items-center gap-2">
-              <div className="hidden sm:flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/70">
-                <Clock className="size-4 text-brand-light" />
-                {state.phase === "break" ? "Take a break" : "Study time"}
-              </div>
-            </div>
+    <AppShell title="Track My Study" subtitle="Run your timer and track progress.">
+      <div className="mx-auto max-w-6xl space-y-6 text-[#0b0f19]">
+        <div className="flex justify-end">
+          <div className="hidden sm:flex items-center gap-2 rounded-full border border-black/10 bg-white px-4 py-2 text-sm text-[#0b0f19]/70">
+            <Clock className="size-4 text-brand" />
+            {state.phase === "break" ? "Take a break" : "Study time"}
           </div>
+        </div>
 
-          {/* Range toggle */}
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 p-1">
+        {/* Range toggle */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2 rounded-[999px] border border-black/10 bg-white p-2">
               <Button
                 size="sm"
                 variant={rangeMode === "day" ? "default" : "ghost"}
-                className={rangeMode === "day" ? "bg-brand text-white" : "text-white/70"}
+                className={rangeMode === "day" ? "rounded-full bg-brand text-white" : "rounded-full text-[#0b0f19]/70 hover:text-[#0b0f19]"}
                 onClick={() => setRangeMode("day")}
               >
                 Today
@@ -222,17 +210,17 @@ export default function TrackStudyPageNew() {
               <Button
                 size="sm"
                 variant={rangeMode === "week" ? "default" : "ghost"}
-                className={rangeMode === "week" ? "bg-brand text-white" : "text-white/70"}
+                className={rangeMode === "week" ? "rounded-full bg-brand text-white" : "rounded-full text-[#0b0f19]/70 hover:text-[#0b0f19]"}
                 onClick={() => setRangeMode("week")}
               >
                 Week
               </Button>
             </div>
 
-            {/* Settings */}
-            <div className="flex flex-wrap items-end gap-4">
-              <div className="space-y-1">
-                <Label htmlFor="goal-minutes" className="text-xs text-white/60">
+          {/* Settings */}
+          <div className="flex flex-wrap items-end gap-4">
+            <div className="space-y-1">
+                <Label htmlFor="goal-minutes" className="text-xs text-[#0b0f19]/60">
                   Goal (min/day)
                 </Label>
                 <Input
@@ -242,12 +230,12 @@ export default function TrackStudyPageNew() {
                   max={480}
                   value={state.goalMinutes}
                   onChange={(e) => setGoalMinutes(Number(e.target.value))}
-                  className="w-28 border-white/15 bg-white/5 text-white"
+                  className="w-28 border-black/10 bg-white text-[#0b0f19]"
                 />
               </div>
 
               <div className="space-y-1">
-                <Label htmlFor="session-minutes" className="text-xs text-white/60">
+                <Label htmlFor="session-minutes" className="text-xs text-[#0b0f19]/60">
                   Session (min)
                 </Label>
                 <Input
@@ -258,12 +246,12 @@ export default function TrackStudyPageNew() {
                   value={state.sessionMinutes}
                   onChange={(e) => setSessionMinutes(Number(e.target.value))}
                   disabled={state.phase === "session" && state.isRunning}
-                  className="w-28 border-white/15 bg-white/5 text-white"
+                  className="w-28 border-black/10 bg-white text-[#0b0f19]"
                 />
               </div>
 
               <div className="space-y-1">
-                <Label htmlFor="break-minutes" className="text-xs text-white/60">
+                <Label htmlFor="break-minutes" className="text-xs text-[#0b0f19]/60">
                   Break (min)
                 </Label>
                 <Input
@@ -273,32 +261,45 @@ export default function TrackStudyPageNew() {
                   max={90}
                   value={state.breakMinutes}
                   onChange={(e) => setBreakMinutes(Number(e.target.value))}
-                  className="w-28 border-white/15 bg-white/5 text-white"
+                  className="w-28 border-black/10 bg-white text-[#0b0f19]"
                 />
               </div>
-            </div>
           </div>
+        </div>
 
           {/* Main grid */}
           <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
             {/* Timer */}
-            <Card className="border-white/10 bg-white/5 text-white shadow-xl">
+            <Card className="border-black/10 bg-white text-[#0b0f19] shadow-xl">
               <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 font-display text-xl">
-                  {state.phase === "break" ? (
-                    <Coffee className="size-5 text-brand-light" />
-                  ) : (
-                    <Flame className="size-5 text-brand-light" />
-                  )}
-                  {phaseLabel} Timer
-                </CardTitle>
+                <div className="flex items-start justify-between gap-3">
+                  <CardTitle className="flex items-center gap-2 font-display text-xl">
+                    {state.phase === "break" ? (
+                      <Coffee className="size-5 text-brand" />
+                    ) : (
+                      <Flame className="size-5 text-brand" />
+                    )}
+                    {phaseLabel} Timer
+                  </CardTitle>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-9 w-9 rounded-full border-black/10 bg-white text-[#0b0f19] hover:bg-black/5"
+                    onClick={() => setTimerFullscreen(true)}
+                    aria-label="Fullscreen timer"
+                  >
+                    <Maximize2 className="size-4" />
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent className="space-y-6">
                 {/* Active subject selection */}
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="text-sm text-white/70">
+                  <div className="text-sm text-[#0b0f19]/70">
                     Studying:{" "}
-                    <span className="font-semibold text-white">
+                    <span className="font-semibold text-[#0b0f19]">
                       {activeSubject?.name ?? "Select a subject"}
                     </span>
                   </div>
@@ -310,7 +311,7 @@ export default function TrackStudyPageNew() {
                         selectSubject(val);
                       }}
                     >
-                      <SelectTrigger className="bg-white/5 border-white/10 text-white">
+                      <SelectTrigger className="bg-white border-brand/30 text-brand focus:ring-brand/30">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -335,14 +336,14 @@ export default function TrackStudyPageNew() {
                         fill="none"
                         stroke="currentColor"
                         strokeWidth={strokeWidth}
-                        className="text-white/10"
+                        className="text-slate-300"
                       />
                       <circle
                         cx={ringSize / 2}
                         cy={ringSize / 2}
                         r={radius}
                         fill="none"
-                        stroke="#3797D3"
+                        stroke="#94a3b8"
                         strokeWidth={strokeWidth}
                         strokeLinecap="round"
                         strokeDasharray={circumference}
@@ -358,7 +359,7 @@ export default function TrackStudyPageNew() {
                       <span className="font-display text-5xl font-bold tracking-tight">
                         {formatSeconds(state.remainingSeconds)}
                       </span>
-                      <span className="mt-2 text-sm text-white/60">
+                      <span className="mt-2 text-sm text-[#0b0f19]/60">
                         {state.phase === "break"
                           ? "Break remaining"
                           : state.isRunning
@@ -369,22 +370,46 @@ export default function TrackStudyPageNew() {
                   </div>
                 </div>
 
+                {/* Manual Start / Stop */}
+                <div className="flex items-center justify-center gap-3 pt-1">
+                  <Button
+                    onClick={() => setRunningSession(!state.isRunning)}
+                    className={
+                      state.isRunning
+                        ? "bg-[#0b0f19] text-white hover:bg-[#0b0f19]/90 border border-transparent"
+                        : "bg-brand text-white hover:bg-brand-dark border border-transparent"
+                    }
+                  >
+                    {state.isRunning ? (
+                      <>
+                        <Pause className="size-4" />
+                        Stop timer
+                      </>
+                    ) : (
+                      <>
+                        <Play className="size-4" />
+                        Start timer
+                      </>
+                    )}
+                  </Button>
+                </div>
+
                 {/* Goal progress */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-white/70 flex items-center gap-2">
-                      <Target className="size-4 text-brand-light" />
+                    <span className="text-[#0b0f19]/70 flex items-center gap-2">
+                      <Target className="size-4 text-brand" />
                       Progress vs goal
                     </span>
-                    <span className="font-semibold text-white/90">
+                    <span className="font-semibold text-[#0b0f19]">
                       {Math.round(Math.min(100, goalPct * 100))}%
                     </span>
                   </div>
-                  <Progress value={Math.round(Math.min(100, goalPct * 100))} className="h-3 bg-white/10" />
+                <Progress value={Math.round(Math.min(100, goalPct * 100))} className="h-3 bg-black/10" />
                 </div>
 
                 {/* Streak */}
-                <Separator className="bg-white/10" />
+                <Separator className="bg-black/10" />
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="text-sm text-white/70">
                     Streak
@@ -399,40 +424,165 @@ export default function TrackStudyPageNew() {
               </CardContent>
             </Card>
 
+            {timerFullscreen && (
+              <div className="fixed inset-0 z-[200] bg-black/80">
+                <div className="flex h-full w-full flex-col">
+                  <div className="flex items-center justify-end p-4 sm:p-6">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-10 w-10 rounded-full border-white/20 bg-white/10 text-white hover:bg-white/15"
+                      onClick={() => setTimerFullscreen(false)}
+                      aria-label="Exit fullscreen"
+                    >
+                      <X className="size-5" />
+                    </Button>
+                  </div>
+
+                  <div className="flex flex-1 items-center justify-center px-4 pb-10 sm:px-10">
+                    <div className="w-full max-w-[1200px] rounded-3xl bg-white shadow-2xl">
+                      <div className="flex items-center justify-between gap-4 border-b border-black/10 px-6 py-5 sm:px-10">
+                        <div className="flex items-center gap-3">
+                          {state.phase === "break" ? (
+                            <Coffee className="size-7 text-brand" />
+                          ) : (
+                            <Flame className="size-7 text-brand" />
+                          )}
+                          <div>
+                            <div className="font-display text-3xl leading-tight text-[#0b0f19]">
+                              {phaseLabel} Timer
+                            </div>
+                            <div className="text-sm text-[#0b0f19]/60">
+                              {state.phase === "break"
+                                ? "Take a break"
+                                : state.isRunning
+                                  ? "Session running"
+                                  : "Session paused"}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid gap-10 px-6 py-8 sm:px-10 sm:py-10 lg:grid-cols-[1fr_360px]">
+                        <div className="flex items-center justify-center">
+                          <div
+                            className="relative"
+                            style={{
+                              width: "min(70vw, 640px)",
+                              height: "min(70vw, 640px)",
+                            }}
+                          >
+                            <svg width="100%" height="100%" viewBox="0 0 640 640">
+                              <circle
+                                cx={320}
+                                cy={320}
+                                r={292}
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth={20}
+                                className="text-slate-300"
+                              />
+                              <circle
+                                cx={320}
+                                cy={320}
+                                r={292}
+                                fill="none"
+                                stroke="#94a3b8"
+                                strokeWidth={20}
+                                strokeLinecap="round"
+                                strokeDasharray={2 * Math.PI * 292}
+                                strokeDashoffset={(2 * Math.PI * 292) - (progressPct / 100) * (2 * Math.PI * 292)}
+                                className="transition-[stroke-dashoffset] duration-500 ease-out"
+                                style={{
+                                  transform: "rotate(-90deg)",
+                                  transformOrigin: "50% 50%",
+                                }}
+                              />
+                            </svg>
+                            <div className="absolute inset-0 flex flex-col items-center justify-center">
+                              <div className="font-display text-[clamp(56px,7vw,120px)] font-bold leading-none tracking-tight text-[#0b0f19]">
+                                {formatSeconds(state.remainingSeconds)}
+                              </div>
+                              <div className="mt-4 text-base text-[#0b0f19]/60">
+                                Remaining
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col justify-center gap-4">
+                          <Button
+                            onClick={() => setRunningSession(!state.isRunning)}
+                            className={
+                              state.isRunning
+                                ? "h-14 bg-[#0b0f19] text-lg text-white hover:bg-[#0b0f19]/90"
+                                : "h-14 bg-brand text-lg text-white hover:bg-brand-dark"
+                            }
+                          >
+                            {state.isRunning ? (
+                              <>
+                                <Pause className="size-6" />
+                                Stop timer
+                              </>
+                            ) : (
+                              <>
+                                <Play className="size-6" />
+                                Start timer
+                              </>
+                            )}
+                          </Button>
+
+                          <div className="rounded-2xl border border-black/10 bg-[#0b0f19]/[0.03] p-5">
+                            <div className="text-sm text-[#0b0f19]/60">
+                              Tip
+                            </div>
+                            <div className="mt-1 text-[#0b0f19]">
+                              Keep the timer fullscreen while you study.
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Overview */}
             <div className="space-y-6">
-              <Card className="border-white/10 bg-white/5 text-white shadow-xl">
+            <Card className="border-black/10 bg-white text-[#0b0f19] shadow-xl">
                 <CardHeader className="pb-3">
                   <CardTitle className="flex items-center justify-between gap-3 font-display text-xl">
                     <span>
                       {rangeMode === "day" ? "Today by Subject" : "This Week by Subject"}
                     </span>
-                    <span className="text-sm text-white/60">
+                    <span className="text-sm text-[#0b0f19]/60">
                       {rangeMode === "day" ? formatSeconds(state.dailySeconds) : `${weekData?.weeklyMinutes ?? 0} min`}
                     </span>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <Table>
+                  <Table className="text-[#0b0f19]">
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Subject</TableHead>
-                        <TableHead className="text-right">Minutes</TableHead>
+                        <TableHead className="text-[#0b0f19]/60">Subject</TableHead>
+                        <TableHead className="text-right text-[#0b0f19]/60">Minutes</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {rangeMode === "day" ? (
                         daySubjectRows.length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={2} className="text-center text-white/60">
+                            <TableCell colSpan={2} className="text-center text-[#0b0f19]/60">
                               No study yet today.
                             </TableCell>
                           </TableRow>
                         ) : (
                           daySubjectRows.slice(0, 8).map((row) => (
                             <TableRow key={row.subjectId}>
-                              <TableCell className="text-white/90">{row.subjectName}</TableCell>
-                              <TableCell className="text-right font-medium text-white/90 tabular-nums">
+                              <TableCell className="text-[#0b0f19]">{row.subjectName}</TableCell>
+                              <TableCell className="text-right font-medium text-[#0b0f19] tabular-nums">
                                 {row.minutes}
                               </TableCell>
                             </TableRow>
@@ -441,15 +591,15 @@ export default function TrackStudyPageNew() {
                       ) : weekData?.perSubjectRows?.length ? (
                         weekData.perSubjectRows.slice(0, 8).map((row) => (
                           <TableRow key={row.subjectId}>
-                            <TableCell className="text-white/90">{row.subjectName}</TableCell>
-                            <TableCell className="text-right font-medium text-white/90 tabular-nums">
+                          <TableCell className="text-[#0b0f19]">{row.subjectName}</TableCell>
+                          <TableCell className="text-right font-medium text-[#0b0f19] tabular-nums">
                               {row.minutes}
                             </TableCell>
                           </TableRow>
                         ))
                       ) : (
                         <TableRow>
-                          <TableCell colSpan={2} className="text-center text-white/60">
+                        <TableCell colSpan={2} className="text-center text-[#0b0f19]/60">
                             No study logged this week yet.
                           </TableCell>
                         </TableRow>
@@ -459,7 +609,7 @@ export default function TrackStudyPageNew() {
                 </CardContent>
               </Card>
 
-              <Card className="border-white/10 bg-white/5 text-white shadow-xl">
+              <Card className="border-black/10 bg-white text-[#0b0f19] shadow-xl">
                 <CardHeader className="pb-3">
                   <CardTitle className="font-display text-xl">
                     {rangeMode === "day" ? "Breakdown (Graph)" : "Week Overview (Graph)"}
@@ -470,14 +620,14 @@ export default function TrackStudyPageNew() {
                     <div style={{ width: "100%", height: 220 }}>
                       <ResponsiveContainer>
                         <BarChart data={daySubjectRows.map((r) => ({ name: r.subjectName, minutes: r.minutes }))}>
-                          <CartesianGrid stroke="rgba(255,255,255,0.08)" />
-                          <XAxis dataKey="name" tick={{ fill: "rgba(255,255,255,0.75)", fontSize: 12 }} interval={0} />
-                          <YAxis tick={{ fill: "rgba(255,255,255,0.75)" }} />
+                          <CartesianGrid stroke="rgba(0,0,0,0.10)" strokeDasharray="3 3" />
+                          <XAxis dataKey="name" tick={{ fill: "rgba(15,23,42,0.75)", fontSize: 12 }} interval={0} />
+                          <YAxis tick={{ fill: "rgba(15,23,42,0.75)" }} />
                           <Tooltip
-                            contentStyle={{ backgroundColor: "rgba(15,23,42,0.95)", border: "1px solid rgba(255,255,255,0.15)" }}
+                            contentStyle={{ backgroundColor: "rgba(255,255,255,0.98)", border: "1px solid rgba(15,23,42,0.12)", color: "#0b0f19" }}
                             formatter={(v) => [`${v} min`, "Minutes"]}
                           />
-                          <Bar dataKey="minutes" fill="#3797D3" radius={[6, 6, 0, 0]} />
+                          <Bar dataKey="minutes" fill="#56abe6" radius={[6, 6, 0, 0]} />
                         </BarChart>
                       </ResponsiveContainer>
                     </div>
@@ -492,11 +642,11 @@ export default function TrackStudyPageNew() {
                           }))}
                           margin={{ top: 10, right: 10, left: -10, bottom: 10 }}
                         >
-                          <CartesianGrid stroke="rgba(255,255,255,0.08)" />
-                          <XAxis dataKey="date" tick={{ fill: "rgba(255,255,255,0.75)", fontSize: 12 }} />
-                          <YAxis tick={{ fill: "rgba(255,255,255,0.75)" }} />
+                          <CartesianGrid stroke="rgba(0,0,0,0.10)" strokeDasharray="3 3" />
+                          <XAxis dataKey="date" tick={{ fill: "rgba(15,23,42,0.75)", fontSize: 12 }} />
+                          <YAxis tick={{ fill: "rgba(15,23,42,0.75)" }} />
                           <Tooltip
-                            contentStyle={{ backgroundColor: "rgba(15,23,42,0.95)", border: "1px solid rgba(255,255,255,0.15)" }}
+                            contentStyle={{ backgroundColor: "rgba(255,255,255,0.98)", border: "1px solid rgba(15,23,42,0.12)", color: "#0b0f19" }}
                             formatter={(v, name) =>
                               [
                                 `${v} min`,
@@ -504,8 +654,8 @@ export default function TrackStudyPageNew() {
                               ] as any
                             }
                           />
-                          <Line type="monotone" dataKey="minutes" stroke="#3797D3" strokeWidth={3} dot={{ r: 3 }} />
-                          <Line type="monotone" dataKey="goal" stroke="rgba(255,255,255,0.6)" strokeDasharray="6 6" />
+                          <Line type="monotone" dataKey="minutes" stroke="#56abe6" strokeWidth={3} dot={{ r: 3 }} />
+                          <Line type="monotone" dataKey="goal" stroke="rgba(15,23,42,0.45)" strokeDasharray="6 6" />
                         </LineChart>
                       </ResponsiveContainer>
                     </div>
@@ -515,8 +665,7 @@ export default function TrackStudyPageNew() {
             </div>
           </div>
         </div>
-      </div>
-    </div>
+    </AppShell>
   );
 }
 

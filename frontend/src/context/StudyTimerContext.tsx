@@ -29,6 +29,8 @@ export interface StudyTimerState {
   remainingSeconds: number;
   // Whether the current phase timer is actively counting down
   isRunning: boolean;
+  // If true, the user manually paused the timer and auto-start should not resume it.
+  manualPaused: boolean;
 }
 
 interface StudyTimerContextValue {
@@ -66,6 +68,7 @@ const DEFAULTS: StudyTimerState = {
   activeSubjectId: null,
   remainingSeconds: 25 * 60,
   isRunning: false,
+  manualPaused: false,
 };
 
 function loadState(raw: string | null): StudyTimerState {
@@ -94,6 +97,10 @@ function loadState(raw: string | null): StudyTimerState {
       breakMinutes,
       phase,
       dailySecondsBySubject: parsed.dailySecondsBySubject ?? {},
+      manualPaused:
+        typeof parsed.manualPaused === "boolean"
+          ? parsed.manualPaused
+          : DEFAULTS.manualPaused,
       // If state was saved in the past and remainingSeconds is missing, reset.
       remainingSeconds:
         typeof parsed.remainingSeconds === "number"
@@ -123,6 +130,7 @@ export function StudyTimerProvider({ children }: { children: ReactNode }) {
 
   // Keep refs to avoid stale closures inside setInterval.
   const isOnPracticeRef = useRef(false);
+  const isOnTrackRef = useRef(false);
   const activeSubjectIdRef = useRef<string | null>(null);
 
   const quizMatch = useMemo(() => {
@@ -131,10 +139,16 @@ export function StudyTimerProvider({ children }: { children: ReactNode }) {
   }, [location.pathname]);
 
   const isOnPractice = !!quizMatch;
+  const isOnTrack = location.pathname.startsWith("/track");
+  const isOnTimerPage = isOnPractice || isOnTrack;
 
   useEffect(() => {
     isOnPracticeRef.current = isOnPractice;
   }, [isOnPractice]);
+
+  useEffect(() => {
+    isOnTrackRef.current = isOnTrack;
+  }, [isOnTrack]);
 
   useEffect(() => {
     activeSubjectIdRef.current = state.activeSubjectId;
@@ -175,7 +189,7 @@ export function StudyTimerProvider({ children }: { children: ReactNode }) {
         return {
           ...prev,
           activeSubjectId: nextActiveSubjectId,
-          isRunning: true,
+          isRunning: !prev.manualPaused,
         };
       }
 
@@ -183,10 +197,11 @@ export function StudyTimerProvider({ children }: { children: ReactNode }) {
       return {
         ...prev,
         activeSubjectId: nextActiveSubjectId,
-        isRunning: isOnPractice,
+        // Allow running on Track My Study as well (manual start/stop lives there).
+        isRunning: isOnTimerPage && !prev.manualPaused,
       };
     });
-  }, [isOnPractice, quizMatch?.subjectId, userId]);
+  }, [isOnTimerPage, quizMatch?.subjectId, userId]);
 
   // Timer tick.
   useEffect(() => {
@@ -214,7 +229,7 @@ export function StudyTimerProvider({ children }: { children: ReactNode }) {
               sessionsCompleted: prev.sessionsCompleted + 1,
               phase: "break",
               remainingSeconds: prev.breakMinutes * 60,
-              isRunning: true,
+              isRunning: !prev.manualPaused,
             };
           }
 
@@ -223,8 +238,8 @@ export function StudyTimerProvider({ children }: { children: ReactNode }) {
             ...prev,
             phase: "session",
             remainingSeconds: prev.sessionMinutes * 60,
-            // Resume only if still in practice.
-            isRunning: isOnPracticeRef.current,
+            // Resume only if still on a timer-capable page.
+            isRunning: (isOnPracticeRef.current || isOnTrackRef.current) && !prev.manualPaused,
           };
         }
 
@@ -268,10 +283,22 @@ export function StudyTimerProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setRunningSession = useCallback((running: boolean) => {
-    setState((prev) => ({
-      ...prev,
-      isRunning: prev.phase === "session" ? running : prev.isRunning,
-    }));
+    const onPractice = isOnPracticeRef.current;
+    const onTrack = isOnTrackRef.current;
+    setState((prev) => {
+      const manualPaused = !running;
+
+      if (prev.phase === "break") {
+        return { ...prev, manualPaused, isRunning: running };
+      }
+
+      // session
+      return {
+        ...prev,
+        manualPaused,
+        isRunning: running && (onPractice || onTrack),
+      };
+    });
   }, []);
 
   const value = useMemo<StudyTimerContextValue>(

@@ -1,19 +1,20 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import "@fontsource-variable/geist/index.css";
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --font-display: 'DM Serif Display', Georgia, 'Times New Roman', serif;
-  --font-sans: 'DM Sans', system-ui, -apple-system, sans-serif;
+  --font-display: 'Geist Variable', system-ui, -apple-system, sans-serif;
+  --font-sans: 'Geist Variable', system-ui, -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
 
   /* Brand (blue) */
-  --color-brand: #3797D3;
-  --color-brand-light: #76c1e7;
-  --color-brand-dark: #2b7fbf;
-  --color-brand-deep: #1e5fa0;
+  --color-brand: #56abe6;
+  --color-brand-light: #7fc7f2;
+  --color-brand-dark: #3f97d8;
+  --color-brand-deep: #2f7fbf;
   --color-gold: #f59e0b;
   --color-gold-light: #fbbf24;
   --color-gold-dark: #d97706;
@@ -68,38 +69,40 @@
 }
 
 :root {
-  --background: #faf8f5;
+  /* Main theme: light-blue background everywhere */
+  --background: transparent;
   --foreground: #0f172a;
   --card: rgba(255, 255, 255, 0.85);
   --card-foreground: #0f172a;
   --popover: #ffffff;
   --popover-foreground: #0f172a;
-  --primary: #3797D3;
+  --primary: #56abe6;
   --primary-foreground: #ffffff;
   --secondary: #f1f5f9;
   --secondary-foreground: #1e293b;
   --muted: #f1f0ed;
   --muted-foreground: #64748b;
-  --accent: #3797D3;
+  --accent: #56abe6;
   --accent-foreground: #ffffff;
   --destructive: #ef4444;
   --border: rgba(15, 23, 42, 0.08);
   --input: rgba(15, 23, 42, 0.08);
-  --ring: #3797D3;
-  --chart-1: #3797D3;
+  --ring: #56abe6;
+  --chart-1: #56abe6;
   --chart-2: #2b7fbf;
   --chart-3: #f59e0b;
   --chart-4: #8b5cf6;
   --chart-5: #ec4899;
   --radius: 0.75rem;
-  --sidebar: #0f172a;
+  /* Secondary theme: true black sidebar */
+  --sidebar: #000000;
   --sidebar-foreground: rgba(255, 255, 255, 0.9);
-  --sidebar-primary: #3797D3;
+  --sidebar-primary: #56abe6;
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: rgba(255, 255, 255, 0.06);
   --sidebar-accent-foreground: rgba(255, 255, 255, 0.9);
   --sidebar-border: rgba(255, 255, 255, 0.06);
-  --sidebar-ring: #3797D3;
+  --sidebar-ring: #56abe6;
 }
 
 @layer base {
@@ -108,15 +111,15 @@
   }
   body {
     @apply bg-background text-foreground antialiased;
-    background-image:
-      radial-gradient(ellipse at 15% 0%, rgba(55, 151, 211, 0.04) 0%, transparent 50%),
-      radial-gradient(ellipse at 85% 0%, rgba(245, 158, 11, 0.03) 0%, transparent 50%),
-      radial-gradient(ellipse at 50% 100%, rgba(15, 23, 42, 0.02) 0%, transparent 50%);
+    background:
+      radial-gradient(circle at top left, rgba(255,255,255,0.24), transparent 24%),
+      radial-gradient(circle at top right, rgba(255,255,255,0.14), transparent 22%),
+      linear-gradient(180deg, #56abe6 0%, #66b9ec 45%, #78c6f1 100%);
     background-attachment: fixed;
   }
   html {
     @apply font-sans scroll-smooth;
-    font-size: 18px;
+    font-size: 20px;
   }
   h1, h2, h3 {
     font-family: var(--font-display);
@@ -151,7 +154,7 @@
 
 /* Gradient glow for accent elements */
 .glow-brand {
-  box-shadow: 0 0 20px rgba(55, 151, 211, 0.15), 0 0 40px rgba(55, 151, 211, 0.05);
+  box-shadow: 0 0 20px rgba(86, 171, 230, 0.15), 0 0 40px rgba(86, 171, 230, 0.05);
 }
 
 .glow-gold {
@@ -225,7 +228,7 @@
 
 /* Academic underline accent */
 .academic-underline {
-  background-image: linear-gradient(to right, #3797D3, #76c1e7);
+  background-image: linear-gradient(to right, #56abe6, #7fc7f2);
   background-size: 100% 2px;
   background-position: 0 100%;
   background-repeat: no-repeat;
