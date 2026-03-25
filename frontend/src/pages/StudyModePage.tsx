@@ -3,7 +3,6 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { STORAGE_KEYS } from "@/lib/constants";
 import { formatSeconds } from "@/lib/utils";
-import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -257,7 +256,9 @@ export default function StudyModePage() {
   };
 
   const handleExit = () => {
-    navigate(subjectId ? `/quiz/${subjectId}` : "/dashboard");
+    // Prefer browser history; fall back to the quiz page.
+    if (window.history.length > 1) navigate(-1);
+    else navigate(subjectId ? `/quiz/${subjectId}` : "/dashboard");
   };
 
   // Progress ring
@@ -270,13 +271,12 @@ export default function StudyModePage() {
   const circumference = 2 * Math.PI * radius;
   const offset = circumference - (progress / 100) * circumference;
 
-  const subjectName = subject?.name ?? "Study";
-
   return (
-    <AppShell title={`${subjectName} Study Mode`}>
-      <div className="mx-auto max-w-4xl">
-        {/* Dark study area */}
-        <div className="rounded-2xl bg-navy p-6 text-white shadow-xl sm:p-8">
+    <div className="fixed inset-0 z-50 bg-navy text-white">
+      <div className="h-full overflow-auto p-4 sm:p-8">
+        <div className="mx-auto max-w-5xl">
+          {/* Dark study area */}
+          <div className="rounded-2xl bg-white/5 p-6 shadow-xl sm:p-8">
           {/* Timer row */}
           <div className="mb-8 flex flex-col items-center gap-6 sm:flex-row sm:justify-between">
             {/* Timer ring */}
@@ -301,7 +301,7 @@ export default function StudyModePage() {
                   cy={ringSize / 2}
                   r={radius}
                   fill="none"
-                  stroke="#10b981"
+                  stroke="#3797D3"
                   strokeWidth={strokeWidth}
                   strokeLinecap="round"
                   strokeDasharray={circumference}
@@ -380,7 +380,7 @@ export default function StudyModePage() {
                 className="gap-1.5 text-white/60 hover:text-white"
               >
                 <LogOut className="size-4" />
-                Exit Study Mode
+                Back
               </Button>
             </div>
           </div>
@@ -494,6 +494,7 @@ export default function StudyModePage() {
           ) : null}
         </div>
       </div>
-    </AppShell>
+      </div>
+    </div>
   );
 }

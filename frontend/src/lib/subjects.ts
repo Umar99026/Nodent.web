@@ -4,6 +4,7 @@ export interface BaseQuestion {
   type: QuestionType;
   topic: string;
   question: string;
+  marks?: number;
   guidance?: string;
   passage?: string;
 }
@@ -21,6 +22,16 @@ export interface ShortQuestion extends BaseQuestion {
 
 export interface LongQuestion extends BaseQuestion {
   type: "long";
+  /**
+   * Optional accepted answers/keywords for scoring long responses.
+   * Populated for custom questions from admin.
+   */
+  acceptedAnswers?: string[];
+  /**
+   * Optional single answer text for scoring long responses.
+   * (Used only if `acceptedAnswers` is not provided.)
+   */
+  answer?: string;
 }
 
 export type Question = McqQuestion | ShortQuestion | LongQuestion;

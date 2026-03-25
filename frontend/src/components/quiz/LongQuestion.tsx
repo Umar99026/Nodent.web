@@ -21,14 +21,113 @@ interface LongQuestionProps {
   question: LongQuestionType;
   subjectId: string;
   questionKey: string;
-  onAnswer: () => void;
+  onAnswer: (correct: boolean | null) => void;
   disabled?: boolean;
 }
 
 interface StudentResponse {
-  id: string;
+  userId: number;
   text: string;
-  createdAt?: string;
+  updatedAt?: string;
+}
+
+function normalizeForMatch(input: string): string {
+  return input
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function scoreLongAnswer(
+  response: string,
+  acceptedAnswers?: string[],
+  answer?: string,
+  fallbackText?: string,
+): boolean {
+  const accepted = [
+    ...(acceptedAnswers ?? []).map((x) => x.trim()).filter(Boolean),
+    ...(answer ? [answer.trim()] : []),
+  ].filter(Boolean);
+
+  const resp = normalizeForMatch(response);
+  if (!resp) return false;
+
+  // If we have accepted answers, use deterministic matching.
+  for (const acc of accepted) {
+    const accNorm = normalizeForMatch(acc);
+    if (!accNorm) continue;
+
+    // Exact / containment match (works well for phrases)
+    if (resp.includes(accNorm) || accNorm.includes(resp)) return true;
+
+    // Fallback: word overlap ratio
+    const respWords = new Set(resp.split(" ").filter(Boolean));
+    const accWords = accNorm.split(" ").filter(Boolean);
+    if (accWords.length === 0) continue;
+
+    let intersect = 0;
+    for (const w of accWords) {
+      if (respWords.has(w)) intersect++;
+    }
+
+    const ratio = intersect / accWords.length;
+    if (ratio >= 0.55) return true;
+  }
+
+  // Fallback heuristic when no accepted answers are available:
+  // consider the response correct if it overlaps meaningful tokens from
+  // passage/guidance/question metadata.
+  if (accepted.length > 0) return false;
+
+  const src = normalizeForMatch(fallbackText ?? "");
+  const respWords = new Set(resp.split(" ").filter(Boolean));
+
+  if (respWords.size < 10) return false;
+
+  const stop = new Set([
+    "the",
+    "and",
+    "with",
+    "from",
+    "that",
+    "this",
+    "there",
+    "which",
+    "would",
+    "could",
+    "should",
+    "into",
+    "about",
+    "over",
+    "under",
+    "then",
+    "than",
+    "because",
+    "your",
+    "their",
+    "have",
+    "has",
+    "had",
+  ]);
+
+  const tokens = src
+    .split(" ")
+    .filter((w) => w.length >= 6 && !stop.has(w));
+  const uniqTokens = Array.from(new Set(tokens)).slice(0, 30);
+
+  if (uniqTokens.length === 0) {
+    // Last resort: long enough response counts.
+    return response.trim().length >= 120;
+  }
+
+  let matches = 0;
+  for (const t of uniqTokens) {
+    if (respWords.has(t)) matches++;
+  }
+
+  const threshold = Math.max(2, Math.floor(uniqTokens.length * 0.15));
+  return matches >= threshold;
 }
 
 export function LongQuestion({
@@ -52,11 +151,19 @@ export function LongQuestion({
     try {
       await apiFetch(`/api/written/${subjectId}/${questionKey}`, {
         method: "PUT",
-        body: JSON.stringify({ text: response }),
+        body: JSON.stringify({ responseText: response }),
       });
       setSaved(true);
       toast.success("Answer saved successfully.");
-      onAnswer();
+      const correct = scoreLongAnswer(
+        response,
+        question.acceptedAnswers,
+        question.answer,
+        [question.passage, question.guidance, question.topic, question.question]
+          .filter(Boolean)
+          .join(" "),
+      );
+      onAnswer(correct);
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : "Failed to save answer."
@@ -117,7 +224,7 @@ export function LongQuestion({
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <blockquote className="text-sm italic leading-relaxed text-foreground/80">
+            <blockquote className="text-sm leading-relaxed text-foreground/80">
               {question.passage}
             </blockquote>
           </CardContent>
@@ -199,8 +306,12 @@ export function LongQuestion({
             </p>
           ) : (
             <div className="space-y-3">
-              {otherResponses.map((resp, index) => (
-                <Card key={resp.id} className="bg-white/50" size="sm">
+                {otherResponses.map((resp, index) => (
+                  <Card
+                    key={`${resp.userId}-${resp.updatedAt ?? index}`}
+                    className="bg-white/50"
+                    size="sm"
+                  >
                   <CardHeader className="pb-1">
                     <CardTitle className="text-sm font-medium text-brand-dark">
                       Student {index + 1}

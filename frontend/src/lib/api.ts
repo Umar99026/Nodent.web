@@ -64,14 +64,9 @@ export async function apiFetchAdmin<T>(
   path: string,
   options?: RequestInit,
 ): Promise<T> {
-  const adminKey = localStorage.getItem(STORAGE_KEYS.adminKey);
   const method = options?.method?.toUpperCase() ?? "GET";
 
   const headers = new Headers(options?.headers);
-
-  if (adminKey) {
-    headers.set("x-admin-key", adminKey);
-  }
 
   // Also include the auth token for admin endpoints that check both
   const token = localStorage.getItem(STORAGE_KEYS.authToken);

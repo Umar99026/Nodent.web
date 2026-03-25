@@ -6,6 +6,7 @@ import {
   LogOut,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { ADMIN_EMAIL } from "@/lib/constants";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Sidebar as SidebarRoot,
@@ -68,12 +69,12 @@ export function AppSidebar() {
         {
           "--sidebar-background": "#0f172a",
           "--sidebar-foreground": "rgba(255, 255, 255, 0.9)",
-          "--sidebar-accent": "rgba(16, 185, 129, 0.08)",
+          "--sidebar-accent": "rgba(55, 151, 211, 0.08)",
           "--sidebar-accent-foreground": "rgba(255, 255, 255, 0.95)",
           "--sidebar-border": "rgba(255, 255, 255, 0.06)",
-          "--sidebar-primary": "#10b981",
+          "--sidebar-primary": "#3797D3",
           "--sidebar-primary-foreground": "#ffffff",
-          "--sidebar-ring": "#10b981",
+          "--sidebar-ring": "#3797D3",
         } as React.CSSProperties
       }
     >
@@ -106,7 +107,7 @@ export function AppSidebar() {
               {navItems.map((item) => {
                 if (
                   item.adminOnly &&
-                  !localStorage.getItem("nodent_admin_key")
+                  user?.email?.toLowerCase() !== ADMIN_EMAIL.toLowerCase()
                 )
                   return null;
 
@@ -131,7 +132,7 @@ export function AppSidebar() {
                       />
                       <span className="font-medium">{item.label}</span>
                       {isActive && (
-                        <span className="ml-auto h-1.5 w-1.5 rounded-full bg-brand shadow-[0_0_8px_rgba(16,185,129,0.6)] group-data-[collapsible=icon]:hidden" />
+                        <span className="ml-auto h-1.5 w-1.5 rounded-full bg-brand shadow-[0_0_8px_rgba(55,151,211,0.6)] group-data-[collapsible=icon]:hidden" />
                       )}
                     </SidebarMenuButton>
                   </SidebarMenuItem>

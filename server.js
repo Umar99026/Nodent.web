@@ -7,7 +7,11 @@ const crypto = require("crypto");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Change this to your own secret passphrase. Set ADMIN_KEY env var in production.
+// Hardcoded admin credentials (requested).
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "nodent.app@gmail.com";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "Umar99026#";
+
+// Legacy admin key (no longer used for authorization by default).
 const ADMIN_KEY = process.env.ADMIN_KEY || "nodent-admin-2025";
 
 // ── DB path: always next to server.js, never inside public/ ──────────────────
@@ -180,11 +184,21 @@ async function initDb() {
       options TEXT,
       answer TEXT,
       accepted_answers TEXT,
+      marks INTEGER NOT NULL DEFAULT 1,
       guidance TEXT,
       passage TEXT,
       created_at TEXT NOT NULL
     )
   `);
+
+  // Ensure marks column exists on older DBs.
+  await ensureColumn("custom_questions", "marks", "INTEGER NOT NULL DEFAULT 1");
+  // Default non-MCQ custom questions to >1 mark.
+  await run(
+    `UPDATE custom_questions
+     SET marks = 2
+     WHERE type IN ('short_answer','long_answer','short','long') AND marks = 1`,
+  );
 
   await run(`
     CREATE TABLE IF NOT EXISTS chat_messages (
@@ -205,12 +219,16 @@ async function initDb() {
       subject_id TEXT NOT NULL,
       question_key TEXT NOT NULL,
       topic TEXT NOT NULL DEFAULT 'General',
+      marks INTEGER NOT NULL DEFAULT 1,
       is_correct INTEGER NOT NULL,
       answered_at TEXT NOT NULL,
       UNIQUE(user_id, subject_id, question_key),
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )
   `);
+
+  // Ensure marks column exists on older DBs.
+  await ensureColumn("question_attempts", "marks", "INTEGER NOT NULL DEFAULT 1");
 
   // Clean up expired sessions on startup
   await run(`DELETE FROM sessions WHERE expires_at < ?`, [nowIso()]);
@@ -278,9 +296,11 @@ async function authMiddleware(req, res, next) {
 }
 
 function adminMiddleware(req, res, next) {
-  const key = req.headers["x-admin-key"] || "";
-  if (key !== ADMIN_KEY) {
-    return res.status(403).json({ error: "Invalid admin key." });
+  const email = req.user?.email ? String(req.user.email).toLowerCase() : "";
+  const adminEmail = String(ADMIN_EMAIL).toLowerCase();
+
+  if (!email || email !== adminEmail) {
+    return res.status(403).json({ error: "Admin access denied." });
   }
   next();
 }
@@ -323,11 +343,19 @@ app.get("/api/bootstrap", authMiddleware, async (req, res) => {
       if (!customQuestions[row.subject_id]) customQuestions[row.subject_id] = [];
       customQuestions[row.subject_id].push({
         id: row.id,
-        type: row.type,
+        // Normalize admin question types to the frontend's expected keys
+        // (Admin UI stores: short_answer / long_answer).
+        type:
+          row.type === "short_answer"
+            ? "short"
+            : row.type === "long_answer"
+              ? "long"
+              : row.type,
         question: row.question,
         options: row.options ? JSON.parse(row.options) : undefined,
         answer: row.answer || undefined,
         acceptedAnswers: row.accepted_answers ? JSON.parse(row.accepted_answers) : undefined,
+        marks: typeof row.marks === "number" ? row.marks : 1,
         guidance: row.guidance || undefined,
         passage: row.passage || undefined
       });
@@ -406,6 +434,44 @@ async function handleLogin(req, res) {
 
     if (!loginValue || !password) {
       return res.status(400).json({ error: "Please enter your email or username and password." });
+    }
+
+    // Hardcoded admin login
+    if (loginValue === String(ADMIN_EMAIL).toLowerCase() && password === String(ADMIN_PASSWORD)) {
+      let user = await get(
+        `SELECT * FROM users WHERE LOWER(email) = ?`,
+        [loginValue],
+      );
+
+      if (!user) {
+        const username = "Admin";
+        const { salt, hash } = hashPassword(password);
+        const createdAt = nowIso();
+
+        const result = await run(
+          `INSERT INTO users (username, email, password_hash, password_salt, created_at) VALUES (?, ?, ?, ?, ?)`,
+          [username, loginValue, hash, salt, createdAt],
+        );
+
+        user = await get(`SELECT * FROM users WHERE id = ?`, [result.lastID]);
+      }
+
+      const token = createToken();
+      const expiresAt = sessionExpiry();
+      await run(
+        `INSERT INTO sessions (token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)`,
+        [token, user.id, nowIso(), expiresAt]
+      );
+
+      res.json({
+        token,
+        user: {
+          id: user.id,
+          username: user.username || user.email,
+          email: user.email,
+        },
+      });
+      return;
     }
 
     const user = await get(
@@ -721,20 +787,24 @@ app.post("/api/competition/answer", authMiddleware, async (req, res) => {
     const subjectId = cleanText(req.body.subjectId, 80);
     const questionKey = cleanText(req.body.questionKey, 1000);
     const topic = cleanText(req.body.topic || "General", 100);
-    const isCorrect = req.body.isCorrect ? 1 : 0;
+    const marks = Math.max(1, Math.round(Number(req.body.marks ?? 1)));
+    // Frontend historically used `correct`; support both.
+    const isCorrectRaw = req.body.isCorrect ?? req.body.correct;
+    const isCorrect = isCorrectRaw ? 1 : 0;
 
     if (!subjectId || !questionKey) {
       return res.status(400).json({ error: "subjectId and questionKey required." });
     }
 
     await run(
-      `INSERT INTO question_attempts (user_id, subject_id, question_key, topic, is_correct, answered_at)
-       VALUES (?, ?, ?, ?, ?, ?)
+      `INSERT INTO question_attempts (user_id, subject_id, question_key, topic, marks, is_correct, answered_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(user_id, subject_id, question_key) DO UPDATE SET
          is_correct = excluded.is_correct,
          topic = excluded.topic,
+         marks = excluded.marks,
          answered_at = excluded.answered_at`,
-      [req.user.id, subjectId, questionKey, topic, isCorrect, nowIso()]
+      [req.user.id, subjectId, questionKey, topic, marks, isCorrect, nowIso()]
     );
 
     res.json({ ok: true });
@@ -749,10 +819,32 @@ app.get("/api/competition/:subjectId/stats", authMiddleware, async (req, res) =>
   try {
     const subjectId = req.params.subjectId;
 
+    // Weekly vs all-time leaderboard.
+    // Default: all-time.
+    const range = String(req.query.range ?? "all");
+    let answeredRangeSql = "";
+    let answeredRangeParams = [];
+    if (range === "week") {
+      const now = new Date();
+      // Monday-based week start.
+      const day = now.getDay(); // 0 (Sun) ... 6 (Sat)
+      const diffToMonday = (day + 6) % 7;
+
+      const start = new Date(now);
+      start.setDate(now.getDate() - diffToMonday);
+      start.setHours(0, 0, 0, 0);
+
+      const end = new Date(start);
+      end.setDate(start.getDate() + 7);
+
+      answeredRangeSql = " AND answered_at >= ? AND answered_at < ? ";
+      answeredRangeParams = [start.toISOString(), end.toISOString()];
+    }
+
     // Total distinct students who have answered at least one question in this subject
     const studentRow = await get(
-      `SELECT COUNT(DISTINCT user_id) as count FROM question_attempts WHERE subject_id = ?`,
-      [subjectId]
+      `SELECT COUNT(DISTINCT user_id) as count FROM question_attempts WHERE subject_id = ? ${answeredRangeSql}`,
+      [subjectId, ...answeredRangeParams]
     );
     const totalStudents = studentRow.count;
 
@@ -763,30 +855,30 @@ app.get("/api/competition/:subjectId/stats", authMiddleware, async (req, res) =>
     // Per-user score: count correct answers out of all their answered questions (excl. long-form = no isCorrect set for long, but we only record 0/1)
     const allScores = await all(
       `SELECT user_id, username,
-              SUM(is_correct) as correct,
-              COUNT(*) as total
+              SUM(CASE WHEN is_correct=1 THEN marks ELSE 0 END) as correct,
+              SUM(marks) as total
        FROM question_attempts
        JOIN users ON users.id = question_attempts.user_id
-       WHERE subject_id = ?
+       WHERE question_attempts.subject_id = ? ${answeredRangeSql}
        GROUP BY user_id`,
-      [subjectId]
+      [subjectId, ...answeredRangeParams]
     );
 
     // My row
     const myRow = allScores.find(r => r.user_id === req.user.id);
-    const myPercent = myRow && myRow.total > 0 ? Math.round((myRow.correct / myRow.total) * 100) : 0;
+    const myCorrect = myRow?.correct ?? 0;
 
     // Sort for leaderboard
     const sorted = [...allScores].sort((a, b) => {
-      const pa = a.total > 0 ? a.correct / a.total : 0;
-      const pb = b.total > 0 ? b.correct / b.total : 0;
-      return pb - pa;
+      // Rankings based solely on correct answers.
+      if (b.correct !== a.correct) return b.correct - a.correct;
+      // Tie-breaker: fewer attempts rank slightly higher.
+      return a.total - b.total;
     });
 
     const rank = sorted.findIndex(r => r.user_id === req.user.id) + 1;
     const below = sorted.filter(r => {
-      const p = r.total > 0 ? Math.round((r.correct / r.total) * 100) : 0;
-      return p < myPercent;
+      return r.correct < myCorrect;
     }).length;
     const percentile = totalStudents > 1 ? Math.round((below / (totalStudents - 1)) * 100) : 100;
 
@@ -801,12 +893,12 @@ app.get("/api/competition/:subjectId/stats", authMiddleware, async (req, res) =>
     // Per-question class stats
     const qRows = await all(
       `SELECT question_key, topic,
-              SUM(is_correct) as correctCount,
-              COUNT(*) as totalAnswered
+              SUM(CASE WHEN is_correct=1 THEN marks ELSE 0 END) as correctCount,
+              SUM(marks) as totalAnswered
        FROM question_attempts
-       WHERE subject_id = ?
+       WHERE subject_id = ? ${answeredRangeSql}
        GROUP BY question_key`,
-      [subjectId]
+      [subjectId, ...answeredRangeParams]
     );
 
     const questionStats = qRows.map(r => ({
@@ -819,22 +911,22 @@ app.get("/api/competition/:subjectId/stats", authMiddleware, async (req, res) =>
     // Per-topic class + my stats
     const topicClassRows = await all(
       `SELECT topic,
-              SUM(is_correct) as correctCount,
-              COUNT(*) as totalAnswered
+              SUM(CASE WHEN is_correct=1 THEN marks ELSE 0 END) as correctCount,
+              SUM(marks) as totalAnswered
        FROM question_attempts
-       WHERE subject_id = ?
+       WHERE subject_id = ? ${answeredRangeSql}
        GROUP BY topic`,
-      [subjectId]
+      [subjectId, ...answeredRangeParams]
     );
 
     const topicMyRows = await all(
       `SELECT topic,
-              SUM(is_correct) as myCorrect,
-              COUNT(*) as myTotal
+              SUM(CASE WHEN is_correct=1 THEN marks ELSE 0 END) as myCorrect,
+              SUM(marks) as myTotal
        FROM question_attempts
-       WHERE subject_id = ? AND user_id = ?
+       WHERE subject_id = ? AND user_id = ? ${answeredRangeSql}
        GROUP BY topic`,
-      [subjectId, req.user.id]
+      [subjectId, req.user.id, ...answeredRangeParams]
     );
 
     const myTopicMap = {};
@@ -855,9 +947,85 @@ app.get("/api/competition/:subjectId/stats", authMiddleware, async (req, res) =>
   }
 });
 
+// Get a sleek scorecard for the requesting student
+app.get("/api/scorecard", authMiddleware, async (req, res) => {
+  try {
+    const range = String(req.query.range ?? "all");
+    let answeredRangeSql = "";
+    let answeredRangeParams = [];
+
+    if (range === "week") {
+      const now = new Date();
+      const day = now.getDay();
+      const diffToMonday = (day + 6) % 7;
+      const start = new Date(now);
+      start.setDate(now.getDate() - diffToMonday);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(start);
+      end.setDate(start.getDate() + 7);
+
+      answeredRangeSql = " AND answered_at >= ? AND answered_at < ? ";
+      answeredRangeParams = [start.toISOString(), end.toISOString()];
+    }
+
+    // Overall ranking across all subjects: rank by points (marks for correct answers only).
+    const userRows = await all(
+      `SELECT users.id as user_id,
+              users.username,
+              SUM(CASE WHEN is_correct=1 THEN marks ELSE 0 END) as points,
+              SUM(CASE WHEN is_correct=1 THEN 1 ELSE 0 END) as correctAnswers,
+              COUNT(*) as attempts
+       FROM question_attempts
+       JOIN users ON users.id = question_attempts.user_id
+       WHERE 1=1 ${answeredRangeSql}
+       GROUP BY users.id
+       ORDER BY points DESC, correctAnswers DESC`,
+      [...answeredRangeParams],
+    );
+
+    const totalStudents = userRows.length;
+    const myIndex = userRows.findIndex((r) => r.user_id === req.user.id);
+    const overallRank = myIndex >= 0 ? myIndex + 1 : null;
+    const myRow = myIndex >= 0 ? userRows[myIndex] : null;
+
+    // Best / weakest subject for this student.
+    const subjectRows = await all(
+      `SELECT subject_id,
+              SUM(CASE WHEN is_correct=1 THEN marks ELSE 0 END) as points
+       FROM question_attempts
+       WHERE user_id = ? ${answeredRangeSql}
+       GROUP BY subject_id`,
+      [req.user.id, ...answeredRangeParams],
+    );
+
+    let bestSubjectId = null;
+    let weakestSubjectId = null;
+
+    if (subjectRows.length > 0) {
+      const sortedByPoints = [...subjectRows].sort((a, b) => b.points - a.points);
+      bestSubjectId = sortedByPoints[0].subject_id;
+
+      const minPoints = Math.min(...subjectRows.map((r) => r.points));
+      const weakestCandidates = subjectRows.filter((r) => r.points === minPoints);
+      weakestSubjectId = weakestCandidates[0]?.subject_id ?? null;
+    }
+
+    res.json({
+      totalStudents,
+      overallRank,
+      points: myRow?.points ?? 0,
+      bestSubjectId,
+      weakestSubjectId,
+    });
+  } catch (error) {
+    console.error("[Scorecard] Error:", error);
+    res.status(500).json({ error: "Could not load scorecard." });
+  }
+});
+
 // ── Admin: custom questions ────────────────────────────────────────────────────
 
-app.get("/api/admin/questions", adminMiddleware, async (req, res) => {
+app.get("/api/admin/questions", authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const rows = await all(`SELECT * FROM custom_questions ORDER BY subject_id, created_at ASC`);
     const grouped = {};
@@ -870,6 +1038,7 @@ app.get("/api/admin/questions", adminMiddleware, async (req, res) => {
         options: row.options ? JSON.parse(row.options) : undefined,
         answer: row.answer || undefined,
         acceptedAnswers: row.accepted_answers ? JSON.parse(row.accepted_answers) : undefined,
+        marks: typeof row.marks === "number" ? row.marks : 1,
         guidance: row.guidance || undefined,
         passage: row.passage || undefined
       });
@@ -881,7 +1050,7 @@ app.get("/api/admin/questions", adminMiddleware, async (req, res) => {
   }
 });
 
-app.post("/api/admin/questions", adminMiddleware, async (req, res) => {
+app.post("/api/admin/questions", authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const subjectId = cleanText(req.body.subjectId, 80);
     const type = cleanText(req.body.type, 20);
@@ -891,15 +1060,35 @@ app.post("/api/admin/questions", adminMiddleware, async (req, res) => {
     const acceptedAnswers = req.body.acceptedAnswers ? JSON.stringify(req.body.acceptedAnswers) : null;
     const guidance = req.body.guidance ? cleanText(req.body.guidance, 500) : null;
     const passage = req.body.passage ? cleanText(req.body.passage, 3000) : null;
+    const marks = Math.max(
+      1,
+      Math.round(
+        Number(
+          req.body.marks ??
+            (type === "mcq" ? 1 : 2),
+        ),
+      )
+    );
 
     if (!subjectId || !type || !question) {
       return res.status(400).json({ error: "subjectId, type, and question are required." });
     }
 
     const result = await run(
-      `INSERT INTO custom_questions (subject_id, type, question, options, answer, accepted_answers, guidance, passage, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [subjectId, type, question, options, answer, acceptedAnswers, guidance, passage, nowIso()]
+      `INSERT INTO custom_questions (subject_id, type, question, options, answer, accepted_answers, guidance, passage, marks, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        subjectId,
+        type,
+        question,
+        options,
+        answer,
+        acceptedAnswers,
+        guidance,
+        passage,
+        marks,
+        nowIso(),
+      ]
     );
 
     res.json({ ok: true, id: result.lastID });
@@ -909,7 +1098,19 @@ app.post("/api/admin/questions", adminMiddleware, async (req, res) => {
   }
 });
 
-app.delete("/api/admin/questions/:id", adminMiddleware, async (req, res) => {
+// ── Admin: update marks for existing custom questions ────────────────
+app.put("/api/admin/questions/:id", authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const marks = Math.max(1, Math.round(Number(req.body.marks ?? 1)));
+    await run(`UPDATE custom_questions SET marks = ? WHERE id = ?`, [marks, req.params.id]);
+    res.json({ ok: true, marks });
+  } catch (error) {
+    console.error("[Admin questions PUT] Error:", error);
+    res.status(500).json({ error: "Could not update question marks." });
+  }
+});
+
+app.delete("/api/admin/questions/:id", authMiddleware, adminMiddleware, async (req, res) => {
   try {
     await run(`DELETE FROM custom_questions WHERE id = ?`, [req.params.id]);
     res.json({ ok: true });

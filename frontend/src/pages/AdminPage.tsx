@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiFetchAdmin, ApiError } from "@/lib/api";
-import { STORAGE_KEYS, API_PATHS } from "@/lib/constants";
+import { API_PATHS, ADMIN_EMAIL } from "@/lib/constants";
 import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
 import {
@@ -43,6 +43,7 @@ import {
 } from "lucide-react";
 
 import { baseSubjects } from "@/lib/subjects";
+import { useAuth } from "@/context/AuthContext";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -61,6 +62,7 @@ interface AdminQuestion {
   acceptedAnswers?: string[];
   guidance?: string;
   passage?: string;
+  marks: number;
 }
 
 const QUESTION_TYPES: { value: QuestionType; label: string }[] = [
@@ -76,19 +78,21 @@ const QUESTION_TYPES: { value: QuestionType; label: string }[] = [
 export default function AdminPage() {
   const navigate = useNavigate();
 
-  // Auth check
-  const adminKey = localStorage.getItem(STORAGE_KEYS.adminKey);
+  const { user } = useAuth();
+  const isAdmin = user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+
   useEffect(() => {
-    if (!adminKey) {
+    if (!isAdmin) {
       navigate("/dashboard", { replace: true });
     }
-  }, [adminKey, navigate]);
+  }, [isAdmin, navigate]);
 
   /* ------ form state ------ */
   const [subjectId, setSubjectId] = useState("");
   const [questionType, setQuestionType] = useState<QuestionType>("mcq");
   const [questionText, setQuestionText] = useState("");
   const [passage, setPassage] = useState("");
+  const [marks, setMarks] = useState<number>(1);
 
   // MCQ
   const [options, setOptions] = useState(["", "", "", ""]);
@@ -103,12 +107,20 @@ export default function AdminPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
 
+  // Default marks based on question type.
+  useEffect(() => {
+    setMarks(questionType === "mcq" ? 1 : 2);
+  }, [questionType]);
+
   /* ------ existing questions state ------ */
   const [questions, setQuestions] = useState<AdminQuestion[]>([]);
   const [questionsLoading, setQuestionsLoading] = useState(true);
   const [expandedSubjects, setExpandedSubjects] = useState<Set<string>>(
     new Set(),
   );
+
+  const [marksEdits, setMarksEdits] = useState<Record<string, number>>({});
+  const [marksSaving, setMarksSaving] = useState<string | null>(null);
 
   /* ------ fetch existing questions ------ */
 
@@ -127,8 +139,8 @@ export default function AdminPage() {
   }, []);
 
   useEffect(() => {
-    if (adminKey) fetchQuestions();
-  }, [adminKey, fetchQuestions]);
+    if (isAdmin) fetchQuestions();
+  }, [isAdmin, fetchQuestions]);
 
   /* ------ submit question ------ */
 
@@ -176,6 +188,17 @@ export default function AdminPage() {
       }
     }
 
+    if (questionType === "long_answer") {
+      const answers = acceptedAnswers
+        .split("\n")
+        .map((a) => a.trim())
+        .filter(Boolean);
+      if (answers.length === 0) {
+        setFormError("At least one accepted answer is required");
+        return;
+      }
+    }
+
     setIsSubmitting(true);
 
     const body: Record<string, unknown> = {
@@ -196,7 +219,14 @@ export default function AdminPage() {
         .filter(Boolean);
     } else if (questionType === "long_answer") {
       if (guidance.trim()) body.guidance = guidance.trim();
+      body.acceptedAnswers = acceptedAnswers
+        .split("\n")
+        .map((a) => a.trim())
+        .filter(Boolean);
     }
+
+    // Admin-configurable marks (non-MCQ defaults to >1).
+    body.marks = marks;
 
     try {
       await apiFetchAdmin(API_PATHS.admin.questions, {
@@ -229,6 +259,27 @@ export default function AdminPage() {
     }
   };
 
+  const handleUpdateMarks = async (questionId: string, nextMarks: number) => {
+    const clamped = Math.max(1, Math.min(20, Math.round(nextMarks)));
+    try {
+      setMarksSaving(questionId);
+      await apiFetchAdmin(`${API_PATHS.admin.questions}/${questionId}`, {
+        method: "PUT",
+        body: JSON.stringify({ marks: clamped }),
+      });
+
+      toast.success("Marks updated");
+      setQuestions((prev) =>
+        prev.map((q) => (q.id === questionId ? { ...q, marks: clamped } : q)),
+      );
+    } catch (err) {
+      if (err instanceof ApiError) toast.error(err.message);
+      else toast.error("Failed to update marks");
+    } finally {
+      setMarksSaving(null);
+    }
+  };
+
   /* ------ grouped questions ------ */
 
   const groupedQuestions = questions.reduce<Record<string, AdminQuestion[]>>(
@@ -252,7 +303,7 @@ export default function AdminPage() {
 
   /* ------ render ------ */
 
-  if (!adminKey) return null;
+  if (!isAdmin) return null;
 
   return (
     <AppShell title="Admin Panel" subtitle="Manage custom questions">
@@ -313,6 +364,20 @@ export default function AdminPage() {
                 </SelectContent>
               </Select>
             </div>
+
+            {questionType !== "mcq" && (
+              <div className="space-y-1.5">
+                <Label>Marks</Label>
+                <Input
+                  type="number"
+                  min={2}
+                  max={20}
+                  value={marks}
+                  onChange={(e) => setMarks(Number(e.target.value))}
+                  className="h-9"
+                />
+              </div>
+            )}
 
             {/* Question Text */}
             <div className="space-y-1.5">
@@ -423,6 +488,19 @@ export default function AdminPage() {
                     rows={3}
                   />
                 </div>
+
+                <div className="space-y-1.5">
+                  <Label>Accepted Answers</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Enter one accepted answer/keyword per line
+                  </p>
+                  <Textarea
+                    placeholder={"Answer 1\nAnswer 2\nAnswer 3"}
+                    value={acceptedAnswers}
+                    onChange={(e) => setAcceptedAnswers(e.target.value)}
+                    rows={4}
+                  />
+                </div>
               </>
             )}
 
@@ -514,6 +592,42 @@ export default function AdminPage() {
                                     {q.question}
                                   </p>
                                 </div>
+
+                                {q.type !== "mcq" && (
+                                  <div className="flex items-center gap-2">
+                                    <Input
+                                      type="number"
+                                      min={1}
+                                      max={20}
+                                      className="h-9 w-24"
+                                      value={marksEdits[q.id] ?? q.marks}
+                                      onChange={(e) =>
+                                        setMarksEdits((prev) => ({
+                                          ...prev,
+                                          [q.id]: Number(e.target.value),
+                                        }))
+                                      }
+                                    />
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-9"
+                                      disabled={marksSaving === q.id}
+                                      onClick={() =>
+                                        handleUpdateMarks(
+                                          q.id,
+                                          marksEdits[q.id] ?? q.marks,
+                                        )
+                                      }
+                                    >
+                                      {marksSaving === q.id ? (
+                                        <Loader2 className="size-4 animate-spin" />
+                                      ) : (
+                                        "Save"
+                                      )}
+                                    </Button>
+                                  </div>
+                                )}
 
                                 <AlertDialog>
                                   <AlertDialogTrigger

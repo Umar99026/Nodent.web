@@ -1,8 +1,8 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
-import { apiFetchAdmin, ApiError } from "@/lib/api";
-import { STORAGE_KEYS, API_PATHS } from "@/lib/constants";
+import { apiFetch } from "@/lib/api";
+import { STORAGE_KEYS } from "@/lib/constants";
 import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,24 +16,13 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import {
-  Sheet,
-  SheetTrigger,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from "@/components/ui/sheet";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   BookOpen,
   MessageSquare,
@@ -41,11 +30,9 @@ import {
   Plus,
   Search,
   X,
-  Shield,
-  Loader2,
   GraduationCap,
   BarChart3,
-  Clock,
+  Star,
 } from "lucide-react";
 
 import { baseSubjects } from "@/lib/subjects";
@@ -101,14 +88,6 @@ export default function DashboardPage() {
     getMySubjects(userId),
   );
   const [searchQuery, setSearchQuery] = useState("");
-  const [sheetOpen, setSheetOpen] = useState(false);
-
-  // Admin unlock
-  const [adminDialogOpen, setAdminDialogOpen] = useState(false);
-  const [adminKey, setAdminKey] = useState("");
-  const [adminLoading, setAdminLoading] = useState(false);
-  const [adminError, setAdminError] = useState("");
-  const isAdmin = !!localStorage.getItem(STORAGE_KEYS.adminKey);
 
   const quizCount = useMemo(() => getCompletedQuizCount(), []);
 
@@ -147,29 +126,60 @@ export default function DashboardPage() {
     );
   }, [mySubjects, searchQuery]);
 
-  /* ------ admin unlock ------ */
+  interface ScorecardData {
+    totalStudents: number;
+    overallRank: number | null;
+    points: number;
+    bestSubjectId: string | null;
+    weakestSubjectId: string | null;
+  }
 
-  const handleAdminUnlock = async () => {
-    if (!adminKey.trim()) {
-      setAdminError("Please enter an admin key");
-      return;
+  const [scoreCardOpen, setScoreCardOpen] = useState(false);
+  const [scoreCardLoading, setScoreCardLoading] = useState(false);
+  const [scoreCard, setScoreCard] = useState<ScorecardData | null>(null);
+
+  const avgDailyStudyMinutes = useMemo(() => {
+    if (!user) return 0;
+    const uid = String(user.id);
+    const today = new Date();
+    let total = 0;
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, "0");
+      const dd = String(d.getDate()).padStart(2, "0");
+      const key = `${STORAGE_KEYS.studyPrefix}${uid}_${yyyy}-${mm}-${dd}`;
+      try {
+        const raw = localStorage.getItem(key);
+        const parsed = raw ? JSON.parse(raw) : null;
+        const seconds = typeof parsed?.dailySeconds === "number" ? parsed.dailySeconds : 0;
+        total += seconds / 60;
+      } catch {
+        // ignore
+      }
     }
-    setAdminLoading(true);
-    setAdminError("");
+    return Math.round(total / 7);
+  }, [user]);
+
+  const fetchScorecard = useCallback(async () => {
+    if (!user) return;
     try {
-      localStorage.setItem(STORAGE_KEYS.adminKey, adminKey.trim());
-      await apiFetchAdmin<unknown>(API_PATHS.admin.questions);
-      toast.success("Admin access granted");
-      setAdminDialogOpen(false);
-      setAdminKey("");
-    } catch (err) {
-      localStorage.removeItem(STORAGE_KEYS.adminKey);
-      if (err instanceof ApiError) setAdminError(err.message);
-      else setAdminError("Invalid admin key");
+      setScoreCardLoading(true);
+      const data = await apiFetch<ScorecardData>("/api/scorecard");
+      setScoreCard(data);
+    } catch {
+      toast.error("Failed to load your scorecard.");
     } finally {
-      setAdminLoading(false);
+      setScoreCardLoading(false);
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    if (scoreCardOpen && !scoreCard && user) {
+      void fetchScorecard();
+    }
+  }, [scoreCardOpen, scoreCard, user, fetchScorecard]);
 
   /* ------ render ------ */
 
@@ -178,6 +188,116 @@ export default function DashboardPage() {
       title="Dashboard"
       subtitle={`Welcome back, ${user?.username ?? "Student"}`}
     >
+      {/* Scorecard toggle */}
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <button
+          type="button"
+          onClick={() => setScoreCardOpen((v) => !v)}
+          className="flex items-center gap-3 rounded-xl border border-border/50 bg-card/60 px-4 py-3 text-left transition-colors hover:bg-card"
+        >
+          <Avatar className="size-10">
+            <AvatarFallback className="bg-brand/15 text-xs font-bold text-brand-light">
+              {(user?.username ?? "Student")
+                .split(" ")
+                .map((n) => n[0])
+                .join("")
+                .toUpperCase()
+                .slice(0, 2) || "S"}
+            </AvatarFallback>
+          </Avatar>
+          <div>
+            <div className="font-display text-lg font-semibold">
+              {user?.username ?? "Student"}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              Tap to {scoreCardOpen ? "hide" : "view"} scorecard
+            </div>
+          </div>
+        </button>
+      </div>
+
+      {scoreCardOpen && (
+        <Card className="paper-texture mb-8 overflow-hidden">
+          <CardHeader className="flex flex-row items-center justify-between gap-4">
+            <div>
+              <CardTitle className="font-display text-xl flex items-center gap-2">
+                <Star className="size-5 text-brand-dark" />
+                Scorecard
+              </CardTitle>
+              <CardDescription>
+                Sleek overview based on correct answers.
+              </CardDescription>
+            </div>
+            <div className="text-right">
+              {scoreCardLoading ? (
+                <div className="text-sm text-muted-foreground">Loading...</div>
+              ) : scoreCard?.overallRank ? (
+                <>
+                  <div className="font-display text-4xl font-bold leading-none">
+                    {(() => {
+                      const total = Math.max(1, scoreCard.totalStudents - 1);
+                      const t = scoreCard.overallRank! - 1;
+                      const rating = 10 - Math.round((t / total) * 9);
+                      return Math.max(1, rating);
+                    })()}
+                    <span className="ml-1 text-sm text-muted-foreground">/10</span>
+                  </div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    Rank #{scoreCard.overallRank} of {scoreCard.totalStudents}
+                  </div>
+                </>
+              ) : (
+                <div className="text-sm text-muted-foreground">
+                  Not enough data yet.
+                </div>
+              )}
+            </div>
+          </CardHeader>
+
+          <CardContent className="grid gap-4 lg:grid-cols-4">
+            <div className="space-y-2 rounded-xl border border-border/50 bg-card/40 p-4">
+              <div className="text-xs text-muted-foreground">Best subject</div>
+              <div className="font-display text-lg font-semibold">
+                {scoreCard?.bestSubjectId
+                  ? baseSubjects.find((s) => s.id === scoreCard.bestSubjectId)?.name ??
+                    scoreCard.bestSubjectId
+                  : "—"}
+              </div>
+            </div>
+
+            <div className="space-y-2 rounded-xl border border-border/50 bg-card/40 p-4">
+              <div className="text-xs text-muted-foreground">Weakest subject</div>
+              <div className="font-display text-lg font-semibold">
+                {scoreCard?.weakestSubjectId
+                  ? baseSubjects.find((s) => s.id === scoreCard.weakestSubjectId)?.name ??
+                    scoreCard.weakestSubjectId
+                  : "—"}
+              </div>
+            </div>
+
+            <div className="space-y-2 rounded-xl border border-border/50 bg-card/40 p-4">
+              <div className="text-xs text-muted-foreground">Study points</div>
+              <div className="font-display text-lg font-semibold tabular-nums">
+                {scoreCard?.points ?? 0}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Higher is better.
+              </div>
+            </div>
+
+            <div className="space-y-2 rounded-xl border border-border/50 bg-card/40 p-4">
+              <div className="text-xs text-muted-foreground">Avg daily study</div>
+              <div className="font-display text-lg font-semibold tabular-nums">
+                {avgDailyStudyMinutes} min
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Based on your timer today.
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Stats row */}
       <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Card className="paper-texture">
@@ -189,9 +309,7 @@ export default function DashboardPage() {
               <p className="text-2xl font-bold text-foreground">
                 {mySubjects.length}
               </p>
-              <p className="text-sm text-muted-foreground">
-                Subjects selected
-              </p>
+              <p className="text-sm text-muted-foreground">Subjects</p>
             </div>
           </CardContent>
         </Card>
@@ -203,9 +321,7 @@ export default function DashboardPage() {
             </div>
             <div>
               <p className="text-2xl font-bold text-foreground">{quizCount}</p>
-              <p className="text-sm text-muted-foreground">
-                Quizzes completed
-              </p>
+              <p className="text-sm text-muted-foreground">Quizzes</p>
             </div>
           </CardContent>
         </Card>
@@ -217,9 +333,7 @@ export default function DashboardPage() {
             </div>
             <div>
               <p className="text-2xl font-bold text-foreground">VCE</p>
-              <p className="text-sm text-muted-foreground">
-                Curriculum aligned
-              </p>
+              <p className="text-sm text-muted-foreground">Curriculum</p>
             </div>
           </CardContent>
         </Card>
@@ -231,24 +345,15 @@ export default function DashboardPage() {
           My Subjects
         </h2>
 
-        <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-          <SheetTrigger
-            render={
-              <Button variant="outline" className="gap-1.5">
-                <Plus className="size-4" />
-                Add Subject
-              </Button>
-            }
-          />
-          <SheetContent>
-            <SheetHeader>
-              <SheetTitle>Browse Subjects</SheetTitle>
-              <SheetDescription>
-                Add subjects to your dashboard for quick access.
-              </SheetDescription>
-            </SheetHeader>
-
-            <div className="px-4 pb-2">
+        <DropdownMenu>
+          <DropdownMenuTrigger {...({ asChild: true } as any)}>
+            <Button variant="outline" className="gap-1.5">
+              <Plus className="size-4" />
+              Add Subject
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent className="w-[420px] p-0">
+            <div className="px-4 pb-2 pt-3">
               <div className="relative">
                 <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
@@ -259,16 +364,15 @@ export default function DashboardPage() {
                 />
               </div>
             </div>
-
-            <ScrollArea className="flex-1 px-4">
+            <ScrollArea className="max-h-[320px] px-4 pb-4">
               {availableSubjects.length === 0 ? (
-                <p className="py-8 text-center text-sm text-muted-foreground">
+                <p className="py-6 text-center text-sm text-muted-foreground">
                   {baseSubjects.length === 0
                     ? "No subjects available yet."
                     : "All subjects have been added or none match your search."}
                 </p>
               ) : (
-                <div className="space-y-2 pb-4">
+                <div className="space-y-2">
                   {availableSubjects.map((subject) => (
                     <button
                       key={subject.id}
@@ -289,8 +393,8 @@ export default function DashboardPage() {
                 </div>
               )}
             </ScrollArea>
-          </SheetContent>
-        </Sheet>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {/* Subject grid */}
@@ -355,15 +459,6 @@ export default function DashboardPage() {
                   variant="outline"
                   size="sm"
                   className="flex-1"
-                  onClick={() => navigate(`/study/${subject.id}`)}
-                >
-                  <Clock className="size-3.5" />
-                  Study
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex-1"
                   onClick={() => navigate(`/quiz/${subject.id}/summary`)}
                 >
                   <FileText className="size-3.5" />
@@ -384,67 +479,6 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Admin unlock */}
-      {!isAdmin && (
-        <>
-          <Separator className="my-10" />
-          <div className="flex justify-center">
-            <Button
-              variant="outline"
-              className="gap-2 text-muted-foreground"
-              onClick={() => setAdminDialogOpen(true)}
-            >
-              <Shield className="size-4" />
-              Unlock Admin Panel
-            </Button>
-          </div>
-
-          <Dialog open={adminDialogOpen} onOpenChange={setAdminDialogOpen}>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Admin Access</DialogTitle>
-                <DialogDescription>
-                  Enter the admin key to unlock the question management panel.
-                </DialogDescription>
-              </DialogHeader>
-
-              {adminError && (
-                <div className="rounded-lg border border-danger/20 bg-danger/5 px-3 py-2 text-sm text-danger">
-                  {adminError}
-                </div>
-              )}
-
-              <Input
-                type="password"
-                placeholder="Admin key"
-                value={adminKey}
-                onChange={(e) => setAdminKey(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleAdminUnlock();
-                }}
-                className="h-10"
-              />
-
-              <DialogFooter>
-                <Button
-                  onClick={handleAdminUnlock}
-                  disabled={adminLoading}
-                  className="bg-brand text-white hover:bg-brand-dark"
-                >
-                  {adminLoading ? (
-                    <>
-                      <Loader2 className="size-4 animate-spin" />
-                      Verifying...
-                    </>
-                  ) : (
-                    "Unlock"
-                  )}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </>
-      )}
     </AppShell>
   );
 }

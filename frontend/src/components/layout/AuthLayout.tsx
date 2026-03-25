@@ -1,5 +1,4 @@
 import { cn } from "@/lib/utils";
-import { GraduationCap, BookOpen, Trophy } from "lucide-react";
 
 interface AuthLayoutProps {
   children: React.ReactNode;
@@ -43,22 +42,7 @@ export function AuthLayout({ children, className }: AuthLayoutProps) {
             Your scholarly companion for VCE excellence
           </p>
 
-          {/* Feature pills */}
-          <div className="mt-10 flex flex-wrap justify-center gap-3">
-            {[
-              { icon: GraduationCap, label: "27 VCE Subjects" },
-              { icon: BookOpen, label: "Practice Quizzes" },
-              { icon: Trophy, label: "Leaderboards" },
-            ].map(({ icon: Icon, label }) => (
-              <div
-                key={label}
-                className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/60 backdrop-blur-sm"
-              >
-                <Icon className="size-4 text-brand-light" />
-                {label}
-              </div>
-            ))}
-          </div>
+          {/* (Removed left-side feature list to keep login clean/sleek.) */}
         </div>
       </div>
 

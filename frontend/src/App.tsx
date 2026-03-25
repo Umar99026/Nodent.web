@@ -2,6 +2,8 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { lazy, Suspense, type ReactNode } from "react";
+import { StudyTimerProvider } from "@/context/StudyTimerContext";
+import { ADMIN_EMAIL } from "@/lib/constants";
 
 // Lazy-load page components — stubs will be replaced with real implementations
 const LoginPage = lazy(() => import("@/pages/LoginPage"));
@@ -9,7 +11,7 @@ const DashboardPage = lazy(() => import("@/pages/DashboardPage"));
 const QuizPage = lazy(() => import("@/pages/QuizPage"));
 const SummaryPage = lazy(() => import("@/pages/SummaryPage"));
 const StudyModePage = lazy(() => import("@/pages/StudyModePage"));
-const TrackStudyPage = lazy(() => import("@/pages/TrackStudyPage"));
+const TrackStudyPage = lazy(() => import("@/pages/TrackStudyPageNew"));
 const ChatPage = lazy(() => import("@/pages/ChatPage"));
 const AdminPage = lazy(() => import("@/pages/AdminPage"));
 
@@ -39,6 +41,17 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
+
+  return <>{children}</>;
+}
+
+function AdminOnlyRoute({ children }: { children: ReactNode }) {
+  const { user, isLoading } = useAuth();
+
+  if (isLoading) return <LoadingFallback />;
+
+  const isAdmin = user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+  if (!isAdmin) return <Navigate to="/dashboard" replace />;
 
   return <>{children}</>;
 }
@@ -147,7 +160,9 @@ function AppRoutes() {
           path="/admin"
           element={
             <ProtectedRoute>
-              <AdminPage />
+              <AdminOnlyRoute>
+                <AdminPage />
+              </AdminOnlyRoute>
             </ProtectedRoute>
           }
         />
@@ -163,7 +178,9 @@ export default function App() {
   return (
     <AuthProvider>
       <TooltipProvider>
-        <AppRoutes />
+        <StudyTimerProvider>
+          <AppRoutes />
+        </StudyTimerProvider>
       </TooltipProvider>
     </AuthProvider>
   );

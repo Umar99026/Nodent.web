@@ -9,10 +9,11 @@
   --font-sans: 'DM Sans', system-ui, -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
 
-  --color-brand: #10b981;
-  --color-brand-light: #34d399;
-  --color-brand-dark: #059669;
-  --color-brand-deep: #047857;
+  /* Brand (blue) */
+  --color-brand: #3797D3;
+  --color-brand-light: #76c1e7;
+  --color-brand-dark: #2b7fbf;
+  --color-brand-deep: #1e5fa0;
   --color-gold: #f59e0b;
   --color-gold-light: #fbbf24;
   --color-gold-dark: #d97706;
@@ -73,32 +74,32 @@
   --card-foreground: #0f172a;
   --popover: #ffffff;
   --popover-foreground: #0f172a;
-  --primary: #10b981;
+  --primary: #3797D3;
   --primary-foreground: #ffffff;
   --secondary: #f1f5f9;
   --secondary-foreground: #1e293b;
   --muted: #f1f0ed;
   --muted-foreground: #64748b;
-  --accent: #10b981;
+  --accent: #3797D3;
   --accent-foreground: #ffffff;
   --destructive: #ef4444;
   --border: rgba(15, 23, 42, 0.08);
   --input: rgba(15, 23, 42, 0.08);
-  --ring: #10b981;
-  --chart-1: #10b981;
-  --chart-2: #059669;
+  --ring: #3797D3;
+  --chart-1: #3797D3;
+  --chart-2: #2b7fbf;
   --chart-3: #f59e0b;
   --chart-4: #8b5cf6;
   --chart-5: #ec4899;
   --radius: 0.75rem;
   --sidebar: #0f172a;
   --sidebar-foreground: rgba(255, 255, 255, 0.9);
-  --sidebar-primary: #10b981;
+  --sidebar-primary: #3797D3;
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: rgba(255, 255, 255, 0.06);
   --sidebar-accent-foreground: rgba(255, 255, 255, 0.9);
   --sidebar-border: rgba(255, 255, 255, 0.06);
-  --sidebar-ring: #10b981;
+  --sidebar-ring: #3797D3;
 }
 
 @layer base {
@@ -108,13 +109,14 @@
   body {
     @apply bg-background text-foreground antialiased;
     background-image:
-      radial-gradient(ellipse at 15% 0%, rgba(16, 185, 129, 0.04) 0%, transparent 50%),
+      radial-gradient(ellipse at 15% 0%, rgba(55, 151, 211, 0.04) 0%, transparent 50%),
       radial-gradient(ellipse at 85% 0%, rgba(245, 158, 11, 0.03) 0%, transparent 50%),
       radial-gradient(ellipse at 50% 100%, rgba(15, 23, 42, 0.02) 0%, transparent 50%);
     background-attachment: fixed;
   }
   html {
     @apply font-sans scroll-smooth;
+    font-size: 18px;
   }
   h1, h2, h3 {
     font-family: var(--font-display);
@@ -149,7 +151,7 @@
 
 /* Gradient glow for accent elements */
 .glow-brand {
-  box-shadow: 0 0 20px rgba(16, 185, 129, 0.15), 0 0 40px rgba(16, 185, 129, 0.05);
+  box-shadow: 0 0 20px rgba(55, 151, 211, 0.15), 0 0 40px rgba(55, 151, 211, 0.05);
 }
 
 .glow-gold {
@@ -223,7 +225,7 @@
 
 /* Academic underline accent */
 .academic-underline {
-  background-image: linear-gradient(to right, #10b981, #34d399);
+  background-image: linear-gradient(to right, #3797D3, #76c1e7);
   background-size: 100% 2px;
   background-position: 0 100%;
   background-repeat: no-repeat;

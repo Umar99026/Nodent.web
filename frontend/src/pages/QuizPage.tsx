@@ -168,7 +168,7 @@ export default function QuizPage() {
 
   // Handle answer
   const handleAnswer = useCallback(
-    (qKey: string, isCorrect: boolean | null) => {
+    (qKey: string, isCorrect: boolean | null, marks: number, topic: string) => {
       setAnswers((prev) => {
         const next = { ...prev, [qKey]: isCorrect };
 
@@ -201,7 +201,9 @@ export default function QuizPage() {
           body: JSON.stringify({
             subjectId,
             questionKey: qKey,
-            correct: isCorrect,
+            isCorrect,
+            marks,
+            topic,
           }),
         }).catch(() => {
           // non-critical
@@ -219,6 +221,13 @@ export default function QuizPage() {
   };
 
   const currentQuestion = questions[currentIndex] ?? null;
+  const currentMarks =
+    currentQuestion && typeof currentQuestion.marks === "number"
+      ? currentQuestion.marks
+      : currentQuestion?.type === "mcq"
+        ? 1
+        : 2;
+  const currentTopic = currentQuestion?.topic ?? "General";
   const answeredCount = Object.keys(answers).length;
   const currentQKey = subjectId
     ? questionKey(subjectId, currentIndex)
@@ -290,8 +299,19 @@ export default function QuizPage() {
   return (
     <AppShell title={subject ? `${subject.name} Practice` : "Practice"}>
       <div className="space-y-6">
-        {/* Progress bar */}
+        {/* Progress bar + Study Mode quick access */}
         <QuizProgress current={answeredCount} total={questions.length} />
+
+        <div className="flex justify-end">
+          <Button
+            variant="outline"
+            onClick={() => navigate(`/study/${subjectId}`)}
+            className="gap-2"
+          >
+            <Clock className="size-4" />
+            Study Mode
+          </Button>
+        </div>
 
         {/* Two-column layout */}
         <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
@@ -304,7 +324,12 @@ export default function QuizPage() {
                     key={currentQKey}
                     question={currentQuestion}
                     onAnswer={(correct) =>
-                      handleAnswer(currentQKey, correct)
+                      handleAnswer(
+                        currentQKey,
+                        correct,
+                        currentMarks,
+                        currentTopic,
+                      )
                     }
                     disabled={isCurrentAnswered}
                   />
@@ -314,7 +339,12 @@ export default function QuizPage() {
                     key={currentQKey}
                     question={currentQuestion}
                     onAnswer={(correct) =>
-                      handleAnswer(currentQKey, correct)
+                      handleAnswer(
+                        currentQKey,
+                        correct,
+                        currentMarks,
+                        currentTopic,
+                      )
                     }
                     disabled={isCurrentAnswered}
                   />
@@ -325,7 +355,14 @@ export default function QuizPage() {
                     question={currentQuestion}
                     subjectId={subjectId}
                     questionKey={currentQKey}
-                    onAnswer={() => handleAnswer(currentQKey, null)}
+                    onAnswer={(correct) =>
+                      handleAnswer(
+                        currentQKey,
+                        correct,
+                        currentMarks,
+                        currentTopic,
+                      )
+                    }
                     disabled={isCurrentAnswered}
                   />
                 )}

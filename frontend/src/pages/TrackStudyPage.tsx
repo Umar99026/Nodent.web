@@ -223,7 +223,7 @@ export default function TrackStudyPage() {
                   cy={ringSize / 2}
                   r={radius}
                   fill="none"
-                  stroke="#10b981"
+                  stroke="#3797D3"
                   strokeWidth={strokeWidth}
                   strokeLinecap="round"
                   strokeDasharray={circumference}
@@ -331,7 +331,7 @@ export default function TrackStudyPage() {
                 progress={goalProgress}
                 size={130}
                 strokeWidth={10}
-                color="#10b981"
+                color="#3797D3"
               />
             </div>
 

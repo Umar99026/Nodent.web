@@ -130,6 +130,10 @@ export default function SummaryPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
+  const [leaderboardRange, setLeaderboardRange] = useState<"week" | "all">(
+    "week",
+  );
+
   const [stats, setStats] = useState<CompetitionStats | null>(null);
   const [loadingStats, setLoadingStats] = useState(true);
   const [statsError, setStatsError] = useState<string | null>(null);
@@ -163,8 +167,9 @@ export default function SummaryPage() {
     let cancelled = false;
     async function fetchStats() {
       try {
+        const rangeParam = leaderboardRange === "week" ? "week" : "all";
         const data = await apiFetch<CompetitionStats>(
-          `/api/competition/${subjectId}/stats`
+          `/api/competition/${subjectId}/stats?range=${rangeParam}`
         );
         if (!cancelled) setStats(data);
       } catch (err) {
@@ -182,7 +187,7 @@ export default function SummaryPage() {
     return () => {
       cancelled = true;
     };
-  }, [subjectId]);
+  }, [subjectId, leaderboardRange]);
 
   // Reset practice
   const handleReset = () => {
@@ -322,13 +327,44 @@ export default function SummaryPage() {
             {/* ---- Leaderboard ---- */}
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2 font-display text-lg">
-                  <TrendingUp className="size-5 text-brand-dark" />
-                  Leaderboard
-                </CardTitle>
-                <CardDescription>
-                  Top performers for this subject
-                </CardDescription>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2 font-display text-lg">
+                      <TrendingUp className="size-5 text-brand-dark" />
+                      Leaderboard
+                    </CardTitle>
+                    <CardDescription>
+                      Top performers for this subject
+                    </CardDescription>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant={leaderboardRange === "week" ? "default" : "outline"}
+                      className={
+                        leaderboardRange === "week"
+                          ? "bg-brand text-white hover:bg-brand-dark"
+                          : ""
+                      }
+                      onClick={() => setLeaderboardRange("week")}
+                    >
+                      This Week
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={leaderboardRange === "all" ? "default" : "outline"}
+                      className={
+                        leaderboardRange === "all"
+                          ? "bg-brand text-white hover:bg-brand-dark"
+                          : ""
+                      }
+                      onClick={() => setLeaderboardRange("all")}
+                    >
+                      All Time
+                    </Button>
+                  </div>
+                </div>
               </CardHeader>
               <CardContent>
                 <Table>

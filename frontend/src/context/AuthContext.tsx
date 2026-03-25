@@ -36,6 +36,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 interface BootstrapResponse {
   user: User;
+  customQuestions?: Record<string, unknown[]>;
   [key: string]: unknown;
 }
 
@@ -82,6 +83,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .then((data) => {
         const user = data.user;
         localStorage.setItem(STORAGE_KEYS.currentUser, JSON.stringify(user));
+        if (data.customQuestions) {
+          // Cache admin-added questions so practice pages can render them.
+          localStorage.setItem(
+            STORAGE_KEYS.customQuestions,
+            JSON.stringify(data.customQuestions),
+          );
+        }
         setState({
           user,
           token: storedToken,

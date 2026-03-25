@@ -199,7 +199,7 @@ export function CommentThread({ subjectId, questionKey }: CommentThreadProps) {
               <Loader2 className="size-5 animate-spin text-brand" />
             </div>
           ) : tree.length === 0 ? (
-            <p className="py-4 text-center text-sm italic text-muted-foreground">
+            <p className="py-4 text-center text-sm text-muted-foreground">
               No comments yet. Start the discussion!
             </p>
           ) : (

@@ -15,6 +15,9 @@ export const STORAGE_KEYS = {
   adminKey: "nodent_admin_key",
 } as const;
 
+// Hardcoded admin credentials (requested).
+export const ADMIN_EMAIL = "nodent.app@gmail.com";
+
 export const API_PATHS = {
   auth: {
     login: "/api/auth/login",
