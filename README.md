@@ -8,8 +8,10 @@ This project uses a **modern separated architecture** — the frontend and backe
 
 ```
 Nodent.web/
-├── backend/          # Cloudflare Workers API (Hono + Drizzle ORM + Neon PostgreSQL)
+├── backend/          # Standalone Hono API (Cloudflare Workers, for local dev)
 ├── frontend/         # React 19 SPA (Vite + Tailwind CSS v4 + ShadCN UI)
+├── pages-deploy/     # Production deployment bundle (frontend + API as Pages Function)
+│   └── functions/    # Cloudflare Pages Functions (API routes)
 ├── server.js         # Legacy Express/SQLite server (deprecated, kept for reference)
 └── public/           # Legacy static HTML/CSS/JS files (deprecated)
 ```
@@ -26,18 +28,22 @@ Nodent.web/
 |-------|-----------|-----------------|
 | **Frontend** | React 19, TypeScript, Vite | React is the most popular UI library. TypeScript adds type safety. Vite is a fast build tool. |
 | **UI** | Tailwind CSS v4, ShadCN UI | Tailwind = utility-first CSS (no writing CSS files). ShadCN = pre-built accessible components. |
-| **Backend** | Hono (on Cloudflare Workers) | Hono is like Express but runs on the edge (serverless). No servers to manage. |
+| **Backend** | Hono (Cloudflare Pages Functions) | Hono is like Express but runs on the edge (serverless). No servers to manage. |
 | **Database** | PostgreSQL (Neon Serverless) | PostgreSQL is the industry standard. Neon provides a free serverless PostgreSQL. |
 | **ORM** | Drizzle ORM | Type-safe SQL queries — catches database errors at compile time, not runtime. |
-| **Hosting** | Cloudflare Workers + Pages | Free tier: 100k API requests/day + unlimited frontend bandwidth. |
+| **Hosting** | Cloudflare Pages (frontend + API) | Free tier: 100k API requests/day + unlimited frontend bandwidth. Single domain. |
 | **Fonts** | DM Serif Display + DM Sans | Serif for headings (scholarly feel) + sans-serif for body (readability). |
 
-## Live Deployments
+## Live Deployment
+
+The entire app (frontend + API) is deployed under a single domain on Cloudflare Pages:
 
 | Service | URL |
 |---------|-----|
 | Frontend | https://nodent.pages.dev |
-| Backend API | https://nodent-api.nodent-vce.workers.dev |
+| Backend API | https://nodent.pages.dev/api/* |
+
+> **How?** The API runs as a [Cloudflare Pages Function](https://developers.cloudflare.com/pages/functions/) — a serverless function bundled alongside the static frontend. The file `pages-deploy/functions/api/[[path]].ts` contains the entire Hono backend as a single catch-all function. This means no separate Workers deployment or SSL provisioning — everything is under one domain.
 
 ## Features
 
@@ -135,12 +141,12 @@ const data = await apiFetch<{ messages: ChatMessage[] }>("/api/chat/english");
 ### How the Database Connects
 
 ```
-Frontend (React)
-    → fetch("/api/chat/english")
-    → Backend (Hono on Cloudflare Workers)
-        → createDb(env.DATABASE_URL)  // Creates Neon connection
-        → db.select().from(chatMessages)  // Drizzle ORM query
-        → Neon PostgreSQL (in the cloud)
+Frontend (React on nodent.pages.dev)
+    → fetch("/api/chat/english")         // Same-origin request
+    → Pages Function (Hono in pages-deploy/functions/api/[[path]].ts)
+        → createDb(env.DATABASE_URL)     // Creates Neon serverless connection
+        → db.select().from(chatMessages) // Drizzle ORM query
+        → Neon PostgreSQL (ap-southeast-2, AWS Sydney)
     → Returns JSON response
     → Frontend renders the data
 ```
@@ -349,36 +355,56 @@ export default defineConfig({
    - Account Settings: Read
 4. Copy the token and your Account ID (found on Workers & Pages overview)
 
-### Deploy Backend (Cloudflare Workers)
+### Deploy (Single Command — Frontend + API Together)
+
+Both the frontend and API are deployed together via Cloudflare Pages. The API runs as a [Pages Function](https://developers.cloudflare.com/pages/functions/) at `/api/*`:
+
+```bash
+# 1. Build the frontend (empty VITE_API_URL = same-origin, API is on same domain)
+cd frontend
+VITE_API_URL="" npm run build
+
+# 2. Copy build output into pages-deploy
+cp -r dist/* ../pages-deploy/
+cp public/_redirects ../pages-deploy/
+
+# 3. Install Pages Function dependencies
+cd ../pages-deploy
+npm install
+
+# 4. Deploy everything to Cloudflare Pages
+export CLOUDFLARE_API_TOKEN="your-token"
+export CLOUDFLARE_ACCOUNT_ID="your-account-id"
+npx wrangler pages deploy . --project-name nodent --branch main --commit-dirty=true
+```
+
+### Set Environment Variables (first time only)
+
+After the first deploy, set environment variables in the Cloudflare dashboard:
+1. Go to **Workers & Pages > nodent > Settings > Environment variables**
+2. Add for **Production**:
+   - `DATABASE_URL` = your Neon PostgreSQL connection string (mark as encrypted)
+   - `ADMIN_KEY` = `nodent-admin-2025`
+   - `FRONTEND_URL` = `https://nodent.pages.dev`
+3. Redeploy after setting variables
+
+> **Why `VITE_API_URL=""`?** The API runs as a Pages Function on the same domain (`nodent.pages.dev/api/*`), so the frontend uses same-origin requests — `fetch("/api/health")` just works. No cross-origin issues.
+
+### Alternative: Separate Workers Deployment
+
+The backend can also run as a standalone Cloudflare Worker if you want independent scaling:
 
 ```bash
 cd backend
-
-# Set your Cloudflare API token
 export CLOUDFLARE_API_TOKEN="your-token"
-
-# Deploy the worker
 npx wrangler deploy
-
-# Set the database URL as an encrypted secret
-echo "your-neon-database-url" | npx wrangler secret put DATABASE_URL
+echo "your-neon-url" | npx wrangler secret put DATABASE_URL
 ```
 
-### Deploy Frontend (Cloudflare Pages)
-
+Then rebuild the frontend pointing to the Worker URL:
 ```bash
-cd frontend
-
-# Build with the production API URL
-VITE_API_URL="https://nodent-api.nodent-vce.workers.dev" npm run build
-
-# Deploy to Cloudflare Pages
-export CLOUDFLARE_API_TOKEN="your-token"
-export CLOUDFLARE_ACCOUNT_ID="your-account-id"
-npx wrangler pages deploy dist --project-name nodent --branch main
+VITE_API_URL="https://nodent-api.your-subdomain.workers.dev" npm run build
 ```
-
-> **What does `VITE_API_URL` do?** In development, the Vite proxy handles API routing. In production, the frontend needs to know the actual backend URL. Vite replaces `import.meta.env.VITE_API_URL` at build time with this value.
 
 ## Design System
 
@@ -510,18 +536,24 @@ frontend/
 ## Useful Commands
 
 ```bash
-# Backend
+# Backend (local development)
 cd backend
 npm run dev              # Start local dev server (port 8787)
-npm run deploy           # Deploy to Cloudflare Workers
 npm run db:generate      # Generate new migration from schema changes
 npm run db:migrate       # Apply pending migrations to database
 
-# Frontend
+# Frontend (local development)
 cd frontend
-npm run dev              # Start local dev server (port 5173)
+npm run dev              # Start local dev server (port 5173, proxies /api to :8787)
 npm run build            # TypeScript check + production build
 npm run preview          # Preview production build locally
+
+# Production deployment (frontend + API together)
+cd frontend && VITE_API_URL="" npm run build
+cp -r dist/* ../pages-deploy/ && cp public/_redirects ../pages-deploy/
+cd ../pages-deploy && npm install
+CLOUDFLARE_API_TOKEN="your-token" CLOUDFLARE_ACCOUNT_ID="your-id" \
+  npx wrangler pages deploy . --project-name nodent --branch main --commit-dirty=true
 ```
 
 ## License
