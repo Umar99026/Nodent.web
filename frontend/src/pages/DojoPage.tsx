@@ -7,10 +7,11 @@ import { API_PATHS, STORAGE_KEYS } from "@/lib/constants";
 import { baseSubjects } from "@/lib/subjects";
 
 import { AppShell } from "@/components/layout/AppShell";
+import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Table,
@@ -86,9 +87,7 @@ function pickRandomQuestions<T>(arr: T[], count: number): T[] {
 
 export default function DojoPage() {
   const navigate = useNavigate();
-
-  const [search, setSearch] = useState("");
-  const [playerResults, setPlayerResults] = useState<{ id: string; username: string }[]>([]);
+  const { user } = useAuth();
 
   const [subjectId, setSubjectId] = useState<string>(() => baseSubjects[0]?.id ?? "");
   const [topicMode, setTopicMode] = useState<string>("mix"); // "mix" or a specific topic
@@ -107,7 +106,7 @@ export default function DojoPage() {
     }
   });
 
-  const [rangeMode, setRangeMode] = useState<"all" | "week">("all");
+  const [rangeMode, setRangeMode] = useState<"all" | "week" | "daily">("all");
   const [leaderboard, setLeaderboard] = useState<
     { username: string; percent: number; correct: number; total: number }[]
   >([]);
@@ -115,6 +114,9 @@ export default function DojoPage() {
 
   const [incomingChallenges, setIncomingChallenges] = useState<Challenge[]>([]);
   const seenChallengeIdsRef = useRef<Set<string>>(new Set());
+
+  const [topicDialogOpen, setTopicDialogOpen] = useState(false);
+  const [challengeOpponentUsername, setChallengeOpponentUsername] = useState<string | null>(null);
 
   const practiceQuestions = useMemo(() => {
     if (!subjectId) return [];
@@ -129,30 +131,6 @@ export default function DojoPage() {
     }
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [practiceQuestions]);
-
-  // Poll players search
-  useEffect(() => {
-    const q = search.trim();
-    if (!q) {
-      setPlayerResults([]);
-      return;
-    }
-    let cancelled = false;
-    const t = setTimeout(async () => {
-      try {
-        const data = await apiFetch<{ users: { id: string; username: string }[] }>(API_PATHS.dojo.users(q));
-        if (cancelled) return;
-        setPlayerResults(data.users ?? []);
-      } catch {
-        if (cancelled) return;
-        setPlayerResults([]);
-      }
-    }, 250);
-    return () => {
-      cancelled = true;
-      clearTimeout(t);
-    };
-  }, [search]);
 
   // Refresh customQuestions so topic dropdown stays accurate after admin edits.
   useEffect(() => {
@@ -298,44 +276,13 @@ export default function DojoPage() {
               <CardTitle className="font-display text-xl">Challenge a player</CardTitle>
             </CardHeader>
             <CardContent className="space-y-5">
-              <div className="space-y-1.5">
-                <Label>Search by username</Label>
-                <Input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Type a username..."
-                  className="h-11 border-black/10 bg-white text-black placeholder:text-black/40"
-                />
-              </div>
-
-              {playerResults.length > 0 ? (
-                <div className="space-y-2">
-                  <Label className="text-xs text-black/70">Players</Label>
-                  <div className="space-y-2">
-                    {playerResults.map((p) => (
-                      <div key={p.id} className="flex items-center justify-between gap-3 rounded-xl border border-black/10 bg-white px-4 py-3">
-                        <div className="min-w-0">
-                          <div className="truncate font-semibold text-black">{p.username}</div>
-                          <div className="text-xs text-black/50">{p.id}</div>
-                        </div>
-                        <Button
-                          size="sm"
-                          disabled={isChallenging}
-                          className="h-9 bg-[#0b0f19] text-white hover:bg-[#0b0f19]/90"
-                          onClick={() => void handleChallenge(p.username)}
-                        >
-                          Challenge
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-4">
                 <div className="space-y-1.5">
                   <Label>Subject</Label>
-                  <Select value={subjectId} onValueChange={(val) => val && setSubjectId(val)}>
+                  <Select
+                    value={subjectId}
+                    onValueChange={(val) => val && setSubjectId(val)}
+                  >
                     <SelectTrigger className="h-11 border-black/10 bg-white text-black">
                       <SelectValue placeholder="Select subject" />
                     </SelectTrigger>
@@ -353,30 +300,104 @@ export default function DojoPage() {
                   </Select>
                 </div>
 
-                <div className="space-y-1.5">
-                  <Label>Topic</Label>
-                  <Select value={topicMode} onValueChange={(val) => val && setTopicMode(val)}>
-                    <SelectTrigger className="h-11 border-black/10 bg-white text-black">
-                      <SelectValue placeholder="Mix all topics" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-white text-black border border-black/10">
-                      <SelectItem
-                        value="mix"
-                        className="text-black focus:bg-white/90"
-                      >
-                        Mix all
-                      </SelectItem>
-                      {availableTopics.map((t) => (
-                        <SelectItem
-                          key={t}
-                          value={t}
-                          className="text-black focus:bg-white/90"
-                        >
-                          {t}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="text-sm font-semibold text-black/70">
+                    Pick opponent from the leaderboard
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      className={
+                        rangeMode === "all"
+                          ? "bg-[#0b0f19] text-white hover:bg-[#0b0f19]/90"
+                          : "bg-white text-black hover:bg-white/90 border border-black/10"
+                      }
+                      onClick={() => setRangeMode("all")}
+                      disabled={leaderboardLoading}
+                    >
+                      Main
+                    </Button>
+                    <Button
+                      size="sm"
+                      className={
+                        rangeMode === "week"
+                          ? "bg-[#0b0f19] text-white hover:bg-[#0b0f19]/90"
+                          : "bg-white text-black hover:bg-white/90 border border-black/10"
+                      }
+                      onClick={() => setRangeMode("week")}
+                      disabled={leaderboardLoading}
+                    >
+                      Weekly
+                    </Button>
+                    <Button
+                      size="sm"
+                      className={
+                        rangeMode === "daily"
+                          ? "bg-[#0b0f19] text-white hover:bg-[#0b0f19]/90"
+                          : "bg-white text-black hover:bg-white/90 border border-black/10"
+                      }
+                      onClick={() => setRangeMode("daily")}
+                      disabled={leaderboardLoading}
+                    >
+                      Daily
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-black/10 bg-white px-2 py-2">
+                  {leaderboardLoading ? (
+                    <div className="px-4 py-6 text-sm text-black/70">
+                      Loading…
+                    </div>
+                  ) : leaderboard.length === 0 ? (
+                    <div className="px-4 py-6 text-sm text-black/60">
+                      No leaderboard data yet.
+                    </div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="text-[#0b0f19]/60">
+                            Player
+                          </TableHead>
+                          <TableHead className="text-right text-[#0b0f19]/60">
+                            %
+                          </TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {leaderboard.map((row, idx) => {
+                          const isMe = (user?.username ?? "") === row.username;
+                          return (
+                            <TableRow key={`${row.username}-${idx}`}>
+                              <TableCell className="font-medium text-[#0b0f19]">
+                                <button
+                                  type="button"
+                                  disabled={isMe}
+                                  className={`block w-full text-left ${
+                                    isMe
+                                      ? "cursor-not-allowed opacity-50"
+                                      : "hover:underline"
+                                  }`}
+                                  onClick={() => {
+                                    if (isMe) return;
+                                    setChallengeOpponentUsername(row.username);
+                                    setTopicMode("mix");
+                                    setTopicDialogOpen(true);
+                                  }}
+                                >
+                                  {idx + 1}. {row.username}
+                                </button>
+                              </TableCell>
+                              <TableCell className="text-right font-semibold text-[#0b0f19] tabular-nums">
+                                {row.percent}%
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  )}
                 </div>
               </div>
             </CardContent>
@@ -436,83 +457,85 @@ export default function DojoPage() {
                 )}
               </CardContent>
             </Card>
-
-            <Card className="border-black/10 bg-white text-black paper-texture">
-              <CardHeader className="pb-4">
-                <CardTitle className="font-display text-xl">
-                  Leaderboard
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="text-sm text-black/70">
-                    {baseSubjects.find((s) => s.id === subjectId)?.name ?? subjectId}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      size="sm"
-                      className={
-                        rangeMode === "all"
-                          ? "bg-[#0b0f19] text-white hover:bg-[#0b0f19]/90"
-                          : "bg-white text-black hover:bg-white/90 border border-black/10"
-                      }
-                      onClick={() => setRangeMode("all")}
-                      disabled={leaderboardLoading}
-                    >
-                      All-time
-                    </Button>
-                    <Button
-                      size="sm"
-                      className={
-                        rangeMode === "week"
-                          ? "bg-[#0b0f19] text-white hover:bg-[#0b0f19]/90"
-                          : "bg-white text-black hover:bg-white/90 border border-black/10"
-                      }
-                      onClick={() => setRangeMode("week")}
-                      disabled={leaderboardLoading}
-                    >
-                      This week
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-black/10 bg-white px-2 py-2">
-                  {leaderboardLoading ? (
-                    <div className="px-4 py-6 text-sm text-black/70">
-                      Loading…
-                    </div>
-                  ) : leaderboard.length === 0 ? (
-                    <div className="px-4 py-6 text-sm text-black/60">
-                      No leaderboard data yet.
-                    </div>
-                  ) : (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="text-[#0b0f19]/60">Player</TableHead>
-                          <TableHead className="text-right text-[#0b0f19]/60">%</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {leaderboard.map((row, idx) => (
-                          <TableRow key={`${row.username}-${idx}`}>
-                            <TableCell className="font-medium text-[#0b0f19]">
-                              {idx + 1}. {row.username}
-                            </TableCell>
-                            <TableCell className="text-right font-semibold text-[#0b0f19] tabular-nums">
-                              {row.percent}%
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
           </div>
         </div>
       </div>
+
+      <Dialog
+        open={topicDialogOpen}
+        onOpenChange={(nextOpen) => {
+          setTopicDialogOpen(nextOpen);
+        }}
+      >
+        <DialogContent className="border border-black/10 bg-white text-black p-6">
+          <DialogHeader>
+            <DialogTitle>
+              Challenge{" "}
+              {challengeOpponentUsername ? (
+                <span className="text-brand">{challengeOpponentUsername}</span>
+              ) : null}
+            </DialogTitle>
+            <DialogDescription>
+              Pick a topic (MCQ + Short Answer only).
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label>Topic</Label>
+              <Select
+                value={topicMode}
+                onValueChange={(val) => val && setTopicMode(val)}
+              >
+                <SelectTrigger className="h-11 border-black/10 bg-white text-black">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-white text-black border border-black/10">
+                  <SelectItem
+                    value="mix"
+                    className="text-black focus:bg-white/90"
+                  >
+                    Mix all topics
+                  </SelectItem>
+                  {availableTopics.map((t) => (
+                    <SelectItem
+                      key={t}
+                      value={t}
+                      className="text-black focus:bg-white/90"
+                    >
+                      {t}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <DialogFooter className="mt-4">
+            <Button
+              variant="outline"
+              className="border-black/20 text-black hover:bg-black/5"
+              onClick={() => setTopicDialogOpen(false)}
+              disabled={isChallenging}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="bg-[#0b0f19] text-white hover:bg-[#0b0f19]/90"
+              onClick={() => {
+                if (!challengeOpponentUsername) return;
+                void handleChallenge(challengeOpponentUsername);
+                setTopicDialogOpen(false);
+              }}
+              disabled={
+                isChallenging || !challengeOpponentUsername || availableTopics.length === 0
+              }
+            >
+              Challenge
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppShell>
   );
 }

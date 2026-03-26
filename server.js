@@ -228,6 +228,7 @@ async function initDb() {
       username TEXT NOT NULL,
       title TEXT NOT NULL,
       body TEXT NOT NULL,
+      image_urls TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -248,8 +249,55 @@ async function initDb() {
     )
   `);
 
+  // Optional images on posts (JSON array of URLs).
+  await ensureColumn("forum_posts", "image_urls", "TEXT");
+
   await run(`CREATE INDEX IF NOT EXISTS idx_forum_posts_subject_updated ON forum_posts(subject_id, updated_at)`);
   await run(`CREATE INDEX IF NOT EXISTS idx_forum_replies_post_created ON forum_replies(post_id, created_at)`);
+
+  // ── Dojo (PvP battles) ───────────────────────────────────────────────
+  await run(`
+    CREATE TABLE IF NOT EXISTS dojo_challenges (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      challenger_id INTEGER NOT NULL,
+      opponent_id INTEGER NOT NULL,
+      subject_id TEXT NOT NULL,
+      topic TEXT NOT NULL DEFAULT 'General',
+      question_set TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      opponent_read INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      accepted_at TEXT,
+      FOREIGN KEY (challenger_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (opponent_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS dojo_battles (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      challenge_id INTEGER NOT NULL,
+      subject_id TEXT NOT NULL,
+      topic TEXT NOT NULL DEFAULT 'General',
+      player1_id INTEGER NOT NULL,
+      player2_id INTEGER NOT NULL,
+      player1_score INTEGER NOT NULL DEFAULT 0,
+      player2_score INTEGER NOT NULL DEFAULT 0,
+      current_index INTEGER NOT NULL DEFAULT 0,
+      question_started_at TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active',
+      winner_id INTEGER,
+      question_set TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (challenge_id) REFERENCES dojo_challenges(id) ON DELETE CASCADE,
+      FOREIGN KEY (player1_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (player2_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+
+  await run(`CREATE INDEX IF NOT EXISTS idx_dojo_challenges_opponent_status ON dojo_challenges(opponent_id, status, opponent_read)`);
+  await run(`CREATE INDEX IF NOT EXISTS idx_dojo_battles_status ON dojo_battles(status, updated_at)`);
 
   await run(`
     CREATE TABLE IF NOT EXISTS question_attempts (
@@ -337,8 +385,14 @@ async function authMiddleware(req, res, next) {
 function adminMiddleware(req, res, next) {
   const email = req.user?.email ? String(req.user.email).toLowerCase() : "";
   const adminEmail = String(ADMIN_EMAIL).toLowerCase();
+  const headerKey = req.headers["x-admin-key"]
+    ? String(req.headers["x-admin-key"])
+    : "";
 
-  if (!email || email !== adminEmail) {
+  const isAdminByEmail = !!email && email === adminEmail;
+  const isAdminByKey = headerKey.trim() && headerKey.trim() === String(ADMIN_KEY);
+
+  if (!isAdminByEmail && !isAdminByKey) {
     return res.status(403).json({ error: "Admin access denied." });
   }
   next();
@@ -834,6 +888,7 @@ app.get("/api/forum/:subjectId/posts", authMiddleware, async (req, res) => {
         p.username,
         p.title,
         p.body,
+        p.image_urls,
         p.created_at,
         p.updated_at,
         (SELECT COUNT(*) FROM forum_replies r WHERE r.post_id = p.id) AS reply_count,
@@ -860,6 +915,7 @@ app.get("/api/forum/:subjectId/posts", authMiddleware, async (req, res) => {
         username: r.username,
         title: r.title,
         body: r.body,
+        imageUrls: r.image_urls ? JSON.parse(r.image_urls) : undefined,
         createdAt: r.created_at,
         updatedAt: r.updated_at,
         replyCount: Number(r.reply_count ?? 0),
@@ -880,11 +936,20 @@ app.post("/api/forum/:subjectId/posts", authMiddleware, async (req, res) => {
     if (!title) return res.status(400).json({ error: "Title is required." });
     if (!body) return res.status(400).json({ error: "Post text is required." });
 
+    const imageUrlsRaw = Array.isArray(req.body.imageUrls) ? req.body.imageUrls : null;
+    const imageUrls = imageUrlsRaw
+      ? imageUrlsRaw
+          .map((u) => String(u || "").trim())
+          .filter(Boolean)
+          .slice(0, 6)
+      : null;
+    const imageUrlsJson = imageUrls && imageUrls.length ? JSON.stringify(imageUrls) : null;
+
     const createdAt = nowIso();
     const result = await run(
-      `INSERT INTO forum_posts (subject_id, user_id, username, title, body, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [subjectId, req.user.id, req.user.username, title, body, createdAt, createdAt]
+      `INSERT INTO forum_posts (subject_id, user_id, username, title, body, image_urls, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [subjectId, req.user.id, req.user.username, title, body, imageUrlsJson, createdAt, createdAt]
     );
 
     res.json({
@@ -895,6 +960,7 @@ app.post("/api/forum/:subjectId/posts", authMiddleware, async (req, res) => {
         username: req.user.username,
         title,
         body,
+        imageUrls: imageUrls ?? undefined,
         createdAt,
         updatedAt: createdAt,
         replyCount: 0,
@@ -914,7 +980,7 @@ app.get("/api/forum/:subjectId/posts/:postId", authMiddleware, async (req, res) 
     if (!postId || Number.isNaN(postId)) return res.status(400).json({ error: "Invalid post id." });
 
     const post = await get(
-      `SELECT id, subject_id, user_id, username, title, body, created_at, updated_at
+      `SELECT id, subject_id, user_id, username, title, body, image_urls, created_at, updated_at
        FROM forum_posts
        WHERE id = ? AND subject_id = ?`,
       [postId, subjectId]
@@ -938,6 +1004,7 @@ app.get("/api/forum/:subjectId/posts/:postId", authMiddleware, async (req, res) 
         username: post.username,
         title: post.title,
         body: post.body,
+        imageUrls: post.image_urls ? JSON.parse(post.image_urls) : undefined,
         createdAt: post.created_at,
         updatedAt: post.updated_at
       },
@@ -993,6 +1060,391 @@ app.post("/api/forum/:subjectId/posts/:postId/replies", authMiddleware, async (r
   } catch (error) {
     console.error("[Forum replies POST] Error:", error);
     res.status(500).json({ error: "Could not add reply." });
+  }
+});
+
+// ── Dojo (PvP battles) ───────────────────────────────────────────────────────
+
+function normalizeAnswerForDojo(text) {
+  if (typeof text !== "string") return "";
+  return text.trim().toLowerCase().replace(/[.,;:!?]+$/, "");
+}
+
+function isQuestionCorrect(question, answerText, selectedOption) {
+  if (!question) return false;
+  const qType = String(question.type ?? "");
+  if (qType === "mcq") {
+    const correct = String(question.answer ?? "");
+    const sub = selectedOption != null ? String(selectedOption) : String(answerText ?? "");
+    return normalizeAnswerForDojo(sub) === normalizeAnswerForDojo(correct);
+  }
+
+  if (qType === "short" || qType === "short_answer") {
+    const accepted = Array.isArray(question.acceptedAnswers)
+      ? question.acceptedAnswers
+      : Array.isArray(question.accepted_answers)
+        ? question.accepted_answers
+        : [];
+    const sub = normalizeAnswerForDojo(String(answerText ?? ""));
+    if (!sub) return false;
+    return accepted.some((a) => normalizeAnswerForDojo(String(a)) === sub);
+  }
+
+  return false;
+}
+
+function serializeQuestionSet(questionSet) {
+  return JSON.stringify(questionSet ?? []);
+}
+
+function pickCurrentQuestion(battle, now) {
+  const questionSet = JSON.parse(battle.question_set ?? "[]");
+  const currentIndex = Number(battle.current_index ?? 0);
+  const question = questionSet[currentIndex] ?? null;
+  const startedAt = new Date(battle.question_started_at);
+  const elapsedSeconds = isNaN(startedAt.getTime())
+    ? 0
+    : Math.floor((now.getTime() - startedAt.getTime()) / 1000);
+  const timePerQuestion = 30;
+  const timeRemainingSeconds = Math.max(0, timePerQuestion - elapsedSeconds);
+  return { questionSet, currentIndex, question, timeRemainingSeconds, timePerQuestion };
+}
+
+function advanceBattleIfExpired(db, battleRow) {
+  return (async () => {
+    const now = new Date();
+    let battle = battleRow;
+    const { questionSet, timeRemainingSeconds, currentIndex } = pickCurrentQuestion(battle, now);
+
+    if (battle.status !== "active") return battle;
+    if (timeRemainingSeconds > 0) return battle;
+
+    // Auto-advance until the current question has remaining time
+    // or we reach the end.
+    while (battle.status === "active") {
+      const idx = Number(battle.current_index ?? 0);
+      if (idx >= 10) {
+        battle.status = "completed";
+        break;
+      }
+      battle = await db.get(
+        `SELECT * FROM dojo_battles WHERE id = ?`,
+        [battle.id],
+      );
+      const info = pickCurrentQuestion(battle, now);
+      if (info.timeRemainingSeconds > 0) break;
+      const nextIndex = idx + 1;
+      if (nextIndex >= 10) {
+        const p1 = Number(battle.player1_score ?? 0);
+        const p2 = Number(battle.player2_score ?? 0);
+        const winnerId = p1 === p2 ? null : p1 > p2 ? battle.player1_id : battle.player2_id;
+        await run(
+          `UPDATE dojo_battles SET current_index = ?, status = 'completed', winner_id = ?, updated_at = ? WHERE id = ?`,
+          [nextIndex, winnerId, nowIso(), battle.id],
+        );
+        battle = await get(`SELECT * FROM dojo_battles WHERE id = ?`, [battle.id]);
+        break;
+      }
+
+      await run(
+        `UPDATE dojo_battles SET current_index = ?, question_started_at = ?, updated_at = ? WHERE id = ?`,
+        [nextIndex, nowIso(), nowIso(), battle.id],
+      );
+      battle = await get(`SELECT * FROM dojo_battles WHERE id = ?`, [battle.id]);
+    }
+
+    return battle;
+  })();
+}
+
+app.get("/api/dojo/unread-count", authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const row = await get(
+      `SELECT COUNT(*) as c FROM dojo_challenges WHERE opponent_id = ? AND status = 'pending' AND opponent_read = 0`,
+      [userId],
+    );
+    res.json({ count: Number(row?.c ?? 0) });
+  } catch (error) {
+    console.error("[Dojo unread-count] Error:", error);
+    res.status(500).json({ error: "Could not load dojo notifications." });
+  }
+});
+
+app.get("/api/dojo/challenges", authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const rows = await all(
+      `SELECT c.id, c.challenger_id, u.username as challenger_username, c.subject_id, c.topic, c.created_at, c.opponent_read
+       FROM dojo_challenges c
+       JOIN users u ON u.id = c.challenger_id
+       WHERE c.opponent_id = ? AND c.status = 'pending'
+       ORDER BY c.created_at DESC
+       LIMIT 50`,
+      [userId],
+    );
+    res.json({
+      challenges: rows.map((r) => ({
+        id: String(r.id),
+        challengerId: String(r.challenger_id),
+        challengerUsername: r.challenger_username,
+        subjectId: r.subject_id,
+        topic: r.topic,
+        createdAt: r.created_at,
+        opponentRead: Number(r.opponent_read ?? 0) === 1,
+      })),
+    });
+  } catch (error) {
+    console.error("[Dojo challenges GET] Error:", error);
+    res.status(500).json({ error: "Could not load dojo challenges." });
+  }
+});
+
+app.post("/api/dojo/challenges/read", authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    await run(
+      `UPDATE dojo_challenges SET opponent_read = 1 WHERE opponent_id = ? AND status = 'pending'`,
+      [userId],
+    );
+    res.json({ ok: true });
+  } catch (error) {
+    console.error("[Dojo challenges read] Error:", error);
+    res.status(500).json({ error: "Could not mark as read." });
+  }
+});
+
+app.get("/api/dojo/users", authMiddleware, async (req, res) => {
+  try {
+    const search = String(req.query.search ?? "").trim();
+    if (!search) return res.json({ users: [] });
+    const rows = await all(
+      `SELECT id, username FROM users
+       WHERE username LIKE ? AND id != ?
+       ORDER BY username ASC
+       LIMIT 10`,
+      [`%${search}%`, req.user.id],
+    );
+    res.json({
+      users: rows.map((r) => ({ id: String(r.id), username: r.username })),
+    });
+  } catch (error) {
+    console.error("[Dojo users GET] Error:", error);
+    res.status(500).json({ error: "Could not load users." });
+  }
+});
+
+app.post("/api/dojo/challenges", authMiddleware, async (req, res) => {
+  try {
+    const opponentUsername = cleanText(req.body.opponentUsername, 40);
+    const subjectId = cleanText(req.body.subjectId, 80);
+    const topic = cleanText(req.body.topic || "General", 100);
+    const questionSetRaw = req.body.questionSet;
+
+    const questionSet = Array.isArray(questionSetRaw) ? questionSetRaw : null;
+    if (!opponentUsername || !subjectId || !questionSet) {
+      return res.status(400).json({ error: "Required fields missing." });
+    }
+    if (questionSet.length !== 10) {
+      return res.status(400).json({ error: "questionSet must contain exactly 10 questions." });
+    }
+
+    const opponent = await get(
+      `SELECT id FROM users WHERE LOWER(username) = LOWER(?)`,
+      [opponentUsername],
+    );
+    if (!opponent) return res.status(404).json({ error: "Opponent not found." });
+    if (opponent.id === req.user.id) {
+      return res.status(400).json({ error: "You cannot challenge yourself." });
+    }
+
+    // Only allow MCQ + Short Answer questions.
+    const invalid = questionSet.some((q) => {
+      const t = String(q?.type ?? "");
+      return !(t === "mcq" || t === "short" || t === "short_answer");
+    });
+    if (invalid) return res.status(400).json({ error: "Battle questions must be MCQ or Short Answer only." });
+
+    const createdAt = nowIso();
+    const result = await run(
+      `INSERT INTO dojo_challenges (challenger_id, opponent_id, subject_id, topic, question_set, status, opponent_read, created_at)
+       VALUES (?, ?, ?, ?, ?, 'pending', 0, ?)`,
+      [req.user.id, opponent.id, subjectId, topic, serializeQuestionSet(questionSet), createdAt],
+    );
+
+    res.json({ ok: true, challengeId: String(result.lastID) });
+  } catch (error) {
+    console.error("[Dojo challenge POST] Error:", error);
+    res.status(500).json({ error: "Could not create challenge." });
+  }
+});
+
+app.post("/api/dojo/challenges/:challengeId/accept", authMiddleware, async (req, res) => {
+  try {
+    const challengeId = Number(req.params.challengeId);
+    if (!challengeId || Number.isNaN(challengeId)) {
+      return res.status(400).json({ error: "Invalid challenge id." });
+    }
+
+    const challenge = await get(
+      `SELECT * FROM dojo_challenges WHERE id = ? AND opponent_id = ? AND status = 'pending'`,
+      [challengeId, req.user.id],
+    );
+    if (!challenge) return res.status(404).json({ error: "Challenge not found." });
+
+    const createdAt = nowIso();
+    const result = await run(
+      `INSERT INTO dojo_battles (challenge_id, subject_id, topic, player1_id, player2_id, player1_score, player2_score, current_index, question_started_at, status, winner_id, question_set, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, 0, 0, 0, ?, 'active', null, ?, ?, ?)`,
+      [
+        challenge.id,
+        challenge.subject_id,
+        challenge.topic,
+        challenge.challenger_id,
+        challenge.opponent_id,
+        createdAt,
+        challenge.question_set,
+        createdAt,
+        createdAt,
+      ],
+    );
+
+    await run(
+      `UPDATE dojo_challenges SET status = 'active', accepted_at = ?, opponent_read = 1 WHERE id = ?`,
+      [createdAt, challenge.id],
+    );
+
+    res.json({ ok: true, battleId: String(result.lastID) });
+  } catch (error) {
+    console.error("[Dojo accept] Error:", error);
+    res.status(500).json({ error: "Could not accept challenge." });
+  }
+});
+
+app.get("/api/dojo/battles/:battleId", authMiddleware, async (req, res) => {
+  try {
+    const battleId = Number(req.params.battleId);
+    if (!battleId || Number.isNaN(battleId)) return res.status(400).json({ error: "Invalid battle id." });
+
+    let battle = await get(
+      `SELECT * FROM dojo_battles WHERE id = ?`,
+      [battleId],
+    );
+    if (!battle) return res.status(404).json({ error: "Battle not found." });
+    if (battle.player1_id !== req.user.id && battle.player2_id !== req.user.id) {
+      return res.status(403).json({ error: "Not your battle." });
+    }
+
+    battle = await advanceBattleIfExpired({ get, execute: all }, battle);
+
+    const questionSet = JSON.parse(battle.question_set ?? "[]");
+    const currentIndex = Number(battle.current_index ?? 0);
+    const status = battle.status;
+    const now = new Date();
+    const startedAt = new Date(battle.question_started_at);
+    const elapsedSeconds = isNaN(startedAt.getTime())
+      ? 0
+      : Math.floor((now.getTime() - startedAt.getTime()) / 1000);
+    const timePerQuestion = 30;
+    const timeRemainingSeconds = Math.max(0, timePerQuestion - elapsedSeconds);
+
+    const p1 = await get(`SELECT username FROM users WHERE id = ?`, [battle.player1_id]);
+    const p2 = await get(`SELECT username FROM users WHERE id = ?`, [battle.player2_id]);
+
+    res.json({
+      battle: {
+        id: String(battle.id),
+        status,
+        subjectId: battle.subject_id,
+        topic: battle.topic,
+        player1: { id: String(battle.player1_id), username: p1?.username ?? "" },
+        player2: { id: String(battle.player2_id), username: p2?.username ?? "" },
+        player1Score: Number(battle.player1_score ?? 0),
+        player2Score: Number(battle.player2_score ?? 0),
+        currentIndex,
+        timeRemainingSeconds: status === "active" ? timeRemainingSeconds : 0,
+        currentQuestion:
+          status === "active" && currentIndex < 10 ? questionSet[currentIndex] ?? null : null,
+        winnerId: battle.winner_id ? String(battle.winner_id) : null,
+      },
+    });
+  } catch (error) {
+    console.error("[Dojo battle GET] Error:", error);
+    res.status(500).json({ error: "Could not load battle." });
+  }
+});
+
+app.post("/api/dojo/battles/:battleId/answer", authMiddleware, async (req, res) => {
+  try {
+    const battleId = Number(req.params.battleId);
+    if (!battleId || Number.isNaN(battleId)) return res.status(400).json({ error: "Invalid battle id." });
+
+    const { questionIndex, answer, selectedOption } = req.body ?? {};
+    const qIdx = Number(questionIndex);
+    if (Number.isNaN(qIdx)) return res.status(400).json({ error: "Invalid questionIndex." });
+
+    let battle = await get(`SELECT * FROM dojo_battles WHERE id = ?`, [battleId]);
+    if (!battle) return res.status(404).json({ error: "Battle not found." });
+    if (battle.player1_id !== req.user.id && battle.player2_id !== req.user.id) {
+      return res.status(403).json({ error: "Not your battle." });
+    }
+    if (battle.status !== "active") return res.status(409).json({ error: "Battle not active." });
+
+    battle = await advanceBattleIfExpired({ get, execute: all }, battle);
+    battle = await get(`SELECT * FROM dojo_battles WHERE id = ?`, [battleId]);
+
+    if (battle.status !== "active") return res.json({ ok: true });
+
+    const questionSet = JSON.parse(battle.question_set ?? "[]");
+    const currentIndex = Number(battle.current_index ?? 0);
+    if (qIdx !== currentIndex) return res.status(409).json({ error: "Stale answer." });
+    const question = questionSet[currentIndex] ?? null;
+    if (!question) return res.status(400).json({ error: "Question missing." });
+
+    const now = new Date();
+    const startedAt = new Date(battle.question_started_at);
+    const elapsedSeconds = isNaN(startedAt.getTime())
+      ? 0
+      : Math.floor((now.getTime() - startedAt.getTime()) / 1000);
+    const timeRemainingSeconds = Math.max(0, 30 - elapsedSeconds);
+    if (timeRemainingSeconds <= 0) return res.json({ ok: true });
+
+    const correct = isQuestionCorrect(question, answer, selectedOption);
+    if (!correct) {
+      return res.json({ ok: true });
+    }
+
+    // Award point to the first correct submission.
+    const winnerId = req.user.id;
+    if (winnerId === battle.player1_id) {
+      await run(
+        `UPDATE dojo_battles SET player1_score = player1_score + 1, current_index = current_index + 1, question_started_at = ?, updated_at = ? WHERE id = ?`,
+        [nowIso(), nowIso(), battle.id],
+      );
+    } else {
+      await run(
+        `UPDATE dojo_battles SET player2_score = player2_score + 1, current_index = current_index + 1, question_started_at = ?, updated_at = ? WHERE id = ?`,
+        [nowIso(), nowIso(), battle.id],
+      );
+    }
+
+    // If we reached the end, mark completed with winner.
+    battle = await get(`SELECT * FROM dojo_battles WHERE id = ?`, [battle.id]);
+    const idxAfter = Number(battle.current_index ?? 0);
+    if (idxAfter >= 10) {
+      const p1 = Number(battle.player1_score ?? 0);
+      const p2 = Number(battle.player2_score ?? 0);
+      const finalWinnerId = p1 === p2 ? null : p1 > p2 ? battle.player1_id : battle.player2_id;
+      await run(
+        `UPDATE dojo_battles SET status = 'completed', winner_id = ?, updated_at = ? WHERE id = ?`,
+        [finalWinnerId, nowIso(), battle.id],
+      );
+    }
+
+    res.json({ ok: true });
+  } catch (error) {
+    console.error("[Dojo answer POST] Error:", error);
+    res.status(500).json({ error: "Could not submit answer." });
   }
 });
 
@@ -1053,6 +1505,16 @@ app.get("/api/competition/:subjectId/stats", authMiddleware, async (req, res) =>
 
       const end = new Date(start);
       end.setDate(start.getDate() + 7);
+
+      answeredRangeSql = " AND answered_at >= ? AND answered_at < ? ";
+      answeredRangeParams = [start.toISOString(), end.toISOString()];
+    }
+    if (range === "daily") {
+      const now = new Date();
+      const start = new Date(now);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(start);
+      end.setDate(start.getDate() + 1);
 
       answeredRangeSql = " AND answered_at >= ? AND answered_at < ? ";
       answeredRangeParams = [start.toISOString(), end.toISOString()];
