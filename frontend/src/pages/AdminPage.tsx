@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiFetchAdmin, ApiError } from "@/lib/api";
-import { API_PATHS, ADMIN_EMAIL } from "@/lib/constants";
+import { API_PATHS, ADMIN_EMAIL, STORAGE_KEYS } from "@/lib/constants";
+import { compressImageFileToDataUrl } from "@/lib/imageCompressor";
 import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
 import {
@@ -80,7 +81,10 @@ export default function AdminPage() {
   const navigate = useNavigate();
 
   const { user } = useAuth();
-  const isAdmin = user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+  const isAdminEmail = user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+  const [adminKey, setAdminKey] = useState(() => localStorage.getItem(STORAGE_KEYS.adminKey) ?? "");
+  const hasAdminKey = !!adminKey.trim();
+  const isAdmin = isAdminEmail || hasAdminKey;
 
   useEffect(() => {
     if (!isAdmin) {
@@ -95,6 +99,8 @@ export default function AdminPage() {
   const [passage, setPassage] = useState("");
   const [topic, setTopic] = useState("");
   const [imageUrlsText, setImageUrlsText] = useState("");
+  const imageFilesRef = useRef<HTMLInputElement | null>(null);
+  const [isProcessingImages, setIsProcessingImages] = useState(false);
   const [marks, setMarks] = useState<number>(1);
 
   // MCQ
@@ -121,6 +127,7 @@ export default function AdminPage() {
   const [expandedSubjects, setExpandedSubjects] = useState<Set<string>>(
     new Set(),
   );
+  const [subjectFilter, setSubjectFilter] = useState<string>("all");
 
   const [marksEdits, setMarksEdits] = useState<Record<string, number>>({});
   const [marksSaving, setMarksSaving] = useState<string | null>(null);
@@ -157,6 +164,36 @@ export default function AdminPage() {
     setAcceptedAnswers("");
     setGuidance("");
     setFormError("");
+  };
+
+  const appendImageDataUrls = async (files: FileList | File[]) => {
+    const list = Array.from(files).filter((f) => f.type.startsWith("image/"));
+    if (list.length === 0) return;
+
+    setIsProcessingImages(true);
+    try {
+      const urls = await Promise.all(
+        list.slice(0, 6).map(async (file) => {
+          // Compress to keep payload size manageable.
+          return await compressImageFileToDataUrl(file, {
+            maxWidth: 1000,
+            maxHeight: 1000,
+            quality: 0.65,
+            outputType: "image/jpeg",
+          });
+        }),
+      );
+
+      const existing = imageUrlsText
+        .split("\n")
+        .map((u) => u.trim())
+        .filter(Boolean);
+
+      const next = [...existing, ...urls].slice(0, 12);
+      setImageUrlsText(next.join("\n"));
+    } finally {
+      setIsProcessingImages(false);
+    }
   };
 
   const handleSubmit = async () => {
@@ -303,6 +340,10 @@ export default function AdminPage() {
     {},
   );
 
+  const filteredQuestions = subjectFilter === "all"
+    ? questions
+    : questions.filter((q) => String(q.subjectId) === subjectFilter);
+
   const toggleSubjectExpand = (subject: string) => {
     setExpandedSubjects((prev) => {
       const next = new Set(prev);
@@ -328,6 +369,29 @@ export default function AdminPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-5">
+            {!isAdminEmail && (
+              <div className="rounded-xl border border-white/15 bg-white/10 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                  <div className="flex-1 space-y-1.5">
+                    <Label>Admin Key</Label>
+                    <Input
+                      value={adminKey}
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        setAdminKey(next);
+                        localStorage.setItem(STORAGE_KEYS.adminKey, next);
+                      }}
+                      placeholder="Paste your Cloudflare ADMIN_KEY..."
+                      className="h-10"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      This is required on Cloudflare deployments (sent as `x-admin-key`).
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {formError && (
               <div className="rounded-lg border border-danger/20 bg-danger/5 px-4 py-3 text-sm text-danger">
                 {formError}
@@ -408,8 +472,50 @@ export default function AdminPage() {
                 <span className="text-muted-foreground">(optional)</span>
               </Label>
               <p className="text-xs text-muted-foreground">
-                Paste one image URL per line (e.g. `https://...png`). Students will see it under the question.
+                Paste one image URL per line or drag/drop image files. Students will see it under the question.
               </p>
+
+              {/* Drag + Drop uploader */}
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => imageFilesRef.current?.click()}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") imageFilesRef.current?.click();
+                }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                    void appendImageDataUrls(e.dataTransfer.files);
+                  }
+                }}
+                className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-black/15 bg-white/50 px-4 py-4 text-center transition-colors hover:bg-white/70"
+              >
+                <span className="text-sm font-semibold text-[#0b0f19]/80">
+                  {isProcessingImages ? "Processing images..." : "Drag & drop images here"}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  or click to browse (up to 6 at a time)
+                </span>
+              </div>
+
+              <input
+                ref={imageFilesRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  if (e.target.files && e.target.files.length > 0) {
+                    void appendImageDataUrls(e.target.files);
+                    e.currentTarget.value = "";
+                  }
+                }}
+              />
+
               <Textarea
                 placeholder={"https://example.com/image1.png\nhttps://example.com/image2.jpg"}
                 value={imageUrlsText}
@@ -594,6 +700,23 @@ export default function AdminPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
+            <div className="mb-4 space-y-1.5">
+              <Label>Filter by Subject</Label>
+              <Select value={subjectFilter} onValueChange={(val: string | null) => val && setSubjectFilter(val)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="All subjects" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All subjects</SelectItem>
+                  {baseSubjects.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             {questionsLoading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="size-6 animate-spin text-brand" />
@@ -604,133 +727,236 @@ export default function AdminPage() {
               </p>
             ) : (
               <div className="space-y-2">
-                {Object.entries(groupedQuestions).map(
-                  ([subjectName, subjectQuestions]) => {
-                    const isExpanded = expandedSubjects.has(subjectName);
+                {subjectFilter === "all" ? (
+                  Object.entries(groupedQuestions).map(
+                    ([subjectName, subjectQuestions]) => {
+                      const isExpanded = expandedSubjects.has(subjectName);
 
-                    return (
-                      <div
-                        key={subjectName}
-                        className="rounded-lg border border-border/50"
-                      >
-                        <button
-                          onClick={() => toggleSubjectExpand(subjectName)}
-                          className="flex w-full items-center justify-between px-4 py-3 text-left transition-colors hover:bg-muted/50"
+                      return (
+                        <div
+                          key={subjectName}
+                          className="rounded-lg border border-border/50"
                         >
-                          <div className="flex items-center gap-2">
-                            {isExpanded ? (
-                              <ChevronDown className="size-4 text-muted-foreground" />
-                            ) : (
-                              <ChevronRight className="size-4 text-muted-foreground" />
-                            )}
-                            <span className="font-display font-medium">
-                              {subjectName}
-                            </span>
-                            <Badge variant="secondary" className="text-[11px]">
-                              {subjectQuestions.length}
-                            </Badge>
-                          </div>
-                        </button>
+                          <button
+                            onClick={() => toggleSubjectExpand(subjectName)}
+                            className="flex w-full items-center justify-between px-4 py-3 text-left transition-colors hover:bg-muted/50"
+                          >
+                            <div className="flex items-center gap-2">
+                              {isExpanded ? (
+                                <ChevronDown className="size-4 text-muted-foreground" />
+                              ) : (
+                                <ChevronRight className="size-4 text-muted-foreground" />
+                              )}
+                              <span className="font-display font-medium">
+                                {subjectName}
+                              </span>
+                              <Badge variant="secondary" className="text-[11px]">
+                                {subjectQuestions.length}
+                              </Badge>
+                            </div>
+                          </button>
 
-                        {isExpanded && (
-                          <div className="border-t border-border/50">
-                            {subjectQuestions.map((q) => (
-                              <div
-                                key={q.id}
-                                className="flex items-start justify-between gap-3 border-b border-border/30 px-4 py-3 last:border-b-0"
-                              >
-                                <div className="min-w-0 flex-1">
-                                  <div className="mb-1 flex items-center gap-2">
-                                    <Badge
-                                      variant="outline"
-                                      className="text-[10px] uppercase"
-                                    >
-                                      {q.type.replace("_", " ")}
-                                    </Badge>
-                                  </div>
-                                  <p className="text-sm text-foreground">
-                                    {q.question}
-                                  </p>
-                                </div>
-
-                                {q.type !== "mcq" && (
-                                  <div className="flex items-center gap-2">
-                                    <Input
-                                      type="number"
-                                      min={1}
-                                      max={20}
-                                      className="h-9 w-24"
-                                      value={marksEdits[q.id] ?? q.marks}
-                                      onChange={(e) =>
-                                        setMarksEdits((prev) => ({
-                                          ...prev,
-                                          [q.id]: Number(e.target.value),
-                                        }))
-                                      }
-                                    />
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      className="h-9"
-                                      disabled={marksSaving === q.id}
-                                      onClick={() =>
-                                        handleUpdateMarks(
-                                          q.id,
-                                          marksEdits[q.id] ?? q.marks,
-                                        )
-                                      }
-                                    >
-                                      {marksSaving === q.id ? (
-                                        <Loader2 className="size-4 animate-spin" />
-                                      ) : (
-                                        "Save"
-                                      )}
-                                    </Button>
-                                  </div>
-                                )}
-
-                                <AlertDialog>
-                                  <AlertDialogTrigger
-                                    render={
-                                      <Button
-                                        variant="ghost"
-                                        size="icon-sm"
-                                        className="shrink-0 text-muted-foreground hover:text-danger"
-                                      />
-                                    }
-                                  >
-                                    <Trash2 className="size-4" />
-                                  </AlertDialogTrigger>
-                                  <AlertDialogContent>
-                                    <AlertDialogHeader>
-                                      <AlertDialogTitle>
-                                        Delete Question
-                                      </AlertDialogTitle>
-                                      <AlertDialogDescription>
-                                        Are you sure you want to delete this
-                                        question? This action cannot be undone.
-                                      </AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter>
-                                      <AlertDialogCancel>
-                                        Cancel
-                                      </AlertDialogCancel>
-                                      <AlertDialogAction
-                                        onClick={() => handleDelete(q.id)}
-                                        className="bg-danger text-white hover:bg-danger/90"
+                          {isExpanded && (
+                            <div className="border-t border-border/50">
+                              {subjectQuestions.map((q) => (
+                                <div
+                                  key={q.id}
+                                  className="flex items-start justify-between gap-3 border-b border-border/30 px-4 py-3 last:border-b-0"
+                                >
+                                  <div className="min-w-0 flex-1">
+                                    <div className="mb-1 flex items-center gap-2">
+                                      <Badge
+                                        variant="outline"
+                                        className="text-[10px] uppercase"
                                       >
-                                        Delete
-                                      </AlertDialogAction>
-                                    </AlertDialogFooter>
-                                  </AlertDialogContent>
-                                </AlertDialog>
-                              </div>
-                            ))}
-                          </div>
-                        )}
+                                        {q.type.replace("_", " ")}
+                                      </Badge>
+                                    </div>
+                                    <p className="text-sm text-foreground">
+                                      {q.question}
+                                    </p>
+                                  </div>
+
+                                  {q.type !== "mcq" && (
+                                    <div className="flex items-center gap-2">
+                                      <Input
+                                        type="number"
+                                        min={1}
+                                        max={20}
+                                        className="h-9 w-24"
+                                        value={marksEdits[q.id] ?? q.marks}
+                                        onChange={(e) =>
+                                          setMarksEdits((prev) => ({
+                                            ...prev,
+                                            [q.id]: Number(e.target.value),
+                                          }))
+                                        }
+                                      />
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-9"
+                                        disabled={marksSaving === q.id}
+                                        onClick={() =>
+                                          handleUpdateMarks(
+                                            q.id,
+                                            marksEdits[q.id] ?? q.marks,
+                                          )
+                                        }
+                                      >
+                                        {marksSaving === q.id ? (
+                                          <Loader2 className="size-4 animate-spin" />
+                                        ) : (
+                                          "Save"
+                                        )}
+                                      </Button>
+                                    </div>
+                                  )}
+
+                                  <AlertDialog>
+                                    <AlertDialogTrigger
+                                      render={
+                                        <Button
+                                          variant="ghost"
+                                          size="icon-sm"
+                                          className="shrink-0 text-muted-foreground hover:text-danger"
+                                        />
+                                      }
+                                    >
+                                      <Trash2 className="size-4" />
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                      <AlertDialogHeader>
+                                        <AlertDialogTitle>
+                                          Delete Question
+                                        </AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                          Are you sure you want to delete this
+                                          question? This action cannot be undone.
+                                        </AlertDialogDescription>
+                                      </AlertDialogHeader>
+                                      <AlertDialogFooter>
+                                        <AlertDialogCancel>
+                                          Cancel
+                                        </AlertDialogCancel>
+                                        <AlertDialogAction
+                                          onClick={() => handleDelete(q.id)}
+                                          className="bg-danger text-white hover:bg-danger/90"
+                                        >
+                                          Delete
+                                        </AlertDialogAction>
+                                      </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                  </AlertDialog>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    },
+                  )
+                ) : (
+                  <div className="rounded-lg border border-border/50">
+                    {filteredQuestions.length === 0 ? (
+                      <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+                        No questions for this subject yet.
                       </div>
-                    );
-                  },
+                    ) : (
+                      filteredQuestions.map((q) => (
+                        <div
+                          key={q.id}
+                          className="flex items-start justify-between gap-3 border-b border-border/30 px-4 py-3 last:border-b-0"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="mb-1 flex items-center gap-2">
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] uppercase"
+                              >
+                                {q.type.replace("_", " ")}
+                              </Badge>
+                            </div>
+                            <p className="text-sm text-foreground">
+                              {q.question}
+                            </p>
+                          </div>
+
+                          {q.type !== "mcq" && (
+                            <div className="flex items-center gap-2">
+                              <Input
+                                type="number"
+                                min={1}
+                                max={20}
+                                className="h-9 w-24"
+                                value={marksEdits[q.id] ?? q.marks}
+                                onChange={(e) =>
+                                  setMarksEdits((prev) => ({
+                                    ...prev,
+                                    [q.id]: Number(e.target.value),
+                                  }))
+                                }
+                              />
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-9"
+                                disabled={marksSaving === q.id}
+                                onClick={() =>
+                                  handleUpdateMarks(
+                                    q.id,
+                                    marksEdits[q.id] ?? q.marks,
+                                  )
+                                }
+                              >
+                                {marksSaving === q.id ? (
+                                  <Loader2 className="size-4 animate-spin" />
+                                ) : (
+                                  "Save"
+                                )}
+                              </Button>
+                            </div>
+                          )}
+
+                          <AlertDialog>
+                            <AlertDialogTrigger
+                              render={
+                                <Button
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  className="shrink-0 text-muted-foreground hover:text-danger"
+                                />
+                              }
+                            >
+                              <Trash2 className="size-4" />
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>
+                                  Delete Question
+                                </AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Are you sure you want to delete this question?
+                                  This action cannot be undone.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>
+                                  Cancel
+                                </AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => handleDelete(q.id)}
+                                  className="bg-danger text-white hover:bg-danger/90"
+                                >
+                                  Delete
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      ))
+                    )}
+                  </div>
                 )}
               </div>
             )}

@@ -74,6 +74,12 @@ export async function apiFetchAdmin<T>(
     headers.set("Authorization", `Bearer ${token}`);
   }
 
+  // Cloudflare Pages/Workers admin middleware expects x-admin-key
+  const adminKey = localStorage.getItem(STORAGE_KEYS.adminKey);
+  if (adminKey && !headers.has("x-admin-key")) {
+    headers.set("x-admin-key", adminKey);
+  }
+
   if (
     (method === "POST" || method === "PUT" || method === "PATCH") &&
     !headers.has("Content-Type")

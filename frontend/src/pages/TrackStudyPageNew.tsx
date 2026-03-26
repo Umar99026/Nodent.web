@@ -64,6 +64,20 @@ function loadDay(userId: string, date: string): any | null {
   }
 }
 
+function loadAnsweredCount(userId: string, subjectId: string): number {
+  try {
+    const raw = localStorage.getItem(
+      `${STORAGE_KEYS.practiceStatePrefix}${userId}_${subjectId}`,
+    );
+    if (!raw) return 0;
+    const parsed = JSON.parse(raw) as { answers?: Record<string, boolean | null> };
+    const answers = parsed?.answers ?? {};
+    return Object.keys(answers).length;
+  } catch {
+    return 0;
+  }
+}
+
 export default function TrackStudyPageNew() {
   const { user } = useAuth();
   const userId = user ? String(user.id) : null;
@@ -107,13 +121,14 @@ export default function TrackStudyPageNew() {
         subjectId,
         subjectName:
           baseSubjects.find((s) => s.id === subjectId)?.name ?? subjectId,
+        questionsAnswered: userId ? loadAnsweredCount(userId, subjectId) : 0,
         minutes: Math.round(seconds / 60),
         seconds,
       }))
       .filter((r) => r.minutes > 0)
       .sort((a, b) => b.minutes - a.minutes);
     return rows;
-  }, [state.dailySecondsBySubject]);
+  }, [state.dailySecondsBySubject, userId]);
 
   const activeSubjectIdOrFirst = state.activeSubjectId ?? baseSubjects[0]?.id ?? "";
 
@@ -567,6 +582,7 @@ export default function TrackStudyPageNew() {
                     <TableHeader>
                       <TableRow>
                         <TableHead className="text-[#0b0f19]/60">Subject</TableHead>
+                        <TableHead className="text-right text-[#0b0f19]/60">Questions</TableHead>
                         <TableHead className="text-right text-[#0b0f19]/60">Minutes</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -574,7 +590,7 @@ export default function TrackStudyPageNew() {
                       {rangeMode === "day" ? (
                         daySubjectRows.length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={2} className="text-center text-[#0b0f19]/60">
+                            <TableCell colSpan={3} className="text-center text-[#0b0f19]/60">
                               No study yet today.
                             </TableCell>
                           </TableRow>
@@ -582,6 +598,9 @@ export default function TrackStudyPageNew() {
                           daySubjectRows.slice(0, 8).map((row) => (
                             <TableRow key={row.subjectId}>
                               <TableCell className="text-[#0b0f19]">{row.subjectName}</TableCell>
+                              <TableCell className="text-right font-medium text-[#0b0f19] tabular-nums">
+                                {row.questionsAnswered}
+                              </TableCell>
                               <TableCell className="text-right font-medium text-[#0b0f19] tabular-nums">
                                 {row.minutes}
                               </TableCell>
@@ -599,7 +618,7 @@ export default function TrackStudyPageNew() {
                         ))
                       ) : (
                         <TableRow>
-                        <TableCell colSpan={2} className="text-center text-[#0b0f19]/60">
+                        <TableCell colSpan={3} className="text-center text-[#0b0f19]/60">
                             No study logged this week yet.
                           </TableCell>
                         </TableRow>

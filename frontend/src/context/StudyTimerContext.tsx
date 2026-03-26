@@ -132,15 +132,18 @@ export function StudyTimerProvider({ children }: { children: ReactNode }) {
   const isOnPracticeRef = useRef(false);
   const isOnTrackRef = useRef(false);
   const activeSubjectIdRef = useRef<string | null>(null);
+  const prevPathRef = useRef<string>("");
 
   const quizMatch = useMemo(() => {
-    const m = location.pathname.match(/^\/quiz\/([^/]+)/);
+    // Practice mode is only the main quiz route: /quiz/:subjectId
+    // (Exclude /quiz/:subjectId/summary etc.)
+    const m = location.pathname.match(/^\/quiz\/([^/]+)\/?$/);
     return m ? { subjectId: m[1] } : null;
   }, [location.pathname]);
 
   const isOnPractice = !!quizMatch;
   const isOnTrack = location.pathname.startsWith("/track");
-  const isOnTimerPage = isOnPractice || isOnTrack;
+  // (Derived state used previously; keep logic explicit below.)
 
   useEffect(() => {
     isOnPracticeRef.current = isOnPractice;
@@ -175,33 +178,55 @@ export function StudyTimerProvider({ children }: { children: ReactNode }) {
   }, [state, userId]);
 
   // Route-driven running state:
-  // - When in a practice quiz, automatically run "session" phase.
-  // - Leaving practice pauses session phase.
-  // - Break phase continues running until completed.
+  // - Entering practice: if session timer isn't running, start it.
+  // - Leaving practice: pause it.
+  // - Track page can still run (manual controls live there).
   useEffect(() => {
     if (!userId) return;
+
+    const prevPath = prevPathRef.current;
+    const wasOnPractice = /^\/quiz\/([^/]+)\/?$/.test(prevPath);
+    prevPathRef.current = location.pathname;
 
     setState((prev) => {
       const nextActiveSubjectId = quizMatch?.subjectId ?? prev.activeSubjectId;
 
-      if (prev.phase === "break") {
-        // Break runs regardless of route.
+      // If we just left practice, always pause (even if navigating to /track).
+      if (wasOnPractice && !isOnPractice) {
         return {
           ...prev,
           activeSubjectId: nextActiveSubjectId,
-          isRunning: !prev.manualPaused,
+          isRunning: false,
         };
       }
 
-      // Phase === "session"
+      // Practice: always ensure the timer is running when you enter.
+      if (isOnPractice) {
+        return {
+          ...prev,
+          activeSubjectId: nextActiveSubjectId,
+          manualPaused: false,
+          isRunning: true,
+        };
+      }
+
+      // Track: do not auto-start. Keep whatever the user set manually.
+      if (isOnTrack) {
+        return {
+          ...prev,
+          activeSubjectId: nextActiveSubjectId,
+          isRunning: prev.isRunning && !prev.manualPaused,
+        };
+      }
+
+      // Any other page: pause the timer.
       return {
         ...prev,
         activeSubjectId: nextActiveSubjectId,
-        // Allow running on Track My Study as well (manual start/stop lives there).
-        isRunning: isOnTimerPage && !prev.manualPaused,
+        isRunning: false,
       };
     });
-  }, [isOnTimerPage, quizMatch?.subjectId, userId]);
+  }, [isOnPractice, isOnTrack, quizMatch?.subjectId, userId, location.pathname]);
 
   // Timer tick.
   useEffect(() => {
@@ -213,19 +238,8 @@ export function StudyTimerProvider({ children }: { children: ReactNode }) {
 
         if (prev.remainingSeconds <= 1) {
           if (prev.phase === "session") {
-            const studySeconds = prev.sessionMinutes * 60;
-            const subjectId = prev.activeSubjectId ?? "unassigned";
-
-            const nextBySubject = {
-              ...prev.dailySecondsBySubject,
-              [subjectId]:
-                (prev.dailySecondsBySubject[subjectId] ?? 0) + studySeconds,
-            };
-
             return {
               ...prev,
-              dailySeconds: prev.dailySeconds + studySeconds,
-              dailySecondsBySubject: nextBySubject,
               sessionsCompleted: prev.sessionsCompleted + 1,
               phase: "break",
               remainingSeconds: prev.breakMinutes * 60,
@@ -240,6 +254,20 @@ export function StudyTimerProvider({ children }: { children: ReactNode }) {
             remainingSeconds: prev.sessionMinutes * 60,
             // Resume only if still on a timer-capable page.
             isRunning: (isOnPracticeRef.current || isOnTrackRef.current) && !prev.manualPaused,
+          };
+        }
+
+        // Live accumulation while studying (updates "Today by subject" instantly)
+        if (prev.phase === "session") {
+          const subjectId = prev.activeSubjectId ?? "unassigned";
+          return {
+            ...prev,
+            remainingSeconds: prev.remainingSeconds - 1,
+            dailySeconds: prev.dailySeconds + 1,
+            dailySecondsBySubject: {
+              ...prev.dailySecondsBySubject,
+              [subjectId]: (prev.dailySecondsBySubject[subjectId] ?? 0) + 1,
+            },
           };
         }
 

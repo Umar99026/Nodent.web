@@ -3,7 +3,7 @@ import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { lazy, Suspense, type ReactNode } from "react";
 import { StudyTimerProvider } from "@/context/StudyTimerContext";
-import { ADMIN_EMAIL } from "@/lib/constants";
+import { ADMIN_EMAIL, STORAGE_KEYS } from "@/lib/constants";
 
 // Lazy-load page components — stubs will be replaced with real implementations
 const LoginPage = lazy(() => import("@/pages/LoginPage"));
@@ -13,6 +13,8 @@ const SummaryPage = lazy(() => import("@/pages/SummaryPage"));
 const StudyModePage = lazy(() => import("@/pages/StudyModePage"));
 const TrackStudyPage = lazy(() => import("@/pages/TrackStudyPageNew"));
 const ChatPage = lazy(() => import("@/pages/ChatPage"));
+const DojoPage = lazy(() => import("@/pages/DojoPage"));
+const DojoBattlePage = lazy(() => import("@/pages/DojoBattlePage"));
 const AdminPage = lazy(() => import("@/pages/AdminPage"));
 
 function LoadingFallback() {
@@ -50,7 +52,9 @@ function AdminOnlyRoute({ children }: { children: ReactNode }) {
 
   if (isLoading) return <LoadingFallback />;
 
-  const isAdmin = user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+  const isAdminEmail = user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+  const hasAdminKey = !!localStorage.getItem(STORAGE_KEYS.adminKey);
+  const isAdmin = isAdminEmail || hasAdminKey;
   if (!isAdmin) return <Navigate to="/dashboard" replace />;
 
   return <>{children}</>;
@@ -160,6 +164,24 @@ function AppRoutes() {
           element={
             <ProtectedRoute>
               <ChatPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/dojo"
+          element={
+            <ProtectedRoute>
+              <DojoPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/dojo/battle/:battleId"
+          element={
+            <ProtectedRoute>
+              <DojoBattlePage />
             </ProtectedRoute>
           }
         />

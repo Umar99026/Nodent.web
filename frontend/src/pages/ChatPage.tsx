@@ -1,8 +1,9 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { apiFetch, ApiError } from "@/lib/api";
 import { API_PATHS } from "@/lib/constants";
+import { compressImageFileToDataUrl } from "@/lib/imageCompressor";
 import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +24,7 @@ interface ForumPost {
   username: string;
   title: string;
   body: string;
+  imageUrls?: string[];
   createdAt: string;
   updatedAt: string;
   replyCount?: number;
@@ -95,10 +97,14 @@ export default function ChatPage() {
 
   const [newPostTitle, setNewPostTitle] = useState("");
   const [newPostBody, setNewPostBody] = useState("");
+  const [newPostImageUrls, setNewPostImageUrls] = useState("");
   const [isCreatingPost, setIsCreatingPost] = useState(false);
 
   const [replyBody, setReplyBody] = useState("");
   const [isReplying, setIsReplying] = useState(false);
+
+  const imageFilesRef = useRef<HTMLInputElement | null>(null);
+  const [isProcessingImages, setIsProcessingImages] = useState(false);
 
   const fetchPosts = useCallback(async () => {
     if (!subjectId) return;
@@ -151,14 +157,20 @@ export default function ChatPage() {
     const body = newPostBody.trim();
     if (!title || !body) return;
 
+    const imageUrls = newPostImageUrls
+      .split("\n")
+      .map((u) => u.trim())
+      .filter(Boolean);
+
     setIsCreatingPost(true);
     try {
       const data = await apiFetch<{ post: ForumPost }>(API_PATHS.forum.posts(subjectId), {
         method: "POST",
-        body: JSON.stringify({ title, body }),
+        body: JSON.stringify({ title, body, imageUrls: imageUrls.length ? imageUrls : undefined }),
       });
       setNewPostTitle("");
       setNewPostBody("");
+      setNewPostImageUrls("");
       const created = data?.post;
       await fetchPosts();
       if (created?.id) navigate(`/chat/${subjectId}/post/${created.id}`);
@@ -166,6 +178,34 @@ export default function ChatPage() {
       // show via next refresh; keep UX simple
     } finally {
       setIsCreatingPost(false);
+    }
+  };
+
+  const appendPostImageDataUrls = async (files: FileList | File[]) => {
+    const list = Array.from(files).filter((f) => f.type.startsWith("image/"));
+    if (list.length === 0) return;
+
+    setIsProcessingImages(true);
+    try {
+      const urls = await Promise.all(
+        list.slice(0, 6).map(async (file) => {
+          return await compressImageFileToDataUrl(file, {
+            maxWidth: 1000,
+            maxHeight: 1000,
+            quality: 0.65,
+            outputType: "image/jpeg",
+          });
+        }),
+      );
+
+      const existing = newPostImageUrls
+        .split("\n")
+        .map((u) => u.trim())
+        .filter(Boolean);
+      const next = [...existing, ...urls].slice(0, 12);
+      setNewPostImageUrls(next.join("\n"));
+    } finally {
+      setIsProcessingImages(false);
     }
   };
 
@@ -250,6 +290,24 @@ export default function ChatPage() {
                     <div className="mt-4 whitespace-pre-wrap text-[15px] leading-relaxed text-black/90">
                       {threadPost.body}
                     </div>
+
+                    {threadPost.imageUrls?.length ? (
+                      <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                        {threadPost.imageUrls.slice(0, 6).map((src) => (
+                          <div
+                            key={src}
+                            className="overflow-hidden rounded-xl border border-black/10 bg-white"
+                          >
+                            <img
+                              src={src}
+                              alt="Post image"
+                              className="h-56 w-full object-cover"
+                              loading="lazy"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
 
                   <div className="rounded-2xl border border-black/10 bg-white p-5 text-[#0b0f19] shadow-xl">
@@ -366,6 +424,54 @@ export default function ChatPage() {
                       disabled={isCreatingPost}
                       className="h-11 border-white/15 bg-white/10 text-white placeholder:text-white/60"
                     />
+                    <Input
+                      placeholder="Image URLs (optional) — one per line"
+                      value={newPostImageUrls}
+                      onChange={(e) => setNewPostImageUrls(e.target.value)}
+                      disabled={isCreatingPost}
+                      className="h-11 border-white/15 bg-white/10 text-white placeholder:text-white/60"
+                    />
+
+                    {/* Drag + Drop uploader */}
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => imageFilesRef.current?.click()}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") imageFilesRef.current?.click();
+                      }}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                          void appendPostImageDataUrls(e.dataTransfer.files);
+                        }
+                      }}
+                      className="mt-3 flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/20 bg-white/5 px-4 py-3 text-center text-white/80 transition-colors hover:bg-white/10"
+                    >
+                      <span className="text-sm font-semibold">
+                        {isProcessingImages ? "Processing images..." : "Drag & drop images here"}
+                      </span>
+                      <span className="text-xs text-white/50">
+                        or click to browse (up to 6 at a time)
+                      </span>
+                    </div>
+
+                    <input
+                      ref={imageFilesRef}
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files.length > 0) {
+                          void appendPostImageDataUrls(e.target.files);
+                          e.currentTarget.value = "";
+                        }
+                      }}
+                    />
                     <div className="flex justify-end">
                       <Button
                         onClick={handleCreatePost}
@@ -422,6 +528,13 @@ export default function ChatPage() {
                               <p className="mt-1 line-clamp-2 text-sm text-black/65">
                                 {p.body}
                               </p>
+                              {p.imageUrls?.length ? (
+                                <div className="mt-3 flex items-center gap-2 text-[11px] font-semibold text-black/55">
+                                  <span className="rounded-full bg-brand/10 px-2 py-0.5 text-brand">
+                                    {p.imageUrls.length} image{p.imageUrls.length === 1 ? "" : "s"}
+                                  </span>
+                                </div>
+                              ) : null}
                               <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-black/55">
                                 <span>By {p.username}</span>
                                 <span>•</span>

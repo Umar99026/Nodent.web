@@ -42,6 +42,18 @@ export const API_PATHS = {
       `/api/forum/${subjectId}/posts/${postId}/replies`,
   },
   track: "/api/track",
+  dojo: {
+    unreadCount: "/api/dojo/unread-count",
+    challenges: "/api/dojo/challenges",
+    readChallenges: "/api/dojo/challenges/read",
+    users: (search: string) => `/api/dojo/users?search=${encodeURIComponent(search)}`,
+    createChallenge: "/api/dojo/challenges",
+    acceptChallenge: (challengeId: number | string) =>
+      `/api/dojo/challenges/${challengeId}/accept`,
+    battle: (battleId: number | string) => `/api/dojo/battles/${battleId}`,
+    answer: (battleId: number | string) =>
+      `/api/dojo/battles/${battleId}/answer`,
+  },
   admin: {
     subjects: "/api/admin/subjects",
     questions: "/api/admin/questions",

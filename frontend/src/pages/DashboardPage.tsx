@@ -159,6 +159,15 @@ export default function DashboardPage() {
     }
   }, [scoreCardOpen, scoreCard, user, fetchScorecard]);
 
+  // Live refresh while open
+  useEffect(() => {
+    if (!scoreCardOpen) return;
+    const t = setInterval(() => {
+      void fetchScorecard();
+    }, 8000);
+    return () => clearInterval(t);
+  }, [scoreCardOpen, fetchScorecard]);
+
   /* ------ render ------ */
 
   return (
@@ -181,85 +190,170 @@ export default function DashboardPage() {
       }
     >
       {scoreCardOpen && (
-        <Card className="paper-texture mb-8 overflow-hidden">
-          <CardHeader className="flex flex-row items-center justify-between gap-4">
-            <div>
-              <CardTitle className="font-display text-xl flex items-center gap-2">
-                <Star className="size-5 text-brand-dark" />
-                Scorecard
-              </CardTitle>
-              <CardDescription>
-                Sleek overview based on correct answers.
-              </CardDescription>
-            </div>
-            <div className="text-right">
-              {scoreCardLoading ? (
-                <div className="text-sm text-muted-foreground">Loading...</div>
-              ) : scoreCard?.overallRank ? (
-                <>
-                  <div className="font-display text-4xl font-bold leading-none">
-                    {(() => {
-                      const total = Math.max(1, scoreCard.totalStudents - 1);
-                      const t = scoreCard.overallRank! - 1;
-                      const rating = 10 - Math.round((t / total) * 9);
-                      return Math.max(1, rating);
-                    })()}
-                    <span className="ml-1 text-sm text-muted-foreground">/10</span>
+        <div className="fixed inset-0 z-[300]">
+          <div
+            className="absolute inset-0 bg-black/70"
+            onClick={() => setScoreCardOpen(false)}
+          />
+          <div className="absolute inset-0 overflow-auto p-4 sm:p-8">
+            <div className="mx-auto w-full max-w-5xl">
+              <div className="mb-4 flex items-center justify-between">
+                <div className="text-white">
+                  <div className="flex items-center gap-2">
+                    <Star className="size-5 text-white/90" />
+                    <span className="font-display text-xl font-semibold">
+                      Scorecard
+                    </span>
                   </div>
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    Rank #{scoreCard.overallRank} of {scoreCard.totalStudents}
-                  </div>
-                </>
-              ) : (
-                <div className="text-sm text-muted-foreground">
-                  Not enough data yet.
+                  <p className="mt-1 text-sm text-white/70">
+                    Live rating based on your correct answers and marks.
+                  </p>
                 </div>
-              )}
-            </div>
-          </CardHeader>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    className="border-white/20 bg-white/10 text-white hover:bg-white/15"
+                    onClick={() => void fetchScorecard()}
+                    disabled={scoreCardLoading}
+                  >
+                    {scoreCardLoading ? "Refreshing…" : "Refresh"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="border-white/20 bg-white/10 text-white hover:bg-white/15"
+                    onClick={() => setScoreCardOpen(false)}
+                  >
+                    Close
+                  </Button>
+                </div>
+              </div>
 
-          <CardContent className="grid gap-4 lg:grid-cols-4">
-            <div className="space-y-2 rounded-xl border border-border/50 bg-card/40 p-4">
-              <div className="text-xs text-muted-foreground">Best subject</div>
-              <div className="font-display text-lg font-semibold">
-                {scoreCard?.bestSubjectId
-                  ? baseSubjects.find((s) => s.id === scoreCard.bestSubjectId)?.name ??
-                    scoreCard.bestSubjectId
-                  : "—"}
-              </div>
-            </div>
+              <Card className="paper-texture overflow-hidden">
+                <CardContent className="grid gap-6 p-6 lg:grid-cols-[360px_1fr]">
+                  {/* Soccer-style rating card */}
+                  <div className="relative overflow-hidden rounded-3xl border border-black/10 bg-gradient-to-b from-[#f3fbff] to-white p-6 shadow-xl">
+                    <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_20%_10%,rgba(86,171,230,0.22),transparent_55%)]" />
+                    <div className="relative">
+                      <div className="flex items-center justify-between">
+                        <div className="rounded-full bg-[#0b0f19] px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-white">
+                          Student
+                        </div>
+                        <div className="text-[11px] font-semibold text-black/60">
+                          Live
+                        </div>
+                      </div>
 
-            <div className="space-y-2 rounded-xl border border-border/50 bg-card/40 p-4">
-              <div className="text-xs text-muted-foreground">Weakest subject</div>
-              <div className="font-display text-lg font-semibold">
-                {scoreCard?.weakestSubjectId
-                  ? baseSubjects.find((s) => s.id === scoreCard.weakestSubjectId)?.name ??
-                    scoreCard.weakestSubjectId
-                  : "—"}
-              </div>
-            </div>
+                      <div className="mt-5">
+                        {scoreCardLoading ? (
+                          <div className="text-sm text-black/60">Loading…</div>
+                        ) : scoreCard?.overallRank ? (
+                          (() => {
+                            const total = Math.max(1, scoreCard.totalStudents - 1);
+                            const t = scoreCard.overallRank! - 1;
+                            const rating = Math.max(1, 10 - Math.round((t / total) * 9));
+                            const percentile = Math.max(
+                              0,
+                              Math.min(
+                                100,
+                                Math.round(
+                                  ((scoreCard.totalStudents - scoreCard.overallRank!) /
+                                    Math.max(1, scoreCard.totalStudents - 1)) *
+                                    100,
+                                ),
+                              ),
+                            );
 
-            <div className="space-y-2 rounded-xl border border-border/50 bg-card/40 p-4">
-              <div className="text-xs text-muted-foreground">Study points</div>
-              <div className="font-display text-lg font-semibold tabular-nums">
-                {scoreCard?.points ?? 0}
-              </div>
-              <div className="text-xs text-muted-foreground">
-                Higher is better.
-              </div>
-            </div>
+                            return (
+                              <>
+                                <div className="font-display text-7xl font-bold leading-none text-[#0b0f19] tabular-nums">
+                                  {rating}
+                                </div>
+                                <div className="mt-2 text-sm font-semibold text-black/60">
+                                  Rank #{scoreCard.overallRank} of {scoreCard.totalStudents}
+                                </div>
+                                <div className="mt-1 text-sm font-semibold text-black/70">
+                                  Percentile: top {100 - percentile}%
+                                </div>
+                              </>
+                            );
+                          })()
+                        ) : (
+                          <div className="text-sm text-black/60">
+                            Not enough data yet.
+                          </div>
+                        )}
+                      </div>
 
-            <div className="space-y-2 rounded-xl border border-border/50 bg-card/40 p-4">
-              <div className="text-xs text-muted-foreground">Avg daily study</div>
-              <div className="font-display text-lg font-semibold tabular-nums">
-                {avgDailyStudyMinutes} min
-              </div>
-              <div className="text-xs text-muted-foreground">
-                Based on your timer today.
-              </div>
+                      <div className="mt-6 grid grid-cols-2 gap-3">
+                        <div className="rounded-2xl border border-black/10 bg-white p-4">
+                          <div className="text-[11px] font-semibold text-black/50">
+                            Points
+                          </div>
+                          <div className="mt-1 font-display text-2xl font-semibold tabular-nums text-[#0b0f19]">
+                            {scoreCard?.points ?? 0}
+                          </div>
+                        </div>
+                        <div className="rounded-2xl border border-black/10 bg-white p-4">
+                          <div className="text-[11px] font-semibold text-black/50">
+                            Avg daily study
+                          </div>
+                          <div className="mt-1 font-display text-2xl font-semibold tabular-nums text-[#0b0f19]">
+                            {avgDailyStudyMinutes}m
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Details */}
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2 rounded-2xl border border-border/50 bg-card/40 p-5">
+                      <div className="text-xs text-muted-foreground">
+                        Best subject
+                      </div>
+                      <div className="font-display text-xl font-semibold">
+                        {scoreCard?.bestSubjectId
+                          ? baseSubjects.find((s) => s.id === scoreCard.bestSubjectId)?.name ??
+                            scoreCard.bestSubjectId
+                          : "—"}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 rounded-2xl border border-border/50 bg-card/40 p-5">
+                      <div className="text-xs text-muted-foreground">
+                        Weakest subject
+                      </div>
+                      <div className="font-display text-xl font-semibold">
+                        {scoreCard?.weakestSubjectId
+                          ? baseSubjects.find((s) => s.id === scoreCard.weakestSubjectId)?.name ??
+                            scoreCard.weakestSubjectId
+                          : "—"}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 rounded-2xl border border-border/50 bg-card/40 p-5">
+                      <div className="text-xs text-muted-foreground">
+                        Live refresh
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        Updates every ~8 seconds while open.
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 rounded-2xl border border-border/50 bg-card/40 p-5">
+                      <div className="text-xs text-muted-foreground">
+                        Rating explanation
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        Rating is scaled from your rank among students.
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       )}
 
       {/* Section container */}
@@ -353,12 +447,7 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       ) : (
-        <div
-          className="grid gap-4"
-          style={{
-            gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))",
-          }}
-        >
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
           {mySubjects.map((subject) => (
             <Card
               key={subject.id}

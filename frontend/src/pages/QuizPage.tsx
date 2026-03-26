@@ -124,18 +124,17 @@ export default function QuizPage() {
   const [initialized, setInitialized] = useState(false);
   const [topicFilter, setTopicFilter] = useState<string>("all");
 
-  // Find subject
+  // Find subject (used for display metadata only)
   const subject: Subject | undefined = useMemo(() => {
     return baseSubjects.find((s) => s.id === subjectId);
   }, [subjectId]);
 
-  // Merge base questions with custom
+  // Use ONLY custom/admin questions (no default questions)
   const questions: Question[] = useMemo(() => {
     if (!subjectId) return [];
-    const base = subject?.quiz ?? [];
     const custom = getCustomQuestions(subjectId);
-    return [...base, ...custom];
-  }, [subject, subjectId]);
+    return [...custom];
+  }, [subjectId]);
 
   const availableTopics = useMemo(() => {
     const set = new Set<string>();
