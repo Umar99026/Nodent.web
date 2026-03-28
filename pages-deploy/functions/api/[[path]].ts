@@ -107,6 +107,25 @@ function safeJsonParse(value: string | null | undefined): unknown {
   }
 }
 function nowIso(): string { return new Date().toISOString(); }
+
+/** Neon/Drizzle often wrap the real Postgres message in `cause`. */
+function errorChain(e: unknown): string {
+  const parts: string[] = [];
+  let cur: unknown = e;
+  for (let depth = 0; depth < 6 && cur != null; depth++) {
+    if (cur instanceof Error) {
+      parts.push(cur.message);
+      cur = cur.cause;
+    } else if (typeof cur === "object" && cur !== null && "message" in cur) {
+      parts.push(String((cur as { message: unknown }).message));
+      break;
+    } else {
+      parts.push(String(cur));
+      break;
+    }
+  }
+  return parts.filter(Boolean).join(" — ");
+}
 function createToken(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
   return Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
@@ -499,12 +518,16 @@ app.post("/api/admin/questions", adminAccessMiddleware, async (c: any) => {
 
     return c.json({ ok: true, id: result[0].id });
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
+    const msg = errorChain(e);
     console.error("[admin/questions POST]", msg);
-    const hint =
-      /column|does not exist/i.test(msg)
-        ? " Run `neon-add-custom-question-columns.sql` from the repo against your Neon DB if `topic` / `image_urls` / `marks` were never added."
-        : "";
+    let hint = "";
+    if (/column|does not exist/i.test(msg)) {
+      hint =
+        " Run `neon-add-custom-question-columns.sql` from the repo on Neon if `topic` / `image_urls` / `marks` are missing.";
+    } else if (/invalid input syntax.*integer|invalid input syntax for type integer/i.test(msg)) {
+      hint =
+        " Your `custom_questions.subject_id` column may be INTEGER while this app expects TEXT (string ids like `methods`). Alter the column to TEXT or recreate the table to match `backend/drizzle/migrations/0000_conscious_proudstar.sql`.";
+    }
     return c.json({ error: `${msg}${hint}` }, 500);
   }
 });
