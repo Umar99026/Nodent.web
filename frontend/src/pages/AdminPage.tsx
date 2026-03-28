@@ -127,6 +127,7 @@ export default function AdminPage() {
   const [expandedSubjects, setExpandedSubjects] = useState<Set<string>>(
     new Set(),
   );
+  const expandedSubjectsInitRef = useRef(false);
   const [subjectFilter, setSubjectFilter] = useState<string>("all");
 
   const [marksEdits, setMarksEdits] = useState<Record<string, number>>({});
@@ -154,6 +155,22 @@ export default function AdminPage() {
   useEffect(() => {
     if (isAdmin) fetchQuestions();
   }, [isAdmin, fetchQuestions]);
+
+  // “All subjects” uses collapsible groups that started fully collapsed, so new
+  // questions looked like they never appeared. Expand every group once data
+  // first loads; after that, only expand the subject you just edited.
+  useEffect(() => {
+    if (questionsLoading || questions.length === 0) return;
+    if (expandedSubjectsInitRef.current) return;
+    expandedSubjectsInitRef.current = true;
+    setExpandedSubjects(
+      new Set(
+        questions.map(
+          (q) => q.subjectName || q.subjectId || "Unknown",
+        ),
+      ),
+    );
+  }, [questionsLoading, questions]);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -303,6 +320,11 @@ export default function AdminPage() {
         body: JSON.stringify(body),
       });
       toast.success("Question added successfully");
+      setExpandedSubjects((prev: Set<string>) => {
+        const next = new Set(prev);
+        next.add(subjectId);
+        return next;
+      });
       resetForm();
       fetchQuestions();
     } catch (err) {
@@ -776,7 +798,8 @@ export default function AdminPage() {
 
             <div className="flex justify-end pt-2">
               <Button
-                onClick={handleSubmit}
+                type="button"
+                onClick={() => void handleSubmit()}
                 disabled={isSubmitting}
                 className="gap-1.5 bg-brand text-white hover:bg-brand-dark"
               >
