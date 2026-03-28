@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Loader2, MessageSquare, Plus, ArrowLeft } from "lucide-react";
+import { toast } from "sonner";
 
 import { baseSubjects } from "@/lib/subjects";
 
@@ -174,8 +175,10 @@ export default function ChatPage() {
       const created = data?.post;
       await fetchPosts();
       if (created?.id) navigate(`/chat/${subjectId}/post/${created.id}`);
-    } catch {
-      // show via next refresh; keep UX simple
+    } catch (err) {
+      const msg =
+        err instanceof ApiError ? err.message : "Could not create post. Try again.";
+      toast.error(msg);
     } finally {
       setIsCreatingPost(false);
     }
@@ -222,8 +225,10 @@ export default function ChatPage() {
       });
       setReplyBody("");
       await fetchThread();
-    } catch {
-      // ignore; next poll will refresh
+    } catch (err) {
+      const msg =
+        err instanceof ApiError ? err.message : "Could not send reply. Try again.";
+      toast.error(msg);
     } finally {
       setIsReplying(false);
     }

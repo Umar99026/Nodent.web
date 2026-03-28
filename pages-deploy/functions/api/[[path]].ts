@@ -89,6 +89,28 @@ const questionAttempts = pgTable("question_attempts", {
   answeredAt: text("answered_at").notNull(),
 });
 
+const forumPosts = pgTable("forum_posts", {
+  id: serial("id").primaryKey(),
+  subjectId: text("subject_id").notNull(),
+  userId: integer("user_id").notNull(),
+  username: text("username").notNull(),
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  imageUrls: text("image_urls"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+const forumReplies = pgTable("forum_replies", {
+  id: serial("id").primaryKey(),
+  postId: integer("post_id").notNull(),
+  subjectId: text("subject_id").notNull(),
+  userId: integer("user_id").notNull(),
+  username: text("username").notNull(),
+  body: text("body").notNull(),
+  createdAt: text("created_at").notNull(),
+});
+
 // ---- Helpers ----
 /** Hardcoded admin email must match `ADMIN_EMAIL` in frontend `constants.ts`. */
 const ADMIN_EMAIL_LC = "nodent.app@gmail.com";
@@ -159,7 +181,20 @@ async function verifyPassword(password: string, salt: string, storedHash: string
 
 // ---- DB ----
 function createDb(url: string) {
-  return drizzle(neon(url), { schema: { users, sessions, quizAttempts, writtenResponses, quizComments, customQuestions, chatMessages, questionAttempts } });
+  return drizzle(neon(url), {
+    schema: {
+      users,
+      sessions,
+      quizAttempts,
+      writtenResponses,
+      quizComments,
+      customQuestions,
+      chatMessages,
+      questionAttempts,
+      forumPosts,
+      forumReplies,
+    },
+  });
 }
 
 type Env = { DATABASE_URL: string; ADMIN_KEY: string; FRONTEND_URL: string };
@@ -428,6 +463,247 @@ app.post("/api/chat/:subjectId", authMiddleware, async (c: any) => {
   return c.json({ message: { id: result[0].id, userId: user.id, username: user.username, text, time: nowIso() } });
 });
 
+// ---- Forum (posts + replies) ----
+app.get("/api/forum/:subjectId/posts", authMiddleware, async (c: any) => {
+  try {
+    const db = c.get("db");
+    const subjectId = c.req.param("subjectId");
+    const result = await db.execute(sql`
+      SELECT * FROM (
+        SELECT
+          p.id,
+          p.subject_id,
+          p.user_id,
+          p.username,
+          p.title,
+          p.body,
+          p.image_urls,
+          p.created_at,
+          p.updated_at,
+          (SELECT COUNT(*)::integer FROM forum_replies r WHERE r.post_id = p.id) AS reply_count,
+          (
+            SELECT MAX(sub.ts) FROM (
+              SELECT p.updated_at AS ts
+              UNION ALL
+              SELECT r.created_at AS ts FROM forum_replies r WHERE r.post_id = p.id
+            ) AS sub
+          ) AS last_activity_at
+        FROM forum_posts p
+        WHERE p.subject_id = ${subjectId}
+      ) q
+      ORDER BY last_activity_at DESC NULLS LAST, q.id DESC
+      LIMIT 200
+    `);
+    const rows = result.rows as Record<string, unknown>[];
+    return c.json({
+      posts: rows.map((r) => ({
+        id: String(r.id),
+        subjectId: String(r.subject_id),
+        userId: String(r.user_id),
+        username: String(r.username ?? ""),
+        title: String(r.title ?? ""),
+        body: String(r.body ?? ""),
+        imageUrls: r.image_urls
+          ? (safeJsonParse(String(r.image_urls)) as string[] | undefined)
+          : undefined,
+        createdAt: String(r.created_at ?? ""),
+        updatedAt: String(r.updated_at ?? ""),
+        replyCount: Number(r.reply_count ?? 0),
+        lastActivityAt: String(r.last_activity_at ?? r.updated_at ?? ""),
+      })),
+    });
+  } catch (e: unknown) {
+    console.error("[Forum posts GET]", errorChain(e));
+    return c.json(
+      {
+        error:
+          "Could not load forum posts. If you use Neon, run `pages-deploy/neon-forum-tables.sql`.",
+      },
+      500,
+    );
+  }
+});
+
+app.post("/api/forum/:subjectId/posts", authMiddleware, async (c: any) => {
+  try {
+    const user = c.get("user");
+    const db = c.get("db");
+    const subjectId = c.req.param("subjectId");
+    const body = await c.req.json();
+    const title = cleanText(body.title, 140);
+    const textBody = cleanText(body.body, 4000);
+    if (!title) return c.json({ error: "Title is required." }, 400);
+    if (!textBody) return c.json({ error: "Post text is required." }, 400);
+
+    const imageUrlsRaw = Array.isArray(body.imageUrls) ? body.imageUrls : null;
+    const imageUrlsArr = imageUrlsRaw
+      ? imageUrlsRaw
+          .map((u: unknown) => String(u ?? "").trim())
+          .filter(Boolean)
+          .slice(0, 6)
+      : null;
+    const imageUrlsJson =
+      imageUrlsArr && imageUrlsArr.length ? JSON.stringify(imageUrlsArr) : null;
+
+    const createdAt = nowIso();
+    const inserted = await db
+      .insert(forumPosts)
+      .values({
+        subjectId,
+        userId: user.id,
+        username: user.username,
+        title,
+        body: textBody,
+        imageUrls: imageUrlsJson,
+        createdAt,
+        updatedAt: createdAt,
+      })
+      .returning({ id: forumPosts.id });
+
+    return c.json({
+      post: {
+        id: String(inserted[0].id),
+        subjectId,
+        userId: String(user.id),
+        username: user.username,
+        title,
+        body: textBody,
+        imageUrls: imageUrlsArr ?? undefined,
+        createdAt,
+        updatedAt: createdAt,
+        replyCount: 0,
+        lastActivityAt: createdAt,
+      },
+    });
+  } catch (e: unknown) {
+    console.error("[Forum posts POST]", errorChain(e));
+    return c.json(
+      {
+        error: `${errorChain(e)} Run pages-deploy/neon-forum-tables.sql on Neon if forum tables are missing.`,
+      },
+      500,
+    );
+  }
+});
+
+app.get("/api/forum/:subjectId/posts/:postId", authMiddleware, async (c: any) => {
+  try {
+    const db = c.get("db");
+    const subjectId = c.req.param("subjectId");
+    const postId = Number(c.req.param("postId"));
+    if (!postId || Number.isNaN(postId)) {
+      return c.json({ error: "Invalid post id." }, 400);
+    }
+
+    const postRows = await db
+      .select()
+      .from(forumPosts)
+      .where(
+        and(eq(forumPosts.id, postId), eq(forumPosts.subjectId, subjectId)),
+      )
+      .limit(1);
+    if (postRows.length === 0) return c.json({ error: "Post not found." }, 404);
+
+    const p = postRows[0];
+    const replies = await db
+      .select()
+      .from(forumReplies)
+      .where(
+        and(eq(forumReplies.postId, postId), eq(forumReplies.subjectId, subjectId)),
+      )
+      .orderBy(asc(forumReplies.createdAt), asc(forumReplies.id))
+      .limit(500);
+
+    return c.json({
+      post: {
+        id: String(p.id),
+        subjectId: p.subjectId,
+        userId: String(p.userId),
+        username: p.username,
+        title: p.title,
+        body: p.body,
+        imageUrls: safeJsonParse(p.imageUrls ?? null) as string[] | undefined,
+        createdAt: p.createdAt,
+        updatedAt: p.updatedAt,
+      },
+      replies: replies.map((r) => ({
+        id: String(r.id),
+        postId: String(r.postId),
+        userId: String(r.userId),
+        username: r.username,
+        body: r.body,
+        createdAt: r.createdAt,
+      })),
+    });
+  } catch (e: unknown) {
+    console.error("[Forum post GET]", errorChain(e));
+    return c.json({ error: "Could not load post." }, 500);
+  }
+});
+
+app.post(
+  "/api/forum/:subjectId/posts/:postId/replies",
+  authMiddleware,
+  async (c: any) => {
+    try {
+      const user = c.get("user");
+      const db = c.get("db");
+      const subjectId = c.req.param("subjectId");
+      const postId = Number(c.req.param("postId"));
+      if (!postId || Number.isNaN(postId)) {
+        return c.json({ error: "Invalid post id." }, 400);
+      }
+
+      const body = await c.req.json();
+      const textBody = cleanText(body.body, 4000);
+      if (!textBody) return c.json({ error: "Reply text is required." }, 400);
+
+      const postCheck = await db
+        .select({ id: forumPosts.id })
+        .from(forumPosts)
+        .where(
+          and(eq(forumPosts.id, postId), eq(forumPosts.subjectId, subjectId)),
+        )
+        .limit(1);
+      if (postCheck.length === 0) {
+        return c.json({ error: "Post not found." }, 404);
+      }
+
+      const createdAt = nowIso();
+      const ins = await db
+        .insert(forumReplies)
+        .values({
+          postId,
+          subjectId,
+          userId: user.id,
+          username: user.username,
+          body: textBody,
+          createdAt,
+        })
+        .returning({ id: forumReplies.id });
+
+      await db
+        .update(forumPosts)
+        .set({ updatedAt: createdAt })
+        .where(eq(forumPosts.id, postId));
+
+      return c.json({
+        reply: {
+          id: String(ins[0].id),
+          postId: String(postId),
+          userId: String(user.id),
+          username: user.username,
+          body: textBody,
+          createdAt,
+        },
+      });
+    } catch (e: unknown) {
+      console.error("[Forum replies POST]", errorChain(e));
+      return c.json({ error: "Could not add reply." }, 500);
+    }
+  },
+);
+
 // ---- Admin ----
 app.get("/api/admin/questions", adminAccessMiddleware, async (c: any) => {
   const db = c.get("db");
@@ -526,7 +802,7 @@ app.post("/api/admin/questions", adminAccessMiddleware, async (c: any) => {
         " Run `neon-add-custom-question-columns.sql` from the repo on Neon if `topic` / `image_urls` / `marks` are missing.";
     } else if (/invalid input syntax.*integer|invalid input syntax for type integer/i.test(msg)) {
       hint =
-        " Your `custom_questions.subject_id` column may be INTEGER while this app expects TEXT (string ids like `methods`). Alter the column to TEXT or recreate the table to match `backend/drizzle/migrations/0000_conscious_proudstar.sql`.";
+        " Run `neon-custom-questions-subject-id-text.sql` on Neon (or ALTER subject_id to TEXT). The app sends string subject ids.";
     }
     return c.json({ error: `${msg}${hint}` }, 500);
   }
