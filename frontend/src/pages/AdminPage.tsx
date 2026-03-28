@@ -82,7 +82,9 @@ export default function AdminPage() {
 
   const { user } = useAuth();
   const isAdminEmail = user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
-  const [adminKey, setAdminKey] = useState(() => localStorage.getItem(STORAGE_KEYS.adminKey) ?? "");
+  const [adminKey, setAdminKey] = useState(
+    () => localStorage.getItem(STORAGE_KEYS.adminKey)?.trim() ?? "",
+  );
   const hasAdminKey = !!adminKey.trim();
   const isAdmin = isAdminEmail || hasAdminKey;
 
@@ -91,6 +93,16 @@ export default function AdminPage() {
       navigate("/dashboard", { replace: true });
     }
   }, [isAdmin, navigate]);
+
+  useEffect(() => {
+    const raw = localStorage.getItem(STORAGE_KEYS.adminKey);
+    if (!raw) return;
+    const trimmed = raw.trim();
+    if (trimmed !== raw) {
+      localStorage.setItem(STORAGE_KEYS.adminKey, trimmed);
+      setAdminKey(trimmed);
+    }
+  }, []);
 
   /* ------ form state ------ */
   const [subjectId, setSubjectId] = useState("");
@@ -328,8 +340,12 @@ export default function AdminPage() {
       resetForm();
       fetchQuestions();
     } catch (err) {
-      if (err instanceof ApiError) setFormError(err.message);
-      else setFormError("Failed to add question");
+      const msg =
+        err instanceof ApiError
+          ? err.message
+          : "Failed to add question (network or server error).";
+      setFormError(msg);
+      toast.error(msg);
     } finally {
       setIsSubmitting(false);
     }
@@ -504,6 +520,11 @@ export default function AdminPage() {
                       value={adminKey}
                       onChange={(e) => {
                         const next = e.target.value;
+                        setAdminKey(next);
+                        localStorage.setItem(STORAGE_KEYS.adminKey, next);
+                      }}
+                      onBlur={(e) => {
+                        const next = e.target.value.trim();
                         setAdminKey(next);
                         localStorage.setItem(STORAGE_KEYS.adminKey, next);
                       }}

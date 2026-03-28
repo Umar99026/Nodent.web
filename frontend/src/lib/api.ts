@@ -74,8 +74,9 @@ export async function apiFetchAdmin<T>(
     headers.set("Authorization", `Bearer ${token}`);
   }
 
-  // Cloudflare Pages/Workers admin middleware expects x-admin-key
-  const adminKey = localStorage.getItem(STORAGE_KEYS.adminKey);
+  // Cloudflare Pages/Workers admin middleware expects x-admin-key (trimmed —
+  // pasted keys often include a trailing newline and fail the equality check).
+  const adminKey = localStorage.getItem(STORAGE_KEYS.adminKey)?.trim() ?? "";
   if (adminKey && !headers.has("x-admin-key")) {
     headers.set("x-admin-key", adminKey);
   }
@@ -93,7 +94,14 @@ export async function apiFetchAdmin<T>(
   });
 
   if (response.status === 401 || response.status === 403) {
-    throw new ApiError(response.status, "Admin access denied");
+    const body = await response.json().catch(() => ({}));
+    const message =
+      (body as Record<string, unknown>).error ??
+      (body as Record<string, unknown>).message;
+    throw new ApiError(
+      response.status,
+      message != null ? String(message) : "Admin access denied",
+    );
   }
 
   if (!response.ok) {

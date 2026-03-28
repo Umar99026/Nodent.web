@@ -150,9 +150,11 @@ const app = new Hono<{ Bindings: Env; Variables: Vars }>();
 
 // CORS
 app.use("/api/*", cors({
-  origin: (origin) => {
+  origin: (origin, c) => {
     if (origin?.startsWith("http://localhost:")) return origin;
     if (origin?.includes(".pages.dev")) return origin;
+    const fe = String(c.env.FRONTEND_URL || "").trim().replace(/\/$/, "");
+    if (fe && origin === fe) return origin;
     return origin || "";
   },
   allowHeaders: ["Content-Type", "Authorization", "X-Admin-Key"],
@@ -185,7 +187,7 @@ async function authMiddleware(c: any, next: any) {
 
 /** Admin routes: `x-admin-key` matching `ADMIN_KEY`, or logged-in `ADMIN_EMAIL_LC`. */
 async function adminAccessMiddleware(c: any, next: any) {
-  const headerKey = (c.req.header("x-admin-key") || "").trim();
+  const headerKey = (c.req.header("x-admin-key") || c.req.header("X-Admin-Key") || "").trim();
   if (headerKey && headerKey === c.env.ADMIN_KEY) {
     await next();
     return;
@@ -439,7 +441,12 @@ app.get("/api/admin/questions", adminAccessMiddleware, async (c: any) => {
 
 app.post("/api/admin/questions", adminAccessMiddleware, async (c: any) => {
   const db = c.get("db");
-  const body = await c.req.json();
+  let body: Record<string, unknown>;
+  try {
+    body = await c.req.json() as Record<string, unknown>;
+  } catch {
+    return c.json({ error: "Invalid JSON body." }, 400);
+  }
   const subjectId = cleanText(body.subjectId, 80);
   const type = cleanText(body.type, 20);
   const question = cleanText(body.question, 1000);
@@ -461,34 +468,45 @@ app.post("/api/admin/questions", adminAccessMiddleware, async (c: any) => {
     : null;
   const guidance = body.guidance ? cleanText(body.guidance, 500) : null;
   const passage = body.passage ? cleanText(body.passage, 3000) : null;
-  const marks = Math.max(
-    1,
-    Math.round(Number(body.marks ?? (type === "mcq" ? 1 : 2))),
-  );
+  const marksDefault = type === "mcq" ? 1 : 2;
+  const marksParsed = Math.round(Number(body.marks ?? marksDefault));
+  const marks = Number.isFinite(marksParsed)
+    ? Math.max(1, marksParsed)
+    : marksDefault;
 
   if (!subjectId || !type || !question) {
     return c.json({ error: "subjectId, type, and question are required." }, 400);
   }
 
-  const result = await db
-    .insert(customQuestions)
-    .values({
-      subjectId,
-      type,
-      topic,
-      question,
-      imageUrls: imageUrlsJson,
-      options: optionsJson,
-      answer,
-      acceptedAnswers: acceptedAnswersJson,
-      guidance,
-      passage,
-      marks,
-      createdAt: nowIso(),
-    })
-    .returning({ id: customQuestions.id });
+  try {
+    const result = await db
+      .insert(customQuestions)
+      .values({
+        subjectId,
+        type,
+        topic,
+        question,
+        imageUrls: imageUrlsJson,
+        options: optionsJson,
+        answer,
+        acceptedAnswers: acceptedAnswersJson,
+        guidance,
+        passage,
+        marks,
+        createdAt: nowIso(),
+      })
+      .returning({ id: customQuestions.id });
 
-  return c.json({ ok: true, id: result[0].id });
+    return c.json({ ok: true, id: result[0].id });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[admin/questions POST]", msg);
+    const hint =
+      /column|does not exist/i.test(msg)
+        ? " Run `neon-add-custom-question-columns.sql` from the repo against your Neon DB if `topic` / `image_urls` / `marks` were never added."
+        : "";
+    return c.json({ error: `${msg}${hint}` }, 500);
+  }
 });
 
 app.put("/api/admin/questions/:id", adminAccessMiddleware, async (c: any) => {
