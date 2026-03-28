@@ -58,12 +58,15 @@ const customQuestions = pgTable("custom_questions", {
   id: serial("id").primaryKey(),
   subjectId: text("subject_id").notNull(),
   type: text("type").notNull(),
+  topic: text("topic").notNull().default("General"),
   question: text("question").notNull(),
+  imageUrls: text("image_urls"),
   options: text("options"),
   answer: text("answer"),
   acceptedAnswers: text("accepted_answers"),
   guidance: text("guidance"),
   passage: text("passage"),
+  marks: integer("marks").notNull().default(1),
   createdAt: text("created_at").notNull(),
 });
 
@@ -87,9 +90,21 @@ const questionAttempts = pgTable("question_attempts", {
 });
 
 // ---- Helpers ----
+/** Hardcoded admin email must match `ADMIN_EMAIL` in frontend `constants.ts`. */
+const ADMIN_EMAIL_LC = "nodent.app@gmail.com";
+
 function cleanText(value: unknown, maxLength = 1000): string {
   if (typeof value !== "string") return "";
   return value.replace(/\0/g, "").trim().slice(0, maxLength);
+}
+
+function safeJsonParse(value: string | null | undefined): unknown {
+  if (value == null || value === "") return undefined;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return undefined;
+  }
 }
 function nowIso(): string { return new Date().toISOString(); }
 function createToken(): string {
@@ -137,6 +152,7 @@ const app = new Hono<{ Bindings: Env; Variables: Vars }>();
 app.use("/api/*", cors({
   origin: (origin) => {
     if (origin?.startsWith("http://localhost:")) return origin;
+    if (origin?.includes(".pages.dev")) return origin;
     return origin || "";
   },
   allowHeaders: ["Content-Type", "Authorization", "X-Admin-Key"],
@@ -167,10 +183,46 @@ async function authMiddleware(c: any, next: any) {
   await next();
 }
 
-function adminMiddleware(c: any, next: any) {
-  const key = c.req.header("x-admin-key");
-  if (!key || key !== c.env.ADMIN_KEY) return c.json({ error: "Forbidden" }, 403);
-  return next();
+/** Admin routes: `x-admin-key` matching `ADMIN_KEY`, or logged-in `ADMIN_EMAIL_LC`. */
+async function adminAccessMiddleware(c: any, next: any) {
+  const headerKey = (c.req.header("x-admin-key") || "").trim();
+  if (headerKey && headerKey === c.env.ADMIN_KEY) {
+    await next();
+    return;
+  }
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return c.json({ error: "Admin access denied." }, 403);
+  }
+  const token = authHeader.slice(7);
+  const db = c.get("db");
+  const result = await db
+    .select({
+      userId: users.id,
+      email: users.email,
+      username: users.username,
+      expiresAt: sessions.expiresAt,
+    })
+    .from(sessions)
+    .innerJoin(users, eq(sessions.userId, users.id))
+    .where(eq(sessions.token, token))
+    .limit(1);
+  if (result.length === 0) return c.json({ error: "Invalid session." }, 401);
+  if (new Date(result[0].expiresAt) < new Date()) {
+    await db.delete(sessions).where(eq(sessions.token, token));
+    return c.json({ error: "Session expired." }, 401);
+  }
+  const email = String(result[0].email || "").toLowerCase();
+  if (email !== ADMIN_EMAIL_LC) {
+    return c.json({ error: "Admin access denied." }, 403);
+  }
+  c.set("user", {
+    id: result[0].userId,
+    email: result[0].email,
+    username: result[0].username,
+    token,
+  });
+  await next();
 }
 
 // ---- Auth routes ----
@@ -229,7 +281,22 @@ app.get("/api/bootstrap", authMiddleware, async (c: any) => {
   const grouped: Record<string, any[]> = {};
   for (const row of rows) {
     if (!grouped[row.subjectId]) grouped[row.subjectId] = [];
-    grouped[row.subjectId].push({ id: row.id, type: row.type, question: row.question, options: row.options ? JSON.parse(row.options) : undefined, answer: row.answer || undefined, acceptedAnswers: row.acceptedAnswers ? JSON.parse(row.acceptedAnswers) : undefined, guidance: row.guidance || undefined, passage: row.passage || undefined });
+    const opts = safeJsonParse(row.options) as string[] | undefined;
+    const acc = safeJsonParse(row.acceptedAnswers) as string[] | undefined;
+    const imgs = safeJsonParse(row.imageUrls) as string[] | undefined;
+    grouped[row.subjectId].push({
+      id: row.id,
+      type: row.type,
+      topic: row.topic ?? "General",
+      question: row.question,
+      imageUrls: imgs,
+      options: opts,
+      answer: row.answer || undefined,
+      acceptedAnswers: acc,
+      guidance: row.guidance || undefined,
+      passage: row.passage || undefined,
+      marks: typeof row.marks === "number" ? row.marks : 1,
+    });
   }
   return c.json({ user: { id: user.id, email: user.email, username: user.username }, customQuestions: grouped });
 });
@@ -341,28 +408,117 @@ app.post("/api/chat/:subjectId", authMiddleware, async (c: any) => {
 });
 
 // ---- Admin ----
-app.get("/api/admin/questions", adminMiddleware, async (c: any) => {
+app.get("/api/admin/questions", adminAccessMiddleware, async (c: any) => {
   const db = c.get("db");
-  const rows = await db.select().from(customQuestions).orderBy(asc(customQuestions.subjectId), asc(customQuestions.createdAt));
-  const grouped: Record<string, any[]> = {};
-  for (const row of rows) {
-    if (!grouped[row.subjectId]) grouped[row.subjectId] = [];
-    grouped[row.subjectId].push({ id: row.id, type: row.type, question: row.question, options: row.options ? JSON.parse(row.options) : undefined, answer: row.answer || undefined, acceptedAnswers: row.acceptedAnswers ? JSON.parse(row.acceptedAnswers) : undefined, guidance: row.guidance || undefined, passage: row.passage || undefined });
-  }
-  return c.json({ customQuestions: grouped });
+  const rows = await db
+    .select()
+    .from(customQuestions)
+    .orderBy(asc(customQuestions.subjectId), asc(customQuestions.createdAt));
+  const list = rows.map((row) => {
+    const opts = safeJsonParse(row.options) as string[] | undefined;
+    const acc = safeJsonParse(row.acceptedAnswers) as string[] | undefined;
+    const imgs = safeJsonParse(row.imageUrls) as string[] | undefined;
+    return {
+      id: String(row.id),
+      subjectId: row.subjectId,
+      subjectName: row.subjectId,
+      type: row.type,
+      topic: row.topic ?? "General",
+      question: row.question,
+      imageUrls: imgs,
+      options: opts,
+      correctAnswer: row.answer || undefined,
+      acceptedAnswers: acc,
+      marks: typeof row.marks === "number" ? row.marks : 1,
+      guidance: row.guidance || undefined,
+      passage: row.passage || undefined,
+    };
+  });
+  return c.json(list);
 });
 
-app.post("/api/admin/questions", adminMiddleware, async (c: any) => {
-  const db = c.get("db"); const body = await c.req.json();
-  const subjectId = cleanText(body.subjectId, 80); const type = cleanText(body.type, 20); const question = cleanText(body.question, 1000);
-  if (!subjectId || !type || !question) return c.json({ error: "Required fields missing." }, 400);
-  const result = await db.insert(customQuestions).values({ subjectId, type, question, options: body.options ? JSON.stringify(body.options) : null, answer: body.answer ? cleanText(body.answer, 500) : null, acceptedAnswers: body.acceptedAnswers ? JSON.stringify(body.acceptedAnswers) : null, guidance: body.guidance ? cleanText(body.guidance, 500) : null, passage: body.passage ? cleanText(body.passage, 3000) : null, createdAt: nowIso() }).returning({ id: customQuestions.id });
+app.post("/api/admin/questions", adminAccessMiddleware, async (c: any) => {
+  const db = c.get("db");
+  const body = await c.req.json();
+  const subjectId = cleanText(body.subjectId, 80);
+  const type = cleanText(body.type, 20);
+  const question = cleanText(body.question, 1000);
+  const topic = cleanText(body.topic || "General", 100);
+  const imageUrlsRaw = Array.isArray(body.imageUrls) ? body.imageUrls : null;
+  const imageUrlsArr = imageUrlsRaw
+    ? imageUrlsRaw
+        .map((u: unknown) => String(u ?? "").trim())
+        .filter(Boolean)
+        .slice(0, 6)
+    : null;
+  const imageUrlsJson =
+    imageUrlsArr && imageUrlsArr.length ? JSON.stringify(imageUrlsArr) : null;
+  const optionsJson = body.options ? JSON.stringify(body.options) : null;
+  const answerRaw = body.correctAnswer ?? body.answer;
+  const answer = answerRaw ? cleanText(String(answerRaw), 500) : null;
+  const acceptedAnswersJson = body.acceptedAnswers
+    ? JSON.stringify(body.acceptedAnswers)
+    : null;
+  const guidance = body.guidance ? cleanText(body.guidance, 500) : null;
+  const passage = body.passage ? cleanText(body.passage, 3000) : null;
+  const marks = Math.max(
+    1,
+    Math.round(Number(body.marks ?? (type === "mcq" ? 1 : 2))),
+  );
+
+  if (!subjectId || !type || !question) {
+    return c.json({ error: "subjectId, type, and question are required." }, 400);
+  }
+
+  const result = await db
+    .insert(customQuestions)
+    .values({
+      subjectId,
+      type,
+      topic,
+      question,
+      imageUrls: imageUrlsJson,
+      options: optionsJson,
+      answer,
+      acceptedAnswers: acceptedAnswersJson,
+      guidance,
+      passage,
+      marks,
+      createdAt: nowIso(),
+    })
+    .returning({ id: customQuestions.id });
+
   return c.json({ ok: true, id: result[0].id });
 });
 
-app.delete("/api/admin/questions/:id", adminMiddleware, async (c: any) => {
-  await c.get("db").delete(customQuestions).where(eq(customQuestions.id, Number(c.req.param("id"))));
+app.put("/api/admin/questions/:id", adminAccessMiddleware, async (c: any) => {
+  const body = await c.req.json();
+  const marks = Math.max(1, Math.round(Number(body.marks ?? 1)));
+  await c
+    .get("db")
+    .update(customQuestions)
+    .set({ marks })
+    .where(eq(customQuestions.id, Number(c.req.param("id"))));
+  return c.json({ ok: true, marks });
+});
+
+app.delete("/api/admin/questions/:id", adminAccessMiddleware, async (c: any) => {
+  await c
+    .get("db")
+    .delete(customQuestions)
+    .where(eq(customQuestions.id, Number(c.req.param("id"))));
   return c.json({ ok: true });
+});
+
+app.get("/api/admin/google-sheet/status", adminAccessMiddleware, async (c: any) => {
+  return c.json({ enabled: false });
+});
+
+app.post("/api/admin/questions/sync-from-sheet", adminAccessMiddleware, async (c: any) => {
+  return c.json(
+    { error: "Google Sheets sync is not configured on Cloudflare Workers." },
+    503,
+  );
 });
 
 // ---- Health ----
