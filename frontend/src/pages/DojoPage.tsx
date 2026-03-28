@@ -211,6 +211,18 @@ export default function DojoPage() {
     };
   }, [practiceQuestions, topicMode]);
 
+  /** True when this subject has enough MCQ + short-answer questions for a 10-question battle (for current topic selection). */
+  const canStartBattle = useMemo(() => {
+    const pool = practiceQuestions.filter(
+      (q) => q.type === "mcq" || q.type === "short" || q.type === "short_answer",
+    );
+    const filtered =
+      topicMode === "mix"
+        ? pool
+        : pool.filter((q) => (q.topic?.trim() || "General") === topicMode);
+    return filtered.length >= 10;
+  }, [practiceQuestions, topicMode]);
+
   const handleChallenge = async (opponentUsername: string) => {
     if (!subjectId) return;
 
@@ -509,6 +521,11 @@ export default function DojoPage() {
                 </SelectContent>
               </Select>
             </div>
+            {!canStartBattle && (
+              <p className="text-sm text-muted-foreground">
+                Battles need at least 10 MCQ or Short Answer questions for this subject (add them in Admin).
+              </p>
+            )}
           </div>
 
           <DialogFooter className="mt-4">
@@ -527,9 +544,7 @@ export default function DojoPage() {
                 void handleChallenge(challengeOpponentUsername);
                 setTopicDialogOpen(false);
               }}
-              disabled={
-                isChallenging || !challengeOpponentUsername || availableTopics.length === 0
-              }
+              disabled={isChallenging || !challengeOpponentUsername || !canStartBattle}
             >
               Challenge
             </Button>

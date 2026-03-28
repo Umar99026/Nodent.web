@@ -132,6 +132,9 @@ export default function AdminPage() {
   const [marksEdits, setMarksEdits] = useState<Record<string, number>>({});
   const [marksSaving, setMarksSaving] = useState<string | null>(null);
 
+  const [sheetEnabled, setSheetEnabled] = useState<boolean | null>(null);
+  const [sheetSyncing, setSheetSyncing] = useState(false);
+
   /* ------ fetch existing questions ------ */
 
   const fetchQuestions = useCallback(async () => {
@@ -151,6 +154,24 @@ export default function AdminPage() {
   useEffect(() => {
     if (isAdmin) fetchQuestions();
   }, [isAdmin, fetchQuestions]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const d = await apiFetchAdmin<{ enabled: boolean }>(
+          API_PATHS.admin.googleSheetStatus,
+        );
+        if (!cancelled) setSheetEnabled(Boolean(d?.enabled));
+      } catch {
+        if (!cancelled) setSheetEnabled(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isAdmin]);
 
   /* ------ submit question ------ */
 
@@ -307,6 +328,36 @@ export default function AdminPage() {
     }
   };
 
+  const handleSyncFromSheet = useCallback(async () => {
+    setSheetSyncing(true);
+    try {
+      const r = await apiFetchAdmin<{
+        imported: number;
+        updated: number;
+        deleted: number;
+        errors?: { row: number; message: string }[];
+      }>(API_PATHS.admin.syncQuestionsFromSheet, {
+        method: "POST",
+        body: "{}",
+      });
+      toast.success(
+        `Sheet sync: ${r.imported} new, ${r.updated} updated, ${r.deleted} removed.`,
+      );
+      if (r.errors?.length) {
+        toast.message(
+          `${r.errors.length} row(s) failed — see server logs for details.`,
+          { duration: 7000 },
+        );
+      }
+      await fetchQuestions();
+    } catch (err) {
+      if (err instanceof ApiError) toast.error(err.message);
+      else toast.error("Could not sync from Google Sheet.");
+    } finally {
+      setSheetSyncing(false);
+    }
+  }, [fetchQuestions]);
+
   const handleUpdateMarks = async (questionId: string, nextMarks: number) => {
     const clamped = Math.max(1, Math.min(20, Math.round(nextMarks)));
     try {
@@ -360,6 +411,59 @@ export default function AdminPage() {
   return (
     <AppShell title="Admin Panel" subtitle="Manage custom questions">
       <div className="mx-auto max-w-4xl space-y-8">
+        <Card className="paper-texture border-white/20">
+          <CardHeader>
+            <CardTitle className="font-display text-lg">
+              Google Sheet mirror
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4 text-sm text-muted-foreground">
+            <p>
+              When the server is configured with a Google service account and
+              spreadsheet ID, each new question is appended to the sheet.
+              Practice mode always uses the database — run{" "}
+              <span className="font-medium text-foreground">
+                Import from Google Sheet
+              </span>{" "}
+              after editing the sheet so changes go live.
+            </p>
+            {sheetEnabled === null ? (
+              <p className="text-xs">Checking whether Sheets sync is enabled…</p>
+            ) : sheetEnabled ? (
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={sheetSyncing}
+                onClick={() => void handleSyncFromSheet()}
+                className="gap-2"
+              >
+                {sheetSyncing ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" />
+                    Syncing from sheet…
+                  </>
+                ) : (
+                  "Import from Google Sheet"
+                )}
+              </Button>
+            ) : (
+              <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-950 dark:text-amber-100">
+                Sheets mirroring is off. On the host, set{" "}
+                <code className="rounded bg-black/10 px-1">GOOGLE_SHEETS_SPREADSHEET_ID</code>{" "}
+                and either{" "}
+                <code className="rounded bg-black/10 px-1">GOOGLE_SERVICE_ACCOUNT_FILE</code>{" "}
+                (path to JSON key) or{" "}
+                <code className="rounded bg-black/10 px-1">GOOGLE_SERVICE_ACCOUNT_JSON</code>
+                . Share the spreadsheet with the service account email (Editor).
+                Tab name defaults to{" "}
+                <code className="rounded bg-black/10 px-1">NodentQuestions</code>{" "}
+                or override with{" "}
+                <code className="rounded bg-black/10 px-1">GOOGLE_SHEETS_TAB_NAME</code>.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Add Question Form */}
         <Card className="paper-texture">
           <CardHeader>

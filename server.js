@@ -3,6 +3,7 @@ const path = require("path");
 const fs = require("fs");
 const sqlite3 = require("sqlite3").verbose();
 const crypto = require("crypto");
+const sheetsSync = require("./googleSheetsSync");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -300,6 +301,23 @@ async function initDb() {
   await run(`CREATE INDEX IF NOT EXISTS idx_dojo_battles_status ON dojo_battles(status, updated_at)`);
 
   await run(`
+    CREATE TABLE IF NOT EXISTS user_study_daily (
+      user_id INTEGER NOT NULL,
+      date TEXT NOT NULL,
+      total_seconds INTEGER NOT NULL DEFAULT 0,
+      by_subject_json TEXT NOT NULL DEFAULT '{}',
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (user_id, date),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+  await run(
+    `CREATE INDEX IF NOT EXISTS idx_user_study_daily_user_date ON user_study_daily(user_id, date)`,
+  );
+
+  await ensureColumn("users", "study_goal_minutes", "INTEGER NOT NULL DEFAULT 120");
+
+  await run(`
     CREATE TABLE IF NOT EXISTS question_attempts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
@@ -462,6 +480,228 @@ app.get("/api/bootstrap", authMiddleware, async (req, res) => {
   } catch (error) {
     console.error("[Bootstrap] Error:", error);
     res.status(500).json({ error: "Could not load session." });
+  }
+});
+
+function mergeStudyBySubject(existingObj, incomingObj) {
+  const out = { ...existingObj };
+  for (const [k, v] of Object.entries(incomingObj || {})) {
+    const n = Math.max(0, Math.floor(Number(v) || 0));
+    out[k] = Math.max(Math.floor(Number(out[k]) || 0), n);
+  }
+  return out;
+}
+
+function mergeStudyDayPayload(existingRow, incoming) {
+  let exSub = {};
+  try {
+    exSub = JSON.parse(existingRow?.by_subject_json || "{}");
+    if (!exSub || typeof exSub !== "object") exSub = {};
+  } catch {
+    exSub = {};
+  }
+  const inSub =
+    typeof incoming.dailySecondsBySubject === "object" && incoming.dailySecondsBySubject !== null
+      ? incoming.dailySecondsBySubject
+      : {};
+  const mergedSub = mergeStudyBySubject(exSub, inSub);
+  const sumSub = Object.values(mergedSub).reduce(
+    (a, n) => a + Math.max(0, Math.floor(Number(n) || 0)),
+    0,
+  );
+  const inTotal = Math.max(0, Math.floor(Number(incoming.dailySeconds) || 0));
+  const exTotal = Math.max(0, Math.floor(Number(existingRow?.total_seconds) || 0));
+  const total = Math.max(exTotal, inTotal, sumSub);
+  return { total, by_subject_json: JSON.stringify(mergedSub) };
+}
+
+async function upsertStudyDayForUser(userId, date, partial) {
+  if (partial.goalMinutes !== undefined && partial.goalMinutes !== null) {
+    const goalMinutes = Number(partial.goalMinutes);
+    if (Number.isFinite(goalMinutes) && goalMinutes >= 1 && goalMinutes <= 480) {
+      await run(`UPDATE users SET study_goal_minutes = ? WHERE id = ?`, [
+        Math.round(goalMinutes),
+        userId,
+      ]);
+    }
+  }
+  const existing = await get(
+    `SELECT total_seconds, by_subject_json FROM user_study_daily WHERE user_id = ? AND date = ?`,
+    [userId, date],
+  );
+  const merged = mergeStudyDayPayload(existing, {
+    dailySeconds: partial.dailySeconds,
+    dailySecondsBySubject: partial.dailySecondsBySubject,
+  });
+  const ts = nowIso();
+  await run(
+    `INSERT INTO user_study_daily (user_id, date, total_seconds, by_subject_json, updated_at)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(user_id, date) DO UPDATE SET
+       total_seconds = excluded.total_seconds,
+       by_subject_json = excluded.by_subject_json,
+       updated_at = excluded.updated_at`,
+    [userId, date, merged.total, merged.by_subject_json, ts],
+  );
+  return merged;
+}
+
+function addDaysIso(isoDate, deltaDays) {
+  const parts = String(isoDate || "").split("-").map(Number);
+  const y = parts[0];
+  const m = parts[1];
+  const d = parts[2];
+  if (!y || !m || !d) return isoDate;
+  const t = Date.UTC(y, m - 1, d) + deltaDays * 86400000;
+  const x = new Date(t);
+  return `${x.getUTCFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`;
+}
+
+function computeStudyStreakFromRows(rowsByDate, asOfDate, goalSeconds) {
+  const map = {};
+  for (const r of rowsByDate) {
+    map[r.date] = Math.max(0, Number(r.total_seconds) || 0);
+  }
+  let d = asOfDate;
+  let count = 0;
+  for (let i = 0; i < 400; i++) {
+    const sec = map[d] ?? 0;
+    if (sec >= goalSeconds) count++;
+    else break;
+    d = addDaysIso(d, -1);
+  }
+  return count;
+}
+
+// ── Study daily sync (cross-device) ───────────────────────────────────────────
+
+app.get("/api/study/daily", authMiddleware, async (req, res) => {
+  try {
+    const date = cleanText(req.query.date, 12);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return res.status(400).json({ error: "Invalid date (use YYYY-MM-DD)." });
+    }
+    const row = await get(
+      `SELECT date, total_seconds, by_subject_json, updated_at FROM user_study_daily WHERE user_id = ? AND date = ?`,
+      [req.user.id, date],
+    );
+    if (!row) {
+      return res.json({
+        date,
+        dailySeconds: 0,
+        dailySecondsBySubject: {},
+        updatedAt: null,
+      });
+    }
+    let bySubject = {};
+    try {
+      bySubject = JSON.parse(row.by_subject_json || "{}");
+      if (!bySubject || typeof bySubject !== "object") bySubject = {};
+    } catch {
+      bySubject = {};
+    }
+    res.json({
+      date: row.date,
+      dailySeconds: Math.max(0, Number(row.total_seconds) || 0),
+      dailySecondsBySubject: bySubject,
+      updatedAt: row.updated_at,
+    });
+  } catch (error) {
+    console.error("[Study daily GET] Error:", error);
+    res.status(500).json({ error: "Could not load study data." });
+  }
+});
+
+app.put("/api/study/daily", authMiddleware, async (req, res) => {
+  try {
+    const date = cleanText(req.body?.date, 12);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return res.status(400).json({ error: "Invalid date (use YYYY-MM-DD)." });
+    }
+
+    const merged = await upsertStudyDayForUser(req.user.id, date, {
+      goalMinutes: req.body?.goalMinutes,
+      dailySeconds: req.body?.dailySeconds,
+      dailySecondsBySubject: req.body?.dailySecondsBySubject,
+    });
+    const ts = nowIso();
+
+    let bySubject = {};
+    try {
+      bySubject = JSON.parse(merged.by_subject_json || "{}");
+    } catch {
+      bySubject = {};
+    }
+    res.json({
+      date,
+      dailySeconds: merged.total,
+      dailySecondsBySubject: bySubject,
+      updatedAt: ts,
+    });
+  } catch (error) {
+    console.error("[Study daily PUT] Error:", error);
+    res.status(500).json({ error: "Could not save study data." });
+  }
+});
+
+app.get("/api/study/history", authMiddleware, async (req, res) => {
+  try {
+    const from = cleanText(req.query.from, 12);
+    const to = cleanText(req.query.to, 12);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+      return res.status(400).json({ error: "from and to must be YYYY-MM-DD." });
+    }
+    if (from > to) {
+      return res.status(400).json({ error: "from must be on or before to." });
+    }
+    const rows = await all(
+      `SELECT date, total_seconds, by_subject_json FROM user_study_daily
+       WHERE user_id = ? AND date >= ? AND date <= ? ORDER BY date ASC`,
+      [req.user.id, from, to],
+    );
+    const days = rows.map((row) => {
+      let bySubject = {};
+      try {
+        bySubject = JSON.parse(row.by_subject_json || "{}");
+        if (!bySubject || typeof bySubject !== "object") bySubject = {};
+      } catch {
+        bySubject = {};
+      }
+      return {
+        date: row.date,
+        dailySeconds: Math.max(0, Number(row.total_seconds) || 0),
+        dailySecondsBySubject: bySubject,
+      };
+    });
+    res.json({ days });
+  } catch (error) {
+    console.error("[Study history GET] Error:", error);
+    res.status(500).json({ error: "Could not load study history." });
+  }
+});
+
+app.post("/api/study/sync", authMiddleware, async (req, res) => {
+  try {
+    const days = req.body?.days;
+    if (!Array.isArray(days)) {
+      return res.status(400).json({ error: "Expected { days: [...] }." });
+    }
+    const slice = days.slice(0, 500);
+    let mergedDays = 0;
+    for (const d of slice) {
+      const date = cleanText(d?.date, 12);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+      await upsertStudyDayForUser(req.user.id, date, {
+        goalMinutes: d.goalMinutes,
+        dailySeconds: d.dailySeconds,
+        dailySecondsBySubject: d.dailySecondsBySubject,
+      });
+      mergedDays++;
+    }
+    res.json({ ok: true, mergedDays });
+  } catch (error) {
+    console.error("[Study sync POST] Error:", error);
+    res.status(500).json({ error: "Could not sync study history." });
   }
 });
 
@@ -1689,12 +1929,35 @@ app.get("/api/scorecard", authMiddleware, async (req, res) => {
       weakestSubjectId = weakestCandidates[0]?.subject_id ?? null;
     }
 
+    const winsRow = await get(
+      `SELECT COUNT(*) as c FROM dojo_battles WHERE status = 'completed' AND winner_id = ?`,
+      [req.user.id],
+    );
+    const dojoWins = Math.max(0, Number(winsRow?.c) || 0);
+
+    const asOfRaw = cleanText(req.query.asOfDate, 12);
+    const streakAnchor = /^\d{4}-\d{2}-\d{2}$/.test(asOfRaw)
+      ? asOfRaw
+      : new Date().toISOString().slice(0, 10);
+
+    const goalRow = await get(`SELECT study_goal_minutes FROM users WHERE id = ?`, [req.user.id]);
+    const goalMin = Math.max(1, Math.min(480, Number(goalRow?.study_goal_minutes) || 120));
+    const goalSec = goalMin * 60;
+
+    const streakRows = await all(
+      `SELECT date, total_seconds FROM user_study_daily WHERE user_id = ? ORDER BY date DESC LIMIT 500`,
+      [req.user.id],
+    );
+    const studyStreak = computeStudyStreakFromRows(streakRows, streakAnchor, goalSec);
+
     res.json({
       totalStudents,
       overallRank,
       points: myRow?.points ?? 0,
       bestSubjectId,
       weakestSubjectId,
+      dojoWins,
+      studyStreak,
     });
   } catch (error) {
     console.error("[Scorecard] Error:", error);
@@ -1783,7 +2046,27 @@ app.post("/api/admin/questions", authMiddleware, adminMiddleware, async (req, re
       ]
     );
 
-    res.json({ ok: true, id: result.lastID });
+    const newId = result.lastID;
+    void sheetsSync
+      .appendQuestionEvent({
+        databaseId: String(newId),
+        subjectId,
+        type,
+        topic,
+        question,
+        optionsJson: options || "",
+        answer: answer || "",
+        acceptedAnswersJson: acceptedAnswers || "",
+        marks: String(marks),
+        guidance: guidance || "",
+        passage: passage || "",
+        imageUrlsJson: imageUrlsJson || "",
+        action: "CREATE",
+        syncedAt: nowIso(),
+      })
+      .catch((err) => console.warn("[Sheets] append after create:", err.message || err));
+
+    res.json({ ok: true, id: newId });
   } catch (error) {
     console.error("[Admin questions POST] Error:", error);
     res.status(500).json({ error: "Could not add question." });
@@ -1805,10 +2088,152 @@ app.put("/api/admin/questions/:id", authMiddleware, adminMiddleware, async (req,
 app.delete("/api/admin/questions/:id", authMiddleware, adminMiddleware, async (req, res) => {
   try {
     await run(`DELETE FROM custom_questions WHERE id = ?`, [req.params.id]);
+    void sheetsSync
+      .appendQuestionEvent({
+        databaseId: String(req.params.id),
+        subjectId: "",
+        type: "",
+        topic: "",
+        question: "",
+        optionsJson: "",
+        answer: "",
+        acceptedAnswersJson: "",
+        marks: "",
+        guidance: "",
+        passage: "",
+        imageUrlsJson: "",
+        action: "DELETE",
+        syncedAt: nowIso(),
+      })
+      .catch((err) => console.warn("[Sheets] append after delete:", err.message || err));
     res.json({ ok: true });
   } catch (error) {
     console.error("[Admin questions DELETE] Error:", error);
     res.status(500).json({ error: "Could not delete question." });
+  }
+});
+
+app.get("/api/admin/google-sheet/status", authMiddleware, adminMiddleware, async (_req, res) => {
+  try {
+    res.json({ enabled: sheetsSync.isSheetsConfigured() });
+  } catch (error) {
+    console.error("[Admin sheet status] Error:", error);
+    res.json({ enabled: false });
+  }
+});
+
+app.post("/api/admin/questions/sync-from-sheet", authMiddleware, adminMiddleware, async (_req, res) => {
+  try {
+    if (!sheetsSync.isSheetsConfigured()) {
+      return res
+        .status(503)
+        .json({ error: "Google Sheets is not configured on this server." });
+    }
+    const rawRows = await sheetsSync.readDataRows();
+    let imported = 0;
+    let updated = 0;
+    let deleted = 0;
+    const errors = [];
+
+    for (let i = 0; i < rawRows.length; i++) {
+      const row = rawRows[i];
+      const p = sheetsSync.parseRow(row);
+      const action = (p.action || "").toUpperCase();
+      const databaseId = p.database_id ? parseInt(p.database_id, 10) : NaN;
+
+      try {
+        if (action === "DELETE" && Number.isFinite(databaseId)) {
+          await run(`DELETE FROM custom_questions WHERE id = ?`, [databaseId]);
+          deleted++;
+          continue;
+        }
+
+        if (!p.subject_id || !p.type || !p.question) {
+          continue;
+        }
+
+        const topic = p.topic || "General";
+        const marks = Math.max(1, Math.round(Number(p.marks) || 1));
+        const optionsJson = p.options_json || null;
+        const acceptedRaw = p.accepted_answers_json || null;
+        const imageUrlsJson = p.image_urls_json || null;
+        const answer = p.answer || null;
+        const guidance = p.guidance || null;
+        const passage = p.passage || null;
+
+        if (Number.isFinite(databaseId)) {
+          const exists = await get(`SELECT id FROM custom_questions WHERE id = ?`, [databaseId]);
+          if (exists) {
+            await run(
+              `UPDATE custom_questions SET subject_id = ?, type = ?, topic = ?, question = ?, image_urls = ?, options = ?, answer = ?, accepted_answers = ?, guidance = ?, passage = ?, marks = ?
+               WHERE id = ?`,
+              [
+                p.subject_id,
+                p.type,
+                topic,
+                p.question,
+                imageUrlsJson,
+                optionsJson,
+                answer,
+                acceptedRaw,
+                guidance,
+                passage,
+                marks,
+                databaseId,
+              ],
+            );
+            updated++;
+          } else {
+            await run(
+              `INSERT INTO custom_questions (subject_id, type, topic, question, image_urls, options, answer, accepted_answers, guidance, passage, marks, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [
+                p.subject_id,
+                p.type,
+                topic,
+                p.question,
+                imageUrlsJson,
+                optionsJson,
+                answer,
+                acceptedRaw,
+                guidance,
+                passage,
+                marks,
+                nowIso(),
+              ],
+            );
+            imported++;
+          }
+        } else {
+          await run(
+            `INSERT INTO custom_questions (subject_id, type, topic, question, image_urls, options, answer, accepted_answers, guidance, passage, marks, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+              p.subject_id,
+              p.type,
+              topic,
+              p.question,
+              imageUrlsJson,
+              optionsJson,
+              answer,
+              acceptedRaw,
+              guidance,
+              passage,
+              marks,
+              nowIso(),
+            ],
+          );
+          imported++;
+        }
+      } catch (e) {
+        errors.push({ row: i + 2, message: String(e.message || e) });
+      }
+    }
+
+    res.json({ ok: true, imported, updated, deleted, errors });
+  } catch (error) {
+    console.error("[Admin sync-from-sheet] Error:", error);
+    res.status(500).json({ error: "Could not sync from Google Sheet." });
   }
 });
 

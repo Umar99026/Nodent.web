@@ -52,19 +52,21 @@ export function AppShell({ children, title, subtitle, headerRight }: AppShellPro
             )}
           </>
 
-          <div className="flex flex-1 items-center justify-between gap-4 py-2">
-            <div>
-              <h1 className="font-display text-xl tracking-tight text-white">
+          <div className="flex min-w-0 flex-1 items-center justify-between gap-3 py-2 sm:gap-4">
+            <div className="min-w-0 flex-1 pr-2">
+              <h1 className="font-display truncate text-xl tracking-tight text-white">
                 {title}
               </h1>
               {subtitle && (
-                <p className="text-sm text-white/70">
+                <p className="truncate text-sm text-white/70">
                   {subtitle}
                 </p>
               )}
             </div>
 
-            {headerRight ? <div className="shrink-0">{headerRight}</div> : null}
+            {headerRight ? (
+              <div className="min-w-0 shrink-0">{headerRight}</div>
+            ) : null}
           </div>
         </header>
         <ScrollArea className="flex-1 bg-transparent">

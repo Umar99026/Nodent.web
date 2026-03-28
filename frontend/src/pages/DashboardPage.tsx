@@ -33,6 +33,7 @@ import {
 
 import { baseSubjects } from "@/lib/subjects";
 import type { Subject } from "@/lib/subjects";
+import { localDateISO } from "@/lib/utils";
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -110,6 +111,8 @@ export default function DashboardPage() {
     points: number;
     bestSubjectId: string | null;
     weakestSubjectId: string | null;
+    dojoWins: number;
+    studyStreak: number;
   }
 
   const [scoreCardOpen, setScoreCardOpen] = useState(false);
@@ -144,7 +147,9 @@ export default function DashboardPage() {
     if (!user) return;
     try {
       setScoreCardLoading(true);
-      const data = await apiFetch<ScorecardData>("/api/scorecard");
+      const data = await apiFetch<ScorecardData>(
+        `/api/scorecard?asOfDate=${encodeURIComponent(localDateISO())}`,
+      );
       setScoreCard(data);
     } catch {
       toast.error("Failed to load your scorecard.");
@@ -178,12 +183,12 @@ export default function DashboardPage() {
         <button
           type="button"
           onClick={() => setScoreCardOpen((v) => !v)}
-          className="flex items-center gap-2 rounded-full border border-white/25 bg-white/15 px-3 py-2 text-left transition-colors hover:bg-white/20"
+          className="flex min-w-0 max-w-full items-center gap-2 rounded-full border border-white/25 bg-white/15 px-2.5 py-2 text-left transition-colors hover:bg-white/20 sm:px-3"
         >
-          <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/15 border border-white/20">
+          <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/20 bg-white/15">
             <User className="size-4 text-white/90" />
           </span>
-          <span className="text-sm font-semibold text-white">
+          <span className="min-w-0 truncate text-sm font-semibold text-white">
             {user?.username ?? "Student"}
           </span>
         </button>
@@ -333,19 +338,29 @@ export default function DashboardPage() {
 
                     <div className="space-y-2 rounded-2xl border border-border/50 bg-card/40 p-5">
                       <div className="text-xs text-muted-foreground">
-                        Live refresh
+                        Study streak
+                      </div>
+                      <div className="font-display text-xl font-semibold tabular-nums">
+                        {scoreCard?.studyStreak ?? 0}{" "}
+                        <span className="text-base font-medium text-muted-foreground">
+                          days
+                        </span>
                       </div>
                       <div className="text-sm text-muted-foreground">
-                        Updates every ~8 seconds while open.
+                        Consecutive days meeting your study goal (synced when you use
+                        Track My Study while signed in).
                       </div>
                     </div>
 
                     <div className="space-y-2 rounded-2xl border border-border/50 bg-card/40 p-5">
                       <div className="text-xs text-muted-foreground">
-                        Rating explanation
+                        Dojo battles won
+                      </div>
+                      <div className="font-display text-xl font-semibold tabular-nums">
+                        {scoreCard?.dojoWins ?? 0}
                       </div>
                       <div className="text-sm text-muted-foreground">
-                        Rating is scaled from your rank among students.
+                        Completed PvP matches where you finished ahead.
                       </div>
                     </div>
                   </div>
@@ -451,31 +466,32 @@ export default function DashboardPage() {
           {mySubjects.map((subject) => (
             <Card
               key={subject.id}
-              className="group relative flex flex-col gap-0 overflow-hidden rounded-2xl border border-black/10 bg-white p-0 py-0 shadow-sm transition-shadow hover:shadow-md"
+              className="group relative flex min-h-0 flex-col gap-0 overflow-hidden rounded-2xl border border-black/10 bg-white p-0 py-0 shadow-sm transition-shadow hover:shadow-md"
             >
               <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-brand/10 via-transparent to-transparent" />
-              <CardHeader className="relative z-10 border-b-0 p-5 pb-2">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 space-y-1">
-                    <CardTitle className="font-display text-xl text-[#0b0f19]">
+              <CardHeader className="relative z-10 border-b-0 p-4 pb-2 sm:p-5">
+                <div className="flex items-start justify-between gap-2 sm:gap-3">
+                  <div className="min-w-0 flex-1 space-y-1 pr-1">
+                    <CardTitle className="font-display break-words text-lg leading-snug text-[#0b0f19] sm:text-xl">
                       {subject.name}
                     </CardTitle>
-                    <CardDescription className="text-sm text-[#0b0f19]/70">
+                    <CardDescription className="break-words text-sm leading-relaxed text-[#0b0f19]/70">
                       {subject.description}
                     </CardDescription>
                   </div>
 
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex shrink-0 items-start gap-1.5 sm:gap-2">
                     <Badge
                       variant="secondary"
-                      className="rounded-full bg-[#faf8f5] border border-black/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-black"
+                      className="rounded-full bg-[#faf8f5] border border-black/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-black sm:px-3 sm:text-xs"
                     >
                       vce
                     </Badge>
 
                     <button
+                      type="button"
                       onClick={() => removeSubject(subject.id)}
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-red-500/85 text-white border border-red-500/25 transition-colors hover:bg-red-500"
+                      className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-500/85 text-white border border-red-500/25 transition-colors hover:bg-red-500"
                       aria-label={`Remove ${subject.name}`}
                     >
                       <X className="size-4 text-white" />
@@ -484,24 +500,24 @@ export default function DashboardPage() {
                 </div>
               </CardHeader>
 
-              <CardFooter className="relative z-10 mt-auto grid grid-cols-3 gap-3 border-t-0 bg-transparent p-5 pt-0">
+              <CardFooter className="relative z-10 mt-auto flex flex-col gap-2 border-t-0 bg-transparent p-4 pt-0 sm:flex-row sm:flex-wrap sm:p-5 sm:pt-0">
                 <Button
                   size="sm"
-                  className="h-11 bg-[#0b0f19] text-white hover:bg-[#0b0f19]/90 px-3 text-sm rounded-lg"
+                  className="h-11 min-h-11 w-full shrink-0 bg-[#0b0f19] px-3 text-sm text-white hover:bg-[#0b0f19]/90 sm:min-w-0 sm:flex-1"
                   onClick={() => navigate(`/quiz/${subject.id}`)}
                 >
                   Practice
                 </Button>
                 <Button
                   size="sm"
-                  className="h-11 bg-[#0b0f19] text-white hover:bg-[#0b0f19]/90 px-3 text-sm rounded-lg whitespace-normal leading-tight"
+                  className="h-11 min-h-11 w-full shrink-0 bg-[#0b0f19] px-3 text-sm text-white hover:bg-[#0b0f19]/90 sm:min-w-0 sm:flex-1"
                   onClick={() => navigate(`/quiz/${subject.id}/summary`)}
                 >
                   Summary
                 </Button>
                 <Button
                   size="sm"
-                  className="h-11 bg-success text-white hover:bg-success/90 px-3 text-sm rounded-lg"
+                  className="h-11 min-h-11 w-full shrink-0 bg-success px-3 text-sm text-white hover:bg-success/90 sm:min-w-0 sm:flex-1"
                   onClick={() => navigate(`/chat/${subject.id}`)}
                 >
                   Chat

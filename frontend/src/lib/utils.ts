@@ -28,6 +28,42 @@ export function formatSeconds(seconds: number): string {
   return `${pad(mins)}:${pad(secs)}`;
 }
 
+/** Local calendar date as YYYY-MM-DD (matches study timer storage keys). */
+export function localDateISO(d = new Date()): string {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+/** Shift a local calendar YYYY-MM-DD by a number of days. */
+export function addDaysToLocalISO(isoDate: string, deltaDays: number): string {
+  const parts = isoDate.split("-").map(Number);
+  const y = parts[0];
+  const m = parts[1];
+  const d = parts[2];
+  if (!y || !m || !d) return isoDate;
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + deltaDays);
+  return localDateISO(dt);
+}
+
+/** Per-subject second totals: take the max per key (used when merging local + server study sync). */
+export function mergeSecondsBySubject(
+  a: Record<string, number>,
+  b: Record<string, number>,
+): Record<string, number> {
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+  const out: Record<string, number> = {};
+  for (const k of keys) {
+    out[k] = Math.max(
+      Math.max(0, Math.floor(Number(a[k]) || 0)),
+      Math.max(0, Math.floor(Number(b[k]) || 0)),
+    );
+  }
+  return out;
+}
+
 /** Format an ISO date string to a human-readable locale string. */
 export function formatDateTime(iso: string): string {
   const date = new Date(iso);

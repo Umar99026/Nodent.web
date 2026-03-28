@@ -59,5 +59,7 @@ export const API_PATHS = {
     questions: "/api/admin/questions",
     users: "/api/admin/users",
     stats: "/api/admin/stats",
+    googleSheetStatus: "/api/admin/google-sheet/status",
+    syncQuestionsFromSheet: "/api/admin/questions/sync-from-sheet",
   },
 } as const;

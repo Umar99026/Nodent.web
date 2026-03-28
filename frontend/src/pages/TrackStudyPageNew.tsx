@@ -1,8 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useStudyTimer } from "@/context/StudyTimerContext";
 import { STORAGE_KEYS } from "@/lib/constants";
-import { formatSeconds } from "@/lib/utils";
+import { formatSeconds, localDateISO, mergeSecondsBySubject } from "@/lib/utils";
 import { baseSubjects } from "@/lib/subjects";
 import type { Subject } from "@/lib/subjects";
 import { AppShell } from "@/components/layout/AppShell";
@@ -81,6 +81,12 @@ function loadAnsweredCount(userId: string, subjectId: string): number {
 export default function TrackStudyPageNew() {
   const { user } = useAuth();
   const userId = user ? String(user.id) : null;
+  const [studyMergeRev, setStudyMergeRev] = useState(0);
+  useEffect(() => {
+    const h = () => setStudyMergeRev((x) => x + 1);
+    window.addEventListener("nodent-study-merged", h);
+    return () => window.removeEventListener("nodent-study-merged", h);
+  }, []);
   const {
     state,
     setBreakMinutes,
@@ -120,17 +126,20 @@ export default function TrackStudyPageNew() {
       .map(([subjectId, seconds]) => ({
         subjectId,
         subjectName:
-          baseSubjects.find((s) => s.id === subjectId)?.name ?? subjectId,
+          subjectId === "unassigned"
+            ? "Other"
+            : (baseSubjects.find((s) => s.id === subjectId)?.name ?? subjectId),
         questionsAnswered: userId ? loadAnsweredCount(userId, subjectId) : 0,
-        minutes: Math.round(seconds / 60),
-        seconds,
+        seconds: Math.max(0, Math.floor(Number(seconds) || 0)),
       }))
-      .filter((r) => r.minutes > 0)
-      .sort((a, b) => b.minutes - a.minutes);
+      .filter((r) => r.seconds > 0)
+      .sort((a, b) => b.seconds - a.seconds);
     return rows;
   }, [state.dailySecondsBySubject, userId]);
 
   const activeSubjectIdOrFirst = state.activeSubjectId ?? baseSubjects[0]?.id ?? "";
+
+  const todayKey = localDateISO();
 
   const weekData = useMemo(() => {
     if (!userId) return null;
@@ -145,10 +154,13 @@ export default function TrackStudyPageNew() {
 
     const perDay = days.map((d) => {
       const day = loadDay(userId, d);
-      const seconds = typeof day?.dailySeconds === "number" ? day.dailySeconds : 0;
+      let seconds = typeof day?.dailySeconds === "number" ? day.dailySeconds : 0;
+      if (d === todayKey) {
+        seconds = Math.max(seconds, state.dailySeconds);
+      }
       return {
         date: d.slice(5), // MM-DD
-        minutes: Math.round(seconds / 60),
+        minutes: seconds / 60,
         seconds,
       };
     });
@@ -156,33 +168,46 @@ export default function TrackStudyPageNew() {
     const perSubject: Record<string, number> = {};
     days.forEach((d) => {
       const day = loadDay(userId, d);
-      const bySubject: Record<string, number> = day?.dailySecondsBySubject ?? {};
+      let bySubject: Record<string, number> = day?.dailySecondsBySubject ?? {};
+      if (d === todayKey) {
+        bySubject = mergeSecondsBySubject(bySubject, state.dailySecondsBySubject);
+      }
       for (const [sid, secs] of Object.entries(bySubject)) {
-        perSubject[sid] = (perSubject[sid] ?? 0) + (typeof secs === "number" ? secs : 0);
+        perSubject[sid] =
+          (perSubject[sid] ?? 0) + (typeof secs === "number" ? secs : 0);
       }
     });
 
     const weeklyTargetMinutes = state.goalMinutes * 7;
-    const weeklyMinutes = perDay.reduce((sum, x) => sum + x.minutes, 0);
+    const weeklySeconds = perDay.reduce((sum, x) => sum + x.seconds, 0);
 
     const perSubjectRows = Object.entries(perSubject)
       .map(([subjectId, seconds]) => ({
         subjectId,
         subjectName:
-          baseSubjects.find((s) => s.id === subjectId)?.name ?? subjectId,
-        minutes: Math.round((seconds ?? 0) / 60),
+          subjectId === "unassigned"
+            ? "Other"
+            : (baseSubjects.find((s) => s.id === subjectId)?.name ?? subjectId),
+        seconds: Math.max(0, Math.floor(seconds ?? 0)),
       }))
-      .filter((r) => r.minutes > 0)
-      .sort((a, b) => b.minutes - a.minutes);
+      .filter((r) => r.seconds > 0)
+      .sort((a, b) => b.seconds - a.seconds);
 
     return {
       days,
       perDay,
       perSubjectRows,
-      weeklyMinutes,
+      weeklySeconds,
       weeklyTargetMinutes,
     };
-  }, [userId, state.goalMinutes]);
+  }, [
+    userId,
+    state.goalMinutes,
+    state.dailySeconds,
+    state.dailySecondsBySubject,
+    todayKey,
+    studyMergeRev,
+  ]);
 
   const streak = useMemo(() => {
     if (!userId) return 0;
@@ -194,12 +219,15 @@ export default function TrackStudyPageNew() {
       d.setDate(d.getDate() - i);
       const key = dateString(d);
       const day = loadDay(userId, key);
-      const seconds = typeof day?.dailySeconds === "number" ? day.dailySeconds : 0;
+      let seconds = typeof day?.dailySeconds === "number" ? day.dailySeconds : 0;
+      if (key === todayKey) {
+        seconds = Math.max(seconds, state.dailySeconds);
+      }
       if (seconds >= state.goalMinutes * 60) count++;
       else break;
     }
     return count;
-  }, [userId, state.goalMinutes]);
+  }, [userId, state.goalMinutes, state.dailySeconds, todayKey, studyMergeRev]);
 
   return (
     <AppShell title="Track My Study" subtitle="Run your timer and track progress.">
@@ -416,56 +444,64 @@ export default function TrackStudyPageNew() {
                       <Target className="size-4 text-brand" />
                       Progress vs goal
                     </span>
-                    <span className="font-semibold text-[#0b0f19]">
-                      {Math.round(Math.min(100, goalPct * 100))}%
+                    <span className="font-semibold tabular-nums text-[#0b0f19]">
+                      {Math.min(100, goalPct * 100).toFixed(1)}%
                     </span>
                   </div>
-                <Progress value={Math.round(Math.min(100, goalPct * 100))} className="h-3 bg-black/10" />
+                <Progress
+                  value={Math.min(100, goalPct * 100)}
+                  className="h-3 bg-black/10"
+                />
                 </div>
 
                 {/* Streak */}
                 <Separator className="bg-black/10" />
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="text-sm text-white/70">
-                    Streak
-                  </div>
+                  <div className="text-sm text-[#0b0f19]/70">Streak</div>
                   <div className="text-right">
-                    <div className="font-display text-3xl font-bold text-white">
+                    <div className="font-display text-3xl font-bold text-[#0b0f19]">
                       {streak}
                     </div>
-                    <div className="text-xs text-white/60">days in a row reaching your goal</div>
+                    <div className="text-xs text-[#0b0f19]/55">
+                      days in a row reaching your goal
+                    </div>
                   </div>
                 </div>
               </CardContent>
             </Card>
 
             {timerFullscreen && (
-              <div className="fixed inset-0 z-[200] bg-black/80">
-                <div className="flex h-full w-full flex-col">
-                  <div className="flex items-center justify-end p-4 sm:p-6">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      className="h-10 w-10 rounded-full border-white/20 bg-white/10 text-white hover:bg-white/15"
-                      onClick={() => setTimerFullscreen(false)}
-                      aria-label="Exit fullscreen"
-                    >
-                      <X className="size-5" />
-                    </Button>
-                  </div>
+              <div
+                className="fixed inset-0 z-[200] flex flex-col bg-black/80"
+                role="dialog"
+                aria-modal="true"
+                aria-label="Fullscreen study timer"
+              >
+                <div className="flex shrink-0 justify-end px-3 pb-2 pt-[max(0.75rem,env(safe-area-inset-top))] sm:px-5">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-10 w-10 rounded-full border-white/20 bg-white/10 text-white hover:bg-white/15"
+                    onClick={() => setTimerFullscreen(false)}
+                    aria-label="Exit fullscreen"
+                  >
+                    <X className="size-5" />
+                  </Button>
+                </div>
 
-                  <div className="flex flex-1 items-center justify-center px-4 pb-10 sm:px-10">
-                    <div className="w-full max-w-[1200px] rounded-3xl bg-white shadow-2xl">
-                      <div className="flex items-center justify-between gap-4 border-b border-black/10 px-6 py-5 sm:px-10">
-                        <div className="flex items-center gap-3">
+                <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain px-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-5">
+                  <div className="mx-auto flex w-full max-w-[1200px] flex-col gap-4 py-2">
+                    <div className="rounded-3xl border border-black/10 bg-white shadow-2xl">
+                      <div className="flex flex-wrap items-center gap-4 border-b border-black/10 px-4 py-4 sm:px-8 sm:py-5">
+                        <div className="flex min-w-0 flex-1 items-center gap-3">
                           {state.phase === "break" ? (
-                            <Coffee className="size-7 text-brand" />
+                            <Coffee className="size-7 shrink-0 text-brand" />
                           ) : (
-                            <Flame className="size-7 text-brand" />
+                            <Flame className="size-7 shrink-0 text-brand" />
                           )}
-                          <div>
-                            <div className="font-display text-3xl leading-tight text-[#0b0f19]">
+                          <div className="min-w-0">
+                            <div className="font-display text-2xl leading-tight text-[#0b0f19] sm:text-3xl">
                               {phaseLabel} Timer
                             </div>
                             <div className="text-sm text-[#0b0f19]/60">
@@ -479,16 +515,14 @@ export default function TrackStudyPageNew() {
                         </div>
                       </div>
 
-                      <div className="grid gap-10 px-6 py-8 sm:px-10 sm:py-10 lg:grid-cols-[1fr_360px]">
-                        <div className="flex items-center justify-center">
-                          <div
-                            className="relative"
-                            style={{
-                              width: "min(70vw, 640px)",
-                              height: "min(70vw, 640px)",
-                            }}
-                          >
-                            <svg width="100%" height="100%" viewBox="0 0 640 640">
+                      <div className="grid gap-8 px-4 py-6 sm:gap-10 sm:px-8 sm:py-8 lg:grid-cols-[1fr_min(100%,280px)] lg:items-start">
+                        <div className="flex w-full justify-center">
+                          <div className="relative mx-auto aspect-square w-full max-w-[min(88vw,calc(100dvh-11rem),640px)] shrink-0">
+                            <svg
+                              className="h-full w-full"
+                              viewBox="0 0 640 640"
+                              preserveAspectRatio="xMidYMid meet"
+                            >
                               <circle
                                 cx={320}
                                 cy={320}
@@ -507,7 +541,10 @@ export default function TrackStudyPageNew() {
                                 strokeWidth={20}
                                 strokeLinecap="round"
                                 strokeDasharray={2 * Math.PI * 292}
-                                strokeDashoffset={(2 * Math.PI * 292) - (progressPct / 100) * (2 * Math.PI * 292)}
+                                strokeDashoffset={
+                                  2 * Math.PI * 292 -
+                                  (progressPct / 100) * (2 * Math.PI * 292)
+                                }
                                 className="transition-[stroke-dashoffset] duration-500 ease-out"
                                 style={{
                                   transform: "rotate(-90deg)",
@@ -515,18 +552,18 @@ export default function TrackStudyPageNew() {
                                 }}
                               />
                             </svg>
-                            <div className="absolute inset-0 flex flex-col items-center justify-center">
-                              <div className="font-display text-[clamp(56px,7vw,120px)] font-bold leading-none tracking-tight text-[#0b0f19]">
+                            <div className="absolute inset-0 flex flex-col items-center justify-center px-2">
+                              <div className="font-display text-[clamp(40px,min(12vw,11dvh),120px)] font-bold leading-none tracking-tight text-[#0b0f19]">
                                 {formatSeconds(state.remainingSeconds)}
                               </div>
-                              <div className="mt-4 text-base text-[#0b0f19]/60">
+                              <div className="mt-2 text-sm text-[#0b0f19]/60 sm:mt-4 sm:text-base">
                                 Remaining
                               </div>
                             </div>
                           </div>
                         </div>
 
-                        <div className="flex flex-col justify-center gap-4">
+                        <div className="flex flex-col justify-center gap-4 pb-2 lg:pb-0">
                           <Button
                             onClick={() => setRunningSession(!state.isRunning)}
                             className={
@@ -547,15 +584,6 @@ export default function TrackStudyPageNew() {
                               </>
                             )}
                           </Button>
-
-                          <div className="rounded-2xl border border-black/10 bg-[#0b0f19]/[0.03] p-5">
-                            <div className="text-sm text-[#0b0f19]/60">
-                              Tip
-                            </div>
-                            <div className="mt-1 text-[#0b0f19]">
-                              Keep the timer fullscreen while you study.
-                            </div>
-                          </div>
                         </div>
                       </div>
                     </div>
@@ -572,8 +600,10 @@ export default function TrackStudyPageNew() {
                     <span>
                       {rangeMode === "day" ? "Today by Subject" : "This Week by Subject"}
                     </span>
-                    <span className="text-sm text-[#0b0f19]/60">
-                      {rangeMode === "day" ? formatSeconds(state.dailySeconds) : `${weekData?.weeklyMinutes ?? 0} min`}
+                    <span className="text-sm font-medium tabular-nums text-[#0b0f19]/70">
+                      {rangeMode === "day"
+                        ? formatSeconds(state.dailySeconds)
+                        : formatSeconds(weekData?.weeklySeconds ?? 0)}
                     </span>
                   </CardTitle>
                 </CardHeader>
@@ -583,7 +613,7 @@ export default function TrackStudyPageNew() {
                       <TableRow>
                         <TableHead className="text-[#0b0f19]/60">Subject</TableHead>
                         <TableHead className="text-right text-[#0b0f19]/60">Questions</TableHead>
-                        <TableHead className="text-right text-[#0b0f19]/60">Minutes</TableHead>
+                        <TableHead className="text-right text-[#0b0f19]/60">Time</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -602,7 +632,7 @@ export default function TrackStudyPageNew() {
                                 {row.questionsAnswered}
                               </TableCell>
                               <TableCell className="text-right font-medium text-[#0b0f19] tabular-nums">
-                                {row.minutes}
+                                {formatSeconds(row.seconds)}
                               </TableCell>
                             </TableRow>
                           ))
@@ -610,9 +640,12 @@ export default function TrackStudyPageNew() {
                       ) : weekData?.perSubjectRows?.length ? (
                         weekData.perSubjectRows.slice(0, 8).map((row) => (
                           <TableRow key={row.subjectId}>
-                          <TableCell className="text-[#0b0f19]">{row.subjectName}</TableCell>
-                          <TableCell className="text-right font-medium text-[#0b0f19] tabular-nums">
-                              {row.minutes}
+                            <TableCell className="text-[#0b0f19]">
+                              {row.subjectName}
+                            </TableCell>
+                            <TableCell className="text-right text-[#0b0f19]/40">—</TableCell>
+                            <TableCell className="text-right font-medium text-[#0b0f19] tabular-nums">
+                              {formatSeconds(row.seconds)}
                             </TableCell>
                           </TableRow>
                         ))
@@ -638,13 +671,26 @@ export default function TrackStudyPageNew() {
                   {rangeMode === "day" ? (
                     <div style={{ width: "100%", height: 220 }}>
                       <ResponsiveContainer>
-                        <BarChart data={daySubjectRows.map((r) => ({ name: r.subjectName, minutes: r.minutes }))}>
+                        <BarChart
+                          data={daySubjectRows.map((r) => ({
+                            name: r.subjectName,
+                            minutes: r.seconds / 60,
+                            seconds: r.seconds,
+                          }))}
+                        >
                           <CartesianGrid stroke="rgba(0,0,0,0.10)" strokeDasharray="3 3" />
                           <XAxis dataKey="name" tick={{ fill: "rgba(15,23,42,0.75)", fontSize: 12 }} interval={0} />
                           <YAxis tick={{ fill: "rgba(15,23,42,0.75)" }} />
                           <Tooltip
                             contentStyle={{ backgroundColor: "rgba(255,255,255,0.98)", border: "1px solid rgba(15,23,42,0.12)", color: "#0b0f19" }}
-                            formatter={(v) => [`${v} min`, "Minutes"]}
+                            formatter={(value, _name, item) => {
+                              const sec = (item?.payload as { seconds?: number })?.seconds;
+                              const s =
+                                typeof sec === "number"
+                                  ? sec
+                                  : Math.round(Number(value) * 60);
+                              return [formatSeconds(s), "Time"];
+                            }}
                           />
                           <Bar dataKey="minutes" fill="#56abe6" radius={[6, 6, 0, 0]} />
                         </BarChart>
@@ -656,8 +702,9 @@ export default function TrackStudyPageNew() {
                         <LineChart
                           data={weekData.perDay.map((d) => ({
                             date: d.date,
-                            minutes: d.minutes,
+                            minutes: d.seconds / 60,
                             goal: state.goalMinutes,
+                            seconds: d.seconds,
                           }))}
                           margin={{ top: 10, right: 10, left: -10, bottom: 10 }}
                         >
@@ -666,12 +713,17 @@ export default function TrackStudyPageNew() {
                           <YAxis tick={{ fill: "rgba(15,23,42,0.75)" }} />
                           <Tooltip
                             contentStyle={{ backgroundColor: "rgba(255,255,255,0.98)", border: "1px solid rgba(15,23,42,0.12)", color: "#0b0f19" }}
-                            formatter={(v, name) =>
-                              [
-                                `${v} min`,
-                                String(name) === "goal" ? "Goal" : "Minutes",
-                              ] as any
-                            }
+                            formatter={(v, name, item) => {
+                              if (String(name) === "goal") {
+                                return [`${v} min`, "Goal"];
+                              }
+                              const sec = (item?.payload as { seconds?: number })?.seconds;
+                              const s =
+                                typeof sec === "number"
+                                  ? sec
+                                  : Math.round(Number(v) * 60);
+                              return [formatSeconds(s), "Time"];
+                            }}
                           />
                           <Line type="monotone" dataKey="minutes" stroke="#56abe6" strokeWidth={3} dot={{ r: 3 }} />
                           <Line type="monotone" dataKey="goal" stroke="rgba(15,23,42,0.45)" strokeDasharray="6 6" />

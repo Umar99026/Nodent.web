@@ -10,7 +10,13 @@ import {
 } from "react";
 import { useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
+import { apiFetch } from "@/lib/api";
 import { STORAGE_KEYS } from "@/lib/constants";
+import {
+  collectStudyDaysForSync,
+  mergeRemoteIntoStudyStorage,
+} from "@/lib/studyLocal";
+import { addDaysToLocalISO, localDateISO, mergeSecondsBySubject } from "@/lib/utils";
 
 type StudyPhase = "session" | "break";
 
@@ -45,16 +51,8 @@ interface StudyTimerContextValue {
 
 const StudyTimerContext = createContext<StudyTimerContextValue | null>(null);
 
-function todayString(): string {
-  const d = new Date();
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-}
-
 function storageKey(userId: string): string {
-  return STORAGE_KEYS.studyPrefix + userId + "_" + todayString();
+  return STORAGE_KEYS.studyPrefix + userId + "_" + localDateISO();
 }
 
 const DEFAULTS: StudyTimerState = {
@@ -133,6 +131,7 @@ export function StudyTimerProvider({ children }: { children: ReactNode }) {
   const isOnTrackRef = useRef(false);
   const activeSubjectIdRef = useRef<string | null>(null);
   const prevPathRef = useRef<string>("");
+  const lastWallClockTickRef = useRef<number | null>(null);
 
   const quizMatch = useMemo(() => {
     // Practice mode is only the main quiz route: /quiz/:subjectId
@@ -143,7 +142,6 @@ export function StudyTimerProvider({ children }: { children: ReactNode }) {
 
   const isOnPractice = !!quizMatch;
   const isOnTrack = location.pathname.startsWith("/track");
-  // (Derived state used previously; keep logic explicit below.)
 
   useEffect(() => {
     isOnPracticeRef.current = isOnPractice;
@@ -157,6 +155,44 @@ export function StudyTimerProvider({ children }: { children: ReactNode }) {
     activeSubjectIdRef.current = state.activeSubjectId;
   }, [state.activeSubjectId]);
 
+  const advanceStudySecond = useCallback((prev: StudyTimerState): StudyTimerState => {
+    if (prev.remainingSeconds <= 1) {
+      if (prev.phase === "session") {
+        return {
+          ...prev,
+          sessionsCompleted: prev.sessionsCompleted + 1,
+          phase: "break",
+          remainingSeconds: prev.breakMinutes * 60,
+          isRunning: !prev.manualPaused,
+        };
+      }
+
+      return {
+        ...prev,
+        phase: "session",
+        remainingSeconds: prev.sessionMinutes * 60,
+        isRunning:
+          (isOnPracticeRef.current || isOnTrackRef.current) &&
+          !prev.manualPaused,
+      };
+    }
+
+    if (prev.phase === "session") {
+      const subjectId = prev.activeSubjectId ?? "unassigned";
+      return {
+        ...prev,
+        remainingSeconds: prev.remainingSeconds - 1,
+        dailySeconds: prev.dailySeconds + 1,
+        dailySecondsBySubject: {
+          ...prev.dailySecondsBySubject,
+          [subjectId]: (prev.dailySecondsBySubject[subjectId] ?? 0) + 1,
+        },
+      };
+    }
+
+    return { ...prev, remainingSeconds: prev.remainingSeconds - 1 };
+  }, []);
+
   // Load state when user changes.
   useEffect(() => {
     if (!userId) return;
@@ -165,6 +201,99 @@ export function StudyTimerProvider({ children }: { children: ReactNode }) {
     } catch {
       setState({ ...DEFAULTS });
     }
+  }, [userId]);
+
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
+  // Pull study history from server (merge into localStorage + today in React state).
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const to = localDateISO();
+        const from = addDaysToLocalISO(to, -400);
+        const data = await apiFetch<{
+          days: {
+            date: string;
+            dailySeconds: number;
+            dailySecondsBySubject: Record<string, number>;
+          }[];
+        }>(
+          `/api/study/history?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+        );
+        if (cancelled) return;
+        const today = localDateISO();
+        let mergedPast = false;
+        for (const day of data.days ?? []) {
+          if (day.date === today) {
+            setState((prev) => {
+              if (localDateISO() !== today) return prev;
+              const rSub = day.dailySecondsBySubject ?? {};
+              const mergedSub = mergeSecondsBySubject(
+                prev.dailySecondsBySubject,
+                rSub,
+              );
+              const sumSub = Object.values(mergedSub).reduce(
+                (acc, n) => acc + Math.max(0, Math.floor(Number(n) || 0)),
+                0,
+              );
+              const dailySeconds = Math.max(
+                prev.dailySeconds,
+                Math.floor(Number(day.dailySeconds) || 0),
+                sumSub,
+              );
+              return { ...prev, dailySeconds, dailySecondsBySubject: mergedSub };
+            });
+          } else {
+            mergeRemoteIntoStudyStorage(
+              userId,
+              day.date,
+              day.dailySeconds,
+              day.dailySecondsBySubject ?? {},
+            );
+            mergedPast = true;
+          }
+        }
+        if (mergedPast) {
+          window.dispatchEvent(new CustomEvent("nodent-study-merged"));
+        }
+      } catch {
+        // offline / unauthenticated
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
+  // Push all local study days to server periodically (cross-device history).
+  useEffect(() => {
+    if (!userId) return;
+    const run = () => {
+      const st = stateRef.current;
+      const today = localDateISO();
+      const days = collectStudyDaysForSync(userId, today, st.goalMinutes, {
+        dailySeconds: st.dailySeconds,
+        dailySecondsBySubject: st.dailySecondsBySubject,
+      });
+      void apiFetch("/api/study/sync", {
+        method: "POST",
+        body: JSON.stringify({ days }),
+      }).catch(() => {});
+    };
+    const interval = window.setInterval(run, 90000);
+    const onVis = () => {
+      if (document.visibilityState === "visible") run();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    const boot = window.setTimeout(run, 5000);
+    return () => {
+      window.clearInterval(interval);
+      window.clearTimeout(boot);
+      document.removeEventListener("visibilitychange", onVis);
+    };
   }, [userId]);
 
   // Persist state.
@@ -176,6 +305,39 @@ export function StudyTimerProvider({ children }: { children: ReactNode }) {
       // ignore
     }
   }, [state, userId]);
+
+  // Sync study totals to server (debounced).
+  useEffect(() => {
+    if (!userId) return;
+    const d = localDateISO();
+    const handle = window.setTimeout(() => {
+      void apiFetch("/api/study/daily", {
+        method: "PUT",
+        body: JSON.stringify({
+          date: d,
+          dailySeconds: state.dailySeconds,
+          dailySecondsBySubject: state.dailySecondsBySubject,
+          goalMinutes: state.goalMinutes,
+        }),
+      }).catch(() => {});
+    }, 800);
+    return () => window.clearTimeout(handle);
+  }, [userId, state.dailySeconds, state.goalMinutes, state.dailySecondsBySubject]);
+
+  // Other tabs / windows: refresh when localStorage study key changes.
+  useEffect(() => {
+    if (!userId) return;
+    const onStorage = (e: StorageEvent) => {
+      if (!e.key || e.key !== storageKey(userId)) return;
+      try {
+        setState(loadState(e.newValue));
+      } catch {
+        // ignore
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [userId]);
 
   // Route-driven running state:
   // - Entering practice: if session timer isn't running, start it.
@@ -228,55 +390,36 @@ export function StudyTimerProvider({ children }: { children: ReactNode }) {
     });
   }, [isOnPractice, isOnTrack, quizMatch?.subjectId, userId, location.pathname]);
 
-  // Timer tick.
+  // Timer tick: wall-clock based, fast UI refresh (handles throttled background tabs).
   useEffect(() => {
-    if (!state.isRunning) return;
+    if (!state.isRunning) {
+      lastWallClockTickRef.current = null;
+      return;
+    }
+    if (lastWallClockTickRef.current === null) {
+      lastWallClockTickRef.current = Date.now();
+    }
 
-    const t = setInterval(() => {
+    const id = window.setInterval(() => {
       setState((prev) => {
         if (!prev.isRunning) return prev;
+        const now = Date.now();
+        const anchor = lastWallClockTickRef.current ?? now;
+        let delta = Math.floor((now - anchor) / 1000);
+        if (delta < 0) delta = 0;
+        if (delta > 12) delta = 12;
+        lastWallClockTickRef.current = anchor + delta * 1000;
 
-        if (prev.remainingSeconds <= 1) {
-          if (prev.phase === "session") {
-            return {
-              ...prev,
-              sessionsCompleted: prev.sessionsCompleted + 1,
-              phase: "break",
-              remainingSeconds: prev.breakMinutes * 60,
-              isRunning: !prev.manualPaused,
-            };
-          }
-
-          // phase === "break"
-          return {
-            ...prev,
-            phase: "session",
-            remainingSeconds: prev.sessionMinutes * 60,
-            // Resume only if still on a timer-capable page.
-            isRunning: (isOnPracticeRef.current || isOnTrackRef.current) && !prev.manualPaused,
-          };
+        let s = prev;
+        for (let i = 0; i < delta; i++) {
+          s = advanceStudySecond(s);
         }
-
-        // Live accumulation while studying (updates "Today by subject" instantly)
-        if (prev.phase === "session") {
-          const subjectId = prev.activeSubjectId ?? "unassigned";
-          return {
-            ...prev,
-            remainingSeconds: prev.remainingSeconds - 1,
-            dailySeconds: prev.dailySeconds + 1,
-            dailySecondsBySubject: {
-              ...prev.dailySecondsBySubject,
-              [subjectId]: (prev.dailySecondsBySubject[subjectId] ?? 0) + 1,
-            },
-          };
-        }
-
-        return { ...prev, remainingSeconds: prev.remainingSeconds - 1 };
+        return s;
       });
-    }, 1000);
+    }, 200);
 
-    return () => clearInterval(t);
-  }, [state.isRunning]);
+    return () => window.clearInterval(id);
+  }, [state.isRunning, advanceStudySecond]);
 
   const selectSubject = useCallback((subjectId: string) => {
     setState((prev) => ({ ...prev, activeSubjectId: subjectId }));
@@ -360,4 +503,3 @@ export function useStudyTimer() {
   if (!ctx) throw new Error("useStudyTimer must be used in StudyTimerProvider");
   return ctx;
 }
-
