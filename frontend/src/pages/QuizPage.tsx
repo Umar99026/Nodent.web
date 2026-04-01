@@ -241,10 +241,13 @@ export default function QuizPage() {
           data?.customQuestions,
           subjectId,
         );
-        setQuestions(normalizeCustomQuestionsList(raw));
+        const custom = normalizeCustomQuestionsList(raw);
+        // If Sheets/admin questions are empty, fall back to built-in subject quiz.
+        setQuestions(custom.length ? custom : (subject?.quiz ?? []));
       } catch {
         if (!cancelled) {
-          setQuestions(getCustomQuestionsFromStorage(subjectId));
+          const custom = getCustomQuestionsFromStorage(subjectId);
+          setQuestions(custom.length ? custom : (subject?.quiz ?? []));
         }
       } finally {
         if (!cancelled) setQuestionsLoading(false);
@@ -253,7 +256,7 @@ export default function QuizPage() {
     return () => {
       cancelled = true;
     };
-  }, [user, subjectId]);
+  }, [user, subjectId, subject?.quiz]);
 
   const availableTopics = useMemo(() => {
     const set = new Set<string>();

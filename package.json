@@ -4,7 +4,8 @@
   "main": "server.js",
   "scripts": {
     "dev": "node server.js",
-    "start": "node server.js"
+    "start": "node server.js",
+    "sheets:sql": "node sheetsToNeonSql.js"
   },
   "dependencies": {
     "googleapis": "^144.0.0",
