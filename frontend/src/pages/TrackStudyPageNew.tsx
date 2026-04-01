@@ -42,8 +42,6 @@ import {
 } from "recharts";
 import {
   Clock,
-  Coffee,
-  Flame,
   Target,
   Play,
   Pause,
