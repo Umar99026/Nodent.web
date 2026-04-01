@@ -1,6 +1,22 @@
 import { STORAGE_KEYS } from "@/lib/constants";
 
-const API_BASE = import.meta.env.VITE_API_URL || "";
+function resolveApiBase(): string {
+  const envBase = (import.meta.env.VITE_API_URL || "").trim().replace(/\/$/, "");
+  if (envBase) return envBase;
+
+  // Production safety-net: if the frontend is served from Pages, use the Worker API.
+  // This avoids 404s from same-origin `/api/*` when Pages is not hosting the API routes.
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname.toLowerCase();
+    if (host === "nodent.pages.dev" || host.endsWith(".pages.dev")) {
+      return "https://nodent-api.nodent-vce.workers.dev";
+    }
+  }
+
+  return "";
+}
+
+const API_BASE = resolveApiBase();
 
 export class ApiError extends Error {
   status: number;
