@@ -1,12 +1,13 @@
 import { Progress } from "@/components/ui/progress";
 
 interface QuizProgressProps {
-  current: number;
+  currentIndex: number;
+  answeredCount: number;
   total: number;
 }
 
-export function QuizProgress({ current, total }: QuizProgressProps) {
-  const percentage = total > 0 ? Math.round((current / total) * 100) : 0;
+export function QuizProgress({ currentIndex, answeredCount, total }: QuizProgressProps) {
+  const percentage = total > 0 ? Math.round((answeredCount / total) * 100) : 0;
 
   return (
     <div className="w-full space-y-1.5">
@@ -14,7 +15,7 @@ export function QuizProgress({ current, total }: QuizProgressProps) {
         <span className="text-foreground">
           Question{" "}
           <span className="font-semibold text-brand-dark">
-            {Math.min(current + 1, total)}
+            {total > 0 ? Math.min(currentIndex + 1, total) : 0}
           </span>{" "}
           of <span className="font-semibold">{total}</span>
         </span>

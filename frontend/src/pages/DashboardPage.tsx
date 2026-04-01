@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { apiFetch } from "@/lib/api";
-import { STORAGE_KEYS } from "@/lib/constants";
+import { API_PATHS, STORAGE_KEYS } from "@/lib/constants";
 import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
 import {
@@ -118,6 +118,35 @@ export default function DashboardPage() {
   const [scoreCardOpen, setScoreCardOpen] = useState(false);
   const [scoreCardLoading, setScoreCardLoading] = useState(false);
   const [scoreCard, setScoreCard] = useState<ScorecardData | null>(null);
+
+  const seenFriendRequestIdsRef = useMemo(() => new Set<number>(), []);
+
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const data = await apiFetch<{
+          incoming: { requestId: number; username: string }[];
+        }>(API_PATHS.friends.requests);
+        if (cancelled) return;
+        for (const r of data?.incoming ?? []) {
+          if (!seenFriendRequestIdsRef.has(Number(r.requestId))) {
+            seenFriendRequestIdsRef.add(Number(r.requestId));
+            toast.message(`Friend request from ${r.username}`, { duration: 5000 });
+          }
+        }
+      } catch {
+        // ignore
+      }
+    };
+    void tick();
+    const interval = setInterval(() => void tick(), 15000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [user, seenFriendRequestIdsRef]);
 
   const avgDailyStudyMinutes = useMemo(() => {
     if (!user) return 0;
@@ -372,7 +401,7 @@ export default function DashboardPage() {
       )}
 
       {/* Section container */}
-      <div className="mt-2 rounded-3xl bg-white/10 backdrop-blur-md border border-white/20 p-8 sm:mt-3">
+      <div className="mt-2 min-w-0 max-w-full rounded-3xl border border-white/20 bg-white/10 p-4 backdrop-blur-md sm:mt-3 sm:p-6 lg:p-8">
         {/* Section header */}
         <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -393,7 +422,7 @@ export default function DashboardPage() {
                     <Plus className="size-4" />
                   </div>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-[420px] p-0">
+                <DropdownMenuContent className="w-[min(100vw-1.5rem,420px)] max-w-[calc(100vw-1.5rem)] p-0">
                   <div className="px-4 pb-2 pt-3">
                     <div className="relative">
                       <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -462,15 +491,15 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {mySubjects.map((subject) => (
             <Card
               key={subject.id}
-              className="group relative flex min-h-0 flex-col gap-0 overflow-hidden rounded-2xl border border-black/10 bg-white p-0 py-0 shadow-sm transition-shadow hover:shadow-md"
+              className="group relative flex min-h-0 min-w-0 flex-col gap-0 overflow-x-clip overflow-y-visible rounded-2xl border border-black/10 bg-white p-0 py-0 shadow-sm transition-shadow hover:shadow-md"
             >
-              <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-brand/10 via-transparent to-transparent" />
+              <div className="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-br from-brand/10 via-transparent to-transparent" />
               <CardHeader className="relative z-10 border-b-0 p-4 pb-2 sm:p-5">
-                <div className="flex items-start justify-between gap-2 sm:gap-3">
+                <div className="flex min-w-0 items-start justify-between gap-2 sm:gap-3">
                   <div className="min-w-0 flex-1 space-y-1 pr-1">
                     <CardTitle className="font-display break-words text-lg leading-snug text-[#0b0f19] sm:text-xl">
                       {subject.name}
@@ -500,24 +529,24 @@ export default function DashboardPage() {
                 </div>
               </CardHeader>
 
-              <CardFooter className="relative z-10 mt-auto flex flex-col gap-2 border-t-0 bg-transparent p-4 pt-0 sm:flex-row sm:flex-wrap sm:p-5 sm:pt-0">
+              <CardFooter className="relative z-10 mt-auto flex min-w-0 flex-col gap-2 border-t-0 bg-transparent p-4 pt-0 sm:p-5 sm:pt-0 lg:flex-row lg:flex-wrap">
                 <Button
                   size="sm"
-                  className="h-11 min-h-11 w-full shrink-0 bg-[#0b0f19] px-3 text-sm text-white hover:bg-[#0b0f19]/90 sm:min-w-0 sm:flex-1"
+                  className="h-11 min-h-11 w-full min-w-0 shrink-0 bg-[#0b0f19] px-2 text-sm text-white hover:bg-[#0b0f19]/90 lg:flex-1 lg:px-3"
                   onClick={() => navigate(`/quiz/${subject.id}`)}
                 >
                   Practice
                 </Button>
                 <Button
                   size="sm"
-                  className="h-11 min-h-11 w-full shrink-0 bg-[#0b0f19] px-3 text-sm text-white hover:bg-[#0b0f19]/90 sm:min-w-0 sm:flex-1"
+                  className="h-11 min-h-11 w-full min-w-0 shrink-0 bg-[#0b0f19] px-2 text-[clamp(0.7rem,2.8vw,0.875rem)] text-white hover:bg-[#0b0f19]/90 sm:text-sm lg:flex-1 lg:px-3"
                   onClick={() => navigate(`/quiz/${subject.id}/summary`)}
                 >
                   Summary
                 </Button>
                 <Button
                   size="sm"
-                  className="h-11 min-h-11 w-full shrink-0 bg-success px-3 text-sm text-white hover:bg-success/90 sm:min-w-0 sm:flex-1"
+                  className="h-11 min-h-11 w-full min-w-0 shrink-0 bg-success px-2 text-sm text-white hover:bg-success/90 lg:flex-1 lg:px-3"
                   onClick={() => navigate(`/chat/${subject.id}`)}
                 >
                   Chat

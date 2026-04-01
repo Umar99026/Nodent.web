@@ -25,10 +25,7 @@ competition.post("/answer", authMiddleware, async (c) => {
   await db.execute(sql`
     INSERT INTO question_attempts (user_id, subject_id, question_key, topic, is_correct, answered_at)
     VALUES (${user.id}, ${subjectId}, ${questionKey}, ${topic}, ${isCorrect}, ${nowIso()})
-    ON CONFLICT(user_id, subject_id, question_key) DO UPDATE SET
-      is_correct = EXCLUDED.is_correct,
-      topic = EXCLUDED.topic,
-      answered_at = EXCLUDED.answered_at
+    ON CONFLICT(user_id, subject_id, question_key) DO NOTHING
   `);
 
   return c.json({ ok: true });

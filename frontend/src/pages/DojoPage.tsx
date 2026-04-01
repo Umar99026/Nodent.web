@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 
 import { apiFetch, ApiError } from "@/lib/api";
@@ -87,6 +87,7 @@ function pickRandomQuestions<T>(arr: T[], count: number): T[] {
 
 export default function DojoPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
 
   const [subjectId, setSubjectId] = useState<string>(() => baseSubjects[0]?.id ?? "");
@@ -117,6 +118,12 @@ export default function DojoPage() {
 
   const [topicDialogOpen, setTopicDialogOpen] = useState(false);
   const [challengeOpponentUsername, setChallengeOpponentUsername] = useState<string | null>(null);
+
+  useEffect(() => {
+    const qs = new URLSearchParams(location.search);
+    const opp = (qs.get("opponent") || "").trim();
+    if (opp) setChallengeOpponentUsername(opp);
+  }, [location.search]);
 
   const practiceQuestions = useMemo(() => {
     if (!subjectId) return [];

@@ -16,6 +16,7 @@ const ChatPage = lazy(() => import("@/pages/ChatPage"));
 const DojoPage = lazy(() => import("@/pages/DojoPage"));
 const DojoBattlePage = lazy(() => import("@/pages/DojoBattlePage"));
 const AdminPage = lazy(() => import("@/pages/AdminPage"));
+const FriendsPage = lazy(() => import("@/pages/FriendsPage"));
 
 function LoadingFallback() {
   return (
@@ -193,6 +194,23 @@ function AppRoutes() {
               <AdminOnlyRoute>
                 <AdminPage />
               </AdminOnlyRoute>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/friends"
+          element={
+            <ProtectedRoute>
+              <FriendsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/friends/:friendId"
+          element={
+            <ProtectedRoute>
+              <FriendsPage />
             </ProtectedRoute>
           }
         />

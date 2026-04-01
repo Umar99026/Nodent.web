@@ -54,7 +54,7 @@ export function AppShell({ children, title, subtitle, headerRight }: AppShellPro
 
           <div className="flex min-w-0 flex-1 items-center justify-between gap-3 py-2 sm:gap-4">
             <div className="min-w-0 flex-1 pr-2">
-              <h1 className="font-display truncate text-xl tracking-tight text-white">
+              <h1 className="font-display truncate text-[clamp(0.95rem,3.8vw,1.25rem)] tracking-tight text-white sm:text-xl">
                 {title}
               </h1>
               {subtitle && (
@@ -69,13 +69,13 @@ export function AppShell({ children, title, subtitle, headerRight }: AppShellPro
             ) : null}
           </div>
         </header>
-        <ScrollArea className="flex-1 bg-transparent">
+        <ScrollArea className="min-h-0 min-w-0 flex-1 bg-transparent">
           <main
-            className={`w-full px-8 ${
+            className={`box-border w-full min-w-0 max-w-full px-4 sm:px-6 lg:px-8 ${
               isDashboard ? "max-w-none text-white" : "mx-auto max-w-7xl text-white"
             } ${isDashboard ? "pt-1 pb-8" : "py-10"}`}
           >
-            <div className="animate-fade-in-up">
+            <div className="animate-fade-in-up min-w-0 max-w-full">
               {children}
             </div>
           </main>

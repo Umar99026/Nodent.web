@@ -8,6 +8,8 @@ export interface BaseQuestion {
   marks?: number;
   guidance?: string;
   passage?: string;
+  /** Set for admin / DB-backed questions (stable practice keys). */
+  id?: number;
 }
 
 export interface McqQuestion extends BaseQuestion {

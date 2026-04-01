@@ -33,7 +33,6 @@ import {
   Users,
   TrendingUp,
   Loader2,
-  ArrowLeft,
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
@@ -224,10 +223,10 @@ export default function SummaryPage() {
               <div className="mb-4 rounded-full bg-brand/10 p-4">
                 <Trophy className="size-10 text-brand-dark" />
               </div>
-              <h2 className="font-display text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
+              <h2 className="font-display text-[clamp(1.75rem,10vw,3rem)] font-bold tracking-tight text-foreground sm:text-4xl md:text-5xl">
                 {correct} / {total}
               </h2>
-              <p className="mt-1 text-lg text-muted-foreground">
+              <p className="mt-1 text-[clamp(0.875rem,3.5vw,1.125rem)] text-muted-foreground sm:text-lg">
                 correct ({percentage}%)
               </p>
               <div className="mt-6 flex flex-wrap justify-center gap-3">
@@ -238,14 +237,6 @@ export default function SummaryPage() {
                 >
                   <RotateCcw className="size-4" />
                   Reset Practice
-                </Button>
-                <Button
-                  onClick={() => navigate(`/quiz/${subjectId}`)}
-                  variant="outline"
-                  className="gap-2"
-                >
-                  <ArrowLeft className="size-4" />
-                  Back to Practice
                 </Button>
                 <Button
                   onClick={() => navigate("/")}

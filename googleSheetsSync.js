@@ -5,9 +5,16 @@
  *
  * Env:
  *   GOOGLE_SHEETS_SPREADSHEET_ID  — spreadsheet ID (required)
- *   GOOGLE_SHEETS_TAB_NAME        — tab name, default NodentQuestions
+ *   GOOGLE_SHEETS_TAB_NAME        — see below
  *   GOOGLE_SERVICE_ACCOUNT_JSON   — full service account JSON string (private_key newlines as \n)
  *   GOOGLE_SERVICE_ACCOUNT_FILE   — path to service account .json (relative to server.js or absolute)
+ *
+ * GOOGLE_SHEETS_TAB_NAME:
+ *   • One tab (legacy): "NodentQuestions" — column B (subject_id) must list the subject per row.
+ *   • Several tabs: "english,methods,biology" — each tab’s name must match the app subject id
+ *     (slug); column B is ignored for routing (you can leave it blank or duplicate for notes).
+ *   • Single subject tab: set tab to e.g. "english" and set GOOGLE_SHEETS_SUBJECT_FROM_TAB=1
+ *     so column B is not required.
  *
  * Share the spreadsheet with the service account email (Editor).
  */
@@ -35,10 +42,30 @@ const HEADERS = [
   "action",
 ];
 
+function getTabNames() {
+  const raw = (process.env.GOOGLE_SHEETS_TAB_NAME || DEFAULT_TAB).trim();
+  return raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/** When true, each row’s subject comes from the sheet tab name, not column B. */
+function subjectIdFromTabMode() {
+  const tabs = getTabNames();
+  if (tabs.length > 1) return true;
+  if (tabs.length === 1 && tabs[0] !== DEFAULT_TAB) return true;
+  if (process.env.GOOGLE_SHEETS_SUBJECT_FROM_TAB === "1") return true;
+  return false;
+}
+
 function getConfig() {
+  const tabs = getTabNames();
   return {
     spreadsheetId: (process.env.GOOGLE_SHEETS_SPREADSHEET_ID || "").trim(),
-    tabName: (process.env.GOOGLE_SHEETS_TAB_NAME || DEFAULT_TAB).trim() || DEFAULT_TAB,
+    tabNames: tabs,
+    /** Tab used when append cannot match a subject tab. */
+    defaultTabForAppend: tabs[0] || DEFAULT_TAB,
   };
 }
 
@@ -88,15 +115,21 @@ async function getClient() {
   return google.sheets({ version: "v4", auth: await auth.getClient() });
 }
 
-function tabRange(cell) {
-  const { tabName } = getConfig();
-  const safe = tabName.includes(" ") ? `'${tabName.replace(/'/g, "''")}'` : tabName;
-  return `${safe}!${cell}`;
+function escapeTabName(tabName) {
+  const t = String(tabName).trim();
+  if (!t) return "Sheet1";
+  if (/[^A-Za-z0-9_]/.test(t) || /\s/.test(t)) {
+    return `'${t.replace(/'/g, "''")}'`;
+  }
+  return t;
 }
 
-async function ensureHeaderRow(sheets) {
-  const { spreadsheetId } = getConfig();
-  const r = tabRange("A1:N1");
+function tabA1Range(tabName, a1) {
+  return `${escapeTabName(tabName)}!${a1}`;
+}
+
+async function ensureHeaderRow(sheets, spreadsheetId, tabName) {
+  const r = tabA1Range(tabName, "A1:N1");
   const got = await sheets.spreadsheets.values.get({
     spreadsheetId,
     range: r,
@@ -138,6 +171,16 @@ function buildRow(payload) {
   ];
 }
 
+function pickTabForAppend(payload) {
+  const { tabNames, defaultTabForAppend } = getConfig();
+  const sid = String(payload.subjectId || "")
+    .trim()
+    .toLowerCase();
+  const match = tabNames.find((t) => t.trim().toLowerCase() === sid);
+  if (match) return match;
+  return defaultTabForAppend || DEFAULT_TAB;
+}
+
 /**
  * Append one row (create / delete / update audit).
  */
@@ -148,8 +191,9 @@ async function appendQuestionEvent(payload) {
   try {
     const { spreadsheetId } = getConfig();
     const sheets = await getClient();
-    await ensureHeaderRow(sheets);
-    const range = tabRange("A:N");
+    const tabName = pickTabForAppend(payload);
+    await ensureHeaderRow(sheets, spreadsheetId, tabName);
+    const range = tabA1Range(tabName, "A:N");
     await sheets.spreadsheets.values.append({
       spreadsheetId,
       range,
@@ -165,20 +209,51 @@ async function appendQuestionEvent(payload) {
 }
 
 /**
- * Read data rows (skip header). Each row should align with HEADERS.
+ * Read data rows from all configured tabs.
+ * Returns { rows: [{ tabName, row }], tabErrors: [{ tabName, message }] }.
  */
 async function readDataRows() {
   if (!isConfigured()) {
-    return [];
+    return { rows: [], tabErrors: [] };
   }
-  const { spreadsheetId } = getConfig();
+  const { spreadsheetId, tabNames } = getConfig();
   const sheets = await getClient();
-  const range = tabRange("A2:N5000");
-  const res = await sheets.spreadsheets.values.get({
-    spreadsheetId,
-    range,
-  });
-  return res.data.values || [];
+  const out = [];
+  const tabErrors = [];
+
+  for (const tabName of tabNames) {
+    try {
+      await ensureHeaderRow(sheets, spreadsheetId, tabName);
+      const range = tabA1Range(tabName, "A2:N5000");
+      const res = await sheets.spreadsheets.values.get({
+        spreadsheetId,
+        range,
+      });
+      const values = res.data.values || [];
+      for (const row of values) {
+        out.push({ tabName, row });
+      }
+    } catch (err) {
+      const message = String(err.message || err);
+      tabErrors.push({ tabName, message });
+      console.warn(
+        `[Sheets] Could not read tab "${tabName}" (create the tab in the spreadsheet or fix GOOGLE_SHEETS_TAB_NAME):`,
+        message,
+      );
+    }
+  }
+  return { rows: out, tabErrors };
+}
+
+/** Tab titles as they appear in Google Sheets (bottom bar). */
+async function listSpreadsheetSheetTitles() {
+  const { spreadsheetId } = getConfig();
+  if (!spreadsheetId) return [];
+  const sheets = await getClient();
+  const res = await sheets.spreadsheets.get({ spreadsheetId });
+  return (res.data.sheets || [])
+    .map((s) => s.properties?.title)
+    .filter(Boolean);
 }
 
 function parseRow(row) {
@@ -196,5 +271,8 @@ module.exports = {
   appendQuestionEvent,
   readDataRows,
   parseRow,
+  subjectIdFromTabMode,
+  getTabNames,
+  listSpreadsheetSheetTitles,
   HEADERS,
 };

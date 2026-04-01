@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useStudyTimer } from "@/context/StudyTimerContext";
 import { STORAGE_KEYS } from "@/lib/constants";
@@ -40,9 +40,47 @@ import {
   Line,
   CartesianGrid,
 } from "recharts";
-import { Clock, Coffee, Flame, Target, Play, Pause, Maximize2, X } from "lucide-react";
+import {
+  Clock,
+  Coffee,
+  Flame,
+  Target,
+  Play,
+  Pause,
+  Maximize2,
+  X,
+  ZoomIn,
+  ZoomOut,
+} from "lucide-react";
 
 type RangeMode = "day" | "week";
+
+const FS_SCALE_STORAGE = "nodent_study_timer_fs_scale";
+const FS_SCALE_MIN = 0.55;
+const FS_SCALE_MAX = 1.75;
+const FS_SCALE_STEP = 0.08;
+
+function clampFsScale(n: number): number {
+  return Math.min(FS_SCALE_MAX, Math.max(FS_SCALE_MIN, n));
+}
+
+function touchPinchDistance(t: TouchList): number {
+  if (t.length < 2) return 0;
+  const a = t[0];
+  const b = t[1];
+  return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+}
+
+function loadStoredFsScale(): number {
+  try {
+    const v = sessionStorage.getItem(FS_SCALE_STORAGE);
+    if (v == null) return 1;
+    const n = Number(v);
+    return Number.isFinite(n) ? clampFsScale(n) : 1;
+  } catch {
+    return 1;
+  }
+}
 
 function dateString(d: Date): string {
   const yyyy = d.getFullYear();
@@ -98,6 +136,88 @@ export default function TrackStudyPageNew() {
 
   const [rangeMode, setRangeMode] = useState<RangeMode>("day");
   const [timerFullscreen, setTimerFullscreen] = useState(false);
+  const [fullscreenScale, setFullscreenScale] = useState(1);
+  const fullscreenScaleRef = useRef(fullscreenScale);
+  fullscreenScaleRef.current = fullscreenScale;
+  const pinchRef = useRef<{
+    initialDist: number;
+    initialScale: number;
+  } | null>(null);
+  const fsCardWrapRef = useRef<HTMLDivElement | null>(null);
+  const fsOverlayRef = useRef<HTMLDivElement | null>(null);
+
+  const storeFsScale = (value: number) => {
+    const c = clampFsScale(value);
+    try {
+      sessionStorage.setItem(FS_SCALE_STORAGE, String(c));
+    } catch {
+      /* ignore */
+    }
+    return c;
+  };
+
+  const nudgeFsScale = (delta: number) => {
+    setFullscreenScale((prev) => storeFsScale(prev + delta));
+  };
+
+  useEffect(() => {
+    if (!timerFullscreen) return;
+    setFullscreenScale(loadStoredFsScale());
+  }, [timerFullscreen]);
+
+  useLayoutEffect(() => {
+    if (!timerFullscreen) return;
+    const el = fsOverlayRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? -FS_SCALE_STEP : FS_SCALE_STEP;
+      setFullscreenScale((prev) => storeFsScale(prev + delta));
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [timerFullscreen]);
+
+  useEffect(() => {
+    if (!timerFullscreen) return;
+    const el = fsCardWrapRef.current;
+    if (!el) return;
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        pinchRef.current = {
+          initialDist: touchPinchDistance(e.touches),
+          initialScale: fullscreenScaleRef.current,
+        };
+      }
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length !== 2 || !pinchRef.current) return;
+      e.preventDefault();
+      const d = touchPinchDistance(e.touches);
+      const { initialDist, initialScale } = pinchRef.current;
+      if (initialDist < 10) return;
+      setFullscreenScale(storeFsScale(initialScale * (d / initialDist)));
+    };
+
+    const endPinch = () => {
+      pinchRef.current = null;
+    };
+
+    el.addEventListener("touchstart", onTouchStart, { passive: true });
+    el.addEventListener("touchmove", onTouchMove, { passive: false });
+    el.addEventListener("touchend", endPinch);
+    el.addEventListener("touchcancel", endPinch);
+
+    return () => {
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove", onTouchMove);
+      el.removeEventListener("touchend", endPinch);
+      el.removeEventListener("touchcancel", endPinch);
+    };
+  }, [timerFullscreen]);
 
   const activeSubject: Subject | undefined = useMemo(() => {
     if (!state.activeSubjectId) return undefined;
@@ -112,7 +232,18 @@ export default function TrackStudyPageNew() {
   const progressPct =
     totalSeconds > 0 ? Math.min(100, (elapsed / totalSeconds) * 100) : 0;
 
-  const ringSize = 280;
+  const computeRingSize = () => {
+    if (typeof window === "undefined") return 320;
+    const minSide = Math.min(window.innerWidth, window.innerHeight);
+    // Big and responsive, but leave room for controls.
+    return Math.max(260, Math.min(520, Math.floor(minSide * 0.62)));
+  };
+  const [ringSize, setRingSize] = useState<number>(() => computeRingSize());
+  useLayoutEffect(() => {
+    const onResize = () => setRingSize(computeRingSize());
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
   const strokeWidth = 14;
   const radius = (ringSize - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
@@ -316,13 +447,23 @@ export default function TrackStudyPageNew() {
             <Card className="border-black/10 bg-white text-[#0b0f19] shadow-xl">
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between gap-3">
-                  <CardTitle className="flex items-center gap-2 font-display text-xl">
-                    {state.phase === "break" ? (
-                      <Coffee className="size-5 text-brand" />
-                    ) : (
-                      <Flame className="size-5 text-brand" />
-                    )}
-                    {phaseLabel} Timer
+                  <CardTitle className="flex items-center gap-3 text-xl">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand">
+                      <img
+                        src="/logo.png"
+                        alt="Nodent logo"
+                        className="h-7 w-7 object-contain"
+                        draggable={false}
+                      />
+                    </div>
+                    <div className="flex min-w-0 flex-col">
+                      <span className="font-display font-bold leading-tight text-[#0b0f19]">
+                        Nodent
+                      </span>
+                      <span className="text-xs font-medium text-[#0b0f19]/55">
+                        {phaseLabel} timer
+                      </span>
+                    </div>
                   </CardTitle>
 
                   <Button
@@ -472,39 +613,89 @@ export default function TrackStudyPageNew() {
 
             {timerFullscreen && (
               <div
-                className="fixed inset-0 z-[200] flex flex-col bg-black/80"
+                ref={fsOverlayRef}
+                className="fixed inset-0 z-[200] overflow-x-auto overflow-y-auto overscroll-y-contain bg-black/80 [touch-action:pan-x_pan-y]"
                 role="dialog"
                 aria-modal="true"
                 aria-label="Fullscreen study timer"
               >
-                <div className="flex shrink-0 justify-end px-3 pb-2 pt-[max(0.75rem,env(safe-area-inset-top))] sm:px-5">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    className="h-10 w-10 rounded-full border-white/20 bg-white/10 text-white hover:bg-white/15"
-                    onClick={() => setTimerFullscreen(false)}
-                    aria-label="Exit fullscreen"
-                  >
-                    <X className="size-5" />
-                  </Button>
-                </div>
+                {/* Fullscreen surface */}
+                <div
+                  className="flex min-h-[100dvh] w-full flex-col gap-3 pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] sm:gap-4 sm:pl-5 sm:pr-5"
+                >
+                  <div className="flex shrink-0 flex-wrap items-start justify-between gap-3">
+                    <div className="flex min-w-0 flex-1 flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
+                      <div className="flex w-fit max-w-full items-center gap-0.5 rounded-full border border-white/25 bg-white/10 px-1 py-1 text-white shadow-md">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="h-9 w-9 shrink-0 rounded-full border-white/35 bg-transparent text-white hover:bg-white/15"
+                          onClick={() => nudgeFsScale(-FS_SCALE_STEP)}
+                          aria-label="Zoom out"
+                        >
+                          <ZoomOut className="size-4" />
+                        </Button>
+                        <span className="min-w-[2.75rem] px-1 text-center text-[11px] font-medium tabular-nums sm:min-w-[3.25rem] sm:text-sm">
+                          {Math.round(fullscreenScale * 100)}%
+                        </span>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="h-9 w-9 shrink-0 rounded-full border-white/35 bg-transparent text-white hover:bg-white/15"
+                          onClick={() => nudgeFsScale(FS_SCALE_STEP)}
+                          aria-label="Zoom in"
+                        >
+                          <ZoomIn className="size-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-9 rounded-full px-2.5 text-xs text-white hover:bg-white/15"
+                          onClick={() => setFullscreenScale(storeFsScale(1))}
+                        >
+                          Reset
+                        </Button>
+                      </div>
+                      <p className="text-[10px] leading-snug text-white/55 sm:text-xs">
+                        Pinch on the timer · Ctrl/⌘ + scroll to zoom
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-11 w-11 shrink-0 rounded-full border-white/25 bg-white/10 text-white shadow-md hover:bg-white/18 sm:h-12 sm:w-12"
+                      onClick={() => setTimerFullscreen(false)}
+                      aria-label="Exit fullscreen"
+                    >
+                      <X className="size-[1.35rem] sm:size-5" strokeWidth={2.25} />
+                    </Button>
+                  </div>
 
-                <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain px-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-5">
-                  <div className="mx-auto flex w-full max-w-[1200px] flex-col gap-4 py-2">
-                    <div className="rounded-3xl border border-black/10 bg-white shadow-2xl">
-                      <div className="flex flex-wrap items-center gap-4 border-b border-black/10 px-4 py-4 sm:px-8 sm:py-5">
+                  <div className="flex w-full flex-1 flex-col pb-2">
+                    <div
+                      ref={fsCardWrapRef}
+                      className="flex min-h-0 flex-1 flex-col rounded-3xl border border-white/10 bg-[#111418] text-white shadow-2xl"
+                    >
+                      <div className="flex flex-wrap items-center gap-4 border-b border-white/10 px-4 py-4 sm:px-8 sm:py-5">
                         <div className="flex min-w-0 flex-1 items-center gap-3">
-                          {state.phase === "break" ? (
-                            <Coffee className="size-7 shrink-0 text-brand" />
-                          ) : (
-                            <Flame className="size-7 shrink-0 text-brand" />
-                          )}
+                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand">
+                            <img
+                              src="/logo.png"
+                              alt="Nodent logo"
+                              className="h-8 w-8 object-contain"
+                              draggable={false}
+                            />
+                          </div>
                           <div className="min-w-0">
-                            <div className="font-display text-2xl leading-tight text-[#0b0f19] sm:text-3xl">
-                              {phaseLabel} Timer
+                            <div className="font-display text-[clamp(1.25rem,4.5vw,1.875rem)] font-bold leading-tight text-white">
+                              Nodent
                             </div>
-                            <div className="text-sm text-[#0b0f19]/60">
+                            <div className="text-[clamp(0.75rem,3vw,0.875rem)] text-white/60">
+                              {phaseLabel} •{" "}
                               {state.phase === "break"
                                 ? "Take a break"
                                 : state.isRunning
@@ -515,9 +706,9 @@ export default function TrackStudyPageNew() {
                         </div>
                       </div>
 
-                      <div className="grid gap-8 px-4 py-6 sm:gap-10 sm:px-8 sm:py-8 lg:grid-cols-[1fr_min(100%,280px)] lg:items-start">
+                      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-6 px-4 py-6 sm:gap-8 sm:px-8 sm:py-8">
                         <div className="flex w-full justify-center">
-                          <div className="relative mx-auto aspect-square w-full max-w-[min(88vw,calc(100dvh-11rem),640px)] shrink-0">
+                          <div className="relative mx-auto aspect-square w-full max-w-[min(92vw,70dvh,760px)] shrink-0">
                             <svg
                               className="h-full w-full"
                               viewBox="0 0 640 640"
@@ -530,7 +721,7 @@ export default function TrackStudyPageNew() {
                                 fill="none"
                                 stroke="currentColor"
                                 strokeWidth={20}
-                                className="text-slate-300"
+                                className="text-white/15"
                               />
                               <circle
                                 cx={320}
@@ -552,39 +743,43 @@ export default function TrackStudyPageNew() {
                                 }}
                               />
                             </svg>
-                            <div className="absolute inset-0 flex flex-col items-center justify-center px-2">
-                              <div className="font-display text-[clamp(40px,min(12vw,11dvh),120px)] font-bold leading-none tracking-tight text-[#0b0f19]">
+                            <div className="absolute inset-0 flex flex-col items-center justify-center px-[max(0.25rem,2vw)]">
+                              <div className="font-display text-[clamp(2rem,min(14vw,12dvh),7.5rem)] font-bold leading-none tracking-tight text-white">
                                 {formatSeconds(state.remainingSeconds)}
                               </div>
-                              <div className="mt-2 text-sm text-[#0b0f19]/60 sm:mt-4 sm:text-base">
+                              <div className="mt-[clamp(0.25rem,2dvh,1rem)] text-[clamp(0.7rem,3.2vw,1rem)] text-white/60">
                                 Remaining
                               </div>
                             </div>
                           </div>
                         </div>
 
-                        <div className="flex flex-col justify-center gap-4 pb-2 lg:pb-0">
-                          <Button
-                            onClick={() => setRunningSession(!state.isRunning)}
-                            className={
-                              state.isRunning
-                                ? "h-14 bg-[#0b0f19] text-lg text-white hover:bg-[#0b0f19]/90"
-                                : "h-14 bg-brand text-lg text-white hover:bg-brand-dark"
-                            }
-                          >
-                            {state.isRunning ? (
-                              <>
-                                <Pause className="size-6" />
-                                Stop timer
-                              </>
-                            ) : (
-                              <>
-                                <Play className="size-6" />
-                                Start timer
-                              </>
-                            )}
-                          </Button>
-                        </div>
+                        <Button
+                          onClick={() => setRunningSession(!state.isRunning)}
+                          className={
+                            state.isRunning
+                              ? "min-h-12 w-full max-w-[520px] flex-wrap justify-center gap-2 bg-white text-[#0b0f19] hover:bg-white/90 sm:min-h-14"
+                              : "min-h-12 w-full max-w-[520px] flex-wrap justify-center gap-2 bg-brand text-white hover:bg-brand-dark sm:min-h-14"
+                          }
+                        >
+                          {state.isRunning ? (
+                            <>
+                              <Pause className="size-[clamp(1.1rem,3.5vw,1.5rem)] shrink-0" />
+                              <span className="text-center leading-snug">
+                                <span className="sm:hidden">Stop</span>
+                                <span className="hidden sm:inline">Stop timer</span>
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              <Play className="size-[clamp(1.1rem,3.5vw,1.5rem)] shrink-0" />
+                              <span className="text-center leading-snug">
+                                <span className="sm:hidden">Start</span>
+                                <span className="hidden sm:inline">Start timer</span>
+                              </span>
+                            </>
+                          )}
+                        </Button>
                       </div>
                     </div>
                   </div>
@@ -680,7 +875,11 @@ export default function TrackStudyPageNew() {
                         >
                           <CartesianGrid stroke="rgba(0,0,0,0.10)" strokeDasharray="3 3" />
                           <XAxis dataKey="name" tick={{ fill: "rgba(15,23,42,0.75)", fontSize: 12 }} interval={0} />
-                          <YAxis tick={{ fill: "rgba(15,23,42,0.75)" }} />
+                          <YAxis
+                            tick={{ fill: "rgba(15,23,42,0.75)" }}
+                            domain={[0, Math.max(1, state.goalMinutes)]}
+                            allowDataOverflow
+                          />
                           <Tooltip
                             contentStyle={{ backgroundColor: "rgba(255,255,255,0.98)", border: "1px solid rgba(15,23,42,0.12)", color: "#0b0f19" }}
                             formatter={(value, _name, item) => {
@@ -710,7 +909,11 @@ export default function TrackStudyPageNew() {
                         >
                           <CartesianGrid stroke="rgba(0,0,0,0.10)" strokeDasharray="3 3" />
                           <XAxis dataKey="date" tick={{ fill: "rgba(15,23,42,0.75)", fontSize: 12 }} />
-                          <YAxis tick={{ fill: "rgba(15,23,42,0.75)" }} />
+                          <YAxis
+                            tick={{ fill: "rgba(15,23,42,0.75)" }}
+                            domain={[0, Math.max(1, state.goalMinutes)]}
+                            allowDataOverflow
+                          />
                           <Tooltip
                             contentStyle={{ backgroundColor: "rgba(255,255,255,0.98)", border: "1px solid rgba(15,23,42,0.12)", color: "#0b0f19" }}
                             formatter={(v, name, item) => {

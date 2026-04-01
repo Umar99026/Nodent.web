@@ -2,7 +2,11 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { apiFetch } from "@/lib/api";
-import { STORAGE_KEYS } from "@/lib/constants";
+import { API_PATHS, STORAGE_KEYS } from "@/lib/constants";
+import {
+  getRawCustomQuestionsForSubject,
+  normalizeCustomQuestionsList,
+} from "@/lib/practiceQuestions";
 import { baseSubjects } from "@/lib/subjects";
 import type { Question, Subject } from "@/lib/subjects";
 import { AppShell } from "@/components/layout/AppShell";
@@ -13,6 +17,14 @@ import { QuizProgress } from "@/components/quiz/QuizProgress";
 import { CommentThread } from "@/components/quiz/CommentThread";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -38,14 +50,74 @@ import {
   RotateCcw,
   Clock,
   Loader2,
+  Send,
 } from "lucide-react";
+
+function mulberry32(seed: number) {
+  return function () {
+    let t = (seed += 0x6d2b79f5);
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function hashSeed(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function seededShuffle<T>(arr: T[], seedStr: string): T[] {
+  const a = [...arr];
+  const rand = mulberry32(hashSeed(seedStr));
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function seededShuffleGroups<T>(
+  items: T[],
+  seedStr: string,
+  groupKey: (item: T) => string,
+  sortWithinGroup?: (a: T, b: T) => number,
+): T[] {
+  // Preserve first-seen group order for stability, then shuffle groups.
+  const groups: { key: string; items: T[] }[] = [];
+  const idx = new Map<string, number>();
+  for (const it of items) {
+    const k = groupKey(it);
+    const existing = idx.get(k);
+    if (existing == null) {
+      idx.set(k, groups.length);
+      groups.push({ key: k, items: [it] });
+    } else {
+      groups[existing].items.push(it);
+    }
+  }
+  for (const g of groups) {
+    if (sortWithinGroup) g.items.sort(sortWithinGroup);
+  }
+  const shuffledGroups = seededShuffle(groups, seedStr);
+  return shuffledGroups.flatMap((g) => g.items);
+}
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
 
-/** Derive a stable key from a question's index within the subject. */
-function questionKey(subjectId: string, index: number): string {
+/** Stable key: DB id when present (custom questions), else index in current list. */
+function questionKey(
+  subjectId: string,
+  index: number,
+  q: Question | null,
+): string {
+  if (q?.id != null) return `${subjectId}_qid_${q.id}`;
   return `${subjectId}_q${index}`;
 }
 
@@ -94,15 +166,17 @@ function savePracticeState(
 }
 
 /* ------------------------------------------------------------------ */
-/*  Custom questions from localStorage                                 */
+/*  Custom questions from localStorage (fallback)                       */
 /* ------------------------------------------------------------------ */
 
-function getCustomQuestions(subjectId: string): Question[] {
+function getCustomQuestionsFromStorage(subjectId: string): Question[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.customQuestions);
     if (!raw) return [];
-    const parsed = JSON.parse(raw) as Record<string, Question[]>;
-    return parsed[subjectId] ?? [];
+    const parsed = JSON.parse(raw) as Record<string, unknown[]>;
+    return normalizeCustomQuestionsList(
+      getRawCustomQuestionsForSubject(parsed, subjectId),
+    );
   } catch {
     return [];
   }
@@ -122,19 +196,64 @@ export default function QuizPage() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, boolean | null>>({});
   const [initialized, setInitialized] = useState(false);
+  const [questionsLoading, setQuestionsLoading] = useState(true);
+  const [questions, setQuestions] = useState<Question[]>([]);
   const [topicFilter, setTopicFilter] = useState<string>("all");
+
+  const [assignOpen, setAssignOpen] = useState(false);
+  const [friendsLoading, setFriendsLoading] = useState(false);
+  const [friends, setFriends] = useState<
+    { userId: number; username: string; email: string }[]
+  >([]);
+  const [assignFilter, setAssignFilter] = useState("");
 
   // Find subject (used for display metadata only)
   const subject: Subject | undefined = useMemo(() => {
     return baseSubjects.find((s) => s.id === subjectId);
   }, [subjectId]);
 
-  // Use ONLY custom/admin questions (no default questions)
-  const questions: Question[] = useMemo(() => {
-    if (!subjectId) return [];
-    const custom = getCustomQuestions(subjectId);
-    return [...custom];
-  }, [subjectId]);
+  useEffect(() => {
+    setInitialized(false);
+  }, [subjectId, user?.id]);
+
+  // Refresh custom questions from API so new admin questions show without re-login.
+  useEffect(() => {
+    if (!user || !subjectId) {
+      setQuestions([]);
+      setQuestionsLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setQuestionsLoading(true);
+    (async () => {
+      try {
+        const data = await apiFetch<{
+          customQuestions?: Record<string, unknown[]>;
+        }>(API_PATHS.bootstrap);
+        if (cancelled) return;
+        if (data?.customQuestions) {
+          localStorage.setItem(
+            STORAGE_KEYS.customQuestions,
+            JSON.stringify(data.customQuestions),
+          );
+        }
+        const raw = getRawCustomQuestionsForSubject(
+          data?.customQuestions,
+          subjectId,
+        );
+        setQuestions(normalizeCustomQuestionsList(raw));
+      } catch {
+        if (!cancelled) {
+          setQuestions(getCustomQuestionsFromStorage(subjectId));
+        }
+      } finally {
+        if (!cancelled) setQuestionsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, subjectId]);
 
   const availableTopics = useMemo(() => {
     const set = new Set<string>();
@@ -142,28 +261,59 @@ export default function QuizPage() {
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [questions]);
 
-  const filteredQuestions = useMemo(() => {
-    if (topicFilter === "all") return questions;
-    return questions.filter((q) => (q.topic || "General") === topicFilter);
-  }, [questions, topicFilter]);
+  const randomizedQuestions = useMemo(() => {
+    if (!subjectId || !user) return questions;
+    // Stable per-user per-subject shuffle, but keep multi-part questions together.
+    // Heuristic: questions sharing the exact same `passage` stay as a contiguous block.
+    // If you later add an explicit `groupId`, it will take precedence automatically.
+    return seededShuffleGroups(
+      questions,
+      `${user.id}:${subjectId}`,
+      (q) => {
+        const anyQ = q as unknown as { groupId?: unknown; passage?: unknown; id?: unknown };
+        if (anyQ.groupId != null && String(anyQ.groupId).trim()) {
+          return `gid:${String(anyQ.groupId).trim()}`;
+        }
+        if (typeof anyQ.passage === "string" && anyQ.passage.trim()) {
+          return `passage:${anyQ.passage.trim()}`;
+        }
+        return `id:${String(anyQ.id ?? "") || JSON.stringify(q)}`;
+      },
+      (a, b) => {
+        const aa = a as unknown as { id?: unknown };
+        const bb = b as unknown as { id?: unknown };
+        const ai = typeof aa.id === "number" ? aa.id : Number(aa.id);
+        const bi = typeof bb.id === "number" ? bb.id : Number(bb.id);
+        if (Number.isFinite(ai) && Number.isFinite(bi)) return ai - bi;
+        return 0;
+      },
+    );
+  }, [questions, user, subjectId]);
 
-  // Load persisted state on mount
+  const filteredQuestions = useMemo(() => {
+    if (topicFilter === "all") return randomizedQuestions;
+    return randomizedQuestions.filter(
+      (q) => (q.topic || "General") === topicFilter,
+    );
+  }, [randomizedQuestions, topicFilter]);
+
+  // Load persisted state after questions are known (topic starts "all" → index matches full list).
   useEffect(() => {
-    if (!user || !subjectId) return;
+    if (!user || !subjectId || questionsLoading) return;
 
     const saved = loadPracticeState(user.id, subjectId);
+    const maxIdx = Math.max(0, questions.length - 1);
     if (saved) {
-      setCurrentIndex(saved.currentIndex);
+      setCurrentIndex(Math.min(saved.currentIndex, maxIdx));
       setAnswers(saved.answers);
 
-      // If already completed, redirect to summary
       if (saved.completedAt) {
         navigate(`/quiz/${subjectId}/summary`, { replace: true });
         return;
       }
     }
     setInitialized(true);
-  }, [user, subjectId, navigate]);
+  }, [user, subjectId, navigate, questionsLoading, questions.length]);
 
   // Show inactivity dialog
   useEffect(() => {
@@ -253,9 +403,41 @@ export default function QuizPage() {
   const currentTopic = currentQuestion?.topic ?? "General";
   const answeredCount = Object.keys(answers).length;
   const currentQKey = subjectId
-    ? questionKey(subjectId, currentIndex)
+    ? questionKey(subjectId, currentIndex, currentQuestion)
     : "";
   const isCurrentAnswered = currentQKey in answers;
+
+  const loadFriends = useCallback(async () => {
+    setFriendsLoading(true);
+    try {
+      const r = await apiFetch<{ friends: { userId: number; username: string; email: string }[] }>(
+        API_PATHS.friends.list,
+      );
+      setFriends(r.friends ?? []);
+    } catch {
+      setFriends([]);
+    } finally {
+      setFriendsLoading(false);
+    }
+  }, []);
+
+  const assignToFriend = async (friendId: number) => {
+    if (!subjectId || !currentQuestion) return;
+    try {
+      await apiFetch(API_PATHS.friends.assign(friendId), {
+        method: "POST",
+        body: JSON.stringify({
+          subjectId,
+          questionKey: currentQKey,
+          question: currentQuestion,
+        }),
+      });
+      toast.success("Assigned!");
+      setAssignOpen(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not assign.");
+    }
+  };
 
   // Handle dismissing inactivity
   const handleDismissInactivity = () => {
@@ -284,7 +466,7 @@ export default function QuizPage() {
     );
   }
 
-  if (!initialized) {
+  if (!initialized || questionsLoading) {
     return (
       <AppShell title="Loading...">
         <div className="flex items-center justify-center py-20">
@@ -323,7 +505,11 @@ export default function QuizPage() {
     <AppShell title={subject ? `${subject.name} Practice` : "Practice"}>
       <div className="space-y-6">
         {/* Progress bar + Study Mode quick access */}
-        <QuizProgress current={answeredCount} total={filteredQuestions.length} />
+        <QuizProgress
+          currentIndex={currentIndex}
+          answeredCount={answeredCount}
+          total={filteredQuestions.length}
+        />
 
         <div className="h-px w-full bg-white/20" />
 
@@ -354,6 +540,18 @@ export default function QuizPage() {
           </div>
 
           <div className="flex justify-end">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setAssignOpen(true);
+                void loadFriends();
+              }}
+              className="mr-3 gap-2 border-transparent bg-white text-[#0b0f19] hover:bg-white/90"
+              disabled={!currentQuestion}
+            >
+              <Send className="size-4" />
+              Assign
+            </Button>
             <Button
               variant="outline"
               onClick={() => navigate(`/study/${subjectId}`)}
@@ -435,8 +633,8 @@ export default function QuizPage() {
 
               {/* Question dots */}
               <div className="hidden flex-wrap justify-center gap-1.5 sm:flex">
-                {questions.map((_q, i) => {
-                  const qk = questionKey(subjectId, i);
+                {filteredQuestions.map((q, i) => {
+                  const qk = questionKey(subjectId, i, q);
                   return (
                     <button
                       key={qk}
@@ -461,7 +659,7 @@ export default function QuizPage() {
               <Button
                 variant="outline"
                 onClick={() => goTo(currentIndex + 1)}
-                disabled={currentIndex === questions.length - 1}
+                disabled={currentIndex === filteredQuestions.length - 1}
                 className="gap-2 border-transparent bg-[#0b0f19] text-white hover:bg-[#0b0f19]/90 disabled:opacity-40"
               >
                 Next
@@ -528,6 +726,67 @@ export default function QuizPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={assignOpen} onOpenChange={setAssignOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Assign this question</DialogTitle>
+            <DialogDescription>
+              Pick a friend to send them this exact question.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <Input
+              value={assignFilter}
+              onChange={(e) => setAssignFilter(e.target.value)}
+              placeholder="Filter friends…"
+            />
+
+            {friendsLoading ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="size-4 animate-spin" />
+                Loading friends…
+              </div>
+            ) : friends.length === 0 ? (
+              <div className="text-sm text-muted-foreground">
+                You don&apos;t have any friends yet. Add them in Friends first.
+              </div>
+            ) : (
+              <div className="max-h-72 space-y-2 overflow-auto pr-1">
+                {friends
+                  .filter((f) => {
+                    const q = assignFilter.trim().toLowerCase();
+                    if (!q) return true;
+                    return (
+                      f.username.toLowerCase().includes(q) ||
+                      f.email.toLowerCase().includes(q)
+                    );
+                  })
+                  .map((f) => (
+                    <button
+                      key={f.userId}
+                      type="button"
+                      className="flex w-full items-center justify-between gap-3 rounded-xl border border-black/10 bg-white px-3 py-2 text-left hover:bg-[#faf8f5]"
+                      onClick={() => void assignToFriend(f.userId)}
+                    >
+                      <div className="min-w-0">
+                        <div className="truncate font-medium text-black">
+                          {f.username}
+                        </div>
+                        <div className="truncate text-xs text-muted-foreground">
+                          {f.email}
+                        </div>
+                      </div>
+                      <span className="text-xs text-muted-foreground">Send</span>
+                    </button>
+                  ))}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </AppShell>
   );
 }
+

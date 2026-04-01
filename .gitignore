@@ -10,3 +10,6 @@ pages-deploy/*.html
 pages-deploy/*.svg
 pages-deploy/*.png
 pages-deploy/package-lock.json
+
+# Google service account keys (local dev)
+nodent-*.json

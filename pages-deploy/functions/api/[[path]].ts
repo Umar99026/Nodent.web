@@ -120,12 +120,45 @@ function cleanText(value: unknown, maxLength = 1000): string {
   return value.replace(/\0/g, "").trim().slice(0, maxLength);
 }
 
+function canonicalSubjectId(raw: unknown): string {
+  const s = cleanText(raw, 80).toLowerCase().replace(/\s+/g, " ");
+  const aliases: Record<string, string> = {
+    "mathematical methods": "methods",
+    "mathematical-methods": "methods",
+    "math methods": "methods",
+    mm: "methods",
+    "general mathematics": "general-maths",
+    "general maths": "general-maths",
+    "general-mathematics": "general-maths",
+    "further mathematics": "further-maths",
+    "further maths": "further-maths",
+    "specialist mathematics": "specialist-maths",
+    "specialist maths": "specialist-maths",
+  };
+  return aliases[s] || s;
+}
+
 function safeJsonParse(value: string | null | undefined): unknown {
   if (value == null || value === "") return undefined;
+  const str = String(value);
   try {
-    return JSON.parse(value);
+    return JSON.parse(str);
   } catch {
-    return undefined;
+    try {
+      const fixed = str
+        .replace(/[\u201c\u201d\u201e]/g, '"')
+        .replace(/[\u2018\u2019]/g, "'");
+      return JSON.parse(fixed);
+    } catch {
+      try {
+        if (/^\s*\[/.test(str) && /'/.test(str)) {
+          return JSON.parse(str.replace(/'/g, '"'));
+        }
+      } catch {
+        /* ignore */
+      }
+      return undefined;
+    }
   }
 }
 function nowIso(): string { return new Date().toISOString(); }
@@ -336,13 +369,18 @@ app.get("/api/bootstrap", authMiddleware, async (c: any) => {
   const rows = await db.select().from(customQuestions).orderBy(asc(customQuestions.subjectId), asc(customQuestions.createdAt));
   const grouped: Record<string, any[]> = {};
   for (const row of rows) {
-    if (!grouped[row.subjectId]) grouped[row.subjectId] = [];
+    const sid = canonicalSubjectId(row.subjectId);
+    if (!grouped[sid]) grouped[sid] = [];
     const opts = safeJsonParse(row.options) as string[] | undefined;
     const acc = safeJsonParse(row.acceptedAnswers) as string[] | undefined;
     const imgs = safeJsonParse(row.imageUrls) as string[] | undefined;
-    grouped[row.subjectId].push({
+    const t = String(row.type || "");
+    const marksNum = Number(row.marks);
+    const marks =
+      Number.isFinite(marksNum) && marksNum > 0 ? Math.round(marksNum) : 1;
+    grouped[sid].push({
       id: row.id,
-      type: row.type,
+      type: t === "short_answer" ? "short" : t === "long_answer" ? "long" : row.type,
       topic: row.topic ?? "General",
       question: row.question,
       imageUrls: imgs,
@@ -351,7 +389,7 @@ app.get("/api/bootstrap", authMiddleware, async (c: any) => {
       acceptedAnswers: acc,
       guidance: row.guidance || undefined,
       passage: row.passage || undefined,
-      marks: typeof row.marks === "number" ? row.marks : 1,
+      marks,
     });
   }
   return c.json({ user: { id: user.id, email: user.email, username: user.username }, customQuestions: grouped });
@@ -382,7 +420,7 @@ app.post("/api/competition/answer", authMiddleware, async (c: any) => {
   const subjectId = cleanText(body.subjectId, 80); const questionKey = cleanText(body.questionKey, 1000);
   const topic = cleanText(body.topic || "General", 100); const isCorrect = body.isCorrect ? 1 : 0;
   if (!subjectId || !questionKey) return c.json({ error: "Required fields missing." }, 400);
-  await db.execute(sql`INSERT INTO question_attempts (user_id, subject_id, question_key, topic, is_correct, answered_at) VALUES (${user.id}, ${subjectId}, ${questionKey}, ${topic}, ${isCorrect}, ${nowIso()}) ON CONFLICT(user_id, subject_id, question_key) DO UPDATE SET is_correct = EXCLUDED.is_correct, topic = EXCLUDED.topic, answered_at = EXCLUDED.answered_at`);
+  await db.execute(sql`INSERT INTO question_attempts (user_id, subject_id, question_key, topic, is_correct, answered_at) VALUES (${user.id}, ${subjectId}, ${questionKey}, ${topic}, ${isCorrect}, ${nowIso()}) ON CONFLICT(user_id, subject_id, question_key) DO NOTHING`);
   return c.json({ ok: true });
 });
 
@@ -742,7 +780,7 @@ app.post("/api/admin/questions", adminAccessMiddleware, async (c: any) => {
   } catch {
     return c.json({ error: "Invalid JSON body." }, 400);
   }
-  const subjectId = cleanText(body.subjectId, 80);
+  const subjectId = canonicalSubjectId(cleanText(body.subjectId, 80));
   const type = cleanText(body.type, 20);
   const question = cleanText(body.question, 1000);
   const topic = cleanText(body.topic || "General", 100);

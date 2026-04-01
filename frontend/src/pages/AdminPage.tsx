@@ -147,6 +147,13 @@ export default function AdminPage() {
 
   const [sheetEnabled, setSheetEnabled] = useState<boolean | null>(null);
   const [sheetSyncing, setSheetSyncing] = useState(false);
+  const [sheetTabs, setSheetTabs] = useState<string[]>([]);
+  const [sheetSubjectFromTab, setSheetSubjectFromTab] = useState(false);
+  const [sheetDiagnose, setSheetDiagnose] = useState<{
+    spreadsheetTabTitles: string[];
+    missingFromSpreadsheet: string[];
+    hint: string | null;
+  } | null>(null);
 
   /* ------ fetch existing questions ------ */
 
@@ -189,12 +196,37 @@ export default function AdminPage() {
     let cancelled = false;
     (async () => {
       try {
-        const d = await apiFetchAdmin<{ enabled: boolean }>(
-          API_PATHS.admin.googleSheetStatus,
-        );
-        if (!cancelled) setSheetEnabled(Boolean(d?.enabled));
+        const d = await apiFetchAdmin<{
+          enabled: boolean;
+          tabs?: string[];
+          subjectFromTab?: boolean;
+        }>(API_PATHS.admin.googleSheetStatus);
+        if (!cancelled) {
+          setSheetEnabled(Boolean(d?.enabled));
+          setSheetTabs(Array.isArray(d?.tabs) ? d.tabs : []);
+          setSheetSubjectFromTab(Boolean(d?.subjectFromTab));
+        }
+        if (!cancelled && d?.enabled) {
+          try {
+            const diag = await apiFetchAdmin<{
+              spreadsheetTabTitles: string[];
+              missingFromSpreadsheet: string[];
+              hint: string | null;
+            }>(API_PATHS.admin.googleSheetDiagnose);
+            if (!cancelled) setSheetDiagnose(diag);
+          } catch {
+            if (!cancelled) setSheetDiagnose(null);
+          }
+        } else if (!cancelled) {
+          setSheetDiagnose(null);
+        }
       } catch {
-        if (!cancelled) setSheetEnabled(false);
+        if (!cancelled) {
+          setSheetEnabled(false);
+          setSheetTabs([]);
+          setSheetSubjectFromTab(false);
+          setSheetDiagnose(null);
+        }
       }
     })();
     return () => {
@@ -373,14 +405,22 @@ export default function AdminPage() {
         imported: number;
         updated: number;
         deleted: number;
+        rowsRead?: number;
+        tabErrors?: { tabName: string; message: string }[];
         errors?: { row: number; message: string }[];
       }>(API_PATHS.admin.syncQuestionsFromSheet, {
         method: "POST",
         body: "{}",
       });
       toast.success(
-        `Sheet sync: ${r.imported} new, ${r.updated} updated, ${r.deleted} removed.`,
+        `Sheet sync: ${r.imported} new, ${r.updated} updated, ${r.deleted} removed (${r.rowsRead ?? 0} rows read).`,
       );
+      if (r.tabErrors?.length) {
+        toast.error(
+          `Could not read ${r.tabErrors.length} tab(s). Each name in GOOGLE_SHEETS_TAB_NAME must match a tab at the bottom of the spreadsheet exactly. ${r.tabErrors.map((t) => `${t.tabName}: ${t.message}`).join(" · ")}`,
+          { duration: 16000 },
+        );
+      }
       if (r.errors?.length) {
         toast.message(
           `${r.errors.length} row(s) failed — see server logs for details.`,
@@ -458,13 +498,49 @@ export default function AdminPage() {
           <CardContent className="space-y-4 text-sm text-muted-foreground">
             <p>
               When the server is configured with a Google service account and
-              spreadsheet ID, each new question is appended to the sheet.
-              Practice mode always uses the database — run{" "}
+              spreadsheet ID, each new question is appended to the matching
+              subject tab (multi-tab setup). Practice uses the database — run{" "}
               <span className="font-medium text-foreground">
                 Import from Google Sheet
               </span>{" "}
-              after editing the sheet so changes go live.
+              after editing so changes go live.
             </p>
+            {sheetEnabled && sheetTabs.length > 0 ? (
+              <p className="text-xs text-foreground/90">
+                <span className="font-medium">Configured tabs:</span>{" "}
+                {sheetTabs.join(", ")}
+                {sheetSubjectFromTab
+                  ? " — Subject for each row is taken from the tab name (use the app slug, e.g. english, methods). Column B is optional."
+                  : " — Use column B (subject_id) per row, or set multiple tabs in GOOGLE_SHEETS_TAB_NAME."}
+              </p>
+            ) : null}
+            {sheetDiagnose?.missingFromSpreadsheet &&
+            sheetDiagnose.missingFromSpreadsheet.length > 0 ? (
+              <div className="rounded-lg border border-red-500/40 bg-red-500/15 px-3 py-2 text-xs text-foreground">
+                <p className="font-semibold text-red-900 dark:text-red-100">
+                  Missing tabs in the spreadsheet
+                </p>
+                <p className="mt-1">
+                  These names are in{" "}
+                  <code className="rounded bg-black/10 px-1">
+                    GOOGLE_SHEETS_TAB_NAME
+                  </code>{" "}
+                  but there is no tab with that exact name:{" "}
+                  <strong>
+                    {sheetDiagnose.missingFromSpreadsheet.join(", ")}
+                  </strong>
+                </p>
+                <p className="mt-1 text-muted-foreground">
+                  Tabs in your file right now:{" "}
+                  {sheetDiagnose.spreadsheetTabTitles?.length
+                    ? sheetDiagnose.spreadsheetTabTitles.join(", ")
+                    : "(none read)"}
+                </p>
+                {sheetDiagnose.hint ? (
+                  <p className="mt-2 text-muted-foreground">{sheetDiagnose.hint}</p>
+                ) : null}
+              </div>
+            ) : null}
             {sheetEnabled === null ? (
               <p className="text-xs">Checking whether Sheets sync is enabled…</p>
             ) : sheetEnabled ? (

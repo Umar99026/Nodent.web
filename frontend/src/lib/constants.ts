@@ -54,12 +54,31 @@ export const API_PATHS = {
     answer: (battleId: number | string) =>
       `/api/dojo/battles/${battleId}/answer`,
   },
+  friends: {
+    list: "/api/friends",
+    requests: "/api/friends/requests",
+    unreadCount: "/api/friends/unread-count",
+    readRequests: "/api/friends/requests/read",
+    search: (q: string) => `/api/friends/search?search=${encodeURIComponent(q)}`,
+    sendRequest: "/api/friends/requests",
+    acceptRequest: (requestId: number | string) =>
+      `/api/friends/requests/${requestId}/accept`,
+    rejectRequest: (requestId: number | string) =>
+      `/api/friends/requests/${requestId}/reject`,
+    thread: (friendId: number | string) => `/api/friends/${friendId}/thread`,
+    friendScorecard: (friendId: number | string) =>
+      `/api/friends/${friendId}/scorecard`,
+    assign: (friendId: number | string) => `/api/friends/${friendId}/assign`,
+    answerAssignment: (assignmentId: number | string) =>
+      `/api/friends/assignments/${assignmentId}/answer`,
+  },
   admin: {
     subjects: "/api/admin/subjects",
     questions: "/api/admin/questions",
     users: "/api/admin/users",
     stats: "/api/admin/stats",
     googleSheetStatus: "/api/admin/google-sheet/status",
+    googleSheetDiagnose: "/api/admin/google-sheet/diagnose",
     syncQuestionsFromSheet: "/api/admin/questions/sync-from-sheet",
   },
 } as const;

@@ -104,6 +104,63 @@ function cleanText(value, maxLength = 2000) {
   return String(value || "").replace(/\u0000/g, "").trim().slice(0, maxLength);
 }
 
+/** Sheet/admin labels → baseSubjects id (e.g. "Mathematical Methods" → methods). */
+function canonicalSubjectId(raw) {
+  const s = cleanText(raw, 80).toLowerCase().replace(/\s+/g, " ");
+  const aliases = {
+    "mathematical methods": "methods",
+    "mathematical-methods": "methods",
+    "math methods": "methods",
+    mm: "methods",
+    "general mathematics": "general-maths",
+    "general maths": "general-maths",
+    "general-mathematics": "general-maths",
+    "further mathematics": "further-maths",
+    "further maths": "further-maths",
+    "specialist mathematics": "specialist-maths",
+    "specialist maths": "specialist-maths"
+  };
+  return aliases[s] || s;
+}
+
+/** Sheets often paste “smart quotes”, or Python-style ['a','b'] instead of JSON — never fail bootstrap. */
+function safeJsonColumn(raw, label, rowId) {
+  if (raw == null || raw === "") return undefined;
+  const str = String(raw);
+  const tryParse = (s) => {
+    try {
+      return JSON.parse(s);
+    } catch {
+      return null;
+    }
+  };
+  let v = tryParse(str);
+  if (v !== null) return v;
+  try {
+    const fixed = str
+      .replace(/[\u201c\u201d\u201e]/g, '"')
+      .replace(/[\u2018\u2019]/g, "'");
+    v = tryParse(fixed);
+    if (v !== null) return v;
+  } catch {
+    /* continue */
+  }
+  // Python / Google Sheets: ['2','4'] — not valid JSON; convert quotes.
+  if (/^\s*\[/.test(str) && /'/.test(str)) {
+    try {
+      v = JSON.parse(str.replace(/'/g, '"'));
+      if (v !== null) return v;
+    } catch {
+      /* fall through */
+    }
+  }
+  console.warn(
+    `[Bootstrap] Invalid JSON in ${label} for custom_questions.id=${rowId}:`,
+    str.slice(0, 160),
+  );
+  return undefined;
+}
+
 // ── DB init ───────────────────────────────────────────────────────────────────
 
 async function initDb() {
@@ -300,6 +357,56 @@ async function initDb() {
   await run(`CREATE INDEX IF NOT EXISTS idx_dojo_challenges_opponent_status ON dojo_challenges(opponent_id, status, opponent_read)`);
   await run(`CREATE INDEX IF NOT EXISTS idx_dojo_battles_status ON dojo_battles(status, updated_at)`);
 
+  // ── Friends ────────────────────────────────────────────────────────────────
+  await run(`
+    CREATE TABLE IF NOT EXISTS friend_requests (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      from_user_id INTEGER NOT NULL,
+      to_user_id INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TEXT NOT NULL,
+      responded_at TEXT,
+      UNIQUE(from_user_id, to_user_id),
+      FOREIGN KEY (from_user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (to_user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+  await run(`CREATE INDEX IF NOT EXISTS idx_friend_requests_to_status ON friend_requests(to_user_id, status, created_at)`);
+  await run(`CREATE INDEX IF NOT EXISTS idx_friend_requests_from_status ON friend_requests(from_user_id, status, created_at)`);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS friendships (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user1_id INTEGER NOT NULL,
+      user2_id INTEGER NOT NULL,
+      created_at TEXT NOT NULL,
+      UNIQUE(user1_id, user2_id),
+      FOREIGN KEY (user1_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (user2_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+  await run(`CREATE INDEX IF NOT EXISTS idx_friendships_user1 ON friendships(user1_id)`);
+  await run(`CREATE INDEX IF NOT EXISTS idx_friendships_user2 ON friendships(user2_id)`);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS friend_assignments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      from_user_id INTEGER NOT NULL,
+      to_user_id INTEGER NOT NULL,
+      subject_id TEXT NOT NULL,
+      question_key TEXT NOT NULL,
+      question_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      answer_json TEXT,
+      answered_at TEXT,
+      is_correct INTEGER,
+      FOREIGN KEY (from_user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (to_user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+  await run(`CREATE INDEX IF NOT EXISTS idx_friend_assignments_pair_created ON friend_assignments(from_user_id, to_user_id, created_at)`);
+  await run(`CREATE INDEX IF NOT EXISTS idx_friend_assignments_to_created ON friend_assignments(to_user_id, created_at)`);
+
   await run(`
     CREATE TABLE IF NOT EXISTS user_study_daily (
       user_id INTEGER NOT NULL,
@@ -451,8 +558,12 @@ app.get("/api/bootstrap", authMiddleware, async (req, res) => {
     const rows = await all(`SELECT * FROM custom_questions ORDER BY subject_id, created_at ASC`);
     const customQuestions = {};
     for (const row of rows) {
-      if (!customQuestions[row.subject_id]) customQuestions[row.subject_id] = [];
-      customQuestions[row.subject_id].push({
+      const sid = canonicalSubjectId(row.subject_id);
+      if (!customQuestions[sid]) customQuestions[sid] = [];
+      const marksNum = Number(row.marks);
+      const marks =
+        Number.isFinite(marksNum) && marksNum > 0 ? Math.round(marksNum) : 1;
+      customQuestions[sid].push({
         id: row.id,
         // Normalize admin question types to the frontend's expected keys
         // (Admin UI stores: short_answer / long_answer).
@@ -464,13 +575,17 @@ app.get("/api/bootstrap", authMiddleware, async (req, res) => {
               : row.type,
         topic: row.topic || "General",
         question: row.question,
-        imageUrls: row.image_urls ? JSON.parse(row.image_urls) : undefined,
-        options: row.options ? JSON.parse(row.options) : undefined,
+        imageUrls: safeJsonColumn(row.image_urls, "image_urls", row.id),
+        options: safeJsonColumn(row.options, "options", row.id),
         answer: row.answer || undefined,
-        acceptedAnswers: row.accepted_answers ? JSON.parse(row.accepted_answers) : undefined,
-        marks: typeof row.marks === "number" ? row.marks : 1,
+        acceptedAnswers: safeJsonColumn(
+          row.accepted_answers,
+          "accepted_answers",
+          row.id,
+        ),
+        marks,
         guidance: row.guidance || undefined,
-        passage: row.passage || undefined
+        passage: row.passage || undefined,
       });
     }
     res.json({
@@ -1440,6 +1555,401 @@ app.get("/api/dojo/challenges", authMiddleware, async (req, res) => {
   }
 });
 
+// ── Friends ───────────────────────────────────────────────────────────────────
+
+function friendshipPair(a, b) {
+  const x = Number(a);
+  const y = Number(b);
+  return x < y ? [x, y] : [y, x];
+}
+
+function normalizeAnswerForFriends(text) {
+  if (typeof text !== "string") return "";
+  return text.trim().toLowerCase().replace(/[.,;:!?]+$/, "");
+}
+
+function scoreAssignedQuestion(question, answerPayload) {
+  const qType = String(question?.type ?? "").trim().toLowerCase();
+  if (qType === "mcq") {
+    const correct = String(question?.answer ?? "");
+    const chosen =
+      answerPayload && typeof answerPayload === "object" && "selectedOption" in answerPayload
+        ? String(answerPayload.selectedOption ?? "")
+        : String(answerPayload?.answerText ?? answerPayload?.answer ?? "");
+    if (!chosen) return null;
+    return normalizeAnswerForFriends(chosen) === normalizeAnswerForFriends(correct);
+  }
+  if (qType === "short" || qType === "short_answer") {
+    const accepted = Array.isArray(question?.acceptedAnswers)
+      ? question.acceptedAnswers
+      : Array.isArray(question?.accepted_answers)
+        ? question.accepted_answers
+        : [];
+    const sub = normalizeAnswerForFriends(
+      String(
+        (answerPayload && typeof answerPayload === "object" && "answerText" in answerPayload
+          ? answerPayload.answerText
+          : answerPayload?.answer) ?? "",
+      ),
+    );
+    if (!sub) return null;
+    return accepted.some((a) => normalizeAnswerForFriends(String(a)) === sub);
+  }
+  // long answers are not auto-scored
+  return null;
+}
+
+app.get("/api/friends", authMiddleware, async (req, res) => {
+  try {
+    const userId = Number(req.user.id);
+    const rows = await all(
+      `SELECT f.user1_id, f.user2_id, f.created_at,
+              u.id as friend_id, u.username as friend_username, u.email as friend_email
+       FROM friendships f
+       JOIN users u ON u.id = CASE WHEN f.user1_id = ? THEN f.user2_id ELSE f.user1_id END
+       WHERE f.user1_id = ? OR f.user2_id = ?
+       ORDER BY f.created_at DESC`,
+      [userId, userId, userId],
+    );
+    res.json({
+      friends: (rows ?? []).map((r) => ({
+        userId: Number(r.friend_id),
+        username: String(r.friend_username || ""),
+        email: String(r.friend_email || ""),
+        since: r.created_at,
+      })),
+    });
+  } catch (error) {
+    console.error("[Friends list] Error:", error);
+    res.status(500).json({ error: "Could not load friends." });
+  }
+});
+
+app.get("/api/friends/requests", authMiddleware, async (req, res) => {
+  try {
+    const userId = Number(req.user.id);
+    const incoming = await all(
+      `SELECT fr.id, fr.from_user_id, fr.to_user_id, fr.status, fr.created_at,
+              u.username as from_username, u.email as from_email
+       FROM friend_requests fr
+       JOIN users u ON u.id = fr.from_user_id
+       WHERE fr.to_user_id = ? AND fr.status = 'pending'
+       ORDER BY fr.created_at DESC`,
+      [userId],
+    );
+    const outgoing = await all(
+      `SELECT fr.id, fr.from_user_id, fr.to_user_id, fr.status, fr.created_at,
+              u.username as to_username, u.email as to_email
+       FROM friend_requests fr
+       JOIN users u ON u.id = fr.to_user_id
+       WHERE fr.from_user_id = ? AND fr.status = 'pending'
+       ORDER BY fr.created_at DESC`,
+      [userId],
+    );
+    res.json({
+      incoming: (incoming ?? []).map((r) => ({
+        requestId: Number(r.id),
+        userId: Number(r.from_user_id),
+        username: String(r.from_username || ""),
+        email: String(r.from_email || ""),
+        createdAt: r.created_at,
+      })),
+      outgoing: (outgoing ?? []).map((r) => ({
+        requestId: Number(r.id),
+        userId: Number(r.to_user_id),
+        username: String(r.to_username || ""),
+        email: String(r.to_email || ""),
+        createdAt: r.created_at,
+      })),
+    });
+  } catch (error) {
+    console.error("[Friends requests] Error:", error);
+    res.status(500).json({ error: "Could not load friend requests." });
+  }
+});
+
+app.get("/api/friends/unread-count", authMiddleware, async (req, res) => {
+  try {
+    const userId = Number(req.user.id);
+    const row = await get(
+      `SELECT COUNT(*) as c FROM friend_requests WHERE to_user_id = ? AND status = 'pending'`,
+      [userId],
+    );
+    res.json({ count: Number(row?.c ?? 0) });
+  } catch (error) {
+    console.error("[Friends unread-count] Error:", error);
+    res.status(500).json({ error: "Could not load friend notifications." });
+  }
+});
+
+app.post("/api/friends/requests/read", authMiddleware, async (_req, res) => {
+  // For now, count is based on pending requests (no separate read flag).
+  res.json({ ok: true });
+});
+
+app.get("/api/friends/search", authMiddleware, async (req, res) => {
+  try {
+    const userId = Number(req.user.id);
+    const q = cleanText(req.query.search || req.query.q || "", 120);
+    if (!q) return res.json({ users: [] });
+    const like = `%${q.toLowerCase()}%`;
+    const rows = await all(
+      `SELECT id, username, email
+       FROM users
+       WHERE id != ?
+         AND (LOWER(username) LIKE ? OR LOWER(email) LIKE ?)
+       ORDER BY username ASC
+       LIMIT 20`,
+      [userId, like, like],
+    );
+    res.json({
+      users: (rows ?? []).map((r) => ({
+        userId: Number(r.id),
+        username: String(r.username || ""),
+        email: String(r.email || ""),
+      })),
+    });
+  } catch (error) {
+    console.error("[Friends search] Error:", error);
+    res.status(500).json({ error: "Could not search users." });
+  }
+});
+
+app.post("/api/friends/requests", authMiddleware, async (req, res) => {
+  try {
+    const fromUserId = Number(req.user.id);
+    const toUserId = Number(req.body.toUserId ?? 0);
+    if (!toUserId || toUserId === fromUserId) {
+      return res.status(400).json({ error: "Invalid user." });
+    }
+    // Already friends?
+    const [u1, u2] = friendshipPair(fromUserId, toUserId);
+    const existsFriend = await get(
+      `SELECT id FROM friendships WHERE user1_id = ? AND user2_id = ?`,
+      [u1, u2],
+    );
+    if (existsFriend) return res.json({ ok: true, status: "already_friends" });
+
+    // If reverse pending request exists, accept immediately.
+    const reverse = await get(
+      `SELECT id FROM friend_requests WHERE from_user_id = ? AND to_user_id = ? AND status = 'pending'`,
+      [toUserId, fromUserId],
+    );
+    if (reverse) {
+      await run(
+        `UPDATE friend_requests SET status = 'accepted', responded_at = ? WHERE id = ?`,
+        [nowIso(), reverse.id],
+      );
+      await run(
+        `INSERT OR IGNORE INTO friendships (user1_id, user2_id, created_at) VALUES (?, ?, ?)`,
+        [u1, u2, nowIso()],
+      );
+      return res.json({ ok: true, status: "accepted" });
+    }
+
+    const existing = await get(
+      `SELECT id, status FROM friend_requests WHERE from_user_id = ? AND to_user_id = ?`,
+      [fromUserId, toUserId],
+    );
+    if (existing && existing.status === "pending") {
+      return res.json({ ok: true, status: "requested" });
+    }
+
+    if (existing) {
+      await run(
+        `UPDATE friend_requests SET status = 'pending', created_at = ?, responded_at = NULL WHERE id = ?`,
+        [nowIso(), existing.id],
+      );
+      return res.json({ ok: true, status: "requested" });
+    }
+
+    const r = await run(
+      `INSERT INTO friend_requests (from_user_id, to_user_id, status, created_at) VALUES (?, ?, 'pending', ?)`,
+      [fromUserId, toUserId, nowIso()],
+    );
+    res.json({ ok: true, status: "requested", requestId: r.lastID });
+  } catch (error) {
+    console.error("[Friends request] Error:", error);
+    res.status(500).json({ error: "Could not send friend request." });
+  }
+});
+
+app.post("/api/friends/requests/:requestId/accept", authMiddleware, async (req, res) => {
+  try {
+    const userId = Number(req.user.id);
+    const requestId = Number(req.params.requestId);
+    const fr = await get(`SELECT * FROM friend_requests WHERE id = ?`, [requestId]);
+    if (!fr) return res.status(404).json({ error: "Not found." });
+    if (Number(fr.to_user_id) !== userId) return res.status(403).json({ error: "Forbidden." });
+    if (String(fr.status) !== "pending") return res.json({ ok: true, status: fr.status });
+    await run(`UPDATE friend_requests SET status = 'accepted', responded_at = ? WHERE id = ?`, [nowIso(), requestId]);
+    const [u1, u2] = friendshipPair(fr.from_user_id, fr.to_user_id);
+    await run(
+      `INSERT OR IGNORE INTO friendships (user1_id, user2_id, created_at) VALUES (?, ?, ?)`,
+      [u1, u2, nowIso()],
+    );
+    res.json({ ok: true });
+  } catch (error) {
+    console.error("[Friends accept] Error:", error);
+    res.status(500).json({ error: "Could not accept request." });
+  }
+});
+
+app.post("/api/friends/requests/:requestId/reject", authMiddleware, async (req, res) => {
+  try {
+    const userId = Number(req.user.id);
+    const requestId = Number(req.params.requestId);
+    const fr = await get(`SELECT * FROM friend_requests WHERE id = ?`, [requestId]);
+    if (!fr) return res.status(404).json({ error: "Not found." });
+    if (Number(fr.to_user_id) !== userId) return res.status(403).json({ error: "Forbidden." });
+    if (String(fr.status) !== "pending") return res.json({ ok: true, status: fr.status });
+    await run(`UPDATE friend_requests SET status = 'rejected', responded_at = ? WHERE id = ?`, [nowIso(), requestId]);
+    res.json({ ok: true });
+  } catch (error) {
+    console.error("[Friends reject] Error:", error);
+    res.status(500).json({ error: "Could not reject request." });
+  }
+});
+
+app.get("/api/friends/:friendId/thread", authMiddleware, async (req, res) => {
+  try {
+    const userId = Number(req.user.id);
+    const friendId = Number(req.params.friendId);
+    if (!friendId || friendId === userId) return res.status(400).json({ error: "Invalid." });
+    // Must be friends
+    const [u1, u2] = friendshipPair(userId, friendId);
+    const ok = await get(`SELECT id FROM friendships WHERE user1_id = ? AND user2_id = ?`, [u1, u2]);
+    if (!ok) return res.status(403).json({ error: "Not friends." });
+
+    const rows = await all(
+      `SELECT fa.*, uf.username as from_username, ut.username as to_username
+       FROM friend_assignments fa
+       JOIN users uf ON uf.id = fa.from_user_id
+       JOIN users ut ON ut.id = fa.to_user_id
+       WHERE (fa.from_user_id = ? AND fa.to_user_id = ?)
+          OR (fa.from_user_id = ? AND fa.to_user_id = ?)
+       ORDER BY fa.created_at ASC, fa.id ASC
+       LIMIT 500`,
+      [userId, friendId, friendId, userId],
+    );
+    res.json({
+      messages: (rows ?? []).map((r) => ({
+        id: Number(r.id),
+        fromUserId: Number(r.from_user_id),
+        toUserId: Number(r.to_user_id),
+        fromUsername: String(r.from_username || ""),
+        toUsername: String(r.to_username || ""),
+        subjectId: String(r.subject_id || ""),
+        questionKey: String(r.question_key || ""),
+        question: (() => {
+          try { return JSON.parse(r.question_json || "{}"); } catch { return {}; }
+        })(),
+        createdAt: r.created_at,
+        answer: (() => {
+          try { return r.answer_json ? JSON.parse(r.answer_json) : null; } catch { return null; }
+        })(),
+        answeredAt: r.answered_at || null,
+        isCorrect: r.is_correct === null || r.is_correct === undefined ? null : Boolean(r.is_correct),
+      })),
+    });
+  } catch (error) {
+    console.error("[Friends thread] Error:", error);
+    res.status(500).json({ error: "Could not load thread." });
+  }
+});
+
+app.get("/api/friends/:friendId/scorecard", authMiddleware, async (req, res) => {
+  try {
+    const userId = Number(req.user.id);
+    const friendId = Number(req.params.friendId);
+    if (!friendId || friendId === userId) return res.status(400).json({ error: "Invalid." });
+    const [u1, u2] = friendshipPair(userId, friendId);
+    const ok = await get(`SELECT id FROM friendships WHERE user1_id = ? AND user2_id = ?`, [u1, u2]);
+    if (!ok) return res.status(403).json({ error: "Not friends." });
+
+    const row = await get(
+      `SELECT users.id as user_id,
+              users.username,
+              SUM(CASE WHEN qa.is_correct=1 THEN qa.marks ELSE 0 END) as points,
+              SUM(CASE WHEN qa.is_correct=1 THEN 1 ELSE 0 END) as correctAnswers,
+              COUNT(*) as attempts
+       FROM users
+       LEFT JOIN question_attempts qa ON qa.user_id = users.id
+       WHERE users.id = ?
+       GROUP BY users.id`,
+      [friendId],
+    );
+    res.json({
+      userId: friendId,
+      username: String(row?.username ?? ""),
+      points: Number(row?.points ?? 0),
+      correctAnswers: Number(row?.correctAnswers ?? 0),
+      attempts: Number(row?.attempts ?? 0),
+    });
+  } catch (error) {
+    console.error("[Friend scorecard] Error:", error);
+    res.status(500).json({ error: "Could not load friend's scorecard." });
+  }
+});
+
+app.post("/api/friends/:friendId/assign", authMiddleware, async (req, res) => {
+  try {
+    const fromUserId = Number(req.user.id);
+    const toUserId = Number(req.params.friendId);
+    if (!toUserId || toUserId === fromUserId) return res.status(400).json({ error: "Invalid." });
+    const [u1, u2] = friendshipPair(fromUserId, toUserId);
+    const ok = await get(`SELECT id FROM friendships WHERE user1_id = ? AND user2_id = ?`, [u1, u2]);
+    if (!ok) return res.status(403).json({ error: "Not friends." });
+
+    const subjectId = canonicalSubjectId(cleanText(req.body.subjectId, 80));
+    const questionKey = cleanText(req.body.questionKey, 1000);
+    const question = req.body.question;
+    if (!subjectId || !questionKey || !question) {
+      return res.status(400).json({ error: "Missing subjectId/questionKey/question." });
+    }
+    const questionJson = JSON.stringify(question);
+    const r = await run(
+      `INSERT INTO friend_assignments (from_user_id, to_user_id, subject_id, question_key, question_json, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [fromUserId, toUserId, subjectId, questionKey, questionJson, nowIso()],
+    );
+    res.json({ ok: true, id: r.lastID });
+  } catch (error) {
+    console.error("[Friends assign] Error:", error);
+    res.status(500).json({ error: "Could not assign question." });
+  }
+});
+
+app.post("/api/friends/assignments/:assignmentId/answer", authMiddleware, async (req, res) => {
+  try {
+    const userId = Number(req.user.id);
+    const assignmentId = Number(req.params.assignmentId);
+    const row = await get(`SELECT * FROM friend_assignments WHERE id = ?`, [assignmentId]);
+    if (!row) return res.status(404).json({ error: "Not found." });
+    if (Number(row.to_user_id) !== userId) {
+      return res.status(403).json({ error: "Forbidden." });
+    }
+    if (row.answered_at) return res.json({ ok: true });
+    let question = {};
+    try { question = JSON.parse(row.question_json || "{}"); } catch { question = {}; }
+    const answerPayload = req.body?.answer ?? req.body;
+    const isCorrect = scoreAssignedQuestion(question, answerPayload);
+    await run(
+      `UPDATE friend_assignments SET answer_json = ?, answered_at = ?, is_correct = ? WHERE id = ?`,
+      [
+        JSON.stringify(answerPayload ?? null),
+        nowIso(),
+        isCorrect === null ? null : isCorrect ? 1 : 0,
+        assignmentId,
+      ],
+    );
+    res.json({ ok: true, isCorrect });
+  } catch (error) {
+    console.error("[Friends answer] Error:", error);
+    res.status(500).json({ error: "Could not submit answer." });
+  }
+});
+
 app.post("/api/dojo/challenges/read", authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
@@ -1708,11 +2218,7 @@ app.post("/api/competition/answer", authMiddleware, async (req, res) => {
     await run(
       `INSERT INTO question_attempts (user_id, subject_id, question_key, topic, marks, is_correct, answered_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(user_id, subject_id, question_key) DO UPDATE SET
-         is_correct = excluded.is_correct,
-         topic = excluded.topic,
-         marks = excluded.marks,
-         answered_at = excluded.answered_at`,
+       ON CONFLICT(user_id, subject_id, question_key) DO NOTHING`,
       [req.user.id, subjectId, questionKey, topic, marks, isCorrect, nowIso()]
     );
 
@@ -1971,21 +2477,38 @@ app.get("/api/admin/questions", authMiddleware, adminMiddleware, async (req, res
   try {
     const rows = await all(`SELECT * FROM custom_questions ORDER BY subject_id, created_at ASC`);
     res.json(
-      rows.map((row) => ({
-        id: String(row.id),
-        subjectId: String(row.subject_id),
-        subjectName: String(row.subject_id),
-        type: row.type,
-        topic: row.topic || "General",
-        question: row.question,
-        imageUrls: row.image_urls ? JSON.parse(row.image_urls) : undefined,
-        options: row.options ? JSON.parse(row.options) : undefined,
-        correctAnswer: row.answer || undefined,
-        acceptedAnswers: row.accepted_answers ? JSON.parse(row.accepted_answers) : undefined,
-        marks: typeof row.marks === "number" ? row.marks : 1,
-        guidance: row.guidance || undefined,
-        passage: row.passage || undefined
-      }))
+      rows.map((row) => {
+        const marksNum = Number(row.marks);
+        const marks =
+          Number.isFinite(marksNum) && marksNum > 0 ? Math.round(marksNum) : 1;
+        let options = safeJsonColumn(row.options, "options", row.id);
+        if (options != null && !Array.isArray(options)) options = undefined;
+        let acceptedAnswers = safeJsonColumn(
+          row.accepted_answers,
+          "accepted_answers",
+          row.id,
+        );
+        if (acceptedAnswers != null && !Array.isArray(acceptedAnswers)) {
+          acceptedAnswers = undefined;
+        }
+        let imageUrls = safeJsonColumn(row.image_urls, "image_urls", row.id);
+        if (imageUrls != null && !Array.isArray(imageUrls)) imageUrls = undefined;
+        return {
+          id: String(row.id),
+          subjectId: String(row.subject_id),
+          subjectName: String(row.subject_id),
+          type: row.type,
+          topic: row.topic || "General",
+          question: row.question,
+          imageUrls,
+          options,
+          correctAnswer: row.answer || undefined,
+          acceptedAnswers,
+          marks,
+          guidance: row.guidance || undefined,
+          passage: row.passage || undefined,
+        };
+      }),
     );
   } catch (error) {
     console.error("[Admin questions GET] Error:", error);
@@ -1995,7 +2518,7 @@ app.get("/api/admin/questions", authMiddleware, adminMiddleware, async (req, res
 
 app.post("/api/admin/questions", authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    const subjectId = cleanText(req.body.subjectId, 80);
+    const subjectId = canonicalSubjectId(cleanText(req.body.subjectId, 80));
     const type = cleanText(req.body.type, 20);
     const question = cleanText(req.body.question, 1000);
     const topic = cleanText(req.body.topic || "General", 100);
@@ -2115,10 +2638,43 @@ app.delete("/api/admin/questions/:id", authMiddleware, adminMiddleware, async (r
 
 app.get("/api/admin/google-sheet/status", authMiddleware, adminMiddleware, async (_req, res) => {
   try {
-    res.json({ enabled: sheetsSync.isSheetsConfigured() });
+    const enabled = sheetsSync.isSheetsConfigured();
+    res.json({
+      enabled,
+      tabs: enabled ? sheetsSync.getTabNames() : [],
+      subjectFromTab: enabled ? sheetsSync.subjectIdFromTabMode() : false,
+    });
   } catch (error) {
     console.error("[Admin sheet status] Error:", error);
-    res.json({ enabled: false });
+    res.json({ enabled: false, tabs: [], subjectFromTab: false });
+  }
+});
+
+/** Compare env tab list to actual spreadsheet tab names (fix typos / missing tabs). */
+app.get("/api/admin/google-sheet/diagnose", authMiddleware, adminMiddleware, async (_req, res) => {
+  try {
+    if (!sheetsSync.isSheetsConfigured()) {
+      return res
+        .status(503)
+        .json({ error: "Google Sheets is not configured on this server." });
+    }
+    const configuredTabs = sheetsSync.getTabNames();
+    const spreadsheetTabTitles = await sheetsSync.listSpreadsheetSheetTitles();
+    const missingFromSpreadsheet = configuredTabs.filter(
+      (t) => !spreadsheetTabTitles.includes(t),
+    );
+    res.json({
+      configuredTabs,
+      spreadsheetTabTitles,
+      missingFromSpreadsheet,
+      hint:
+        missingFromSpreadsheet.length > 0
+          ? "Create a tab for each missing name exactly as listed (same spelling/case), or change GOOGLE_SHEETS_TAB_NAME to match existing tab names."
+          : null,
+    });
+  } catch (error) {
+    console.error("[Admin google-sheet diagnose] Error:", error);
+    res.status(500).json({ error: String(error.message || error) });
   }
 });
 
@@ -2129,15 +2685,20 @@ app.post("/api/admin/questions/sync-from-sheet", authMiddleware, adminMiddleware
         .status(503)
         .json({ error: "Google Sheets is not configured on this server." });
     }
-    const rawRows = await sheetsSync.readDataRows();
+    const { rows: rawRows, tabErrors } = await sheetsSync.readDataRows();
     let imported = 0;
     let updated = 0;
     let deleted = 0;
     const errors = [];
 
     for (let i = 0; i < rawRows.length; i++) {
-      const row = rawRows[i];
-      const p = sheetsSync.parseRow(row);
+      const item = rawRows[i];
+      const row = item.row != null ? item.row : item;
+      const tabName = item.tabName;
+      const p = sheetsSync.parseRow(Array.isArray(row) ? row : []);
+      if (sheetsSync.subjectIdFromTabMode() && tabName) {
+        p.subject_id = tabName;
+      }
       const action = (p.action || "").toUpperCase();
       const databaseId = p.database_id ? parseInt(p.database_id, 10) : NaN;
 
@@ -2152,6 +2713,7 @@ app.post("/api/admin/questions/sync-from-sheet", authMiddleware, adminMiddleware
           continue;
         }
 
+        const subjectIdSheet = canonicalSubjectId(cleanText(p.subject_id, 80));
         const topic = p.topic || "General";
         const marks = Math.max(1, Math.round(Number(p.marks) || 1));
         const optionsJson = p.options_json || null;
@@ -2168,7 +2730,7 @@ app.post("/api/admin/questions/sync-from-sheet", authMiddleware, adminMiddleware
               `UPDATE custom_questions SET subject_id = ?, type = ?, topic = ?, question = ?, image_urls = ?, options = ?, answer = ?, accepted_answers = ?, guidance = ?, passage = ?, marks = ?
                WHERE id = ?`,
               [
-                p.subject_id,
+                subjectIdSheet,
                 p.type,
                 topic,
                 p.question,
@@ -2188,7 +2750,7 @@ app.post("/api/admin/questions/sync-from-sheet", authMiddleware, adminMiddleware
               `INSERT INTO custom_questions (subject_id, type, topic, question, image_urls, options, answer, accepted_answers, guidance, passage, marks, created_at)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
               [
-                p.subject_id,
+                subjectIdSheet,
                 p.type,
                 topic,
                 p.question,
@@ -2209,7 +2771,7 @@ app.post("/api/admin/questions/sync-from-sheet", authMiddleware, adminMiddleware
             `INSERT INTO custom_questions (subject_id, type, topic, question, image_urls, options, answer, accepted_answers, guidance, passage, marks, created_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
-              p.subject_id,
+              subjectIdSheet,
               p.type,
               topic,
               p.question,
@@ -2230,7 +2792,15 @@ app.post("/api/admin/questions/sync-from-sheet", authMiddleware, adminMiddleware
       }
     }
 
-    res.json({ ok: true, imported, updated, deleted, errors });
+    res.json({
+      ok: true,
+      imported,
+      updated,
+      deleted,
+      errors,
+      tabErrors,
+      rowsRead: rawRows.length,
+    });
   } catch (error) {
     console.error("[Admin sync-from-sheet] Error:", error);
     res.status(500).json({ error: "Could not sync from Google Sheet." });

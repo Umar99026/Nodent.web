@@ -5,6 +5,7 @@ import {
   Settings,
   LogOut,
   Trophy,
+  Users,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
@@ -37,6 +38,7 @@ const navItems: NavItem[] = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
   { label: "Track My Study", icon: Clock, path: "/track" },
   { label: "Dojo", icon: Trophy, path: "/dojo" },
+  { label: "Friends", icon: Users, path: "/friends" },
   { label: "Admin", icon: Settings, path: "/admin", adminOnly: true },
 ];
 
@@ -47,6 +49,7 @@ export function AppSidebar() {
   const { setOpenMobile } = useSidebar();
 
   const [dojoUnread, setDojoUnread] = useState(0);
+  const [friendsUnread, setFriendsUnread] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -69,6 +72,30 @@ export function AppSidebar() {
     void load();
     const interval = setInterval(() => void load(), 15000);
 
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [user]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      if (!user) return;
+      try {
+        const data = await apiFetch<{ count: number }>(
+          "/api/friends/unread-count",
+          { method: "GET" },
+        );
+        if (cancelled) return;
+        setFriendsUnread(Number(data?.count ?? 0));
+      } catch {
+        if (cancelled) return;
+        setFriendsUnread(0);
+      }
+    }
+    void load();
+    const interval = setInterval(() => void load(), 15000);
     return () => {
       cancelled = true;
       clearInterval(interval);
@@ -169,6 +196,9 @@ export function AppSidebar() {
                         {item.label}
                       </span>
                       {item.path === "/dojo" && dojoUnread > 0 ? (
+                        <span className="absolute right-2 top-2 z-10 h-2 w-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.9)] pointer-events-none group-data-[collapsible=icon]:right-1 group-data-[collapsible=icon]:top-1" />
+                      ) : null}
+                      {item.path === "/friends" && friendsUnread > 0 ? (
                         <span className="absolute right-2 top-2 z-10 h-2 w-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.9)] pointer-events-none group-data-[collapsible=icon]:right-1 group-data-[collapsible=icon]:top-1" />
                       ) : null}
                       {isActive && (
