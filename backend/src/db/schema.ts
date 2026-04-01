@@ -168,3 +168,73 @@ export const questionAttempts = pgTable(
     ),
   ]
 );
+
+// ---- Friends ----
+export const friendRequests = pgTable(
+  "friend_requests",
+  {
+    id: serial("id").primaryKey(),
+    fromUserId: integer("from_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    toUserId: integer("to_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    status: text("status").notNull().default("pending"), // pending|accepted|rejected
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    index("friend_requests_from_to_idx").on(table.fromUserId, table.toUserId),
+    index("friend_requests_to_status_idx").on(table.toUserId, table.status),
+  ]
+);
+
+export const friendships = pgTable(
+  "friendships",
+  {
+    id: serial("id").primaryKey(),
+    userLow: integer("user_low")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    userHigh: integer("user_high")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    unique("friendships_user_low_user_high_unique").on(
+      table.userLow,
+      table.userHigh
+    ),
+    index("friendships_user_low_idx").on(table.userLow),
+    index("friendships_user_high_idx").on(table.userHigh),
+  ]
+);
+
+export const friendAssignments = pgTable(
+  "friend_assignments",
+  {
+    id: serial("id").primaryKey(),
+    fromUserId: integer("from_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    toUserId: integer("to_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    subjectId: text("subject_id").notNull(),
+    questionKey: text("question_key").notNull(),
+    questionJson: text("question_json").notNull(),
+    marks: integer("marks").notNull().default(1),
+    answerJson: text("answer_json"),
+    isCorrect: integer("is_correct"),
+    createdAt: text("created_at").notNull(),
+    answeredAt: text("answered_at"),
+  },
+  (table) => [
+    index("friend_assignments_pair_idx").on(table.fromUserId, table.toUserId),
+    index("friend_assignments_to_answered_idx").on(
+      table.toUserId,
+      table.answeredAt
+    ),
+  ]
+);
