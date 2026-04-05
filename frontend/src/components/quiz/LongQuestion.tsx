@@ -5,6 +5,7 @@ import { apiFetch } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { PassageBlock, QuestionImageGrid } from "@/components/quiz/QuestionStimulus";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
@@ -12,7 +13,6 @@ import {
   Save,
   Users,
   ChevronUp,
-  BookOpen,
   Lightbulb,
   Loader2,
 } from "lucide-react";
@@ -29,27 +29,6 @@ interface StudentResponse {
   userId: number;
   text: string;
   updatedAt?: string;
-}
-
-function QuestionImages({ urls }: { urls?: string[] }) {
-  if (!urls?.length) return null;
-  return (
-    <div className="grid gap-3 sm:grid-cols-2">
-      {urls.slice(0, 4).map((src) => (
-        <div
-          key={src}
-          className="overflow-hidden rounded-xl border border-black/10 bg-white shadow-sm"
-        >
-          <img
-            src={src}
-            alt="Question image"
-            className="h-52 w-full object-cover"
-            loading="lazy"
-          />
-        </div>
-      ))}
-    </div>
-  );
 }
 
 function normalizeForMatch(input: string): string {
@@ -230,29 +209,14 @@ export function LongQuestion({
             </Badge>
           )}
         </div>
-        <h3 className="font-display text-lg leading-relaxed text-foreground sm:text-xl">
-          {question.question}
-        </h3>
       </div>
 
-      <QuestionImages urls={question.imageUrls} />
+      <PassageBlock passage={question.passage} />
+      <QuestionImageGrid urls={question.imageUrls} />
 
-      {/* Passage */}
-      {question.passage && (
-        <Card className="border-l-4 border-l-brand/40 bg-muted/60">
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-              <BookOpen className="size-4" />
-              Passage
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <blockquote className="text-sm leading-relaxed text-foreground/80">
-              {question.passage}
-            </blockquote>
-          </CardContent>
-        </Card>
-      )}
+      <h3 className="font-display text-lg leading-relaxed text-foreground sm:text-xl">
+        {question.question}
+      </h3>
 
       {/* Guidance */}
       {question.guidance && (

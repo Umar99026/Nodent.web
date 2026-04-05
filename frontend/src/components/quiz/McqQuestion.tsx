@@ -2,33 +2,13 @@ import { useState } from "react";
 import { cn, getQuestionTypeLabel } from "@/lib/utils";
 import type { McqQuestion as McqQuestionType } from "@/lib/subjects";
 import { Badge } from "@/components/ui/badge";
+import { PassageBlock, QuestionImageGrid } from "@/components/quiz/QuestionStimulus";
 import { CheckCircle2, XCircle } from "lucide-react";
 
 interface McqQuestionProps {
   question: McqQuestionType;
   onAnswer: (isCorrect: boolean) => void;
   disabled?: boolean;
-}
-
-function QuestionImages({ urls }: { urls?: string[] }) {
-  if (!urls?.length) return null;
-  return (
-    <div className="grid gap-3 sm:grid-cols-2">
-      {urls.slice(0, 4).map((src) => (
-        <div
-          key={src}
-          className="overflow-hidden rounded-xl border border-black/10 bg-white shadow-sm"
-        >
-          <img
-            src={src}
-            alt="Question image"
-            className="h-44 w-full object-cover"
-            loading="lazy"
-          />
-        </div>
-      ))}
-    </div>
-  );
 }
 
 export function McqQuestion({
@@ -84,12 +64,14 @@ export function McqQuestion({
             </Badge>
           )}
         </div>
-        <h3 className="font-display text-lg leading-relaxed text-foreground sm:text-xl">
-          {question.question}
-        </h3>
       </div>
 
-      <QuestionImages urls={question.imageUrls} />
+      <PassageBlock passage={question.passage} />
+      <QuestionImageGrid urls={question.imageUrls} />
+
+      <h3 className="font-display text-lg leading-relaxed text-foreground sm:text-xl">
+        {question.question}
+      </h3>
 
       {/* Options grid */}
       <div className="grid gap-3 sm:grid-cols-2">

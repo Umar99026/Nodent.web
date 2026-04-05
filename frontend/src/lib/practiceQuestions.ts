@@ -55,8 +55,13 @@ function parseJsonArrayFromString(s: string): unknown[] | undefined {
 function parseStringArray(val: unknown): string[] {
   if (Array.isArray(val)) return val.map(String);
   if (typeof val === "string" && val.trim()) {
-    const arr = parseJsonArrayFromString(val);
+    const trimmed = val.trim();
+    const arr = parseJsonArrayFromString(trimmed);
     if (arr) return arr.map(String);
+    // Single URL in a cell (no JSON array) — common in Sheets
+    if (/^https?:\/\//i.test(trimmed) || trimmed.startsWith("data:image")) {
+      return [trimmed];
+    }
   }
   return [];
 }

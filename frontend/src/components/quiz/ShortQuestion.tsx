@@ -4,33 +4,13 @@ import type { ShortQuestion as ShortQuestionType } from "@/lib/subjects";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PassageBlock, QuestionImageGrid } from "@/components/quiz/QuestionStimulus";
 import { CheckCircle2, XCircle, Send } from "lucide-react";
 
 interface ShortQuestionProps {
   question: ShortQuestionType;
   onAnswer: (isCorrect: boolean) => void;
   disabled?: boolean;
-}
-
-function QuestionImages({ urls }: { urls?: string[] }) {
-  if (!urls?.length) return null;
-  return (
-    <div className="grid gap-3 sm:grid-cols-2">
-      {urls.slice(0, 4).map((src) => (
-        <div
-          key={src}
-          className="overflow-hidden rounded-xl border border-black/10 bg-white shadow-sm"
-        >
-          <img
-            src={src}
-            alt="Question image"
-            className="h-44 w-full object-cover"
-            loading="lazy"
-          />
-        </div>
-      ))}
-    </div>
-  );
 }
 
 export function ShortQuestion({
@@ -76,12 +56,14 @@ export function ShortQuestion({
             </Badge>
           )}
         </div>
-        <h3 className="font-display text-lg leading-relaxed text-foreground sm:text-xl">
-          {question.question}
-        </h3>
       </div>
 
-      <QuestionImages urls={question.imageUrls} />
+      <PassageBlock passage={question.passage} />
+      <QuestionImageGrid urls={question.imageUrls} />
+
+      <h3 className="font-display text-lg leading-relaxed text-foreground sm:text-xl">
+        {question.question}
+      </h3>
 
       {/* Guidance */}
       {question.guidance && (
