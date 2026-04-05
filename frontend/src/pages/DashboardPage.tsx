@@ -544,13 +544,6 @@ export default function DashboardPage() {
                 >
                   Summary
                 </Button>
-                <Button
-                  size="sm"
-                  className="h-11 min-h-11 w-full min-w-0 shrink-0 bg-success px-2 text-sm text-white hover:bg-success/90 lg:flex-1 lg:px-3"
-                  onClick={() => navigate(`/chat/${subject.id}`)}
-                >
-                  Chat
-                </Button>
               </CardFooter>
             </Card>
           ))}

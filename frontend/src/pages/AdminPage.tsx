@@ -510,7 +510,7 @@ export default function AdminPage() {
                 <span className="font-medium">Configured tabs:</span>{" "}
                 {sheetTabs.join(", ")}
                 {sheetSubjectFromTab
-                  ? " — Subject for each row is taken from the tab name (use the app slug, e.g. english, methods). Column B is optional."
+                  ? " — Subject for each row is taken from the tab name (use the app slug: methods, general-maths, specialist-maths). Column B is optional."
                   : " — Use column B (subject_id) per row, or set multiple tabs in GOOGLE_SHEETS_TAB_NAME."}
               </p>
             ) : null}
@@ -541,15 +541,18 @@ export default function AdminPage() {
                 ) : null}
               </div>
             ) : null}
-            {sheetEnabled === null ? (
-              <p className="text-xs">Checking whether Sheets sync is enabled…</p>
-            ) : sheetEnabled ? (
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
               <Button
                 type="button"
                 variant="secondary"
-                disabled={sheetSyncing}
+                disabled={sheetSyncing || sheetEnabled === null}
                 onClick={() => void handleSyncFromSheet()}
                 className="gap-2"
+                title={
+                  sheetEnabled === false
+                    ? "Server may not have Sheets env vars — click to try; you will see an error if not configured."
+                    : undefined
+                }
               >
                 {sheetSyncing ? (
                   <>
@@ -560,9 +563,15 @@ export default function AdminPage() {
                   "Import from Google Sheet"
                 )}
               </Button>
-            ) : (
+              {sheetEnabled === null ? (
+                <p className="text-xs text-muted-foreground">
+                  Checking whether Sheets sync is enabled on the server…
+                </p>
+              ) : null}
+            </div>
+            {sheetEnabled === false ? (
               <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-950 dark:text-amber-100">
-                Sheets mirroring is off. On the host, set{" "}
+                Sheets mirroring is off on the server until you set{" "}
                 <code className="rounded bg-black/10 px-1">GOOGLE_SHEETS_SPREADSHEET_ID</code>{" "}
                 and either{" "}
                 <code className="rounded bg-black/10 px-1">GOOGLE_SERVICE_ACCOUNT_FILE</code>{" "}
@@ -573,8 +582,10 @@ export default function AdminPage() {
                 <code className="rounded bg-black/10 px-1">NodentQuestions</code>{" "}
                 or override with{" "}
                 <code className="rounded bg-black/10 px-1">GOOGLE_SHEETS_TAB_NAME</code>.
+                You can still use <span className="font-medium">Import from Google Sheet</span>{" "}
+                after configuring — if something is wrong, the error message will explain what failed.
               </p>
-            )}
+            ) : null}
           </CardContent>
         </Card>
 

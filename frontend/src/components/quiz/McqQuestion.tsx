@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { cn, getQuestionTypeLabel } from "@/lib/utils";
 import type { McqQuestion as McqQuestionType } from "@/lib/subjects";
 import { Badge } from "@/components/ui/badge";
@@ -9,15 +9,31 @@ interface McqQuestionProps {
   question: McqQuestionType;
   onAnswer: (isCorrect: boolean) => void;
   disabled?: boolean;
+  /** Hide stimulus when the parent group already rendered it. */
+  hidePassage?: boolean;
+  /** Show as already solved (e.g. another part of the same stimulus was wrong). */
+  lockedCorrect?: boolean;
+  /** Share of students who got this question fully correct (all-time class). */
+  classFullyCorrectPercent?: number | null;
 }
 
 export function McqQuestion({
   question,
   onAnswer,
   disabled = false,
+  hidePassage = false,
+  lockedCorrect = false,
+  classFullyCorrectPercent,
 }: McqQuestionProps) {
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
+
+  useEffect(() => {
+    if (lockedCorrect) {
+      setSubmitted(true);
+      setSelectedOption(question.answer);
+    }
+  }, [lockedCorrect, question.answer]);
 
   const handleSelect = (option: string) => {
     if (submitted || disabled) return;
@@ -26,6 +42,8 @@ export function McqQuestion({
     const isCorrect = option === question.answer;
     onAnswer(isCorrect);
   };
+
+  const userWrong = submitted && selectedOption !== question.answer;
 
   const getOptionClasses = (option: string) => {
     const base =
@@ -38,8 +56,8 @@ export function McqQuestion({
       );
     }
 
-    // After submission
-    if (option === question.answer) {
+    // After submission: never highlight the correct option when the user was wrong
+    if (!userWrong && option === question.answer) {
       return cn(base, "border-success/60 bg-success/8 cursor-default");
     }
     if (option === selectedOption && option !== question.answer) {
@@ -64,9 +82,14 @@ export function McqQuestion({
             </Badge>
           )}
         </div>
+        {classFullyCorrectPercent != null && (
+          <p className="text-xs tabular-nums text-muted-foreground">
+            Class fully correct: {classFullyCorrectPercent}%
+          </p>
+        )}
       </div>
 
-      <PassageBlock passage={question.passage} />
+      {!hidePassage && <PassageBlock passage={question.passage} />}
       <QuestionImageGrid urls={question.imageUrls} />
 
       <h3 className="font-display text-lg leading-relaxed text-foreground sm:text-xl">
@@ -86,7 +109,9 @@ export function McqQuestion({
             <span
               className={cn(
                 "flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold transition-colors",
-                submitted && option === question.answer
+                submitted &&
+                  !userWrong &&
+                  option === question.answer
                   ? "bg-success text-white"
                   : submitted &&
                       option === selectedOption &&
@@ -102,7 +127,7 @@ export function McqQuestion({
             <span className="flex-1 pt-0.5">{option}</span>
 
             {/* Result icon */}
-            {submitted && option === question.answer && (
+            {submitted && !userWrong && option === question.answer && (
               <CheckCircle2 className="size-5 shrink-0 text-success" />
             )}
             {submitted &&
@@ -126,7 +151,7 @@ export function McqQuestion({
         >
           {selectedOption === question.answer
             ? "Correct! Well done."
-            : `Incorrect. The correct answer is: ${question.answer}`}
+            : "Not quite — that wasn\u2019t the right choice."}
         </div>
       )}
     </div>

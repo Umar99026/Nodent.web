@@ -2218,7 +2218,11 @@ app.post("/api/competition/answer", authMiddleware, async (req, res) => {
     await run(
       `INSERT INTO question_attempts (user_id, subject_id, question_key, topic, marks, is_correct, answered_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(user_id, subject_id, question_key) DO NOTHING`,
+       ON CONFLICT(user_id, subject_id, question_key) DO UPDATE SET
+         topic = excluded.topic,
+         marks = excluded.marks,
+         is_correct = excluded.is_correct,
+         answered_at = excluded.answered_at`,
       [req.user.id, subjectId, questionKey, topic, marks, isCorrect, nowIso()]
     );
 
@@ -2233,6 +2237,7 @@ app.post("/api/competition/answer", authMiddleware, async (req, res) => {
 app.get("/api/competition/:subjectId/stats", authMiddleware, async (req, res) => {
   try {
     const subjectId = req.params.subjectId;
+    const MIN_RANKED_ATTEMPTS = 10;
 
     // Weekly vs all-time leaderboard.
     // Default: all-time.
@@ -2273,15 +2278,12 @@ app.get("/api/competition/:subjectId/stats", authMiddleware, async (req, res) =>
     );
     const totalStudents = studentRow.count;
 
-    if (totalStudents < 2) {
-      return res.json({ totalStudents, percentile: null, rank: null, leaderboard: [], questionStats: [], topicStats: [] });
-    }
-
-    // Per-user score: count correct answers out of all their answered questions (excl. long-form = no isCorrect set for long, but we only record 0/1)
+    // Per-user: marks earned / marks attempted + attempt count (one row per question).
     const allScores = await all(
       `SELECT user_id, username,
-              SUM(CASE WHEN is_correct=1 THEN marks ELSE 0 END) as correct,
-              SUM(marks) as total
+              SUM(CASE WHEN is_correct=1 THEN marks ELSE 0 END) as marks_correct,
+              SUM(marks) as marks_attempted,
+              COUNT(*) as attempt_count
        FROM question_attempts
        JOIN users ON users.id = question_attempts.user_id
        WHERE question_attempts.subject_id = ? ${answeredRangeSql}
@@ -2289,55 +2291,79 @@ app.get("/api/competition/:subjectId/stats", authMiddleware, async (req, res) =>
       [subjectId, ...answeredRangeParams]
     );
 
-    // My row
-    const myRow = allScores.find(r => r.user_id === req.user.id);
-    const myCorrect = myRow?.correct ?? 0;
+    const pctRounded = (r) =>
+      r.marks_attempted > 0
+        ? Math.round((r.marks_correct / r.marks_attempted) * 100)
+        : 0;
 
-    // Sort for leaderboard
-    const sorted = [...allScores].sort((a, b) => {
-      // Rankings based solely on correct answers.
-      if (b.correct !== a.correct) return b.correct - a.correct;
-      // Tie-breaker: fewer attempts rank slightly higher.
-      return a.total - b.total;
+    const eligible = allScores.filter((r) => Number(r.attempt_count) >= MIN_RANKED_ATTEMPTS);
+
+    const sortedEligible = [...eligible].sort((a, b) => {
+      const pa = pctRounded(a);
+      const pb = pctRounded(b);
+      if (pb !== pa) return pb - pa;
+      if (Number(b.marks_attempted) !== Number(a.marks_attempted)) {
+        return Number(b.marks_attempted) - Number(a.marks_attempted);
+      }
+      return String(a.username).localeCompare(String(b.username));
     });
 
-    const rank = sorted.findIndex(r => r.user_id === req.user.id) + 1;
-    const below = sorted.filter(r => {
-      return r.correct < myCorrect;
-    }).length;
-    const percentile = totalStudents > 1 ? Math.round((below / (totalStudents - 1)) * 100) : 100;
+    const myRow = allScores.find((r) => r.user_id === req.user.id);
+    const myAttempts = myRow ? Number(myRow.attempt_count) : 0;
+    const myPct = myRow && myRow.marks_attempted > 0
+      ? pctRounded(myRow)
+      : 0;
 
-    const leaderboard = sorted.slice(0, 10).map(r => ({
+    let rank = null;
+    let percentile = null;
+    if (myAttempts >= MIN_RANKED_ATTEMPTS && sortedEligible.length >= 2) {
+      rank = sortedEligible.findIndex((r) => r.user_id === req.user.id) + 1;
+      if (rank === 0) rank = null;
+      else {
+        const below = sortedEligible.filter((r) => pctRounded(r) < myPct).length;
+        percentile =
+          sortedEligible.length > 1
+            ? Math.round((below / (sortedEligible.length - 1)) * 100)
+            : 100;
+      }
+    }
+
+    const leaderboard = sortedEligible.slice(0, 10).map((r) => ({
       userId: r.user_id,
       username: r.username,
-      correct: r.correct,
-      total: r.total,
-      percent: r.total > 0 ? Math.round((r.correct / r.total) * 100) : 0
+      correct: r.marks_correct,
+      total: r.marks_attempted,
+      attemptCount: Number(r.attempt_count),
+      percent: pctRounded(r),
     }));
 
-    // Per-question class stats
+    // Per-question: % of students fully correct (binary is_correct), not partial marks.
     const qRows = await all(
-      `SELECT question_key, topic,
-              SUM(CASE WHEN is_correct=1 THEN marks ELSE 0 END) as correctCount,
-              SUM(marks) as totalAnswered
+      `SELECT question_key, MAX(topic) as topic,
+              SUM(CASE WHEN is_correct=1 THEN 1 ELSE 0 END) as fully_correct,
+              COUNT(*) as total_answered
        FROM question_attempts
        WHERE subject_id = ? ${answeredRangeSql}
        GROUP BY question_key`,
       [subjectId, ...answeredRangeParams]
     );
 
-    const questionStats = qRows.map(r => ({
-      questionKey: r.question_key,
-      topic: r.topic,
-      correctCount: r.correctCount,
-      totalAnswered: r.totalAnswered
-    }));
+    const questionStats = qRows.map((r) => {
+      const ta = Number(r.total_answered);
+      const fc = Number(r.fully_correct);
+      return {
+        questionKey: r.question_key,
+        topic: r.topic,
+        correctCount: fc,
+        totalAnswered: ta,
+        fullyCorrectPercent: ta > 0 ? Math.round((fc / ta) * 100) : 0,
+      };
+    });
 
-    // Per-topic class + my stats
     const topicClassRows = await all(
       `SELECT topic,
-              SUM(CASE WHEN is_correct=1 THEN marks ELSE 0 END) as correctCount,
-              SUM(marks) as totalAnswered
+              SUM(CASE WHEN is_correct=1 THEN marks ELSE 0 END) as class_marks_correct,
+              SUM(marks) as class_marks_attempted
        FROM question_attempts
        WHERE subject_id = ? ${answeredRangeSql}
        GROUP BY topic`,
@@ -2346,8 +2372,8 @@ app.get("/api/competition/:subjectId/stats", authMiddleware, async (req, res) =>
 
     const topicMyRows = await all(
       `SELECT topic,
-              SUM(CASE WHEN is_correct=1 THEN marks ELSE 0 END) as myCorrect,
-              SUM(marks) as myTotal
+              SUM(CASE WHEN is_correct=1 THEN marks ELSE 0 END) as my_marks_correct,
+              SUM(marks) as my_marks_attempted
        FROM question_attempts
        WHERE subject_id = ? AND user_id = ? ${answeredRangeSql}
        GROUP BY topic`,
@@ -2355,17 +2381,62 @@ app.get("/api/competition/:subjectId/stats", authMiddleware, async (req, res) =>
     );
 
     const myTopicMap = {};
-    topicMyRows.forEach(r => { myTopicMap[r.topic] = { myCorrect: r.myCorrect, myTotal: r.myTotal }; });
+    topicMyRows.forEach((r) => {
+      myTopicMap[r.topic] = {
+        myCorrect: r.my_marks_correct,
+        myTotal: r.my_marks_attempted,
+      };
+    });
 
-    const topicStats = topicClassRows.map(r => ({
+    const topicUserRows = await all(
+      `SELECT user_id, topic,
+              SUM(CASE WHEN is_correct=1 THEN marks ELSE 0 END) as marks_correct,
+              SUM(marks) as marks_attempted
+       FROM question_attempts
+       WHERE subject_id = ? ${answeredRangeSql}
+       GROUP BY user_id, topic`,
+      [subjectId, ...answeredRangeParams]
+    );
+
+    const byTopicUsers = new Map();
+    for (const row of topicUserRows) {
+      const t = row.topic;
+      if (!byTopicUsers.has(t)) byTopicUsers.set(t, []);
+      const ma = Number(row.marks_attempted);
+      const mc = Number(row.marks_correct);
+      byTopicUsers.get(t).push({
+        userId: row.user_id,
+        pctRounded: ma > 0 ? Math.round((mc / ma) * 100) : 0,
+      });
+    }
+
+    function topicPercentile(topic) {
+      const list = byTopicUsers.get(topic);
+      if (!list || list.length < 2) return null;
+      const mine = list.find((x) => x.userId === req.user.id);
+      if (!mine) return null;
+      const below = list.filter((x) => x.pctRounded < mine.pctRounded).length;
+      return Math.round((below / (list.length - 1)) * 100);
+    }
+
+    const topicStats = topicClassRows.map((r) => ({
       topic: r.topic,
-      correctCount: r.correctCount,
-      totalAnswered: r.totalAnswered,
+      correctCount: r.class_marks_correct,
+      totalAnswered: r.class_marks_attempted,
       myCorrect: myTopicMap[r.topic]?.myCorrect ?? null,
-      myTotal: myTopicMap[r.topic]?.myTotal ?? 0
+      myTotal: myTopicMap[r.topic]?.myTotal ?? 0,
+      topicPercentile: topicPercentile(r.topic),
     }));
 
-    res.json({ totalStudents, percentile, rank, leaderboard, questionStats, topicStats });
+    res.json({
+      totalStudents,
+      percentile,
+      rank,
+      leaderboard,
+      questionStats,
+      topicStats,
+      minRankedAttempts: MIN_RANKED_ATTEMPTS,
+    });
   } catch (error) {
     console.error("[Competition stats] Error:", error);
     res.status(500).json({ error: "Could not load competition stats." });

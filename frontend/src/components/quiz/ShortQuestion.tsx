@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { cn, normalizeAnswer, getQuestionTypeLabel } from "@/lib/utils";
 import type { ShortQuestion as ShortQuestionType } from "@/lib/subjects";
 import { Badge } from "@/components/ui/badge";
@@ -11,16 +11,30 @@ interface ShortQuestionProps {
   question: ShortQuestionType;
   onAnswer: (isCorrect: boolean) => void;
   disabled?: boolean;
+  hidePassage?: boolean;
+  lockedCorrect?: boolean;
+  classFullyCorrectPercent?: number | null;
 }
 
 export function ShortQuestion({
   question,
   onAnswer,
   disabled = false,
+  hidePassage = false,
+  lockedCorrect = false,
+  classFullyCorrectPercent,
 }: ShortQuestionProps) {
   const [answer, setAnswer] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [isCorrect, setIsCorrect] = useState(false);
+
+  useEffect(() => {
+    if (lockedCorrect) {
+      setSubmitted(true);
+      setIsCorrect(true);
+      setAnswer(question.acceptedAnswers[0] ?? "—");
+    }
+  }, [lockedCorrect, question]);
 
   const handleSubmit = () => {
     if (!answer.trim() || submitted || disabled) return;
@@ -56,9 +70,14 @@ export function ShortQuestion({
             </Badge>
           )}
         </div>
+        {classFullyCorrectPercent != null && (
+          <p className="text-xs tabular-nums text-muted-foreground">
+            Class fully correct: {classFullyCorrectPercent}%
+          </p>
+        )}
       </div>
 
-      <PassageBlock passage={question.passage} />
+      {!hidePassage && <PassageBlock passage={question.passage} />}
       <QuestionImageGrid urls={question.imageUrls} />
 
       <h3 className="font-display text-lg leading-relaxed text-foreground sm:text-xl">
@@ -116,15 +135,9 @@ export function ShortQuestion({
               {isCorrect ? (
                 <span className="font-medium">Correct! Well done.</span>
               ) : (
-                <div className="space-y-1">
-                  <span className="font-medium">Incorrect.</span>
-                  <p className="text-danger/80">
-                    Accepted answers:{" "}
-                    <span className="font-medium">
-                      {question.acceptedAnswers.join(", ")}
-                    </span>
-                  </p>
-                </div>
+                <span className="font-medium">
+                  Not quite — keep working on this one.
+                </span>
               )}
             </div>
           </div>

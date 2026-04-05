@@ -134,10 +134,12 @@ export function StudyTimerProvider({ children }: { children: ReactNode }) {
   const lastWallClockTickRef = useRef<number | null>(null);
 
   const quizMatch = useMemo(() => {
-    // Practice mode is only the main quiz route: /quiz/:subjectId
-    // (Exclude /quiz/:subjectId/summary etc.)
-    const m = location.pathname.match(/^\/quiz\/([^/]+)\/?$/);
-    return m ? { subjectId: m[1] } : null;
+    // Main practice and wrong-answer review (not /summary).
+    const wrong = location.pathname.match(/^\/quiz\/([^/]+)\/wrong\/?$/);
+    if (wrong) return { subjectId: wrong[1] };
+    const main = location.pathname.match(/^\/quiz\/([^/]+)\/?$/);
+    if (main) return { subjectId: main[1] };
+    return null;
   }, [location.pathname]);
 
   const isOnPractice = !!quizMatch;

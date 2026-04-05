@@ -52,6 +52,34 @@ function parseJsonArrayFromString(s: string): unknown[] | undefined {
   return undefined;
 }
 
+/** Trim, strip wrapping quotes, fix protocol-relative and bare-host URLs (common in Sheets). */
+export function normalizeImageUrl(s: string): string {
+  let t = String(s ?? "").trim();
+  if (
+    (t.startsWith('"') && t.endsWith('"')) ||
+    (t.startsWith("'") && t.endsWith("'"))
+  ) {
+    t = t.slice(1, -1).trim();
+  }
+  if (!t) return t;
+  if (t.startsWith("//")) return `https:${t}`;
+  if (/^https?:\/\//i.test(t)) return t;
+  if (t.startsWith("data:image")) return t;
+  // Pasted host or host/path without scheme (e.g. sandbox CDN domains)
+  if (/^[a-z0-9][a-z0-9+.-]*\.[a-z]{2,}/i.test(t)) {
+    return `https://${t.replace(/^\/+/, "")}`;
+  }
+  return t;
+}
+
+export function normalizeImageUrls(
+  urls: string[] | undefined,
+): string[] | undefined {
+  if (!urls?.length) return urls;
+  const out = urls.map((u) => normalizeImageUrl(String(u))).filter(Boolean);
+  return out.length ? out : undefined;
+}
+
 function parseStringArray(val: unknown): string[] {
   if (Array.isArray(val)) return val.map(String);
   if (typeof val === "string" && val.trim()) {
@@ -59,16 +87,27 @@ function parseStringArray(val: unknown): string[] {
     const arr = parseJsonArrayFromString(trimmed);
     if (arr) return arr.map(String);
     // Single URL in a cell (no JSON array) — common in Sheets
-    if (/^https?:\/\//i.test(trimmed) || trimmed.startsWith("data:image")) {
-      return [trimmed];
+    if (
+      /^https?:\/\//i.test(trimmed) ||
+      trimmed.startsWith("data:image") ||
+      trimmed.startsWith("//")
+    ) {
+      return [normalizeImageUrl(trimmed)];
+    }
+    // Bare domain/path (no spaces) — treat as one URL
+    if (
+      /^[a-z0-9][a-z0-9+.-]*\.[a-z]{2,}(\/|$)/i.test(trimmed) &&
+      !/\s/.test(trimmed)
+    ) {
+      return [normalizeImageUrl(trimmed)];
     }
   }
   return [];
 }
 
 /**
- * Bootstrap groups questions by `subject_id`. URLs use canonical ids (e.g. `english`);
- * sheet rows sometimes use different casing — match case-insensitively.
+ * Bootstrap groups questions by `subject_id`. URLs use canonical ids (`methods`,
+ * `general-maths`, `specialist-maths`); sheet rows sometimes use different casing.
  */
 export function getRawCustomQuestionsForSubject(
   map: Record<string, unknown[]> | undefined,
@@ -98,12 +137,19 @@ export function normalizeCustomQuestion(raw: unknown): Question | null {
 
   let imageUrls: string[] | undefined;
   if (Array.isArray(q.imageUrls)) {
-    imageUrls = (q.imageUrls as unknown[]).map(String);
+    imageUrls = normalizeImageUrls(
+      (q.imageUrls as unknown[]).map(String),
+    );
   } else {
     const a = parseStringArray(q.image_urls);
     const b = parseStringArray(q.imageUrls);
-    imageUrls = a.length ? a : b.length ? b : undefined;
+    imageUrls = normalizeImageUrls(a.length ? a : b.length ? b : undefined);
   }
+  const groupIdRaw = q.group_id ?? q.groupId;
+  const groupId =
+    typeof groupIdRaw === "string" && groupIdRaw.trim()
+      ? groupIdRaw.trim()
+      : undefined;
   const marks = typeof q.marks === "number" ? q.marks : undefined;
   const passage =
     typeof q.passage === "string" && q.passage.trim() ? q.passage : undefined;
@@ -139,6 +185,7 @@ export function normalizeCustomQuestion(raw: unknown): Question | null {
       marks,
       passage,
       id,
+      ...(groupId ? { groupId } : {}),
     };
   }
 
@@ -158,6 +205,7 @@ export function normalizeCustomQuestion(raw: unknown): Question | null {
         marks,
         passage,
         id,
+        ...(groupId ? { groupId } : {}),
       };
     }
     return {
@@ -169,6 +217,7 @@ export function normalizeCustomQuestion(raw: unknown): Question | null {
       marks,
       passage,
       id,
+      ...(groupId ? { groupId } : {}),
     };
   }
 
@@ -192,6 +241,7 @@ export function normalizeCustomQuestion(raw: unknown): Question | null {
       marks,
       passage,
       id,
+      ...(groupId ? { groupId } : {}),
     };
   }
 

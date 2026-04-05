@@ -12,7 +12,9 @@ const QuizPage = lazy(() => import("@/pages/QuizPage"));
 const SummaryPage = lazy(() => import("@/pages/SummaryPage"));
 const StudyModePage = lazy(() => import("@/pages/StudyModePage"));
 const TrackStudyPage = lazy(() => import("@/pages/TrackStudyPageNew"));
-const ChatPage = lazy(() => import("@/pages/ChatPage"));
+const QuestionForumThreadPage = lazy(
+  () => import("@/pages/QuestionForumThreadPage"),
+);
 const DojoPage = lazy(() => import("@/pages/DojoPage"));
 const DojoBattlePage = lazy(() => import("@/pages/DojoBattlePage"));
 const AdminPage = lazy(() => import("@/pages/AdminPage"));
@@ -126,6 +128,24 @@ function AppRoutes() {
         />
 
         <Route
+          path="/quiz/:subjectId/wrong"
+          element={
+            <ProtectedRoute>
+              <QuizPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/quiz/:subjectId/question-forum"
+          element={
+            <ProtectedRoute>
+              <QuestionForumThreadPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
           path="/quiz/:subjectId/summary"
           element={
             <ProtectedRoute>
@@ -148,23 +168,6 @@ function AppRoutes() {
           element={
             <ProtectedRoute>
               <TrackStudyPage />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/chat/:subjectId"
-          element={
-            <ProtectedRoute>
-              <ChatPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/chat/:subjectId/post/:postId"
-          element={
-            <ProtectedRoute>
-              <ChatPage />
             </ProtectedRoute>
           }
         />

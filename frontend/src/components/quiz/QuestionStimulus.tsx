@@ -1,5 +1,6 @@
 import { BookOpen } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { normalizeImageUrls } from "@/lib/practiceQuestions";
 
 /** Shared passage / stimulus block for MCQ, short, and long practice questions. */
 export function PassageBlock({ passage }: { passage?: string }) {
@@ -26,8 +27,9 @@ export function PassageBlock({ passage }: { passage?: string }) {
  * Uses object-contain so diagrams and charts are not over-cropped.
  */
 export function QuestionImageGrid({ urls }: { urls?: string[] }) {
-  if (!urls?.length) return null;
-  const list = urls.map((u) => u.trim()).filter(Boolean);
+  const normalized = normalizeImageUrls(urls);
+  if (!normalized?.length) return null;
+  const list = normalized.map((u) => u.trim()).filter(Boolean);
   if (!list.length) return null;
 
   return (

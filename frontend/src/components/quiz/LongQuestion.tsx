@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, Fragment } from "react";
 import { cn, getQuestionTypeLabel } from "@/lib/utils";
 import type { LongQuestion as LongQuestionType } from "@/lib/subjects";
 import { apiFetch } from "@/lib/api";
@@ -15,6 +15,7 @@ import {
   ChevronUp,
   Lightbulb,
   Loader2,
+  CheckCircle2,
 } from "lucide-react";
 
 interface LongQuestionProps {
@@ -23,6 +24,9 @@ interface LongQuestionProps {
   questionKey: string;
   onAnswer: (correct: boolean | null) => void;
   disabled?: boolean;
+  hidePassage?: boolean;
+  lockedCorrect?: boolean;
+  classFullyCorrectPercent?: number | null;
 }
 
 interface StudentResponse {
@@ -136,6 +140,9 @@ export function LongQuestion({
   questionKey,
   onAnswer,
   disabled = false,
+  hidePassage = false,
+  lockedCorrect = false,
+  classFullyCorrectPercent,
 }: LongQuestionProps) {
   const [response, setResponse] = useState("");
   const [saving, setSaving] = useState(false);
@@ -143,6 +150,8 @@ export function LongQuestion({
   const [otherResponses, setOtherResponses] = useState<StudentResponse[]>([]);
   const [showOthers, setShowOthers] = useState(false);
   const [loadingOthers, setLoadingOthers] = useState(false);
+  const [scoreKnown, setScoreKnown] = useState(false);
+  const [scoredCorrect, setScoredCorrect] = useState(false);
 
   const handleSave = async () => {
     if (!response.trim() || saving || disabled) return;
@@ -154,7 +163,6 @@ export function LongQuestion({
         body: JSON.stringify({ responseText: response }),
       });
       setSaved(true);
-      toast.success("Answer saved successfully.");
       const correct = scoreLongAnswer(
         response,
         question.acceptedAnswers,
@@ -163,7 +171,10 @@ export function LongQuestion({
           .filter(Boolean)
           .join(" "),
       );
+      setScoredCorrect(correct);
+      setScoreKnown(true);
       onAnswer(correct);
+      toast.success("Answer saved.");
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : "Failed to save answer."
@@ -209,9 +220,14 @@ export function LongQuestion({
             </Badge>
           )}
         </div>
+        {classFullyCorrectPercent != null && (
+          <p className="text-xs tabular-nums text-muted-foreground">
+            Class fully correct: {classFullyCorrectPercent}%
+          </p>
+        )}
       </div>
 
-      <PassageBlock passage={question.passage} />
+      {!hidePassage && <PassageBlock passage={question.passage} />}
       <QuestionImageGrid urls={question.imageUrls} />
 
       <h3 className="font-display text-lg leading-relaxed text-foreground sm:text-xl">
@@ -226,7 +242,16 @@ export function LongQuestion({
         </div>
       )}
 
-      {/* Answer textarea */}
+      {lockedCorrect ? (
+        <div className="flex gap-3 rounded-xl border border-success/30 bg-success/5 p-4 text-sm">
+          <CheckCircle2 className="size-5 shrink-0 text-success" />
+          <p className="text-success">
+            <span className="font-medium">Marked correct</span> — shown for reference while you
+            work on other parts.
+          </p>
+        </div>
+      ) : (
+      <Fragment>
       <div className="space-y-3">
         <Textarea
           value={response}
@@ -272,9 +297,16 @@ export function LongQuestion({
           </Button>
         </div>
 
-        {saved && (
-          <p className="text-xs font-medium text-success">
-            Your answer has been saved.
+        {scoreKnown && (
+          <p
+            className={cn(
+              "text-xs font-medium",
+              scoredCorrect ? "text-success" : "text-danger",
+            )}
+          >
+            {scoredCorrect
+              ? "Marked as meeting the expected response."
+              : "Not marked as correct — try revising your answer and save again."}
           </p>
         )}
       </div>
@@ -314,6 +346,8 @@ export function LongQuestion({
             </div>
           )}
         </div>
+      )}
+      </Fragment>
       )}
     </div>
   );

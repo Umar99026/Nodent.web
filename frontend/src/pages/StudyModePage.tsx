@@ -1,8 +1,21 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
-import { STORAGE_KEYS } from "@/lib/constants";
-import { formatSeconds } from "@/lib/utils";
+import { apiFetch } from "@/lib/api";
+import { API_PATHS, STORAGE_KEYS } from "@/lib/constants";
+import {
+  getRawCustomQuestionsForSubject,
+  normalizeCustomQuestionsList,
+} from "@/lib/practiceQuestions";
+import { baseSubjects } from "@/lib/subjects";
+import type { Question, Subject } from "@/lib/subjects";
+import { questionKeyStable, getStableQuestionIndex } from "@/lib/practiceKeys";
+import { randomizedQuestionsForSubject } from "@/lib/quizShuffle";
+import { buildGroupsFromOrderedFlat } from "@/lib/questionGroups";
+import { PassageBlock, QuestionImageGrid } from "@/components/quiz/QuestionStimulus";
+import { McqQuestion } from "@/components/quiz/McqQuestion";
+import { ShortQuestion } from "@/components/quiz/ShortQuestion";
+import { formatSeconds, getQuestionTypeLabel } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -17,17 +30,11 @@ import {
   ChevronLeft,
   ChevronRight,
   LogOut,
+  Loader2,
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
-/* ------------------------------------------------------------------ */
-
-import { baseSubjects } from "@/lib/subjects";
-import type { Question } from "@/lib/subjects";
-
-/* ------------------------------------------------------------------ */
-/*  Persistence helpers                                                */
 /* ------------------------------------------------------------------ */
 
 interface StudyModeState {
@@ -41,8 +48,8 @@ function stateKey(userId: string, subjectId: string) {
   return STORAGE_KEYS.studyModePrefix + userId + "_" + subjectId;
 }
 
-function answersKey(subjectId: string, questionText: string) {
-  return subjectId + "__" + questionText;
+function studyAnswerKey(subjectId: string, questionKey: string) {
+  return `${subjectId}__${questionKey}`;
 }
 
 function loadStudyState(
@@ -86,9 +93,9 @@ function loadAnswers(): Record<string, string> {
   return {};
 }
 
-function saveAnswer(subjectId: string, questionText: string, value: string) {
+function saveAnswer(subjectId: string, questionKey: string, value: string) {
   const all = loadAnswers();
-  all[answersKey(subjectId, questionText)] = value;
+  all[studyAnswerKey(subjectId, questionKey)] = value;
   try {
     localStorage.setItem(STORAGE_KEYS.studyModeAnswers, JSON.stringify(all));
   } catch {
@@ -96,44 +103,103 @@ function saveAnswer(subjectId: string, questionText: string, value: string) {
   }
 }
 
-function getAnswer(subjectId: string, questionText: string): string {
-  const all = loadAnswers();
-  return all[answersKey(subjectId, questionText)] ?? "";
-}
-
-/* ------------------------------------------------------------------ */
-/*  Type badge helper                                                  */
-/* ------------------------------------------------------------------ */
-
-function typeBadgeLabel(type: string): string {
-  switch (type) {
-    case "mcq":
-      return "MCQ";
-    case "short_answer":
-      return "Short";
-    case "written":
-      return "Long";
-    default:
-      return type;
+function getCustomQuestionsFromStorage(subjectId: string): Question[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.customQuestions);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as Record<string, unknown[]>;
+    return normalizeCustomQuestionsList(
+      getRawCustomQuestionsForSubject(parsed, subjectId),
+    );
+  } catch {
+    return [];
   }
 }
 
-function typeBadgeColor(type: string): string {
+function typeBadgeLabel(type: Question["type"]): string {
+  return getQuestionTypeLabel(type);
+}
+
+function typeBadgeColor(type: Question["type"]): string {
   switch (type) {
     case "mcq":
       return "bg-brand/20 text-brand";
-    case "short_answer":
+    case "short":
       return "bg-amber/20 text-amber";
-    case "written":
+    case "long":
       return "bg-success/20 text-success";
     default:
       return "bg-white/20 text-white";
   }
 }
 
-/* ------------------------------------------------------------------ */
-/*  Component                                                          */
-/* ------------------------------------------------------------------ */
+/** Long-answer notes for study (no written API); same stimulus layout as quiz. */
+function StudyLongPart({
+  subjectId,
+  part,
+  bank,
+  hidePassage,
+}: {
+  subjectId: string;
+  part: Extract<Question, { type: "long" }>;
+  bank: Question[];
+  hidePassage: boolean;
+}) {
+  const qk = questionKeyStable(
+    subjectId,
+    part,
+    Math.max(0, getStableQuestionIndex(bank, part)),
+  );
+  const [value, setValue] = useState(() => {
+    const all = loadAnswers();
+    return all[studyAnswerKey(subjectId, qk)] ?? "";
+  });
+
+  useEffect(() => {
+    const all = loadAnswers();
+    setValue(all[studyAnswerKey(subjectId, qk)] ?? "");
+  }, [subjectId, qk]);
+
+  const handleChange = (v: string) => {
+    setValue(v);
+    saveAnswer(subjectId, qk, v);
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge variant="secondary" className="text-xs font-normal">
+          {getQuestionTypeLabel(part.type)}
+        </Badge>
+        {part.topic && (
+          <Badge
+            variant="outline"
+            className="text-xs font-normal text-muted-foreground"
+          >
+            {part.topic}
+          </Badge>
+        )}
+      </div>
+      {!hidePassage && <PassageBlock passage={part.passage} />}
+      <QuestionImageGrid urls={part.imageUrls} />
+      <h3 className="font-display text-lg leading-relaxed text-foreground sm:text-xl">
+        {part.question}
+      </h3>
+      {part.guidance && (
+        <div className="flex items-start gap-3 rounded-lg bg-amber/10 px-4 py-3 text-sm text-amber">
+          {part.guidance}
+        </div>
+      )}
+      <Textarea
+        placeholder="Write your answer here..."
+        value={value}
+        onChange={(e) => handleChange(e.target.value)}
+        rows={12}
+        className="resize-y border-black/10 bg-white/80 text-base leading-relaxed text-foreground placeholder:text-muted-foreground"
+      />
+    </div>
+  );
+}
 
 const DEFAULT_DURATION = 30;
 
@@ -142,11 +208,76 @@ export default function StudyModePage() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  const subject = baseSubjects.find((s) => String(s.id) === subjectId);
-  const questions: Question[] = subject?.quiz ?? [];
+  const subject: Subject | undefined = useMemo(
+    () => baseSubjects.find((s) => String(s.id) === subjectId),
+    [subjectId],
+  );
+
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [questionsLoading, setQuestionsLoading] = useState(true);
+
   const userId = user ? String(user.id) : "guest";
 
-  // State
+  useEffect(() => {
+    if (!subjectId) {
+      setQuestions([]);
+      setQuestionsLoading(false);
+      return;
+    }
+    let cancelled = false;
+
+    if (!user) {
+      setQuestionsLoading(true);
+      const custom = getCustomQuestionsFromStorage(subjectId);
+      setQuestions(custom.length ? custom : (subject?.quiz ?? []));
+      setQuestionsLoading(false);
+      return;
+    }
+
+    setQuestionsLoading(true);
+    (async () => {
+      try {
+        const data = await apiFetch<{
+          customQuestions?: Record<string, unknown[]>;
+        }>(API_PATHS.bootstrap);
+        if (cancelled) return;
+        if (data?.customQuestions) {
+          localStorage.setItem(
+            STORAGE_KEYS.customQuestions,
+            JSON.stringify(data.customQuestions),
+          );
+        }
+        const raw = getRawCustomQuestionsForSubject(
+          data?.customQuestions,
+          subjectId,
+        );
+        const custom = normalizeCustomQuestionsList(raw);
+        setQuestions(custom.length ? custom : (subject?.quiz ?? []));
+      } catch {
+        if (!cancelled) {
+          const custom = getCustomQuestionsFromStorage(subjectId);
+          setQuestions(custom.length ? custom : (subject?.quiz ?? []));
+        }
+      } finally {
+        if (!cancelled) setQuestionsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, subjectId, subject?.quiz]);
+
+  const randomizedQuestions = useMemo(() => {
+    if (!subjectId) return questions;
+    const uid = user?.id ?? "guest";
+    return randomizedQuestionsForSubject(questions, uid, subjectId);
+  }, [questions, user, subjectId]);
+
+  const studyGroups = useMemo(
+    () => buildGroupsFromOrderedFlat(randomizedQuestions, questions),
+    [randomizedQuestions, questions],
+  );
+
   const [studyState, setStudyState] = useState<StudyModeState>(() =>
     loadStudyState(userId, subjectId ?? "", DEFAULT_DURATION),
   );
@@ -154,14 +285,25 @@ export default function StudyModePage() {
 
   const { index, durationMinutes, remainingSeconds, running } = studyState;
 
-  // Persist state changes
+  useEffect(() => {
+    setStudyState((prev) =>
+      loadStudyState(userId, subjectId ?? "", prev.durationMinutes),
+    );
+  }, [userId, subjectId]);
+
+  useEffect(() => {
+    setStudyState((prev) => ({
+      ...prev,
+      index: Math.max(0, Math.min(studyGroups.length - 1, prev.index)),
+    }));
+  }, [studyGroups.length]);
+
   useEffect(() => {
     if (subjectId) {
       saveStudyState(userId, subjectId, studyState);
     }
   }, [studyState, userId, subjectId]);
 
-  // Timer tick
   useEffect(() => {
     if (!running) {
       if (intervalRef.current) {
@@ -189,41 +331,11 @@ export default function StudyModePage() {
     };
   }, [running]);
 
-  // Current question
-  const currentQuestion = questions[index] ?? null;
+  const currentGroup = studyGroups[index] ?? null;
+  const hidePassageForParts = Boolean(currentGroup?.passage?.trim());
 
-  // Answer state for current question
-  const [currentAnswer, setCurrentAnswer] = useState("");
-
-  // Sync answer when question changes
-  useEffect(() => {
-    if (currentQuestion && subjectId) {
-      setCurrentAnswer(getAnswer(subjectId, currentQuestion.question));
-    }
-  }, [index, currentQuestion, subjectId]);
-
-  // Save answer on change
-  const handleAnswerChange = useCallback(
-    (value: string) => {
-      setCurrentAnswer(value);
-      if (currentQuestion && subjectId) {
-        saveAnswer(subjectId, currentQuestion.question, value);
-      }
-    },
-    [currentQuestion, subjectId],
-  );
-
-  // MCQ selection
-  const handleOptionSelect = useCallback(
-    (option: string) => {
-      handleAnswerChange(option);
-    },
-    [handleAnswerChange],
-  );
-
-  // Navigation
   const goNext = () => {
-    if (index < questions.length - 1) {
+    if (index < studyGroups.length - 1) {
       setStudyState((prev) => ({ ...prev, index: prev.index + 1 }));
     }
   };
@@ -234,7 +346,6 @@ export default function StudyModePage() {
     }
   };
 
-  // Timer controls
   const handleStart = () =>
     setStudyState((prev) => ({ ...prev, running: true }));
   const handlePause = () =>
@@ -256,12 +367,10 @@ export default function StudyModePage() {
   };
 
   const handleExit = () => {
-    // Prefer browser history; fall back to the quiz page.
     if (window.history.length > 1) navigate(-1);
     else navigate(subjectId ? `/quiz/${subjectId}` : "/dashboard");
   };
 
-  // Progress ring
   const totalSeconds = durationMinutes * 60;
   const elapsed = totalSeconds - remainingSeconds;
   const progress = totalSeconds > 0 ? (elapsed / totalSeconds) * 100 : 0;
@@ -271,250 +380,242 @@ export default function StudyModePage() {
   const circumference = 2 * Math.PI * radius;
   const offset = circumference - (progress / 100) * circumference;
 
+  const renderPartCard = useCallback(
+    (part: Question) => {
+      if (!subjectId) return null;
+      const qk = questionKeyStable(
+        subjectId,
+        part,
+        Math.max(0, getStableQuestionIndex(questions, part)),
+      );
+      const hidePassage = hidePassageForParts;
+
+      return (
+        <div
+          key={qk}
+          className="rounded-xl border border-white/10 bg-white/[0.97] p-4 text-[#0b0f19] shadow-lg sm:p-5 [&_.text-muted-foreground]:text-neutral-600"
+        >
+          {part.type === "mcq" && (
+            <McqQuestion
+              question={part}
+              hidePassage={hidePassage}
+              lockedCorrect={false}
+              onAnswer={() => {}}
+              disabled={false}
+              classFullyCorrectPercent={null}
+            />
+          )}
+          {part.type === "short" && (
+            <ShortQuestion
+              question={part}
+              hidePassage={hidePassage}
+              lockedCorrect={false}
+              onAnswer={() => {}}
+              disabled={false}
+              classFullyCorrectPercent={null}
+            />
+          )}
+          {part.type === "long" && (
+            <StudyLongPart
+              subjectId={subjectId}
+              part={part}
+              bank={questions}
+              hidePassage={hidePassage}
+            />
+          )}
+        </div>
+      );
+    },
+    [subjectId, questions, hidePassageForParts],
+  );
+
   return (
     <div className="fixed inset-0 z-50 bg-navy text-white">
       <div className="h-full overflow-auto p-4 sm:p-8">
         <div className="mx-auto max-w-5xl">
-          {/* Dark study area */}
           <div className="rounded-2xl bg-white/5 p-8 shadow-xl sm:p-10">
-          {/* Timer row */}
-          <div className="mb-6 flex flex-col items-center gap-6 sm:flex-row sm:justify-between">
-            {/* Timer ring */}
-            <div className="relative flex items-center justify-center">
-              <svg
-                width={ringSize}
-                height={ringSize}
-                viewBox={`0 0 ${ringSize} ${ringSize}`}
-                className="block"
-              >
-                <circle
-                  cx={ringSize / 2}
-                  cy={ringSize / 2}
-                  r={radius}
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={strokeWidth}
-                  className="text-white/10"
-                />
-                <circle
-                  cx={ringSize / 2}
-                  cy={ringSize / 2}
-                  r={radius}
-                  fill="none"
-                  stroke="#56abe6"
-                  strokeWidth={strokeWidth}
-                  strokeLinecap="round"
-                  strokeDasharray={circumference}
-                  strokeDashoffset={offset}
-                  className="transition-[stroke-dashoffset] duration-500 ease-out"
-                  style={{
-                    transform: "rotate(-90deg)",
-                    transformOrigin: "50% 50%",
-                  }}
-                />
-              </svg>
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="font-display text-3xl font-bold tracking-tight">
-                  {formatSeconds(remainingSeconds)}
-                </span>
+            <div className="mb-6 flex flex-col items-center gap-6 sm:flex-row sm:justify-between">
+              <div className="relative flex items-center justify-center">
+                <svg
+                  width={ringSize}
+                  height={ringSize}
+                  viewBox={`0 0 ${ringSize} ${ringSize}`}
+                  className="block"
+                >
+                  <circle
+                    cx={ringSize / 2}
+                    cy={ringSize / 2}
+                    r={radius}
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={strokeWidth}
+                    className="text-white/10"
+                  />
+                  <circle
+                    cx={ringSize / 2}
+                    cy={ringSize / 2}
+                    r={radius}
+                    fill="none"
+                    stroke="#56abe6"
+                    strokeWidth={strokeWidth}
+                    strokeLinecap="round"
+                    strokeDasharray={circumference}
+                    strokeDashoffset={offset}
+                    className="transition-[stroke-dashoffset] duration-500 ease-out"
+                    style={{
+                      transform: "rotate(-90deg)",
+                      transformOrigin: "50% 50%",
+                    }}
+                  />
+                </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="font-display text-3xl font-bold tracking-tight">
+                    {formatSeconds(remainingSeconds)}
+                  </span>
+                </div>
               </div>
-            </div>
 
-            {/* Timer controls & settings */}
-            <div className="flex flex-col items-center gap-4">
-              <div className="flex items-center gap-2">
-                {running ? (
+              <div className="flex flex-col items-center gap-4">
+                <div className="flex items-center gap-2">
+                  {running ? (
+                    <Button
+                      onClick={handlePause}
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5 border-white/20 bg-white/5 text-white hover:bg-white/10"
+                    >
+                      <Pause className="size-4" />
+                      Pause
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={handleStart}
+                      size="sm"
+                      className="gap-1.5 bg-brand text-white hover:bg-brand-dark"
+                    >
+                      <Play className="size-4" />
+                      Start
+                    </Button>
+                  )}
                   <Button
-                    onClick={handlePause}
+                    onClick={handleReset}
                     variant="outline"
                     size="sm"
                     className="gap-1.5 border-white/20 bg-white/5 text-white hover:bg-white/10"
                   >
-                    <Pause className="size-4" />
-                    Pause
+                    <RotateCcw className="size-4" />
+                    Reset
                   </Button>
-                ) : (
-                  <Button
-                    onClick={handleStart}
-                    size="sm"
-                    className="gap-1.5 bg-brand text-white hover:bg-brand-dark"
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Label
+                    htmlFor="study-duration"
+                    className="text-xs text-white/60"
                   >
-                    <Play className="size-4" />
-                    Start
-                  </Button>
-                )}
+                    Duration (min)
+                  </Label>
+                  <Input
+                    id="study-duration"
+                    type="number"
+                    min={10}
+                    max={90}
+                    value={durationMinutes}
+                    onChange={(e) => handleDurationChange(e.target.value)}
+                    disabled={running}
+                    className="w-16 border-white/20 bg-white/5 text-center text-sm text-white"
+                  />
+                </div>
+
                 <Button
-                  onClick={handleReset}
-                  variant="outline"
+                  onClick={handleExit}
+                  variant="ghost"
                   size="sm"
-                  className="gap-1.5 border-white/20 bg-white/5 text-white hover:bg-white/10"
+                  className="gap-1.5 text-white/60 hover:text-white"
                 >
-                  <RotateCcw className="size-4" />
-                  Reset
+                  <LogOut className="size-4" />
+                  Back
                 </Button>
               </div>
-
-              <div className="flex items-center gap-2">
-                <Label
-                  htmlFor="study-duration"
-                  className="text-xs text-white/60"
-                >
-                  Duration (min)
-                </Label>
-                <Input
-                  id="study-duration"
-                  type="number"
-                  min={10}
-                  max={90}
-                  value={durationMinutes}
-                  onChange={(e) => handleDurationChange(e.target.value)}
-                  disabled={running}
-                  className="w-16 border-white/20 bg-white/5 text-center text-sm text-white"
-                />
-              </div>
-
-              <Button
-                onClick={handleExit}
-                variant="ghost"
-                size="sm"
-                className="gap-1.5 text-white/60 hover:text-white"
-              >
-                <LogOut className="size-4" />
-                Back
-              </Button>
             </div>
-          </div>
 
-          <Separator className="bg-white/10" />
+            <Separator className="bg-white/10" />
 
-          {/* Questions area */}
-          {questions.length === 0 ? (
-            <div className="py-16 text-center">
-              <p className="font-display text-xl text-white/60">
-                No questions available for this subject.
-              </p>
-              <p className="mt-2 text-sm text-white/40">
-                Questions will appear here once the subject data is loaded.
-              </p>
-            </div>
-          ) : currentQuestion ? (
-            <div className="mt-8 space-y-8">
-              {/* Question header */}
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-white/50">
-                  Question {index + 1} of {questions.length}
-                </span>
-                <Badge
-                  className={`${typeBadgeColor(currentQuestion.type)} border-0`}
-                >
-                  {typeBadgeLabel(currentQuestion.type)}
-                </Badge>
+            {questionsLoading ? (
+              <div className="flex items-center justify-center py-20">
+                <Loader2 className="size-8 animate-spin text-brand" />
               </div>
-
-              {/* Passage */}
-              {currentQuestion.passage && (
-                <div className="rounded-lg border border-white/10 bg-white/5 p-4">
-                  <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-white/40">
-                    Passage
-                  </p>
-              <p className="text-base leading-relaxed text-white/85">
-                    {currentQuestion.passage}
-                  </p>
+            ) : questions.length === 0 ? (
+              <div className="py-16 text-center">
+                <p className="font-display text-xl text-white/60">
+                  No questions available for this subject.
+                </p>
+                <p className="mt-2 text-sm text-white/40">
+                  Questions will appear here once the subject data is loaded.
+                </p>
+              </div>
+            ) : currentGroup ? (
+              <div className="mt-8 space-y-8">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-white/50">
+                    Stimulus {index + 1} of {studyGroups.length}
+                    {currentGroup.parts.length > 1 && (
+                      <span className="text-white/40">
+                        {" "}
+                        · {currentGroup.parts.length} parts
+                      </span>
+                    )}
+                  </span>
+                  {currentGroup.parts.length === 1 && (
+                    <Badge
+                      className={`${typeBadgeColor(currentGroup.parts[0]!.type)} border-0`}
+                    >
+                      {typeBadgeLabel(currentGroup.parts[0]!.type)}
+                    </Badge>
+                  )}
                 </div>
-              )}
 
-              {/* Question text */}
-              <p className="font-display text-2xl font-semibold leading-relaxed sm:text-3xl">
-                {currentQuestion.question}
-              </p>
-
-              {/* Images */}
-              {"imageUrls" in currentQuestion &&
-                Array.isArray((currentQuestion as any).imageUrls) &&
-                (currentQuestion as any).imageUrls.length > 0 && (
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {(currentQuestion as any).imageUrls.slice(0, 4).map((src: string) => (
-                      <div
-                        key={src}
-                        className="overflow-hidden rounded-xl border border-white/15 bg-white/5"
-                      >
-                        <img
-                          src={src}
-                          alt="Question image"
-                          className="h-56 w-full object-cover"
-                          loading="lazy"
-                        />
-                      </div>
-                    ))}
+                {currentGroup.passage && (
+                  <div className="rounded-lg border border-white/10 bg-white/5 p-4">
+                    <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-white/40">
+                      Passage
+                    </p>
+                    <p className="whitespace-pre-wrap text-base leading-relaxed text-white/85">
+                      {currentGroup.passage}
+                    </p>
                   </div>
                 )}
 
-              {/* Answer area */}
-              {currentQuestion.type === "mcq" &&
-              currentQuestion.options?.length ? (
-                <div className="space-y-2">
-                  {currentQuestion.options.map((option, i) => (
-                    <button
-                      key={i}
-                      onClick={() => handleOptionSelect(option)}
-                      className={`w-full rounded-lg border p-4 text-left text-base transition-colors ${
-                        currentAnswer === option
-                          ? "border-brand bg-brand/20 text-white"
-                          : "border-white/10 bg-white/5 text-white/80 hover:border-white/20 hover:bg-white/10"
-                      }`}
-                    >
-                      <span className="mr-2 font-semibold text-white/50">
-                        {String.fromCharCode(65 + i)}.
-                      </span>
-                      {option}
-                    </button>
-                  ))}
+                <div className="space-y-6">
+                  {currentGroup.parts.map((part) => renderPartCard(part))}
                 </div>
-              ) : currentQuestion.type === "long" ? (
-                <Textarea
-                  placeholder="Write your answer here..."
-                  value={currentAnswer}
-                  onChange={(e) => handleAnswerChange(e.target.value)}
-                  rows={10}
-                  className="border-white/20 bg-white/5 text-base leading-relaxed text-white placeholder:text-white/30"
-                />
-              ) : (
-                <Textarea
-                  placeholder="Type your answer..."
-                  value={currentAnswer}
-                  onChange={(e) => handleAnswerChange(e.target.value)}
-                  rows={6}
-                  className="border-white/20 bg-white/5 text-base leading-relaxed text-white placeholder:text-white/30"
-                />
-              )}
 
-              {/* Navigation */}
-              <div className="flex items-center justify-between pt-2">
-                <Button
-                  onClick={goPrev}
-                  disabled={index === 0}
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5 border-white/20 bg-white/5 text-white hover:bg-white/10 disabled:opacity-30"
-                >
-                  <ChevronLeft className="size-4" />
-                  Previous
-                </Button>
-                <Button
-                  onClick={goNext}
-                  disabled={index === questions.length - 1}
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5 border-white/20 bg-white/5 text-white hover:bg-white/10 disabled:opacity-30"
-                >
-                  Next
-                  <ChevronRight className="size-4" />
-                </Button>
+                <div className="flex items-center justify-between pt-2">
+                  <Button
+                    onClick={goPrev}
+                    disabled={index === 0}
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 border-white/20 bg-white/5 text-white hover:bg-white/10 disabled:opacity-30"
+                  >
+                    <ChevronLeft className="size-4" />
+                    Previous
+                  </Button>
+                  <Button
+                    onClick={goNext}
+                    disabled={index === studyGroups.length - 1}
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 border-white/20 bg-white/5 text-white hover:bg-white/10 disabled:opacity-30"
+                  >
+                    Next
+                    <ChevronRight className="size-4" />
+                  </Button>
+                </div>
               </div>
-            </div>
-          ) : null}
+            ) : null}
+          </div>
         </div>
-      </div>
       </div>
     </div>
   );

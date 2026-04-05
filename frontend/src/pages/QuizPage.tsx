@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { apiFetch } from "@/lib/api";
 import { API_PATHS, STORAGE_KEYS } from "@/lib/constants";
@@ -9,14 +9,29 @@ import {
 } from "@/lib/practiceQuestions";
 import { baseSubjects } from "@/lib/subjects";
 import type { Question, Subject } from "@/lib/subjects";
+import {
+  getStableQuestionIndex,
+  normalizeAnswerMap,
+  questionKeyStable,
+  resolveAnswerKey,
+} from "@/lib/practiceKeys";
+import {
+  randomizedQuestionsForSubject,
+  getQuestionGroupKey,
+} from "@/lib/quizShuffle";
+import {
+  buildGroupsFromOrderedFlat,
+  getAllPartsInGroup,
+  type QuestionStimulusGroup,
+} from "@/lib/questionGroups";
 import { AppShell } from "@/components/layout/AppShell";
 import { McqQuestion } from "@/components/quiz/McqQuestion";
 import { ShortQuestion } from "@/components/quiz/ShortQuestion";
 import { LongQuestion } from "@/components/quiz/LongQuestion";
-import { QuizProgress } from "@/components/quiz/QuizProgress";
 import { CommentThread } from "@/components/quiz/CommentThread";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 import {
   Dialog,
   DialogContent,
@@ -53,73 +68,9 @@ import {
   Send,
 } from "lucide-react";
 
-function mulberry32(seed: number) {
-  return function () {
-    let t = (seed += 0x6d2b79f5);
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-function hashSeed(s: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-}
-
-function seededShuffle<T>(arr: T[], seedStr: string): T[] {
-  const a = [...arr];
-  const rand = mulberry32(hashSeed(seedStr));
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(rand() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
-
-function seededShuffleGroups<T>(
-  items: T[],
-  seedStr: string,
-  groupKey: (item: T) => string,
-  sortWithinGroup?: (a: T, b: T) => number,
-): T[] {
-  // Preserve first-seen group order for stability, then shuffle groups.
-  const groups: { key: string; items: T[] }[] = [];
-  const idx = new Map<string, number>();
-  for (const it of items) {
-    const k = groupKey(it);
-    const existing = idx.get(k);
-    if (existing == null) {
-      idx.set(k, groups.length);
-      groups.push({ key: k, items: [it] });
-    } else {
-      groups[existing].items.push(it);
-    }
-  }
-  for (const g of groups) {
-    if (sortWithinGroup) g.items.sort(sortWithinGroup);
-  }
-  const shuffledGroups = seededShuffle(groups, seedStr);
-  return shuffledGroups.flatMap((g) => g.items);
-}
-
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
-
-/** Stable key: DB id when present (custom questions), else index in current list. */
-function questionKey(
-  subjectId: string,
-  index: number,
-  q: Question | null,
-): string {
-  if (q?.id != null) return `${subjectId}_qid_${q.id}`;
-  return `${subjectId}_q${index}`;
-}
 
 /* ------------------------------------------------------------------ */
 /*  Practice state persistence                                         */
@@ -189,6 +140,15 @@ function getCustomQuestionsFromStorage(subjectId: string): Question[] {
 export default function QuizPage() {
   const { subjectId } = useParams<{ subjectId: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const location = useLocation();
+  const wrongPath = subjectId
+    ? new RegExp(`^/quiz/${subjectId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/wrong/?$`)
+    : null;
+  const isWrongReview =
+    (wrongPath?.test(location.pathname) ?? false) ||
+    searchParams.get("review") === "wrong";
+  const wrongOnlyKeyParam = searchParams.get("key");
   const { user } = useAuth();
   const { isInactive, resetInactivity } = useInactivity();
 
@@ -206,6 +166,7 @@ export default function QuizPage() {
     { userId: number; username: string; email: string }[]
   >([]);
   const [assignFilter, setAssignFilter] = useState("");
+  const [classByKey, setClassByKey] = useState<Record<string, number>>({});
 
   // Find subject (used for display metadata only)
   const subject: Subject | undefined = useMemo(() => {
@@ -214,7 +175,32 @@ export default function QuizPage() {
 
   useEffect(() => {
     setInitialized(false);
-  }, [subjectId, user?.id]);
+  }, [subjectId, user?.id, isWrongReview]);
+
+  useEffect(() => {
+    if (!user || !subjectId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await apiFetch<{
+          questionStats?: { questionKey: string; fullyCorrectPercent?: number }[];
+        }>(`/api/competition/${subjectId}/stats?range=all`);
+        if (cancelled) return;
+        const m: Record<string, number> = {};
+        for (const q of data.questionStats ?? []) {
+          if (q.questionKey != null && q.fullyCorrectPercent != null) {
+            m[q.questionKey] = q.fullyCorrectPercent;
+          }
+        }
+        setClassByKey(m);
+      } catch {
+        if (!cancelled) setClassByKey({});
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, subjectId]);
 
   // Refresh custom questions from API so new admin questions show without re-login.
   useEffect(() => {
@@ -266,57 +252,147 @@ export default function QuizPage() {
 
   const randomizedQuestions = useMemo(() => {
     if (!subjectId || !user) return questions;
-    // Stable per-user per-subject shuffle, but keep multi-part questions together.
-    // Heuristic: questions sharing the exact same `passage` stay as a contiguous block.
-    // If you later add an explicit `groupId`, it will take precedence automatically.
-    return seededShuffleGroups(
-      questions,
-      `${user.id}:${subjectId}`,
-      (q) => {
-        const anyQ = q as unknown as { groupId?: unknown; passage?: unknown; id?: unknown };
-        if (anyQ.groupId != null && String(anyQ.groupId).trim()) {
-          return `gid:${String(anyQ.groupId).trim()}`;
-        }
-        if (typeof anyQ.passage === "string" && anyQ.passage.trim()) {
-          return `passage:${anyQ.passage.trim()}`;
-        }
-        return `id:${String(anyQ.id ?? "") || JSON.stringify(q)}`;
-      },
-      (a, b) => {
-        const aa = a as unknown as { id?: unknown };
-        const bb = b as unknown as { id?: unknown };
-        const ai = typeof aa.id === "number" ? aa.id : Number(aa.id);
-        const bi = typeof bb.id === "number" ? bb.id : Number(bb.id);
-        if (Number.isFinite(ai) && Number.isFinite(bi)) return ai - bi;
-        return 0;
-      },
-    );
+    return randomizedQuestionsForSubject(questions, user.id, subjectId);
   }, [questions, user, subjectId]);
 
-  const filteredQuestions = useMemo(() => {
+  const wrongReviewGroups = useMemo((): QuestionStimulusGroup[] | null => {
+    if (!isWrongReview || !user || !subjectId || questions.length === 0) {
+      return null;
+    }
+    const subj = subjectId;
+    const saved = loadPracticeState(user.id, subj);
+
+    function buildWrongGroups(): QuestionStimulusGroup[] {
+      if (!saved?.answers || Object.keys(saved.answers).length === 0) return [];
+      const norm = normalizeAnswerMap(
+        subj,
+        saved.answers,
+        questions,
+        randomizedQuestions,
+      );
+      const seenGk = new Set<string>();
+      const out: QuestionStimulusGroup[] = [];
+      for (const [k, val] of Object.entries(norm)) {
+        if (val !== false) continue;
+        const r = resolveAnswerKey(subj, k, questions, randomizedQuestions);
+        if (!r) continue;
+        const gk = getQuestionGroupKey(r.q, questions);
+        if (seenGk.has(gk)) continue;
+        seenGk.add(gk);
+        const parts = getAllPartsInGroup(gk, questions);
+        const passage = parts.find((p) => p.passage?.trim())?.passage?.trim();
+        out.push({ key: gk, passage, parts });
+      }
+      const order = new Map<string, number>();
+      randomizedQuestions.forEach((q, i) => {
+        const gk = getQuestionGroupKey(q, questions);
+        if (!order.has(gk)) order.set(gk, i);
+      });
+      out.sort((a, b) => (order.get(a.key) ?? 999) - (order.get(b.key) ?? 999));
+      return out;
+    }
+
+    if (wrongOnlyKeyParam) {
+      try {
+        const dec = decodeURIComponent(wrongOnlyKeyParam);
+        const wrongs = buildWrongGroups();
+        const target = resolveAnswerKey(
+          subj,
+          dec,
+          questions,
+          randomizedQuestions,
+        );
+        if (!target) return [];
+        const gk = getQuestionGroupKey(target.q, questions);
+        const match = wrongs.find((g) => g.key === gk);
+        if (match) return [match];
+        const parts = getAllPartsInGroup(gk, questions);
+        const passage = parts.find((p) => p.passage?.trim())?.passage?.trim();
+        return [{ key: gk, passage, parts }];
+      } catch {
+        return [];
+      }
+    }
+
+    return buildWrongGroups();
+  }, [
+    isWrongReview,
+    user,
+    subjectId,
+    questions,
+    randomizedQuestions,
+    wrongOnlyKeyParam,
+  ]);
+
+  const topicFilteredFlat = useMemo(() => {
     if (topicFilter === "all") return randomizedQuestions;
     return randomizedQuestions.filter(
       (q) => (q.topic || "General") === topicFilter,
     );
   }, [randomizedQuestions, topicFilter]);
 
-  // Load persisted state after questions are known (topic starts "all" → index matches full list).
+  const allGroupsFlat = useMemo(
+    () => buildGroupsFromOrderedFlat(topicFilteredFlat, questions),
+    [topicFilteredFlat, questions],
+  );
+
+  /** Main quiz: stimulus groups where at least one part is not yet correct. */
+  const activeGroups = useMemo(() => {
+    if (!subjectId) return allGroupsFlat;
+    return allGroupsFlat.filter((g) =>
+      !g.parts.every((p) => {
+        const qk = questionKeyStable(
+          subjectId,
+          p,
+          Math.max(0, getStableQuestionIndex(questions, p)),
+        );
+        return answers[qk] === true;
+      }),
+    );
+  }, [allGroupsFlat, answers, subjectId, questions]);
+
+  const displayGroups: QuestionStimulusGroup[] = isWrongReview
+    ? wrongReviewGroups ?? []
+    : activeGroups;
+
+  // Load persisted state after questions are known; normalize keys to stable bank indices.
   useEffect(() => {
     if (!user || !subjectId || questionsLoading) return;
+    if (questions.length === 0) return;
+
+    if (isWrongReview) {
+      setCurrentIndex(0);
+      setAnswers({});
+      setInitialized(true);
+      return;
+    }
 
     const saved = loadPracticeState(user.id, subjectId);
-    const maxIdx = Math.max(0, questions.length - 1);
+    const groupCount = buildGroupsFromOrderedFlat(randomizedQuestions, questions).length;
+    const maxIdx = Math.max(0, groupCount - 1);
     if (saved) {
-      setCurrentIndex(Math.min(saved.currentIndex, maxIdx));
-      setAnswers(saved.answers);
-
-      if (saved.completedAt) {
-        navigate(`/quiz/${subjectId}/summary`, { replace: true });
-        return;
+      const norm = normalizeAnswerMap(
+        subjectId,
+        saved.answers,
+        questions,
+        randomizedQuestions,
+      );
+      if (JSON.stringify(norm) !== JSON.stringify(saved.answers)) {
+        savePracticeState(user.id, subjectId, { ...saved, answers: norm });
       }
+      setCurrentIndex(Math.min(saved.currentIndex, maxIdx));
+      setAnswers(norm);
     }
     setInitialized(true);
-  }, [user, subjectId, navigate, questionsLoading, questions.length]);
+  }, [
+    user,
+    subjectId,
+    navigate,
+    questionsLoading,
+    questions,
+    randomizedQuestions,
+    isWrongReview,
+  ]);
 
   // Show inactivity dialog
   useEffect(() => {
@@ -325,48 +401,21 @@ export default function QuizPage() {
     }
   }, [isInactive]);
 
-  // Persist state on every answer change
-  const persistState = useCallback(
-    (index: number, ans: Record<string, boolean | null>) => {
-      if (!user || !subjectId) return;
-      savePracticeState(user.id, subjectId, {
-        currentIndex: index,
-        answers: ans,
-      });
-    },
-    [user, subjectId]
-  );
-
   // Handle answer
   const handleAnswer = useCallback(
     (qKey: string, isCorrect: boolean | null, marks: number, topic: string) => {
       setAnswers((prev) => {
         const next = { ...prev, [qKey]: isCorrect };
-
-        // Check completion
-        const answeredCount = Object.keys(next).length;
-        if (answeredCount >= filteredQuestions.length && filteredQuestions.length > 0) {
-          // All answered — mark complete and redirect
-          if (user && subjectId) {
-            savePracticeState(user.id, subjectId, {
-              currentIndex,
-              answers: next,
-              completedAt: new Date().toISOString(),
-            });
-          }
-          toast.success("Quiz complete! Redirecting to summary...");
-          setTimeout(() => {
-            navigate(`/quiz/${subjectId}/summary`);
-          }, 1200);
-        } else {
-          persistState(currentIndex, next);
+        if (user && subjectId) {
+          savePracticeState(user.id, subjectId, {
+            currentIndex,
+            answers: next,
+          });
         }
-
         return next;
       });
 
-      // Send to competition API (fire-and-forget)
-      if (isCorrect !== null) {
+      if (!isWrongReview && isCorrect !== null) {
         apiFetch("/api/competition/answer", {
           method: "POST",
           body: JSON.stringify({
@@ -381,34 +430,49 @@ export default function QuizPage() {
         });
       }
     },
-    [filteredQuestions.length, currentIndex, persistState, user, subjectId, navigate]
+    [currentIndex, user, subjectId, isWrongReview]
   );
 
-  // Navigation
+  // Navigation (index = stimulus group)
   const goTo = (index: number) => {
-    const clamped = Math.max(0, Math.min(filteredQuestions.length - 1, index));
+    const clamped = Math.max(0, Math.min(displayGroups.length - 1, index));
     setCurrentIndex(clamped);
-    persistState(clamped, answers);
+    if (user && subjectId && displayGroups.length > 0) {
+      savePracticeState(user.id, subjectId, {
+        currentIndex: clamped,
+        answers,
+      });
+    }
   };
 
   useEffect(() => {
-    // When switching topic sets, keep index in-range.
-    setCurrentIndex((prev) => Math.max(0, Math.min(filteredQuestions.length - 1, prev)));
-  }, [filteredQuestions.length]);
+    setCurrentIndex((prev) =>
+      Math.max(0, Math.min(displayGroups.length - 1, prev)),
+    );
+  }, [displayGroups.length]);
 
-  const currentQuestion = filteredQuestions[currentIndex] ?? null;
-  const currentMarks =
-    currentQuestion && typeof currentQuestion.marks === "number"
-      ? currentQuestion.marks
-      : currentQuestion?.type === "mcq"
-        ? 1
-        : 2;
-  const currentTopic = currentQuestion?.topic ?? "General";
-  const answeredCount = Object.keys(answers).length;
-  const currentQKey = subjectId
-    ? questionKey(subjectId, currentIndex, currentQuestion)
-    : "";
-  const isCurrentAnswered = currentQKey in answers;
+  const currentGroup = displayGroups[currentIndex] ?? null;
+
+  const focusPart =
+    subjectId && currentGroup
+      ? (currentGroup.parts.find((p) => {
+          const qk = questionKeyStable(
+            subjectId,
+            p,
+            Math.max(0, getStableQuestionIndex(questions, p)),
+          );
+          return answers[qk] !== true;
+        }) ?? currentGroup.parts[0])
+      : null;
+
+  const focusQKey =
+    subjectId && focusPart
+      ? questionKeyStable(
+          subjectId,
+          focusPart,
+          Math.max(0, getStableQuestionIndex(questions, focusPart)),
+        )
+      : "";
 
   const loadFriends = useCallback(async () => {
     setFriendsLoading(true);
@@ -425,14 +489,14 @@ export default function QuizPage() {
   }, []);
 
   const assignToFriend = async (friendId: number) => {
-    if (!subjectId || !currentQuestion) return;
+    if (!subjectId || !focusPart) return;
     try {
       await apiFetch(API_PATHS.friends.assign(friendId), {
         method: "POST",
         body: JSON.stringify({
           subjectId,
-          questionKey: currentQKey,
-          question: currentQuestion,
+          questionKey: focusQKey,
+          question: focusPart,
         }),
       });
       toast.success("Assigned!");
@@ -504,42 +568,85 @@ export default function QuizPage() {
     );
   }
 
+  if (isWrongReview && (wrongReviewGroups?.length ?? 0) === 0) {
+    return (
+      <AppShell title={subject ? `${subject.name} Practice` : "Practice"}>
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <h2 className="font-display text-xl text-foreground">
+            Nothing to review
+          </h2>
+          <p className="mt-2 max-w-md text-sm text-muted-foreground">
+            No incorrect answers are saved for this subject yet. As you practise, wrong answers are
+            added here automatically. Use the same device and account so progress stays in sync.
+          </p>
+          <Button
+            variant="outline"
+            className="mt-6"
+            onClick={() => navigate(`/quiz/${subjectId}/summary`)}
+          >
+            Back to summary
+          </Button>
+        </div>
+      </AppShell>
+    );
+  }
+
+  if (!isWrongReview && activeGroups.length === 0 && questions.length > 0) {
+    return (
+      <AppShell title={subject ? `${subject.name} Revision` : "Revision"}>
+        <div className="mx-auto max-w-lg space-y-4 py-16 text-center">
+          <h2 className="font-display text-xl text-foreground">You&apos;re caught up</h2>
+          <p className="text-sm text-muted-foreground">
+            Every question in{" "}
+            {topicFilter === "all" ? "this subject" : `“${topicFilter}”`} is marked correct. Open any
+            question from the summary to revisit it, or switch topic / choose &quot;All topics&quot;
+            to keep revising.
+          </p>
+          <div className="flex flex-wrap justify-center gap-2 pt-2">
+            <Button variant="outline" onClick={() => navigate(`/quiz/${subjectId}/summary`)}>
+              Go to summary
+            </Button>
+            <Button onClick={() => navigate("/")}>Dashboard</Button>
+          </div>
+        </div>
+      </AppShell>
+    );
+  }
+
   return (
     <AppShell title={subject ? `${subject.name} Practice` : "Practice"}>
       <div className="space-y-6">
-        {/* Progress bar + Study Mode quick access */}
-        <QuizProgress
-          currentIndex={currentIndex}
-          answeredCount={answeredCount}
-          total={filteredQuestions.length}
-        />
-
-        <div className="h-px w-full bg-white/20" />
+        {isWrongReview && (
+          <p className="rounded-lg border border-amber/40 bg-amber/10 px-4 py-3 text-sm text-amber">
+            Wrong-answer review: answers here are not sent to the competition and do not change your rank or marks.
+          </p>
+        )}
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center justify-end gap-3 sm:justify-start">
-            {/* Topic filter (top-right like screenshot) */}
-            <div className="w-56">
-              <Select
-                value={topicFilter}
-                onValueChange={(val) => {
-                  if (!val) return;
-                  setTopicFilter(val);
-                }}
-              >
-                <SelectTrigger className="h-10 bg-white border-black/10 text-[#0b0f19]">
-                  <SelectValue placeholder="Topic" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All topics</SelectItem>
-                  {availableTopics.map((t) => (
-                    <SelectItem key={t} value={t}>
-                      {t}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {!isWrongReview && (
+              <div className="w-56">
+                <Select
+                  value={topicFilter}
+                  onValueChange={(val) => {
+                    if (!val) return;
+                    setTopicFilter(val);
+                  }}
+                >
+                  <SelectTrigger className="h-10 bg-white border-black/10 text-[#0b0f19]">
+                    <SelectValue placeholder="Topic" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All topics</SelectItem>
+                    {availableTopics.map((t) => (
+                      <SelectItem key={t} value={t}>
+                        {t}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
 
           <div className="flex justify-end">
@@ -550,7 +657,7 @@ export default function QuizPage() {
                 void loadFriends();
               }}
               className="mr-3 gap-2 border-transparent bg-white text-[#0b0f19] hover:bg-white/90"
-              disabled={!currentQuestion}
+              disabled={!focusPart}
             >
               <Send className="size-4" />
               Assign
@@ -572,52 +679,82 @@ export default function QuizPage() {
           <div className="space-y-6">
             <Card className="paper-texture">
               <CardContent className="pt-2">
-                {currentQuestion?.type === "mcq" && (
-                  <McqQuestion
-                    key={currentQKey}
-                    question={currentQuestion}
-                    onAnswer={(correct) =>
-                      handleAnswer(
-                        currentQKey,
-                        correct,
-                        currentMarks,
-                        currentTopic,
-                      )
-                    }
-                    disabled={isCurrentAnswered}
-                  />
-                )}
-                {currentQuestion?.type === "short" && (
-                  <ShortQuestion
-                    key={currentQKey}
-                    question={currentQuestion}
-                    onAnswer={(correct) =>
-                      handleAnswer(
-                        currentQKey,
-                        correct,
-                        currentMarks,
-                        currentTopic,
-                      )
-                    }
-                    disabled={isCurrentAnswered}
-                  />
-                )}
-                {currentQuestion?.type === "long" && (
-                  <LongQuestion
-                    key={currentQKey}
-                    question={currentQuestion}
-                    subjectId={subjectId}
-                    questionKey={currentQKey}
-                    onAnswer={(correct) =>
-                      handleAnswer(
-                        currentQKey,
-                        correct,
-                        currentMarks,
-                        currentTopic,
-                      )
-                    }
-                    disabled={isCurrentAnswered}
-                  />
+                {currentGroup && subjectId && (
+                  <div className="max-h-[min(78vh,920px)] space-y-5 overflow-y-auto pr-1">
+                    {currentGroup.passage && (
+                      <div className="rounded-xl border border-black/10 bg-white/60 p-4 text-sm leading-relaxed text-foreground shadow-sm">
+                        {currentGroup.passage}
+                      </div>
+                    )}
+                    {currentGroup.parts.map((part) => {
+                      const qk = questionKeyStable(
+                        subjectId,
+                        part,
+                        Math.max(0, getStableQuestionIndex(questions, part)),
+                      );
+                      const ans = answers[qk];
+                      const lockedCorrect = ans === true;
+                      const hidePassage = Boolean(currentGroup.passage?.trim());
+                      const partMarks =
+                        typeof part.marks === "number"
+                          ? part.marks
+                          : part.type === "mcq"
+                            ? 1
+                            : 2;
+                      const partTopic = part.topic ?? "General";
+                      const partClass = classByKey[qk];
+                      return (
+                        <div
+                          key={qk}
+                          className={cn(
+                            "rounded-xl border p-3 sm:p-4",
+                            lockedCorrect
+                              ? "border-success/35 bg-success/5"
+                              : "border-black/10 bg-white/50",
+                          )}
+                        >
+                          {part.type === "mcq" && (
+                            <McqQuestion
+                              question={part}
+                              hidePassage={hidePassage}
+                              lockedCorrect={lockedCorrect}
+                              onAnswer={(correct) =>
+                                handleAnswer(qk, correct, partMarks, partTopic)
+                              }
+                              disabled={lockedCorrect}
+                              classFullyCorrectPercent={partClass ?? null}
+                            />
+                          )}
+                          {part.type === "short" && (
+                            <ShortQuestion
+                              question={part}
+                              hidePassage={hidePassage}
+                              lockedCorrect={lockedCorrect}
+                              onAnswer={(correct) =>
+                                handleAnswer(qk, correct, partMarks, partTopic)
+                              }
+                              disabled={lockedCorrect}
+                              classFullyCorrectPercent={partClass ?? null}
+                            />
+                          )}
+                          {part.type === "long" && (
+                            <LongQuestion
+                              question={part}
+                              subjectId={subjectId}
+                              questionKey={qk}
+                              hidePassage={hidePassage}
+                              lockedCorrect={lockedCorrect}
+                              onAnswer={(correct) =>
+                                handleAnswer(qk, correct, partMarks, partTopic)
+                              }
+                              disabled={lockedCorrect}
+                              classFullyCorrectPercent={partClass ?? null}
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -627,42 +764,17 @@ export default function QuizPage() {
               <Button
                 variant="outline"
                 onClick={() => goTo(currentIndex - 1)}
-                disabled={currentIndex === 0}
+                disabled={currentIndex === 0 || displayGroups.length === 0}
                 className="gap-2 border-transparent bg-[#0b0f19] text-white hover:bg-[#0b0f19]/90 disabled:opacity-40"
               >
                 <ChevronLeft className="size-4" />
                 Previous
               </Button>
 
-              {/* Question dots */}
-              <div className="hidden flex-wrap justify-center gap-1.5 sm:flex">
-                {filteredQuestions.map((q, i) => {
-                  const qk = questionKey(subjectId, i, q);
-                  return (
-                    <button
-                      key={qk}
-                      onClick={() => goTo(i)}
-                      className={`size-2.5 rounded-full transition-all ${
-                        i === currentIndex
-                          ? "scale-125 bg-brand ring-2 ring-brand/30"
-                          : qk in answers
-                            ? answers[qk] === true
-                              ? "bg-success"
-                              : answers[qk] === false
-                                ? "bg-danger"
-                                : "bg-brand/40"
-                            : "bg-border"
-                      }`}
-                      title={`Question ${i + 1}`}
-                    />
-                  );
-                })}
-              </div>
-
               <Button
                 variant="outline"
                 onClick={() => goTo(currentIndex + 1)}
-                disabled={currentIndex === filteredQuestions.length - 1}
+                disabled={currentIndex === displayGroups.length - 1}
                 className="gap-2 border-transparent bg-[#0b0f19] text-white hover:bg-[#0b0f19]/90 disabled:opacity-40"
               >
                 Next
@@ -671,35 +783,29 @@ export default function QuizPage() {
             </div>
           </div>
 
-          {/* Right column: Comments (desktop) */}
+          {/* Right column: Comments (desktop) — forum-style column, no extra card shell */}
           <div className="hidden lg:block">
-            <Card className="sticky top-6">
-              <CardContent>
-                {currentQuestion && (
-                  <CommentThread
-                    key={currentQKey}
-                    subjectId={subjectId}
-                    questionKey={currentQKey}
-                  />
-                )}
-              </CardContent>
-            </Card>
+            <div className="sticky top-6">
+              {focusPart && (
+                <CommentThread
+                  key={focusQKey}
+                  subjectId={subjectId}
+                  questionKey={focusQKey}
+                />
+              )}
+            </div>
           </div>
         </div>
 
         {/* Mobile comments (below question) */}
         <div className="lg:hidden">
-          <Card>
-            <CardContent>
-              {currentQuestion && (
-                <CommentThread
-                  key={`mobile-${currentQKey}`}
-                  subjectId={subjectId}
-                  questionKey={currentQKey}
-                />
-              )}
-            </CardContent>
-          </Card>
+          {focusPart && (
+            <CommentThread
+              key={`mobile-${focusQKey}`}
+              subjectId={subjectId}
+              questionKey={focusQKey}
+            />
+          )}
         </div>
       </div>
 

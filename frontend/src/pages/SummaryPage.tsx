@@ -2,9 +2,21 @@ import { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { apiFetch } from "@/lib/api";
-import { STORAGE_KEYS } from "@/lib/constants";
+import { API_PATHS, STORAGE_KEYS } from "@/lib/constants";
+import {
+  getRawCustomQuestionsForSubject,
+  normalizeCustomQuestionsList,
+} from "@/lib/practiceQuestions";
+import {
+  getStableQuestionIndex,
+  normalizeAnswerMap,
+  questionKeyStable,
+  resolveAnswerKey,
+} from "@/lib/practiceKeys";
+import { cn } from "@/lib/utils";
+import { randomizedQuestionsForSubject } from "@/lib/quizShuffle";
 import { baseSubjects } from "@/lib/subjects";
-import type { Subject } from "@/lib/subjects";
+import type { Question, Subject } from "@/lib/subjects";
 import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,9 +42,12 @@ import {
   LayoutDashboard,
   Star,
   AlertTriangle,
-  Users,
   TrendingUp,
   Loader2,
+  ListX,
+  CheckCircle2,
+  XCircle,
+  CircleDot,
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
@@ -51,6 +66,7 @@ interface LeaderboardEntry {
   correct: number;
   total: number;
   percent: number;
+  attemptCount?: number;
 }
 
 interface TopicStat {
@@ -59,6 +75,7 @@ interface TopicStat {
   totalAnswered: number;
   myCorrect: number | null;
   myTotal: number;
+  topicPercentile?: number | null;
 }
 
 interface QuestionStat {
@@ -66,6 +83,7 @@ interface QuestionStat {
   topic: string;
   correctCount: number;
   totalAnswered: number;
+  fullyCorrectPercent?: number;
 }
 
 interface CompetitionStats {
@@ -75,6 +93,7 @@ interface CompetitionStats {
   leaderboard: LeaderboardEntry[];
   topicStats: TopicStat[];
   questionStats: QuestionStat[];
+  minRankedAttempts?: number;
 }
 
 /* ------------------------------------------------------------------ */
@@ -136,6 +155,8 @@ export default function SummaryPage() {
   const [stats, setStats] = useState<CompetitionStats | null>(null);
   const [loadingStats, setLoadingStats] = useState(true);
   const [statsError, setStatsError] = useState<string | null>(null);
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [questionsLoading, setQuestionsLoading] = useState(true);
 
   // Find subject
   const subject: Subject | undefined = useMemo(() => {
@@ -148,16 +169,195 @@ export default function SummaryPage() {
     return loadPracticeState(user.id, subjectId);
   }, [user, subjectId]);
 
-  // Compute score from practice state
-  const { correct, total, percentage } = useMemo(() => {
-    if (!practiceState) return { correct: 0, total: 0, percentage: 0 };
-    const entries = Object.values(practiceState.answers);
+  // Compute score from practice state (normalized keys when question bank is loaded)
+  const { correct, total, percentage, wrongCount } = useMemo(() => {
+    if (!practiceState) {
+      return { correct: 0, total: 0, percentage: 0, wrongCount: 0 };
+    }
+    let answers = practiceState.answers;
+    if (user && subjectId && questions.length > 0) {
+      const rand = randomizedQuestionsForSubject(questions, user.id, subjectId);
+      answers = normalizeAnswerMap(
+        subjectId,
+        practiceState.answers,
+        questions,
+        rand,
+      );
+    }
+    const entries = Object.values(answers);
     const scorable = entries.filter((v) => v !== null);
     const correctCount = scorable.filter((v) => v === true).length;
     const totalCount = scorable.length;
+    const wrong = entries.filter((v) => v === false).length;
     const pct = totalCount > 0 ? Math.round((correctCount / totalCount) * 100) : 0;
-    return { correct: correctCount, total: totalCount, percentage: pct };
-  }, [practiceState]);
+    return { correct: correctCount, total: totalCount, percentage: pct, wrongCount: wrong };
+  }, [practiceState, user, subjectId, questions]);
+
+  const minRanked = stats?.minRankedAttempts ?? 10;
+  const canCompareClass = (stats?.totalStudents ?? 0) >= 2;
+
+  function getCustomQuestionsFromStorage(subjectId: string): Question[] {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.customQuestions);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw) as Record<string, unknown[]>;
+      return normalizeCustomQuestionsList(
+        getRawCustomQuestionsForSubject(parsed, subjectId),
+      );
+    } catch {
+      return [];
+    }
+  }
+
+  useEffect(() => {
+    if (!user || !subjectId) {
+      setQuestions([]);
+      setQuestionsLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setQuestionsLoading(true);
+    (async () => {
+      try {
+        const data = await apiFetch<{
+          customQuestions?: Record<string, unknown[]>;
+        }>(API_PATHS.bootstrap);
+        if (cancelled) return;
+        if (data?.customQuestions) {
+          localStorage.setItem(
+            STORAGE_KEYS.customQuestions,
+            JSON.stringify(data.customQuestions),
+          );
+        }
+        const raw = getRawCustomQuestionsForSubject(
+          data?.customQuestions,
+          subjectId,
+        );
+        const custom = normalizeCustomQuestionsList(raw);
+        setQuestions(
+          custom.length ? custom : (subject?.quiz ?? []),
+        );
+      } catch {
+        if (!cancelled) {
+          const custom = getCustomQuestionsFromStorage(subjectId);
+          setQuestions(custom.length ? custom : (subject?.quiz ?? []));
+        }
+      } finally {
+        if (!cancelled) setQuestionsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, subjectId, subject?.quiz]);
+
+  const randForSummary = useMemo(() => {
+    if (!user?.id || !subjectId || questions.length === 0) return [];
+    return randomizedQuestionsForSubject(questions, user.id, subjectId);
+  }, [user, subjectId, questions]);
+
+  /** Your saved answers for this subject (canonical key → score; null = not auto-scored). */
+  const myAnswerByCanonicalKey = useMemo(() => {
+    if (
+      !subjectId ||
+      !practiceState?.answers ||
+      Object.keys(practiceState.answers).length === 0 ||
+      !user?.id ||
+      questions.length === 0
+    ) {
+      return new Map<string, boolean | null>();
+    }
+    const subj = subjectId;
+    const norm = normalizeAnswerMap(
+      subj,
+      practiceState.answers,
+      questions,
+      randForSummary,
+    );
+    const m = new Map<string, boolean | null>();
+    for (const [k, v] of Object.entries(norm)) {
+      const r = resolveAnswerKey(subj, k, questions, randForSummary);
+      if (r) m.set(r.canonicalKey, v);
+    }
+    return m;
+  }, [practiceState, user, subjectId, questions, randForSummary]);
+
+  /** Per-topic counts from your saved answers (fills gaps when the server has no row yet). */
+  const localTopicRollup = useMemo(() => {
+    const m = new Map<string, { myCorrect: number; myTotal: number }>();
+    if (!subjectId || questions.length === 0) return m;
+    for (const q of questions) {
+      const qk = questionKeyStable(
+        subjectId,
+        q,
+        Math.max(0, getStableQuestionIndex(questions, q)),
+      );
+      const v = myAnswerByCanonicalKey.get(qk);
+      if (v === undefined) continue;
+      const t = (q.topic || "General").trim() || "General";
+      const cur = m.get(t) ?? { myCorrect: 0, myTotal: 0 };
+      cur.myTotal += 1;
+      if (v === true) cur.myCorrect += 1;
+      m.set(t, cur);
+    }
+    return m;
+  }, [subjectId, questions, myAnswerByCanonicalKey]);
+
+  const displayTopicStats = useMemo((): TopicStat[] => {
+    if (!stats) return [];
+    const local = localTopicRollup;
+    const topics = new Set<string>();
+    stats.topicStats.forEach((t) => topics.add(t.topic));
+    local.forEach((_, t) => topics.add(t));
+    return Array.from(topics)
+      .sort((a, b) => a.localeCompare(b))
+      .map((topic) => {
+        const api = stats.topicStats.find((x) => x.topic === topic);
+        const loc = local.get(topic);
+        const useLocal = loc && loc.myTotal > 0;
+        return {
+          topic,
+          correctCount: api?.correctCount ?? 0,
+          totalAnswered: api?.totalAnswered ?? 0,
+          myCorrect: useLocal ? loc.myCorrect : (api?.myCorrect ?? null),
+          myTotal: useLocal ? loc.myTotal : (api?.myTotal ?? 0),
+          topicPercentile: api?.topicPercentile,
+        };
+      });
+  }, [stats, localTopicRollup]);
+
+  const mergedQuestionStats = useMemo((): QuestionStat[] => {
+    if (!stats || !subjectId || questions.length === 0) {
+      return stats?.questionStats ?? [];
+    }
+    const byKey = new Map(stats.questionStats.map((q) => [q.questionKey, q]));
+    for (const canon of myAnswerByCanonicalKey.keys()) {
+      if (byKey.has(canon)) continue;
+      const r = resolveAnswerKey(subjectId, canon, questions, randForSummary);
+      const topicLabel =
+        (r?.q.question && r.q.question.length > 100
+          ? `${r.q.question.slice(0, 100)}…`
+          : r?.q.question) ||
+        r?.q.topic ||
+        "Question";
+      byKey.set(canon, {
+        questionKey: canon,
+        topic: topicLabel,
+        correctCount: 0,
+        totalAnswered: 0,
+        fullyCorrectPercent: 0,
+      });
+    }
+    const list = Array.from(byKey.values());
+    list.sort((a, b) => {
+      const ra = resolveAnswerKey(subjectId, a.questionKey, questions, randForSummary);
+      const rb = resolveAnswerKey(subjectId, b.questionKey, questions, randForSummary);
+      const ia = ra ? getStableQuestionIndex(questions, ra.q) : 0;
+      const ib = rb ? getStableQuestionIndex(questions, rb.q) : 0;
+      return ia - ib;
+    });
+    return list;
+  }, [stats, subjectId, questions, randForSummary, myAnswerByCanonicalKey]);
 
   // Fetch competition stats
   useEffect(() => {
@@ -170,7 +370,10 @@ export default function SummaryPage() {
         const data = await apiFetch<CompetitionStats>(
           `/api/competition/${subjectId}/stats?range=${rangeParam}`
         );
-        if (!cancelled) setStats(data);
+        if (!cancelled) {
+          setStats(data);
+          setStatsError(null);
+        }
       } catch (err) {
         if (!cancelled) {
           setStatsError(
@@ -209,9 +412,6 @@ export default function SummaryPage() {
       </AppShell>
     );
   }
-
-  const tooFewStudents =
-    stats !== null && stats.totalStudents < 2;
 
   return (
     <AppShell title={subject ? `${subject.name} Summary` : "Summary"}>
@@ -264,19 +464,6 @@ export default function SummaryPage() {
               <p className="text-sm text-muted-foreground">{statsError}</p>
             </CardContent>
           </Card>
-        ) : tooFewStudents ? (
-          <Card>
-            <CardContent className="flex flex-col items-center py-10 text-center">
-              <Users className="size-8 text-muted-foreground" />
-              <h3 className="mt-3 font-display text-lg font-medium text-foreground">
-                Not enough data yet
-              </h3>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Competition stats require at least 2 students to have completed
-                this quiz. Share the quiz with classmates to see rankings!
-              </p>
-            </CardContent>
-          </Card>
         ) : stats ? (
           <div className="space-y-6">
             {/* ---- Rank card ---- */}
@@ -293,11 +480,17 @@ export default function SummaryPage() {
               </Card>
               <Card>
                 <CardContent className="flex flex-col items-center py-6 text-center">
-                  <Badge
-                    className={`text-sm px-3 py-1 ${getPercentileBadge(stats.percentile ?? 0).className}`}
-                  >
-                    {getPercentileBadge(stats.percentile ?? 0).label}
-                  </Badge>
+                  {stats.percentile != null ? (
+                    <Badge
+                      className={`text-sm px-3 py-1 ${getPercentileBadge(stats.percentile).className}`}
+                    >
+                      {getPercentileBadge(stats.percentile).label}
+                    </Badge>
+                  ) : (
+                    <span className="font-display text-xl font-semibold text-muted-foreground">
+                      —
+                    </span>
+                  )}
                   <p className="mt-2 text-sm text-muted-foreground">
                     Percentile
                   </p>
@@ -315,6 +508,14 @@ export default function SummaryPage() {
               </Card>
             </div>
 
+            {stats.rank == null && stats.percentile == null && (
+              <p className="text-center text-sm text-muted-foreground">
+                Rankings use your mark-weighted score (marks earned ÷ marks on questions you
+                tried). You need at least {minRanked} scored questions in this period to be
+                ranked.
+              </p>
+            )}
+
             {/* ---- Leaderboard ---- */}
             <Card>
               <CardHeader>
@@ -325,7 +526,9 @@ export default function SummaryPage() {
                       Leaderboard
                     </CardTitle>
                     <CardDescription>
-                      Top performers for this subject
+                      Top performers by mark-weighted % (min. {minRanked} questions). Only fully
+                      correct responses count toward the “class fully correct” stats on each
+                      question.
                     </CardDescription>
                   </div>
 
@@ -363,84 +566,114 @@ export default function SummaryPage() {
                     <TableRow>
                       <TableHead className="w-16">Rank</TableHead>
                       <TableHead>Student</TableHead>
-                      <TableHead className="text-right">Score %</TableHead>
-                      <TableHead className="text-right">Correct / Total</TableHead>
+                      <TableHead className="text-right">Mark %</TableHead>
+                      <TableHead className="text-right">Marks earned / attempted</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {stats.leaderboard.map((entry, idx) => {
-                      const isMe = user && entry.userId === user.id;
-                      return (
-                        <TableRow
-                          key={entry.userId}
-                          className={
-                            isMe
-                              ? "bg-brand/8 font-medium"
-                              : ""
-                          }
+                    {stats.leaderboard.length === 0 ? (
+                      <TableRow>
+                        <TableCell
+                          colSpan={4}
+                          className="py-10 text-center text-sm text-muted-foreground"
                         >
-                          <TableCell className="font-semibold">
-                            {getRankMedal(idx + 1)}
-                          </TableCell>
-                          <TableCell>
-                            {entry.username}
-                            {isMe && (
-                              <Badge
-                                variant="secondary"
-                                className="ml-2 text-xs"
-                              >
-                                You
-                              </Badge>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-right tabular-nums">
-                            {entry.percent}%
-                          </TableCell>
-                          <TableCell className="text-right tabular-nums">
-                            {entry.correct} / {entry.total}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
+                          No leaderboard entries for this period yet. You need at least{" "}
+                          {minRanked} scored questions in the window to rank; keep answering
+                          to appear here.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      stats.leaderboard.map((entry, idx) => {
+                        const isMe = user && entry.userId === user.id;
+                        return (
+                          <TableRow
+                            key={entry.userId}
+                            className={
+                              isMe
+                                ? "bg-brand/8 font-medium"
+                                : ""
+                            }
+                          >
+                            <TableCell className="font-semibold">
+                              {getRankMedal(idx + 1)}
+                            </TableCell>
+                            <TableCell>
+                              {entry.username}
+                              {isMe && (
+                                <Badge
+                                  variant="secondary"
+                                  className="ml-2 text-xs"
+                                >
+                                  You
+                                </Badge>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {entry.percent}%
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {entry.correct} / {entry.total}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
+                    )}
                   </TableBody>
                 </Table>
               </CardContent>
             </Card>
 
             {/* ---- Topic breakdown ---- */}
-            {stats.topicStats.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 font-display text-lg">
-                    <Star className="size-5 text-amber" />
-                    Topic Breakdown
-                  </CardTitle>
-                  <CardDescription>
-                    Your score vs. class average per topic
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-5">
-                  {stats.topicStats.map((topic) => {
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 font-display text-lg">
+                  <Star className="size-5 text-amber" />
+                  Topic Breakdown
+                </CardTitle>
+                <CardDescription>
+                  Your mark-weighted % vs. class on each topic, plus your percentile among
+                  everyone who attempted that topic.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                {displayTopicStats.length === 0 ? (
+                  <p className="py-6 text-center text-sm text-muted-foreground">
+                    No topic attempts recorded for this period yet. Answer questions to build
+                    this view.
+                  </p>
+                ) : (
+                  displayTopicStats.map((topic) => {
                     const yourPct =
                       topic.myTotal > 0 && topic.myCorrect !== null
                         ? Math.round(
                             (topic.myCorrect / topic.myTotal) * 100
                           )
                         : 0;
-                    const classPct = topic.totalAnswered > 0
-                        ? Math.round((topic.correctCount / topic.totalAnswered) * 100)
-                        : 0;
-                    const above = yourPct >= classPct;
+                    const hasClassData =
+                      canCompareClass && topic.totalAnswered > 0;
+                    const classPct = hasClassData
+                      ? Math.round((topic.correctCount / topic.totalAnswered) * 100)
+                      : null;
+                    const above =
+                      hasClassData && classPct != null ? yourPct >= classPct : false;
                     const isWeak = yourPct < 50;
                     const isStrong = yourPct >= 80;
+                    const tp = topic.topicPercentile;
+                    const tpBadge =
+                      tp != null ? getPercentileBadge(tp) : null;
 
                     return (
                       <div key={topic.topic} className="space-y-2">
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             <span className="text-sm font-medium text-foreground">
                               {topic.topic}
                             </span>
+                            {tpBadge && (
+                              <Badge className={`text-xs ${tpBadge.className}`}>
+                                Topic: {tpBadge.label}
+                              </Badge>
+                            )}
                             {isStrong && (
                               <Star className="size-3.5 fill-amber text-amber" />
                             )}
@@ -451,68 +684,165 @@ export default function SummaryPage() {
                           <div className="flex items-center gap-3 text-xs tabular-nums">
                             <span
                               className={
-                                above ? "text-success font-semibold" : "text-danger font-semibold"
+                                hasClassData
+                                  ? above
+                                    ? "text-success font-semibold"
+                                    : "text-danger font-semibold"
+                                  : "font-semibold text-foreground"
                               }
                             >
                               You: {yourPct}%
                             </span>
                             <span className="text-muted-foreground">
-                              Class: {classPct}%
+                              Class:{" "}
+                              {hasClassData && classPct != null ? `${classPct}%` : "—"}
                             </span>
                           </div>
                         </div>
                         <div className="flex gap-1">
-                          {/* Your bar */}
                           <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
                             <div
-                              className={`h-full rounded-full transition-all duration-500 ${above ? "bg-success" : "bg-danger"}`}
+                              className={`h-full rounded-full transition-all duration-500 ${
+                                hasClassData
+                                  ? above
+                                    ? "bg-success"
+                                    : "bg-danger"
+                                  : "bg-brand/50"
+                              }`}
                               style={{ width: `${yourPct}%` }}
                             />
                           </div>
                         </div>
                       </div>
                     );
-                  })}
-                </CardContent>
-              </Card>
-            )}
+                  })
+                )}
+              </CardContent>
+            </Card>
 
             {/* ---- Per-question stats ---- */}
-            {stats.questionStats.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="font-display text-lg">
-                    Per-Question Class Stats
-                  </CardTitle>
-                  <CardDescription>
-                    How the class performed on each question
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {stats.questionStats.map((qs, idx) => {
-                    const pct = qs.totalAnswered > 0
-                      ? Math.round((qs.correctCount / qs.totalAnswered) * 100)
-                      : 0;
+            <Card>
+              <CardHeader className="space-y-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="space-y-1.5">
+                    <CardTitle className="font-display text-lg">
+                      Per-Question Class Stats
+                    </CardTitle>
+                    <CardDescription>
+                      Class % fully correct per question (same period as leaderboard). Tap a row
+                      to practise that question (not scored). Questions you&apos;ve got wrong so
+                      far are highlighted; use the button to open your wrong-answer queue only.
+                    </CardDescription>
+                  </div>
+                  {wrongCount > 0 && (
+                    <Button
+                      variant="outline"
+                      className="w-full shrink-0 gap-2 sm:w-auto"
+                      onClick={() => navigate(`/quiz/${subjectId}/wrong`)}
+                    >
+                      <ListX className="size-4" />
+                      Wrong answers ({wrongCount}) — practice only
+                    </Button>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {mergedQuestionStats.length === 0 ? (
+                  <p className="py-6 text-center text-sm text-muted-foreground">
+                    No question attempts recorded yet. Complete questions in the quiz to see
+                    them here (including your own progress).
+                  </p>
+                ) : questionsLoading || questions.length === 0 ? (
+                  <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
+                    <Loader2 className="size-4 animate-spin" />
+                    Loading questions to match rows…
+                  </div>
+                ) : (
+                  mergedQuestionStats.map((qs, idx) => {
+                    const hasClassStat =
+                      canCompareClass && qs.totalAnswered > 0;
+                    const pct =
+                      qs.fullyCorrectPercent != null
+                        ? qs.fullyCorrectPercent
+                        : qs.totalAnswered > 0
+                          ? Math.round((qs.correctCount / qs.totalAnswered) * 100)
+                          : 0;
+                    const resolved = resolveAnswerKey(
+                      subjectId!,
+                      qs.questionKey,
+                      questions,
+                      randForSummary,
+                    );
+                    const canonical = resolved?.canonicalKey ?? qs.questionKey;
+                    const my = myAnswerByCanonicalKey.get(canonical);
+                    const topicLabel =
+                      resolved?.q?.topic?.trim() || qs.topic || "General";
+                    const preview =
+                      resolved?.q?.question?.trim() ??
+                      qs.topic;
+                    const previewShort =
+                      preview.length > 140
+                        ? `${preview.slice(0, 140)}…`
+                        : preview;
+
                     return (
-                      <div key={qs.questionKey} className="space-y-1.5">
-                        <div className="flex items-start justify-between gap-3">
-                          <p className="text-sm text-foreground/85 leading-relaxed">
-                            <span className="font-semibold text-brand-dark">
-                              Q{idx + 1}.
-                            </span>{" "}
-                            {qs.topic}
-                          </p>
-                          <span className="shrink-0 text-xs font-medium tabular-nums text-muted-foreground">
-                            {pct}% correct
-                          </span>
-                        </div>
-                        <Progress value={pct} />
+                      <div key={qs.questionKey} className="space-y-2">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            navigate(
+                              `/quiz/${subjectId}/wrong?key=${encodeURIComponent(canonical)}`,
+                            )
+                          }
+                          className={cn(
+                            "w-full min-w-0 rounded-xl border p-3 text-left transition-colors",
+                            my === false
+                              ? "border-danger/30 bg-danger/5 hover:bg-danger/10"
+                              : "border-black/10 bg-white/40 hover:bg-muted/40",
+                          )}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Badge variant="secondary" className="text-[10px]">
+                                  {topicLabel}
+                                </Badge>
+                                {my === true && (
+                                  <CheckCircle2 className="size-4 shrink-0 text-success" />
+                                )}
+                                {my === false && (
+                                  <XCircle className="size-4 shrink-0 text-danger" />
+                                )}
+                                {my === null && practiceState && (
+                                  <CircleDot className="size-4 shrink-0 text-muted-foreground" />
+                                )}
+                              </div>
+                              <p className="mt-1.5 break-words text-sm leading-snug text-foreground [overflow-wrap:anywhere]">
+                                <span className="font-semibold text-brand-dark">Q{idx + 1}. </span>
+                                {previewShort}
+                              </p>
+                              {my === null && practiceState && (
+                                <p className="mt-0.5 text-xs text-muted-foreground">
+                                  Not auto-scored
+                                </p>
+                              )}
+                            </div>
+                            <span className="shrink-0 text-xs font-medium tabular-nums text-muted-foreground">
+                              {hasClassStat ? `${pct}% class correct` : "Class: —"}
+                            </span>
+                          </div>
+                        </button>
+                        {hasClassStat ? (
+                          <Progress value={pct} />
+                        ) : (
+                          <div className="h-2 w-full rounded-full bg-muted/60" />
+                        )}
                       </div>
                     );
-                  })}
-                </CardContent>
-              </Card>
-            )}
+                  })
+                )}
+              </CardContent>
+            </Card>
           </div>
         ) : null}
       </div>

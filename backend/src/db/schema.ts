@@ -156,6 +156,7 @@ export const questionAttempts = pgTable(
     subjectId: text("subject_id").notNull(),
     questionKey: text("question_key").notNull(),
     topic: text("topic").notNull().default("General"),
+    marks: integer("marks").notNull().default(1),
     isCorrect: integer("is_correct").notNull(),
     answeredAt: text("answered_at").notNull(),
   },
