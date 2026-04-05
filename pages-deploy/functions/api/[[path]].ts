@@ -6,6 +6,14 @@ import { eq, or, and, asc, sql } from "drizzle-orm";
 import {
   pgTable, serial, text, integer, unique, index,
 } from "drizzle-orm/pg-core";
+import {
+  isSheetsConfigured,
+  sheetsGetTabNames,
+  sheetsSubjectIdFromTabMode,
+  sheetsReadDataRows,
+  sheetsListSpreadsheetTabTitles,
+  sheetsParseRow,
+} from "../lib/googleSheets";
 
 // ---- Schema ----
 const users = pgTable("users", {
@@ -318,7 +326,16 @@ function createDb(url: string) {
   });
 }
 
-type Env = { DATABASE_URL: string; ADMIN_KEY: string; FRONTEND_URL: string };
+type Env = {
+  DATABASE_URL: string;
+  ADMIN_KEY: string;
+  FRONTEND_URL: string;
+  /** Google Sheets (optional) — use plain text var + encrypted secret for JSON */
+  GOOGLE_SHEETS_SPREADSHEET_ID?: string;
+  GOOGLE_SHEETS_TAB_NAME?: string;
+  GOOGLE_SERVICE_ACCOUNT_JSON?: string;
+  GOOGLE_SHEETS_SUBJECT_FROM_TAB?: string;
+};
 type Vars = { user: { id: number; email: string; username: string; token: string }; db: ReturnType<typeof createDb> };
 
 const app = new Hono<{ Bindings: Env; Variables: Vars }>();
@@ -1275,14 +1292,179 @@ app.delete("/api/admin/questions/:id", adminAccessMiddleware, async (c: any) => 
 });
 
 app.get("/api/admin/google-sheet/status", adminAccessMiddleware, async (c: any) => {
-  return c.json({ enabled: false });
+  const env = c.env as Env;
+  const enabled = isSheetsConfigured(env);
+  return c.json({
+    enabled,
+    tabs: enabled ? sheetsGetTabNames(env) : [],
+    subjectFromTab: enabled ? sheetsSubjectIdFromTabMode(env) : false,
+  });
+});
+
+app.get("/api/admin/google-sheet/diagnose", adminAccessMiddleware, async (c: any) => {
+  const env = c.env as Env;
+  if (!isSheetsConfigured(env)) {
+    return c.json(
+      { error: "Google Sheets is not configured. Add GOOGLE_SHEETS_SPREADSHEET_ID and GOOGLE_SERVICE_ACCOUNT_JSON on Pages." },
+      503,
+    );
+  }
+  try {
+    const configuredTabs = sheetsGetTabNames(env);
+    const spreadsheetTabTitles = await sheetsListSpreadsheetTabTitles(env);
+    const missingFromSpreadsheet = configuredTabs.filter(
+      (t) => !spreadsheetTabTitles.includes(t),
+    );
+    return c.json({
+      spreadsheetTabTitles,
+      missingFromSpreadsheet,
+      hint:
+        missingFromSpreadsheet.length > 0
+          ? "Create a tab for each missing name exactly as listed (same spelling/case), or change GOOGLE_SHEETS_TAB_NAME to match existing tab names."
+          : null,
+    });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[google-sheet/diagnose]", msg);
+    return c.json({ error: msg }, 500);
+  }
 });
 
 app.post("/api/admin/questions/sync-from-sheet", adminAccessMiddleware, async (c: any) => {
-  return c.json(
-    { error: "Google Sheets sync is not configured on Cloudflare Workers." },
-    503,
-  );
+  const env = c.env as Env;
+  const db = c.get("db");
+  if (!isSheetsConfigured(env)) {
+    return c.json(
+      {
+        error:
+          "Google Sheets is not configured. In Cloudflare Pages → Settings → Variables and secrets add GOOGLE_SHEETS_SPREADSHEET_ID, GOOGLE_SHEETS_TAB_NAME (e.g. english,methods), and GOOGLE_SERVICE_ACCOUNT_JSON (Secret, full service account JSON). Share the sheet with the service account email.",
+      },
+      503,
+    );
+  }
+
+  try {
+    const { rows: rawRows, tabErrors } = await sheetsReadDataRows(env);
+    let imported = 0;
+    let updated = 0;
+    let deleted = 0;
+    const errors: { row: number; message: string }[] = [];
+
+    for (let i = 0; i < rawRows.length; i++) {
+      const item = rawRows[i]!;
+      const row = item.row;
+      const tabName = item.tabName;
+      const p = sheetsParseRow(Array.isArray(row) ? row : []);
+      if (sheetsSubjectIdFromTabMode(env) && tabName) {
+        p.subject_id = tabName;
+      }
+      const action = (p.action || "").toUpperCase();
+      const databaseId = p.database_id ? parseInt(p.database_id, 10) : NaN;
+
+      try {
+        if (action === "DELETE" && Number.isFinite(databaseId)) {
+          await db
+            .delete(customQuestions)
+            .where(eq(customQuestions.id, databaseId));
+          deleted++;
+          continue;
+        }
+
+        if (!p.subject_id || !p.type || !p.question) {
+          continue;
+        }
+
+        const subjectIdSheet = canonicalSubjectId(cleanText(p.subject_id, 80));
+        const topic = p.topic || "General";
+        const marks = Math.max(1, Math.round(Number(p.marks) || 1));
+        const optionsJson = p.options_json || null;
+        const acceptedRaw = p.accepted_answers_json || null;
+        const imageUrlsJson = p.image_urls_json || null;
+        const answer = p.answer || null;
+        const guidance = p.guidance || null;
+        const passage = p.passage || null;
+        const createdAt = nowIso();
+
+        if (Number.isFinite(databaseId)) {
+          const exists = await db
+            .select({ id: customQuestions.id })
+            .from(customQuestions)
+            .where(eq(customQuestions.id, databaseId))
+            .limit(1);
+          if (exists.length > 0) {
+            await db
+              .update(customQuestions)
+              .set({
+                subjectId: subjectIdSheet,
+                type: p.type,
+                topic,
+                question: p.question,
+                imageUrls: imageUrlsJson,
+                options: optionsJson,
+                answer,
+                acceptedAnswers: acceptedRaw,
+                guidance,
+                passage,
+                marks,
+              })
+              .where(eq(customQuestions.id, databaseId));
+            updated++;
+          } else {
+            await db.insert(customQuestions).values({
+              subjectId: subjectIdSheet,
+              type: p.type,
+              topic,
+              question: p.question,
+              imageUrls: imageUrlsJson,
+              options: optionsJson,
+              answer,
+              acceptedAnswers: acceptedRaw,
+              guidance,
+              passage,
+              marks,
+              createdAt,
+            });
+            imported++;
+          }
+        } else {
+          await db.insert(customQuestions).values({
+            subjectId: subjectIdSheet,
+            type: p.type,
+            topic,
+            question: p.question,
+            imageUrls: imageUrlsJson,
+            options: optionsJson,
+            answer,
+            acceptedAnswers: acceptedRaw,
+            guidance,
+            passage,
+            marks,
+            createdAt,
+          });
+          imported++;
+        }
+      } catch (e: unknown) {
+        errors.push({
+          row: i + 2,
+          message: String(e instanceof Error ? e.message : e),
+        });
+      }
+    }
+
+    return c.json({
+      ok: true,
+      imported,
+      updated,
+      deleted,
+      errors,
+      tabErrors,
+      rowsRead: rawRows.length,
+    });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[admin/questions/sync-from-sheet]", msg);
+    return c.json({ error: `Could not sync from Google Sheet: ${msg}` }, 500);
+  }
 });
 
 // ---- Health ----
