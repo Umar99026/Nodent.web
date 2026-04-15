@@ -26,6 +26,14 @@ export function canonicalSubjectId(raw: string): string {
   return SUBJECT_ID_ALIASES[s] ?? s;
 }
 
+function normalizeTopicLabel(raw: unknown): string {
+  const topic = String(raw ?? "").trim();
+  if (!topic) return "General";
+  // Hide legacy placeholder topic names from old PDF test imports.
+  if (/^(?:test(?:\s*pdf)?|pdf\s*test)$/i.test(topic)) return "General";
+  return topic;
+}
+
 function parseJsonArrayFromString(s: string): unknown[] | undefined {
   const trimmed = s.trim();
   if (!trimmed) return undefined;
@@ -131,7 +139,7 @@ export function normalizeCustomQuestion(raw: unknown): Question | null {
   if (!raw || typeof raw !== "object") return null;
   const q = raw as Record<string, unknown>;
 
-  const topic = String(q.topic ?? "General");
+  const topic = normalizeTopicLabel(q.topic);
   const questionText = String(q.question ?? "").trim();
   if (!questionText) return null;
 
@@ -144,6 +152,20 @@ export function normalizeCustomQuestion(raw: unknown): Question | null {
     const a = parseStringArray(q.image_urls);
     const b = parseStringArray(q.imageUrls);
     imageUrls = normalizeImageUrls(a.length ? a : b.length ? b : undefined);
+  }
+
+  let answerImageUrls: string[] | undefined;
+  if (Array.isArray((q as any).answerImageUrls)) {
+    answerImageUrls = normalizeImageUrls(
+      ((q as any).answerImageUrls as unknown[]).map(String),
+    );
+  } else {
+    const a = parseStringArray((q as any).answer_image_urls);
+    const b = parseStringArray((q as any).answer_image_urls_json);
+    const c = parseStringArray((q as any).answerImageUrls);
+    answerImageUrls = normalizeImageUrls(
+      a.length ? a : b.length ? b : c.length ? c : undefined,
+    );
   }
   const groupIdRaw = q.group_id ?? q.groupId;
   const groupId =
@@ -166,6 +188,41 @@ export function normalizeCustomQuestion(raw: unknown): Question | null {
     .trim()
     .toLowerCase();
 
+  const writtenUploadTypes = new Set([
+    "extended",
+    "extended_response",
+    "drawing",
+    "visual",
+    "diagram",
+    "graph",
+    "sketch",
+    "long_response",
+  ]);
+  if (writtenUploadTypes.has(typeRaw)) {
+    let acceptedAnswers: string[] | undefined = parseStringArray(
+      q.acceptedAnswers,
+    );
+    if (!acceptedAnswers?.length)
+      acceptedAnswers = parseStringArray(q.accepted_answers);
+    if (!acceptedAnswers?.length) acceptedAnswers = undefined;
+    const answer =
+      typeof q.answer === "string" && q.answer.trim() ? q.answer : undefined;
+    return {
+      type: "long",
+      topic,
+      question: questionText,
+      acceptedAnswers,
+      answer,
+      guidance,
+      imageUrls,
+      answerImageUrls,
+      marks,
+      passage,
+      id,
+      ...(groupId ? { groupId } : {}),
+    };
+  }
+
   if (typeRaw === "mcq") {
     let options = parseStringArray(q.options);
     if (!options.length) options = parseStringArray(q.options_json);
@@ -182,6 +239,7 @@ export function normalizeCustomQuestion(raw: unknown): Question | null {
       options,
       answer,
       imageUrls,
+      answerImageUrls,
       marks,
       passage,
       id,
@@ -202,6 +260,7 @@ export function normalizeCustomQuestion(raw: unknown): Question | null {
           guidance ??
           "Add accepted answers in the sheet (accepted_answers_json) or in Admin for short-answer auto-marking.",
         imageUrls,
+        answerImageUrls,
         marks,
         passage,
         id,
@@ -214,6 +273,7 @@ export function normalizeCustomQuestion(raw: unknown): Question | null {
       question: questionText,
       acceptedAnswers,
       imageUrls,
+      answerImageUrls,
       marks,
       passage,
       id,
@@ -238,6 +298,7 @@ export function normalizeCustomQuestion(raw: unknown): Question | null {
       answer,
       guidance,
       imageUrls,
+      answerImageUrls,
       marks,
       passage,
       id,

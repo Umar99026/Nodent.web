@@ -18,6 +18,11 @@ function resolveApiBase(): string {
 
 const API_BASE = resolveApiBase();
 
+/** Use for bare `fetch()` calls that must hit the Worker in production (e.g. token upload). */
+export function getApiBase(): string {
+  return resolveApiBase();
+}
+
 export class ApiError extends Error {
   status: number;
 
@@ -41,9 +46,12 @@ export async function apiFetch<T>(
     headers.set("Authorization", `Bearer ${token}`);
   }
 
+  const isFormData =
+    typeof FormData !== "undefined" && options?.body instanceof FormData;
   if (
     (method === "POST" || method === "PUT" || method === "PATCH") &&
-    !headers.has("Content-Type")
+    !headers.has("Content-Type") &&
+    !isFormData
   ) {
     headers.set("Content-Type", "application/json");
   }
@@ -84,22 +92,22 @@ export async function apiFetchAdmin<T>(
 
   const headers = new Headers(options?.headers);
 
-  // Also include the auth token for admin endpoints that check both
+  // Admin endpoints require auth token (and optionally an admin key).
   const token = localStorage.getItem(STORAGE_KEYS.authToken);
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
   }
 
-  // Cloudflare Pages/Workers admin middleware expects x-admin-key (trimmed —
-  // pasted keys often include a trailing newline and fail the equality check).
+  // Legacy: x-admin-key (optional). New default is admin-email auth.
   const adminKey = localStorage.getItem(STORAGE_KEYS.adminKey)?.trim() ?? "";
-  if (adminKey && !headers.has("x-admin-key")) {
-    headers.set("x-admin-key", adminKey);
-  }
+  if (adminKey && !headers.has("x-admin-key")) headers.set("x-admin-key", adminKey);
 
+  const isFormData =
+    typeof FormData !== "undefined" && options?.body instanceof FormData;
   if (
     (method === "POST" || method === "PUT" || method === "PATCH") &&
-    !headers.has("Content-Type")
+    !headers.has("Content-Type") &&
+    !isFormData
   ) {
     headers.set("Content-Type", "application/json");
   }

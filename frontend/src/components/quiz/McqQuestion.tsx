@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import { cn, getQuestionTypeLabel } from "@/lib/utils";
 import type { McqQuestion as McqQuestionType } from "@/lib/subjects";
+import { displayMarks, stripQuestionHeadingFromPassage, stripQuestionNumberPrefix } from "@/lib/questionDisplay";
 import { Badge } from "@/components/ui/badge";
-import { PassageBlock, QuestionImageGrid } from "@/components/quiz/QuestionStimulus";
+import { PassageBlock, QuestionImageGrid, RichMathText } from "@/components/quiz/QuestionStimulus";
 import { CheckCircle2, XCircle } from "lucide-react";
 
 interface McqQuestionProps {
@@ -89,12 +90,19 @@ export function McqQuestion({
         )}
       </div>
 
-      {!hidePassage && <PassageBlock passage={question.passage} />}
-      <QuestionImageGrid urls={question.imageUrls} />
+      {!hidePassage && <PassageBlock passage={stripQuestionHeadingFromPassage(question.passage)} />}
+      <QuestionImageGrid urls={question.imageUrls} title="Question figures & images" />
 
-      <h3 className="font-display text-lg leading-relaxed text-foreground sm:text-xl">
-        {question.question}
-      </h3>
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        {displayMarks(question.marks, question.type)}{" "}
+        {displayMarks(question.marks, question.type) === 1 ? "mark" : "marks"}
+      </p>
+      <div className="font-display text-lg leading-relaxed text-foreground sm:text-xl">
+        <RichMathText
+          text={stripQuestionNumberPrefix(question.question)}
+          className="prose prose-sm max-w-none prose-p:my-0"
+        />
+      </div>
 
       {/* Options grid */}
       <div className="grid gap-3 sm:grid-cols-2">
@@ -123,8 +131,10 @@ export function McqQuestion({
               {optionLabels[index]}
             </span>
 
-            {/* Option text */}
-            <span className="flex-1 pt-0.5">{option}</span>
+            {/* Option text (render math) */}
+            <span className="flex-1 pt-0.5">
+              <RichMathText text={option} className="prose prose-sm max-w-none prose-p:my-0" />
+            </span>
 
             {/* Result icon */}
             {submitted && !userWrong && option === question.answer && (
@@ -153,6 +163,13 @@ export function McqQuestion({
             ? "Correct! Well done."
             : "Not quite — that wasn\u2019t the right choice."}
         </div>
+      )}
+
+      {submitted && (
+        <QuestionImageGrid
+          urls={question.answerImageUrls}
+          title="Solution / marking scheme"
+        />
       )}
     </div>
   );

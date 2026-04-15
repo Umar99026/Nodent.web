@@ -24,6 +24,8 @@ import {
   getAllPartsInGroup,
   type QuestionStimulusGroup,
 } from "@/lib/questionGroups";
+import { questionSupportsAnswerUpload } from "@/lib/writtenAnswerUpload";
+import { stripQuestionHeadingFromPassage } from "@/lib/questionDisplay";
 import { AppShell } from "@/components/layout/AppShell";
 import { McqQuestion } from "@/components/quiz/McqQuestion";
 import { ShortQuestion } from "@/components/quiz/ShortQuestion";
@@ -358,7 +360,14 @@ export default function QuizPage() {
   // Load persisted state after questions are known; normalize keys to stable bank indices.
   useEffect(() => {
     if (!user || !subjectId || questionsLoading) return;
-    if (questions.length === 0) return;
+    // If there are no questions, still mark initialized so we can render the
+    // “No questions available” empty state instead of spinning forever.
+    if (questions.length === 0) {
+      setCurrentIndex(0);
+      setAnswers({});
+      setInitialized(true);
+      return;
+    }
 
     if (isWrongReview) {
       setCurrentIndex(0);
@@ -681,9 +690,9 @@ export default function QuizPage() {
               <CardContent className="pt-2">
                 {currentGroup && subjectId && (
                   <div className="max-h-[min(78vh,920px)] space-y-5 overflow-y-auto pr-1">
-                    {currentGroup.passage && (
+                    {stripQuestionHeadingFromPassage(currentGroup.passage) && (
                       <div className="rounded-xl border border-black/10 bg-white/60 p-4 text-sm leading-relaxed text-foreground shadow-sm">
-                        {currentGroup.passage}
+                        {stripQuestionHeadingFromPassage(currentGroup.passage)}
                       </div>
                     )}
                     {currentGroup.parts.map((part) => {
@@ -728,6 +737,11 @@ export default function QuizPage() {
                           {part.type === "short" && (
                             <ShortQuestion
                               question={part}
+                              subjectId={subjectId}
+                              questionKey={qk}
+                              enableAnswerUpload={questionSupportsAnswerUpload(
+                                part,
+                              )}
                               hidePassage={hidePassage}
                               lockedCorrect={lockedCorrect}
                               onAnswer={(correct) =>

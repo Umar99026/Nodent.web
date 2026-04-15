@@ -1,7 +1,10 @@
 export type Bindings = {
   DATABASE_URL: string;
-  ADMIN_KEY: string;
+  /** Optional legacy admin key; prefer ADMIN_EMAIL auth. */
+  ADMIN_KEY?: string;
   FRONTEND_URL: string;
+  /** Admin email (the account that can use /api/admin/*). */
+  ADMIN_EMAIL?: string;
   GOOGLE_SHEETS_SPREADSHEET_ID?: string;
   GOOGLE_SHEETS_TAB_NAME?: string;
   GOOGLE_SERVICE_ACCOUNT_JSON?: string;

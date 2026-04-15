@@ -13,7 +13,10 @@ export default defineConfig({
   server: {
     proxy: {
       "/api": {
-        target: "http://localhost:3000",
+        // Local dev: use the Workers API (wrangler dev).
+        // If you want to use the legacy Express server instead, change back to :3000.
+        // Local backend dev server.
+        target: "http://127.0.0.1:8788",
         changeOrigin: true,
       },
     },

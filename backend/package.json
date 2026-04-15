@@ -11,7 +11,9 @@
   "dependencies": {
     "@neondatabase/serverless": "^1.0.2",
     "drizzle-orm": "^0.45.1",
-    "hono": "^4.12.9"
+    "hono": "^4.12.9",
+    "pdfjs-dist": "^5.4.149",
+    "pngjs": "^7.0.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260317.1",

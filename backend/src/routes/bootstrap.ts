@@ -6,12 +6,36 @@ import type { Bindings, Variables } from "../types";
 
 const bootstrap = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
+function safeJsonParseArray(raw: string | null): string[] | undefined {
+  if (!raw) return undefined;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (Array.isArray(parsed)) return parsed.map(String);
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 bootstrap.get("/", authMiddleware, async (c) => {
   const user = c.get("user");
   const db = c.get("db");
 
   const rows = await db
-    .select()
+    .select({
+      id: customQuestions.id,
+      subjectId: customQuestions.subjectId,
+      type: customQuestions.type,
+      question: customQuestions.question,
+      topic: customQuestions.topic,
+      marks: customQuestions.marks,
+      imageUrls: customQuestions.imageUrls,
+      options: customQuestions.options,
+      answer: customQuestions.answer,
+      acceptedAnswers: customQuestions.acceptedAnswers,
+      guidance: customQuestions.guidance,
+      passage: customQuestions.passage,
+    })
     .from(customQuestions)
     .orderBy(asc(customQuestions.subjectId), asc(customQuestions.createdAt));
 
@@ -22,11 +46,12 @@ bootstrap.get("/", authMiddleware, async (c) => {
       id: row.id,
       type: row.type,
       question: row.question,
-      options: row.options ? JSON.parse(row.options) : undefined,
+      topic: row.topic || undefined,
+      marks: row.marks || undefined,
+      imageUrls: safeJsonParseArray(row.imageUrls),
+      options: safeJsonParseArray(row.options),
       answer: row.answer || undefined,
-      acceptedAnswers: row.acceptedAnswers
-        ? JSON.parse(row.acceptedAnswers)
-        : undefined,
+      acceptedAnswers: safeJsonParseArray(row.acceptedAnswers),
       guidance: row.guidance || undefined,
       passage: row.passage || undefined,
     });

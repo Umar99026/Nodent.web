@@ -12,9 +12,12 @@ import type { Question, Subject } from "@/lib/subjects";
 import { questionKeyStable, getStableQuestionIndex } from "@/lib/practiceKeys";
 import { randomizedQuestionsForSubject } from "@/lib/quizShuffle";
 import { buildGroupsFromOrderedFlat } from "@/lib/questionGroups";
-import { PassageBlock, QuestionImageGrid } from "@/components/quiz/QuestionStimulus";
+import { PassageBlock, QuestionImageGrid, RichMathText } from "@/components/quiz/QuestionStimulus";
 import { McqQuestion } from "@/components/quiz/McqQuestion";
 import { ShortQuestion } from "@/components/quiz/ShortQuestion";
+import { LongQuestion } from "@/components/quiz/LongQuestion";
+import { questionSupportsAnswerUpload } from "@/lib/writtenAnswerUpload";
+import { displayMarks, stripQuestionHeadingFromPassage, stripQuestionNumberPrefix } from "@/lib/questionDisplay";
 import { formatSeconds, getQuestionTypeLabel } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -180,14 +183,23 @@ function StudyLongPart({
           </Badge>
         )}
       </div>
-      {!hidePassage && <PassageBlock passage={part.passage} />}
+      {!hidePassage && (
+        <PassageBlock passage={stripQuestionHeadingFromPassage(part.passage)} />
+      )}
       <QuestionImageGrid urls={part.imageUrls} />
-      <h3 className="font-display text-lg leading-relaxed text-foreground sm:text-xl">
-        {part.question}
-      </h3>
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        {displayMarks(part.marks, part.type)}{" "}
+        {displayMarks(part.marks, part.type) === 1 ? "mark" : "marks"}
+      </p>
+      <div className="font-display text-lg leading-relaxed text-foreground sm:text-xl">
+        <RichMathText
+          text={stripQuestionNumberPrefix(part.question)}
+          className="prose prose-sm max-w-none prose-p:my-0"
+        />
+      </div>
       {part.guidance && (
         <div className="flex items-start gap-3 rounded-lg bg-amber/10 px-4 py-3 text-sm text-amber">
-          {part.guidance}
+          <RichMathText text={part.guidance} className="prose prose-sm max-w-none prose-p:my-0" />
         </div>
       )}
       <Textarea
@@ -408,6 +420,11 @@ export default function StudyModePage() {
           {part.type === "short" && (
             <ShortQuestion
               question={part}
+              subjectId={subjectId}
+              questionKey={qk}
+              enableAnswerUpload={
+                Boolean(user) && questionSupportsAnswerUpload(part)
+              }
               hidePassage={hidePassage}
               lockedCorrect={false}
               onAnswer={() => {}}
@@ -415,7 +432,19 @@ export default function StudyModePage() {
               classFullyCorrectPercent={null}
             />
           )}
-          {part.type === "long" && (
+          {part.type === "long" && user && (
+            <LongQuestion
+              question={part}
+              subjectId={subjectId}
+              questionKey={qk}
+              hidePassage={hidePassage}
+              lockedCorrect={false}
+              onAnswer={() => {}}
+              disabled={false}
+              classFullyCorrectPercent={null}
+            />
+          )}
+          {part.type === "long" && !user && (
             <StudyLongPart
               subjectId={subjectId}
               part={part}
@@ -426,7 +455,7 @@ export default function StudyModePage() {
         </div>
       );
     },
-    [subjectId, questions, hidePassageForParts],
+    [subjectId, questions, hidePassageForParts, user],
   );
 
   return (
@@ -575,13 +604,13 @@ export default function StudyModePage() {
                   )}
                 </div>
 
-                {currentGroup.passage && (
+                {stripQuestionHeadingFromPassage(currentGroup.passage) && (
                   <div className="rounded-lg border border-white/10 bg-white/5 p-4">
                     <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-white/40">
                       Passage
                     </p>
                     <p className="whitespace-pre-wrap text-base leading-relaxed text-white/85">
-                      {currentGroup.passage}
+                      {stripQuestionHeadingFromPassage(currentGroup.passage)}
                     </p>
                   </div>
                 )}

@@ -8,6 +8,22 @@ const competition = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 const MIN_RANKED_ATTEMPTS = 10;
 
+function isMissingMarksColumn(err: unknown): boolean {
+  // Neon/Drizzle typically reports missing columns with code 42703.
+  // We keep this loose to avoid tight coupling to a specific error shape.
+  const anyErr = err as any;
+  const code = anyErr?.cause?.code ?? anyErr?.code;
+  const msg = String(anyErr?.cause?.message ?? anyErr?.message ?? "");
+  return String(code) === "42703" && msg.toLowerCase().includes("marks");
+}
+
+async function ensureQuestionAttemptMarksColumn(db: any) {
+  await db.execute(sql`
+    ALTER TABLE question_attempts
+    ADD COLUMN IF NOT EXISTS marks integer NOT NULL DEFAULT 1
+  `);
+}
+
 // Record a single question answer (upsert)
 competition.post("/answer", authMiddleware, async (c) => {
   const user = c.get("user");
@@ -25,15 +41,30 @@ competition.post("/answer", authMiddleware, async (c) => {
     return c.json({ error: "subjectId and questionKey required." }, 400);
   }
 
-  await db.execute(sql`
-    INSERT INTO question_attempts (user_id, subject_id, question_key, topic, marks, is_correct, answered_at)
-    VALUES (${user.id}, ${subjectId}, ${questionKey}, ${topic}, ${marks}, ${isCorrect}, ${nowIso()})
-    ON CONFLICT(user_id, subject_id, question_key) DO UPDATE SET
-      topic = EXCLUDED.topic,
-      marks = EXCLUDED.marks,
-      is_correct = EXCLUDED.is_correct,
-      answered_at = EXCLUDED.answered_at
-  `);
+  try {
+    await db.execute(sql`
+      INSERT INTO question_attempts (user_id, subject_id, question_key, topic, marks, is_correct, answered_at)
+      VALUES (${user.id}, ${subjectId}, ${questionKey}, ${topic}, ${marks}, ${isCorrect}, ${nowIso()})
+      ON CONFLICT(user_id, subject_id, question_key) DO UPDATE SET
+        topic = EXCLUDED.topic,
+        marks = EXCLUDED.marks,
+        is_correct = EXCLUDED.is_correct,
+        answered_at = EXCLUDED.answered_at
+    `);
+  } catch (err) {
+    // Some existing DBs were created before `marks` was added.
+    if (!isMissingMarksColumn(err)) throw err;
+    await ensureQuestionAttemptMarksColumn(db);
+    await db.execute(sql`
+      INSERT INTO question_attempts (user_id, subject_id, question_key, topic, marks, is_correct, answered_at)
+      VALUES (${user.id}, ${subjectId}, ${questionKey}, ${topic}, ${marks}, ${isCorrect}, ${nowIso()})
+      ON CONFLICT(user_id, subject_id, question_key) DO UPDATE SET
+        topic = EXCLUDED.topic,
+        marks = EXCLUDED.marks,
+        is_correct = EXCLUDED.is_correct,
+        answered_at = EXCLUDED.answered_at
+    `);
+  }
 
   return c.json({ ok: true });
 });
@@ -64,16 +95,32 @@ competition.get("/:subjectId/stats", authMiddleware, async (c) => {
   `);
   const totalStudents = Number((studentResult.rows[0] as { count: string }).count);
 
-  const allScoresRows = await db.execute(sql`
-    SELECT qa.user_id, u.username,
-           SUM(CASE WHEN qa.is_correct = 1 THEN qa.marks ELSE 0 END) AS marks_correct,
-           SUM(qa.marks) AS marks_attempted,
-           COUNT(*)::int AS attempt_count
-    FROM question_attempts qa
-    JOIN users u ON u.id = qa.user_id
-    WHERE qa.subject_id = ${subjectId} ${timeFilter}
-    GROUP BY qa.user_id, u.username
-  `);
+  let allScoresRows: any;
+  try {
+    allScoresRows = await db.execute(sql`
+      SELECT qa.user_id, u.username,
+             SUM(CASE WHEN qa.is_correct = 1 THEN qa.marks ELSE 0 END) AS marks_correct,
+             SUM(qa.marks) AS marks_attempted,
+             COUNT(*)::int AS attempt_count
+      FROM question_attempts qa
+      JOIN users u ON u.id = qa.user_id
+      WHERE qa.subject_id = ${subjectId} ${timeFilter}
+      GROUP BY qa.user_id, u.username
+    `);
+  } catch (err) {
+    if (!isMissingMarksColumn(err)) throw err;
+    await ensureQuestionAttemptMarksColumn(db);
+    allScoresRows = await db.execute(sql`
+      SELECT qa.user_id, u.username,
+             SUM(CASE WHEN qa.is_correct = 1 THEN qa.marks ELSE 0 END) AS marks_correct,
+             SUM(qa.marks) AS marks_attempted,
+             COUNT(*)::int AS attempt_count
+      FROM question_attempts qa
+      JOIN users u ON u.id = qa.user_id
+      WHERE qa.subject_id = ${subjectId} ${timeFilter}
+      GROUP BY qa.user_id, u.username
+    `);
+  }
   const allScores = allScoresRows.rows as {
     user_id: number;
     username: string;
@@ -145,23 +192,45 @@ competition.get("/:subjectId/stats", authMiddleware, async (c) => {
     };
   });
 
-  const topicClassRows = await db.execute(sql`
-    SELECT topic,
-           SUM(CASE WHEN is_correct = 1 THEN marks ELSE 0 END) AS class_marks_correct,
-           SUM(marks) AS class_marks_attempted
-    FROM question_attempts
-    WHERE subject_id = ${subjectId} ${timeFilter}
-    GROUP BY topic
-  `);
-
-  const topicMyRows = await db.execute(sql`
-    SELECT topic,
-           SUM(CASE WHEN is_correct = 1 THEN marks ELSE 0 END) AS my_marks_correct,
-           SUM(marks) AS my_marks_attempted
-    FROM question_attempts
-    WHERE subject_id = ${subjectId} AND user_id = ${user.id} ${timeFilter}
-    GROUP BY topic
-  `);
+  let topicClassRows: any;
+  let topicMyRows: any;
+  try {
+    topicClassRows = await db.execute(sql`
+      SELECT topic,
+             SUM(CASE WHEN is_correct = 1 THEN marks ELSE 0 END) AS class_marks_correct,
+             SUM(marks) AS class_marks_attempted
+      FROM question_attempts
+      WHERE subject_id = ${subjectId} ${timeFilter}
+      GROUP BY topic
+    `);
+    topicMyRows = await db.execute(sql`
+      SELECT topic,
+             SUM(CASE WHEN is_correct = 1 THEN marks ELSE 0 END) AS my_marks_correct,
+             SUM(marks) AS my_marks_attempted
+      FROM question_attempts
+      WHERE subject_id = ${subjectId} AND user_id = ${user.id} ${timeFilter}
+      GROUP BY topic
+    `);
+  } catch (err) {
+    if (!isMissingMarksColumn(err)) throw err;
+    await ensureQuestionAttemptMarksColumn(db);
+    topicClassRows = await db.execute(sql`
+      SELECT topic,
+             SUM(CASE WHEN is_correct = 1 THEN marks ELSE 0 END) AS class_marks_correct,
+             SUM(marks) AS class_marks_attempted
+      FROM question_attempts
+      WHERE subject_id = ${subjectId} ${timeFilter}
+      GROUP BY topic
+    `);
+    topicMyRows = await db.execute(sql`
+      SELECT topic,
+             SUM(CASE WHEN is_correct = 1 THEN marks ELSE 0 END) AS my_marks_correct,
+             SUM(marks) AS my_marks_attempted
+      FROM question_attempts
+      WHERE subject_id = ${subjectId} AND user_id = ${user.id} ${timeFilter}
+      GROUP BY topic
+    `);
+  }
 
   const myTopicMap: Record<string, { myCorrect: number; myTotal: number }> = {};
   for (const r of topicMyRows.rows as { topic: string; my_marks_correct: string; my_marks_attempted: string }[]) {
@@ -171,14 +240,28 @@ competition.get("/:subjectId/stats", authMiddleware, async (c) => {
     };
   }
 
-  const topicUserRows = await db.execute(sql`
-    SELECT user_id, topic,
-           SUM(CASE WHEN is_correct = 1 THEN marks ELSE 0 END) AS marks_correct,
-           SUM(marks) AS marks_attempted
-    FROM question_attempts
-    WHERE subject_id = ${subjectId} ${timeFilter}
-    GROUP BY user_id, topic
-  `);
+  let topicUserRows: any;
+  try {
+    topicUserRows = await db.execute(sql`
+      SELECT user_id, topic,
+             SUM(CASE WHEN is_correct = 1 THEN marks ELSE 0 END) AS marks_correct,
+             SUM(marks) AS marks_attempted
+      FROM question_attempts
+      WHERE subject_id = ${subjectId} ${timeFilter}
+      GROUP BY user_id, topic
+    `);
+  } catch (err) {
+    if (!isMissingMarksColumn(err)) throw err;
+    await ensureQuestionAttemptMarksColumn(db);
+    topicUserRows = await db.execute(sql`
+      SELECT user_id, topic,
+             SUM(CASE WHEN is_correct = 1 THEN marks ELSE 0 END) AS marks_correct,
+             SUM(marks) AS marks_attempted
+      FROM question_attempts
+      WHERE subject_id = ${subjectId} ${timeFilter}
+      GROUP BY user_id, topic
+    `);
+  }
 
   const byTopicUsers = new Map<string, { userId: number; pctRounded: number }[]>();
   for (const row of topicUserRows.rows as {

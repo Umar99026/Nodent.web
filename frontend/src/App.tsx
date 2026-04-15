@@ -3,7 +3,7 @@ import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { lazy, Suspense, type ReactNode } from "react";
 import { StudyTimerProvider } from "@/context/StudyTimerContext";
-import { ADMIN_EMAIL, STORAGE_KEYS } from "@/lib/constants";
+import { ADMIN_EMAIL } from "@/lib/constants";
 
 // Lazy-load page components — stubs will be replaced with real implementations
 const LoginPage = lazy(() => import("@/pages/LoginPage"));
@@ -19,6 +19,7 @@ const DojoPage = lazy(() => import("@/pages/DojoPage"));
 const DojoBattlePage = lazy(() => import("@/pages/DojoBattlePage"));
 const AdminPage = lazy(() => import("@/pages/AdminPage"));
 const FriendsPage = lazy(() => import("@/pages/FriendsPage"));
+const UploadWrittenImagesPage = lazy(() => import("@/pages/UploadWrittenImagesPage"));
 
 function LoadingFallback() {
   return (
@@ -56,8 +57,7 @@ function AdminOnlyRoute({ children }: { children: ReactNode }) {
   if (isLoading) return <LoadingFallback />;
 
   const isAdminEmail = user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
-  const hasAdminKey = !!localStorage.getItem(STORAGE_KEYS.adminKey);
-  const isAdmin = isAdminEmail || hasAdminKey;
+  const isAdmin = isAdminEmail;
   if (!isAdmin) return <Navigate to="/dashboard" replace />;
 
   return <>{children}</>;
@@ -217,6 +217,9 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         />
+
+        {/* Public upload page used by QR codes */}
+        <Route path="/upload/:token" element={<UploadWrittenImagesPage />} />
 
         {/* Catch-all: redirect to root */}
         <Route path="*" element={<Navigate to="/" replace />} />

@@ -12,6 +12,8 @@ import { chat } from "./routes/chat";
 import { admin } from "./routes/admin";
 import { health } from "./routes/health";
 import { friends } from "./routes/friends";
+import { dojo } from "./routes/dojo";
+import { study } from "./routes/study";
 import { authMiddleware } from "./middleware/auth";
 import type { Bindings, Variables } from "./types";
 
@@ -53,6 +55,8 @@ app.route("/api/comments", comments);
 app.route("/api/written", written);
 app.route("/api/chat", chat);
 app.route("/api/friends", friends);
+app.route("/api/dojo", dojo);
+app.route("/api/study", study);
 app.route("/api/admin", admin);
 app.route("/api/health", health);
 

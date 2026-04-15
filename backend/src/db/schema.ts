@@ -70,6 +70,7 @@ export const writtenResponses = pgTable(
     subjectId: text("subject_id").notNull(),
     questionKey: text("question_key").notNull(),
     responseText: text("response_text").notNull(),
+    imageUrls: text("image_urls"),
     updatedAt: text("updated_at").notNull(),
   },
   (table) => [
@@ -83,6 +84,55 @@ export const writtenResponses = pgTable(
       table.questionKey
     ),
   ]
+);
+
+export const uploadTokens = pgTable(
+  "upload_tokens",
+  {
+    token: text("token").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    subjectId: text("subject_id").notNull(),
+    questionKey: text("question_key").notNull(),
+    createdAt: text("created_at").notNull(),
+    expiresAt: text("expires_at").notNull(),
+  },
+  (table) => [
+    index("upload_tokens_user_idx").on(table.userId),
+    index("upload_tokens_expires_idx").on(table.expiresAt),
+  ]
+);
+
+/** 1–5 stars from peers on a student’s written response for one question. */
+export const peerResponseRatings = pgTable(
+  "peer_response_ratings",
+  {
+    id: serial("id").primaryKey(),
+    raterUserId: integer("rater_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    subjectId: text("subject_id").notNull(),
+    questionKey: text("question_key").notNull(),
+    targetUserId: integer("target_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    score: integer("score").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    unique("peer_response_ratings_unique").on(
+      table.raterUserId,
+      table.subjectId,
+      table.questionKey,
+      table.targetUserId,
+    ),
+    index("peer_response_ratings_target_idx").on(
+      table.subjectId,
+      table.questionKey,
+      table.targetUserId,
+    ),
+  ],
 );
 
 export const quizComments = pgTable(
@@ -115,6 +165,7 @@ export const customQuestions = pgTable(
     topic: text("topic").notNull().default("General"),
     question: text("question").notNull(),
     imageUrls: text("image_urls"),
+    answerImageUrls: text("answer_image_urls"),
     options: text("options"),
     answer: text("answer"),
     acceptedAnswers: text("accepted_answers"),

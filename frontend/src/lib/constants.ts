@@ -66,10 +66,15 @@ export const API_PATHS = {
   admin: {
     subjects: "/api/admin/subjects",
     questions: "/api/admin/questions",
+    questionsBulk: "/api/admin/questions/bulk",
+    questionsReassignSubject: "/api/admin/questions/reassign-subject",
     users: "/api/admin/users",
     stats: "/api/admin/stats",
     googleSheetStatus: "/api/admin/google-sheet/status",
     googleSheetDiagnose: "/api/admin/google-sheet/diagnose",
     syncQuestionsFromSheet: "/api/admin/questions/sync-from-sheet",
+    pdfPreview: "/api/admin/pdf/preview",
+    pdfGenerate: "/api/admin/pdf/generate",
+    pdfPublish: "/api/admin/pdf/publish",
   },
 } as const;
