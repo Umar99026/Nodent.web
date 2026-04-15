@@ -35,14 +35,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -60,14 +52,12 @@ import {
   AlertDialogCancel,
 } from "@/components/ui/alert-dialog";
 import { useInactivity } from "@/hooks/useInactivity";
-import { toast } from "sonner";
 import {
   ChevronLeft,
   ChevronRight,
   RotateCcw,
   Clock,
   Loader2,
-  Send,
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
@@ -162,12 +152,6 @@ export default function QuizPage() {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [topicFilter, setTopicFilter] = useState<string>("all");
 
-  const [assignOpen, setAssignOpen] = useState(false);
-  const [friendsLoading, setFriendsLoading] = useState(false);
-  const [friends, setFriends] = useState<
-    { userId: number; username: string; email: string }[]
-  >([]);
-  const [assignFilter, setAssignFilter] = useState("");
   const [classByKey, setClassByKey] = useState<Record<string, number>>({});
 
   // Find subject (used for display metadata only)
@@ -483,38 +467,6 @@ export default function QuizPage() {
         )
       : "";
 
-  const loadFriends = useCallback(async () => {
-    setFriendsLoading(true);
-    try {
-      const r = await apiFetch<{ friends: { userId: number; username: string; email: string }[] }>(
-        API_PATHS.friends.list,
-      );
-      setFriends(r.friends ?? []);
-    } catch {
-      setFriends([]);
-    } finally {
-      setFriendsLoading(false);
-    }
-  }, []);
-
-  const assignToFriend = async (friendId: number) => {
-    if (!subjectId || !focusPart) return;
-    try {
-      await apiFetch(API_PATHS.friends.assign(friendId), {
-        method: "POST",
-        body: JSON.stringify({
-          subjectId,
-          questionKey: focusQKey,
-          question: focusPart,
-        }),
-      });
-      toast.success("Assigned!");
-      setAssignOpen(false);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not assign.");
-    }
-  };
-
   // Handle dismissing inactivity
   const handleDismissInactivity = () => {
     setShowInactivityDialog(false);
@@ -659,18 +611,6 @@ export default function QuizPage() {
           </div>
 
           <div className="flex justify-end">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setAssignOpen(true);
-                void loadFriends();
-              }}
-              className="mr-3 gap-2 border-transparent bg-white text-[#0b0f19] hover:bg-white/90"
-              disabled={!focusPart}
-            >
-              <Send className="size-4" />
-              Assign
-            </Button>
             <Button
               variant="outline"
               onClick={() => navigate(`/study/${subjectId}`)}
@@ -850,65 +790,6 @@ export default function QuizPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <Dialog open={assignOpen} onOpenChange={setAssignOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Assign this question</DialogTitle>
-            <DialogDescription>
-              Pick a friend to send them this exact question.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-3">
-            <Input
-              value={assignFilter}
-              onChange={(e) => setAssignFilter(e.target.value)}
-              placeholder="Filter friends…"
-            />
-
-            {friendsLoading ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="size-4 animate-spin" />
-                Loading friends…
-              </div>
-            ) : friends.length === 0 ? (
-              <div className="text-sm text-muted-foreground">
-                You don&apos;t have any friends yet. Add them in Friends first.
-              </div>
-            ) : (
-              <div className="max-h-72 space-y-2 overflow-auto pr-1">
-                {friends
-                  .filter((f) => {
-                    const q = assignFilter.trim().toLowerCase();
-                    if (!q) return true;
-                    return (
-                      f.username.toLowerCase().includes(q) ||
-                      f.email.toLowerCase().includes(q)
-                    );
-                  })
-                  .map((f) => (
-                    <button
-                      key={f.userId}
-                      type="button"
-                      className="flex w-full items-center justify-between gap-3 rounded-xl border border-black/10 bg-white px-3 py-2 text-left hover:bg-[#faf8f5]"
-                      onClick={() => void assignToFriend(f.userId)}
-                    >
-                      <div className="min-w-0">
-                        <div className="truncate font-medium text-black">
-                          {f.username}
-                        </div>
-                        <div className="truncate text-xs text-muted-foreground">
-                          {f.email}
-                        </div>
-                      </div>
-                      <span className="text-xs text-muted-foreground">Send</span>
-                    </button>
-                  ))}
-              </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
     </AppShell>
   );
 }

@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { apiFetch } from "@/lib/api";
-import { API_PATHS, STORAGE_KEYS } from "@/lib/constants";
+import { STORAGE_KEYS } from "@/lib/constants";
 import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
 import {
@@ -118,35 +118,6 @@ export default function DashboardPage() {
   const [scoreCardOpen, setScoreCardOpen] = useState(false);
   const [scoreCardLoading, setScoreCardLoading] = useState(false);
   const [scoreCard, setScoreCard] = useState<ScorecardData | null>(null);
-
-  const seenFriendRequestIdsRef = useMemo(() => new Set<number>(), []);
-
-  useEffect(() => {
-    if (!user) return;
-    let cancelled = false;
-    const tick = async () => {
-      try {
-        const data = await apiFetch<{
-          incoming: { requestId: number; username: string }[];
-        }>(API_PATHS.friends.requests);
-        if (cancelled) return;
-        for (const r of data?.incoming ?? []) {
-          if (!seenFriendRequestIdsRef.has(Number(r.requestId))) {
-            seenFriendRequestIdsRef.add(Number(r.requestId));
-            toast.message(`Friend request from ${r.username}`, { duration: 5000 });
-          }
-        }
-      } catch {
-        // ignore
-      }
-    };
-    void tick();
-    const interval = setInterval(() => void tick(), 15000);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [user, seenFriendRequestIdsRef]);
 
   const avgDailyStudyMinutes = useMemo(() => {
     if (!user) return 0;

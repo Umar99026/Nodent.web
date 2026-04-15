@@ -15,10 +15,7 @@ const TrackStudyPage = lazy(() => import("@/pages/TrackStudyPageNew"));
 const QuestionForumThreadPage = lazy(
   () => import("@/pages/QuestionForumThreadPage"),
 );
-const DojoPage = lazy(() => import("@/pages/DojoPage"));
-const DojoBattlePage = lazy(() => import("@/pages/DojoBattlePage"));
 const AdminPage = lazy(() => import("@/pages/AdminPage"));
-const FriendsPage = lazy(() => import("@/pages/FriendsPage"));
 const UploadWrittenImagesPage = lazy(() => import("@/pages/UploadWrittenImagesPage"));
 
 function LoadingFallback() {
@@ -173,47 +170,12 @@ function AppRoutes() {
         />
 
         <Route
-          path="/dojo"
-          element={
-            <ProtectedRoute>
-              <DojoPage />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/dojo/battle/:battleId"
-          element={
-            <ProtectedRoute>
-              <DojoBattlePage />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
           path="/admin"
           element={
             <ProtectedRoute>
               <AdminOnlyRoute>
                 <AdminPage />
               </AdminOnlyRoute>
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/friends"
-          element={
-            <ProtectedRoute>
-              <FriendsPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/friends/:friendId"
-          element={
-            <ProtectedRoute>
-              <FriendsPage />
             </ProtectedRoute>
           }
         />
