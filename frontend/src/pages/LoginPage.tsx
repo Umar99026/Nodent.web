@@ -109,7 +109,7 @@ export default function LoginPage() {
   };
 
   return (
-    <AuthLayout>
+    <AuthLayout authMode={tab === "signup" ? "signup" : "login"}>
       <div className="space-y-6">
         <div className="text-center">
           <h2 className="font-display text-2xl tracking-tight text-foreground">

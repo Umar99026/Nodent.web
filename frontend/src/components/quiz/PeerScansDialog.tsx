@@ -16,6 +16,12 @@ type Props = {
   currentUserId: number;
   label?: string;
   className?: string;
+  requireConfirmBeforeOpen?: boolean;
+  onViewedBeforeSubmit?: () => void;
+  modelWorking?: {
+    text?: string;
+    imageUrls?: string[];
+  };
 };
 
 /**
@@ -28,6 +34,9 @@ export function PeerScansDialog({
   currentUserId,
   label = "View & rate others' answers",
   className,
+  requireConfirmBeforeOpen = false,
+  onViewedBeforeSubmit,
+  modelWorking,
 }: Props) {
   const [open, setOpen] = useState(false);
 
@@ -40,6 +49,13 @@ export function PeerScansDialog({
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
+          if (requireConfirmBeforeOpen) {
+            const ok = window.confirm(
+              "Viewing worked solutions or other responses before submitting means this question will not award marks. Continue?",
+            );
+            if (!ok) return;
+            onViewedBeforeSubmit?.();
+          }
           setOpen(true);
         }}
       >
@@ -64,6 +80,7 @@ export function PeerScansDialog({
               subjectId={subjectId}
               questionKey={questionKey}
               currentUserId={currentUserId}
+              modelWorking={modelWorking}
               enabled
               hideIntro
               className="border-0 bg-transparent p-0 shadow-none"

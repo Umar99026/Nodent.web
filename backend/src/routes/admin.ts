@@ -151,6 +151,21 @@ function parseFlexibleArray(raw: unknown): string[] | null {
   return parts.length ? parts : null;
 }
 
+function normalizeQuestionForMatch(raw: unknown): string {
+  const t = cleanText(String(raw ?? ""), 8000)
+    .toLowerCase()
+    // normalize smart punctuation to ASCII
+    .replace(/[‘’]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/[–—]/g, "-")
+    // collapse all whitespace/newlines
+    .replace(/\s+/g, " ")
+    // remove zero-width chars occasionally copied from docs/AI output
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .trim();
+  return t;
+}
+
 /**
  * Bulk insert custom questions.
  * Accepts pasted-sheet rows (already validated client-side), but re-validates server-side.
@@ -233,16 +248,138 @@ admin.post("/questions/bulk", adminMiddleware, async (c) => {
       continue;
     }
 
-    await db.execute(sql`
-      INSERT INTO custom_questions
-      (subject_id, type, topic, question, image_urls, options, answer, accepted_answers, guidance, passage, marks, created_at)
-      VALUES
-      (${subjectId}, ${type}, ${topic}, ${question}, ${imageArr ? JSON.stringify(imageArr) : null}, ${optionsArr ? JSON.stringify(optionsArr) : null}, ${answer}, ${acceptedArr ? JSON.stringify(acceptedArr) : null}, ${guidance}, ${passage}, ${marks}, ${createdAt})
-    `);
-    imported++;
+    try {
+      await db.execute(sql`
+        INSERT INTO custom_questions
+        (subject_id, type, topic, question, image_urls, options, answer, accepted_answers, guidance, passage, marks, created_at)
+        VALUES
+        (${subjectId}, ${type}, ${topic}, ${question}, ${imageArr ? JSON.stringify(imageArr) : null}, ${optionsArr ? JSON.stringify(optionsArr) : null}, ${answer}, ${acceptedArr ? JSON.stringify(acceptedArr) : null}, ${guidance}, ${passage}, ${marks}, ${createdAt})
+      `);
+      imported++;
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      errors.push({ index: i, message: `DB insert failed: ${message}` });
+      continue;
+    }
   }
 
   return c.json({ ok: errors.length === 0, imported, errors });
+});
+
+/**
+ * Bulk-attach images to existing questions by exact subject + question text match.
+ * Intended for a second-stage import after question text has already been imported.
+ */
+admin.post("/questions/attach-images-bulk", adminMiddleware, async (c) => {
+  const db = c.get("db");
+  const body = (await c.req.json().catch(() => null)) as
+    | { mappings?: unknown; dryRun?: unknown }
+    | null;
+
+  const dryRun = Boolean((body as any)?.dryRun);
+  const list = (body as any)?.mappings;
+  if (!Array.isArray(list) || list.length === 0) {
+    return c.json({ error: "mappings must be a non-empty array." }, 400);
+  }
+
+  let updated = 0;
+  const errors: { index: number; message: string }[] = [];
+
+  for (let i = 0; i < list.length; i++) {
+    const raw = list[i];
+    if (!raw || typeof raw !== "object") {
+      errors.push({ index: i, message: "Row is not an object." });
+      continue;
+    }
+    const r = raw as Record<string, unknown>;
+    const questionId = Number(
+      (r as any).questionId ??
+      (r as any).question_id ??
+      (r as any).id ??
+      (r as any).database_id,
+    );
+
+    const subjectId = canonicalSubjectId(cleanText(r.subjectId ?? (r as any).subject_id, 80));
+    const question = cleanText(
+      r.question ?? (r as any).prompt ?? (r as any).stem,
+      4000,
+    );
+    const imageArr =
+      parseFlexibleArray(r.image_urls_json) ??
+      parseFlexibleArray(r.imageUrls) ??
+      (Array.isArray(r.imageUrls) ? (r.imageUrls as any[]).map(String) : null);
+
+    if (!imageArr || imageArr.length === 0) {
+      errors.push({ index: i, message: "image_urls_json must contain at least one image." });
+      continue;
+    }
+
+    let ids: number[] = [];
+    if (Number.isFinite(questionId) && questionId > 0) {
+      ids = [questionId];
+    } else {
+      if (!subjectId || !question) {
+        errors.push({ index: i, message: "subjectId and question are required (or provide questionId)." });
+        continue;
+      }
+      const matches = await db.execute(sql`
+        SELECT id, question
+        FROM custom_questions
+        WHERE subject_id = ${subjectId}
+        ORDER BY created_at DESC
+        LIMIT 5000
+      `);
+      const target = normalizeQuestionForMatch(question);
+      const rows = (matches.rows as Array<{ id?: unknown; question?: unknown }>)
+        .map((x) => ({
+          id: Number(x.id),
+          question: String(x.question ?? ""),
+          norm: normalizeQuestionForMatch(x.question),
+        }))
+        .filter((x) => Number.isFinite(x.id) && x.id > 0);
+
+      // Strict normalized equality first.
+      ids = rows.filter((x) => x.norm === target).map((x) => x.id);
+      // Fallback for tiny punctuation differences/truncation: containment match.
+      if (ids.length === 0 && target.length >= 24) {
+        ids = rows
+          .filter((x) => x.norm.includes(target) || target.includes(x.norm))
+          .map((x) => x.id);
+      }
+    }
+
+    if (ids.length === 0) {
+      errors.push({ index: i, message: "No matching question found for subject + question text." });
+      continue;
+    }
+    if (ids.length > 1) {
+      errors.push({
+        index: i,
+        message:
+          "Multiple matching questions found. Make question text more specific or map by ID.",
+      });
+      continue;
+    }
+
+    if (dryRun) {
+      updated++;
+      continue;
+    }
+
+    try {
+      await db.execute(sql`
+        UPDATE custom_questions
+        SET image_urls = ${JSON.stringify(imageArr)}
+        WHERE id = ${ids[0]}
+      `);
+      updated++;
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      errors.push({ index: i, message: `DB update failed: ${message}` });
+    }
+  }
+
+  return c.json({ ok: errors.length === 0, updated, errors });
 });
 
 admin.post("/questions/reassign-subject", adminMiddleware, async (c) => {

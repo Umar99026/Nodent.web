@@ -1,12 +1,13 @@
 import { useEffect, useState, Fragment } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { cn, getQuestionTypeLabel } from "@/lib/utils";
+import { cn, getQuestionTypeLabel, normalizeAnswer } from "@/lib/utils";
 import type { LongQuestion as LongQuestionType } from "@/lib/subjects";
 import { apiFetch } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { PassageBlock, QuestionImageGrid, RichMathText } from "@/components/quiz/QuestionStimulus";
+import { PassageBlock, QuestionImageGrid } from "@/components/quiz/QuestionStimulus";
+import { RichQuestionContent } from "@/components/quiz/RichQuestionContent";
 import { AttachAnswerSection } from "@/components/quiz/AttachAnswerSection";
 import { PeerScansDialog } from "@/components/quiz/PeerScansDialog";
 import { writtenApiPath } from "@/lib/writtenAnswerUpload";
@@ -17,6 +18,7 @@ import {
   Lightbulb,
   Loader2,
   CheckCircle2,
+  XCircle,
 } from "lucide-react";
 
 interface LongQuestionProps {
@@ -44,7 +46,10 @@ export function LongQuestion({
   const [response, setResponse] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [autoMarkResult, setAutoMarkResult] = useState<boolean | null>(null);
   const [myImages, setMyImages] = useState<string[]>([]);
+  const [viewedBeforeSubmit, setViewedBeforeSubmit] = useState(false);
+  const [forfeitedMarks, setForfeitedMarks] = useState(false);
   const [yourPeerRating, setYourPeerRating] = useState<{
     average: number | null;
     count: number;
@@ -70,6 +75,9 @@ export function LongQuestion({
           if (t) setResponse((prev) => (prev.trim() ? prev : t));
           if (Array.isArray(data.response.imageUrls))
             setMyImages(data.response.imageUrls);
+          if (t || (Array.isArray(data.response.imageUrls) && data.response.imageUrls.length > 0)) {
+            setSaved(true);
+          }
         }
       } catch {
         // ignore
@@ -102,9 +110,27 @@ export function LongQuestion({
         }),
       });
       setSaved(true);
-      // No marking for long answers (save-only).
-      onAnswer(null);
-      toast.success("Answer saved.");
+      const acceptedPool = [
+        ...(Array.isArray(question.acceptedAnswers) ? question.acceptedAnswers : []),
+        ...(question.answer ? [question.answer] : []),
+      ]
+        .map((s) => String(s).trim())
+        .filter(Boolean);
+      let result: boolean | null = null;
+      if (response.trim() && acceptedPool.length > 0) {
+        const normalized = normalizeAnswer(response);
+        result = acceptedPool.some(
+          (accepted) => normalizeAnswer(accepted) === normalized,
+        );
+      }
+      const forfeits = viewedBeforeSubmit && result === true;
+      setForfeitedMarks(forfeits);
+      setAutoMarkResult(result);
+      onAnswer(forfeits ? false : result);
+      if (result === true) toast.success("Answer saved. Marked correct.");
+      else if (result === false)
+        toast.error("Answer saved. Not quite right yet.");
+      else toast.success("Answer saved.");
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : "Failed to save answer."
@@ -143,7 +169,7 @@ export function LongQuestion({
         {displayMarks(question.marks, question.type) === 1 ? "mark" : "marks"}
       </p>
       <div className="font-display text-lg leading-relaxed text-foreground sm:text-xl">
-        <RichMathText
+        <RichQuestionContent
           text={stripQuestionNumberPrefix(question.question)}
           className="prose prose-sm max-w-none prose-p:my-0"
         />
@@ -153,7 +179,7 @@ export function LongQuestion({
       {question.guidance && (
         <div className="flex items-start gap-3 rounded-lg bg-amber/10 px-4 py-3 text-sm text-amber">
           <Lightbulb className="mt-0.5 size-4 shrink-0" />
-          <RichMathText text={question.guidance} className="prose prose-sm max-w-none prose-p:my-0" />
+          <RichQuestionContent text={question.guidance} className="prose prose-sm max-w-none prose-p:my-0" />
         </div>
       )}
 
@@ -174,6 +200,12 @@ export function LongQuestion({
               currentUserId={user.id}
               label="View"
               className="w-auto border-black/15 bg-white px-4 py-2 text-xs font-semibold"
+              requireConfirmBeforeOpen={!saved}
+              onViewedBeforeSubmit={() => setViewedBeforeSubmit(true)}
+              modelWorking={{
+                text: question.guidance ?? question.answer ?? undefined,
+                imageUrls: question.answerImageUrls ?? [],
+              }}
             />
           ) : null
         }
@@ -230,6 +262,36 @@ export function LongQuestion({
             {saved ? "Update Answer" : "Save Answer"}
           </Button>
         </div>
+        {saved && autoMarkResult !== null && (
+          <div
+            className={cn(
+              "flex items-start gap-3 rounded-lg px-4 py-3 text-sm",
+              autoMarkResult && !forfeitedMarks
+                ? "bg-success/10 text-success"
+                : "bg-danger/10 text-danger",
+            )}
+          >
+            {autoMarkResult && !forfeitedMarks ? (
+              <>
+                <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
+                <span className="font-medium">Correct! Well done.</span>
+              </>
+            ) : (
+              <>
+                <XCircle className="mt-0.5 size-4 shrink-0" />
+                {forfeitedMarks ? (
+                  <span className="font-medium">
+                    Correct, but marks are forfeited because you viewed working before submitting.
+                  </span>
+                ) : (
+                  <span className="font-medium">
+                    Not quite — keep working on this one.
+                  </span>
+                )}
+              </>
+            )}
+          </div>
+        )}
       </div>
       </Fragment>
       )}

@@ -72,7 +72,11 @@ export function normalizeImageUrl(s: string): string {
   if (!t) return t;
   if (t.startsWith("//")) return `https:${t}`;
   if (/^https?:\/\//i.test(t)) return t;
-  if (t.startsWith("data:image")) return t;
+  if (/^data:image/i.test(t)) {
+    // Pasted/imported data URLs sometimes include whitespace/newlines.
+    // Browsers can fail to render these, so normalize aggressively.
+    return t.replace(/\s+/g, "");
+  }
   // Pasted host or host/path without scheme (e.g. sandbox CDN domains)
   if (/^[a-z0-9][a-z0-9+.-]*\.[a-z]{2,}/i.test(t)) {
     return `https://${t.replace(/^\/+/, "")}`;

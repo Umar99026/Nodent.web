@@ -3,7 +3,8 @@ import { cn, getQuestionTypeLabel } from "@/lib/utils";
 import type { McqQuestion as McqQuestionType } from "@/lib/subjects";
 import { displayMarks, stripQuestionHeadingFromPassage, stripQuestionNumberPrefix } from "@/lib/questionDisplay";
 import { Badge } from "@/components/ui/badge";
-import { PassageBlock, QuestionImageGrid, RichMathText } from "@/components/quiz/QuestionStimulus";
+import { PassageBlock, QuestionImageGrid } from "@/components/quiz/QuestionStimulus";
+import { RichQuestionContent } from "@/components/quiz/RichQuestionContent";
 import { CheckCircle2, XCircle } from "lucide-react";
 
 interface McqQuestionProps {
@@ -98,7 +99,7 @@ export function McqQuestion({
         {displayMarks(question.marks, question.type) === 1 ? "mark" : "marks"}
       </p>
       <div className="font-display text-lg leading-relaxed text-foreground sm:text-xl">
-        <RichMathText
+        <RichQuestionContent
           text={stripQuestionNumberPrefix(question.question)}
           className="prose prose-sm max-w-none prose-p:my-0"
         />
@@ -133,7 +134,7 @@ export function McqQuestion({
 
             {/* Option text (render math) */}
             <span className="flex-1 pt-0.5">
-              <RichMathText text={option} className="prose prose-sm max-w-none prose-p:my-0" />
+              <RichQuestionContent text={option} className="prose prose-sm max-w-none prose-p:my-0" />
             </span>
 
             {/* Result icon */}

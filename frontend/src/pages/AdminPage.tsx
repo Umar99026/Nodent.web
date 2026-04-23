@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { apiFetchAdmin, ApiError } from "@/lib/api";
 import { API_PATHS, ADMIN_EMAIL } from "@/lib/constants";
 import { compressImageFileToDataUrl } from "@/lib/imageCompressor";
-import { RichMathText } from "@/components/quiz/QuestionStimulus";
+import { RichQuestionContent } from "@/components/quiz/RichQuestionContent";
 import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
 import {
@@ -90,20 +90,20 @@ type BulkRow = {
   errors: string[];
 };
 
-type PdfPreviewQuestion = {
-  localId: string;
+type ImageMapRow = {
+  rowNumber: number;
   subjectId: string;
-  type: QuestionType;
-  topic: string;
+  questionId?: number;
   question: string;
-  passage?: string;
-  options?: string[];
-  answer?: string;
-  acceptedAnswers?: string[];
-  guidance?: string;
-  marks?: number;
-  imageUrls?: string[];
-  sourcePage?: number;
+  image_urls_json?: string;
+  errors: string[];
+};
+
+type EnglishAdminPrompt = {
+  id: number;
+  section: "A" | "B";
+  book: string;
+  prompt: string;
 };
 
 /* ------------------------------------------------------------------ */
@@ -170,24 +170,21 @@ export default function AdminPage() {
   const [bulkRows, setBulkRows] = useState<BulkRow[]>([]);
   const [bulkError, setBulkError] = useState("");
   const [bulkImporting, setBulkImporting] = useState(false);
+  const [imageMapText, setImageMapText] = useState("");
+  const [imageMapRows, setImageMapRows] = useState<ImageMapRow[]>([]);
+  const [imageMapError, setImageMapError] = useState("");
+  const [imageMapImporting, setImageMapImporting] = useState(false);
+  const [englishBulkText, setEnglishBulkText] = useState("");
+  const [englishBusy, setEnglishBusy] = useState(false);
+  const [englishMsg, setEnglishMsg] = useState("");
+  const [englishPreviewRows, setEnglishPreviewRows] = useState<
+    Array<{ section: "A" | "B"; book: string; prompt: string }>
+  >([]);
+  const [englishPrompts, setEnglishPrompts] = useState<EnglishAdminPrompt[]>([]);
 
   const bulkImagesRef = useRef<HTMLInputElement | null>(null);
   const [bulkImagesProcessing, setBulkImagesProcessing] = useState(false);
   const [bulkImagesJson, setBulkImagesJson] = useState("");
-
-  const [pdfFile, setPdfFile] = useState<File | null>(null);
-  const [pdfSubjectId, setPdfSubjectId] = useState("");
-  const [pdfTopic, setPdfTopic] = useState("General");
-  const [pdfMaxPages, setPdfMaxPages] = useState<number>(50);
-  const [pdfPreviewRows, setPdfPreviewRows] = useState<PdfPreviewQuestion[]>([]);
-  const [pdfExtractedCount, setPdfExtractedCount] = useState(0);
-  const [pdfPageCount, setPdfPageCount] = useState(0);
-  const [pdfBusy, setPdfBusy] = useState(false);
-
-  const [reassignFrom, setReassignFrom] = useState("");
-  const [reassignTo, setReassignTo] = useState("");
-  const [reassigning, setReassigning] = useState(false);
-  const [reassignMsg, setReassignMsg] = useState("");
 
   /* ------ fetch existing questions ------ */
 
@@ -236,9 +233,21 @@ export default function AdminPage() {
     }
   }, []);
 
+  const fetchEnglishPrompts = useCallback(async () => {
+    try {
+      const data = await apiFetchAdmin<{ prompts: EnglishAdminPrompt[] }>(API_PATHS.admin.englishPrompts);
+      setEnglishPrompts(Array.isArray(data?.prompts) ? data.prompts : []);
+    } catch {
+      setEnglishPrompts([]);
+    }
+  }, []);
+
   useEffect(() => {
-    if (isAdmin) fetchQuestions();
-  }, [isAdmin, fetchQuestions]);
+    if (isAdmin) {
+      fetchQuestions();
+      fetchEnglishPrompts();
+    }
+  }, [isAdmin, fetchQuestions, fetchEnglishPrompts]);
 
   // “All subjects” uses collapsible groups that started fully collapsed, so new
   // questions looked like they never appeared. Expand every group once data
@@ -571,7 +580,14 @@ export default function AdminPage() {
           const image_urls_json = imageArr?.length ? JSON.stringify(imageArr) : undefined;
 
           const answer = String(q.answer ?? q.correctAnswer ?? "").trim() || undefined;
-          const guidance = String(q.guidance ?? "").trim() || undefined;
+          const guidance =
+            String(
+              q.guidance ??
+                (q as any).workedSolution ??
+                (q as any).roughWorking ??
+                (q as any).solutionWorking ??
+                "",
+            ).trim() || undefined;
           const marksRaw = Number(q.marks ?? NaN);
           const marks = Number.isFinite(marksRaw)
             ? Math.max(1, Math.round(marksRaw))
@@ -652,6 +668,9 @@ export default function AdminPage() {
       answer: "answer",
       marks: "marks",
       guidance: "guidance",
+      workedsolution: "guidance",
+      roughworking: "guidance",
+      solutionworking: "guidance",
       imageurls: "image_urls_json",
       image_urls: "image_urls_json",
       imageurlsjson: "image_urls_json",
@@ -779,41 +798,95 @@ export default function AdminPage() {
     }
     setBulkImporting(true);
     try {
-      const payload = {
-        questions: bulkRows.map((r) => ({
-          subjectId: r.subjectId,
-          type: r.type,
-          topic: r.topic,
-          passage: r.passage,
-          question: r.question,
-          options_json: r.options_json,
-          answer: r.answer,
-          accepted_answers_json: r.accepted_answers_json,
-          marks: r.marks,
-          guidance: r.guidance,
-          image_urls_json: r.image_urls_json,
-        })),
-      };
-      const res = await apiFetchAdmin<{
-        ok: boolean;
-        imported: number;
-        errors?: { index: number; message: string }[];
-      }>(API_PATHS.admin.questionsBulk, {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
+      // Keep payloads small to avoid proxy/worker timeouts on large imports.
+      const CHUNK_SIZE = 10;
+      let importedTotal = 0;
+      const allErrors: { index: number; message: string }[] = [];
 
-      if (res?.errors?.length) {
+      for (let start = 0; start < bulkRows.length; start += CHUNK_SIZE) {
+        const chunk = bulkRows.slice(start, start + CHUNK_SIZE);
+        const payload = {
+          questions: chunk.map((r) => ({
+            subjectId: r.subjectId,
+            type: r.type,
+            topic: r.topic,
+            passage: r.passage,
+            question: r.question,
+            options_json: r.options_json,
+            answer: r.answer,
+            accepted_answers_json: r.accepted_answers_json,
+            marks: r.marks,
+            guidance: r.guidance,
+            image_urls_json: r.image_urls_json,
+          })),
+        };
+
+        try {
+          const res = await apiFetchAdmin<{
+            ok: boolean;
+            imported: number;
+            errors?: { index: number; message: string }[];
+          }>(API_PATHS.admin.questionsBulk, {
+            method: "POST",
+            body: JSON.stringify(payload),
+          });
+
+          importedTotal += Number(res?.imported ?? 0);
+          if (Array.isArray(res?.errors) && res.errors.length) {
+            // Re-map per-chunk index to original row index for clearer error messages.
+            allErrors.push(
+              ...res.errors.map((e) => ({
+                index: start + e.index,
+                message: e.message,
+              })),
+            );
+          }
+        } catch {
+          // Local Node API doesn't expose /questions/bulk.
+          // Fallback to one-by-one inserts via /questions so imports still work locally.
+          for (let i = 0; i < chunk.length; i++) {
+            const row = chunk[i]!;
+            try {
+              const options = parseFlexibleList(row.options_json ?? "");
+              const acceptedAnswers = parseFlexibleList(row.accepted_answers_json ?? "");
+              const imageUrls = parseFlexibleList(row.image_urls_json ?? "");
+
+              await apiFetchAdmin(API_PATHS.admin.questions, {
+                method: "POST",
+                body: JSON.stringify({
+                  subjectId: row.subjectId,
+                  type: row.type,
+                  topic: row.topic,
+                  passage: row.passage,
+                  question: row.question,
+                  options: options ?? undefined,
+                  answer: row.answer,
+                  acceptedAnswers: acceptedAnswers ?? undefined,
+                  marks: row.marks,
+                  guidance: row.guidance,
+                  imageUrls: imageUrls ?? undefined,
+                }),
+              });
+              importedTotal++;
+            } catch (e) {
+              const msg = e instanceof ApiError ? e.message : "Row import failed.";
+              allErrors.push({ index: start + i, message: msg });
+            }
+          }
+        }
+      }
+
+      if (allErrors.length) {
         setBulkError(
-          `Imported ${res.imported}. Some rows failed: ` +
-            res.errors
-              .slice(0, 5)
+          `Imported ${importedTotal}. Some rows failed: ` +
+            allErrors
+              .slice(0, 8)
               .map((e) => `#${e.index + 1} ${e.message}`)
               .join("; "),
         );
         toast.error("Imported with errors. See details below.");
       } else {
-        toast.success(`Imported ${res?.imported ?? 0} questions.`);
+        toast.success(`Imported ${importedTotal} questions.`);
       }
 
       setBulkText("");
@@ -828,170 +901,414 @@ export default function AdminPage() {
     }
   };
 
-  const previewPdfImport = async () => {
-    if (!pdfFile) {
-      toast.error("Pick a PDF first.");
-      return;
-    }
-    if (!pdfSubjectId) {
-      toast.error("Pick a subject first.");
-      return;
-    }
-
-    setPdfBusy(true);
-    try {
-      const form = new FormData();
-      form.set("file", pdfFile);
-      form.set("subjectId", pdfSubjectId);
-      form.set("topic", (pdfTopic || "General").trim());
-      form.set("maxPages", String(Math.max(1, Math.min(200, Math.round(pdfMaxPages || 50)))));
-
-      const res = await apiFetchAdmin<{
-        ok: boolean;
-        pageCount: number;
-        extractedCount: number;
-        questions: PdfPreviewQuestion[];
-      }>(API_PATHS.admin.pdfPreview, {
-        method: "POST",
-        body: form,
-      });
-
-      setPdfPreviewRows(Array.isArray(res.questions) ? res.questions : []);
-      setPdfExtractedCount(Number(res.extractedCount ?? 0));
-      setPdfPageCount(Number(res.pageCount ?? 0));
-      toast.success(`Preview ready: ${res.extractedCount ?? 0} question(s).`);
-    } catch (e) {
-      const msg = e instanceof ApiError ? e.message : "PDF preview failed.";
-      toast.error(msg);
-    } finally {
-      setPdfBusy(false);
-    }
-  };
-
-  const publishPdfImport = async () => {
-    if (!pdfSubjectId) {
-      toast.error("Pick a subject first.");
-      return;
-    }
-    if (pdfPreviewRows.length === 0) {
-      toast.error("Generate a preview first.");
+  const buildImageMapPreview = () => {
+    setImageMapError("");
+    // Be forgiving with AI output:
+    // - convert literal "\t" sequences into real tabs
+    // - keep CSV fallback (commas) if user didn't get true TSV
+    const text = imageMapText.replace(/\r\n/g, "\n").replace(/\\t/g, "\t").trim();
+    if (!text) {
+      setImageMapRows([]);
       return;
     }
 
-    setPdfBusy(true);
-    try {
-      const payload = {
-        subjectId: pdfSubjectId,
-        questions: pdfPreviewRows,
-      };
-      const res = await apiFetchAdmin<{ ok: boolean; imported: number }>(
-        API_PATHS.admin.pdfPublish,
-        {
-          method: "POST",
-          body: JSON.stringify(payload),
-        },
-      );
-      toast.success(`Imported ${res.imported ?? 0} question(s) from PDF.`);
-      setPdfPreviewRows([]);
-      setPdfExtractedCount(0);
-      setPdfPageCount(0);
-      setPdfFile(null);
-      await fetchQuestions();
-    } catch (e) {
-      const msg = e instanceof ApiError ? e.message : "PDF publish failed.";
-      toast.error(msg);
-    } finally {
-      setPdfBusy(false);
-    }
-  };
-
-  const generateQuestionsFromPdf = async () => {
-    if (!pdfFile) {
-      toast.error("Pick a PDF first.");
-      return;
-    }
-    if (!pdfSubjectId) {
-      toast.error("Pick a subject first.");
+    const rawLines = text
+      .split("\n")
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0)
+      .filter((l) => !/^```/.test(l)); // ignore markdown code fences
+    // ignore markdown table separator rows like: |---|---|---|
+    const lines = rawLines.filter((l) => !/^\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?$/.test(l));
+    if (lines.length < 2) {
+      setImageMapError("Paste a header + at least one data row.");
+      setImageMapRows([]);
       return;
     }
 
-    setPdfBusy(true);
-    try {
-      const form = new FormData();
-      form.set("file", pdfFile);
-      form.set("subjectId", pdfSubjectId);
-      form.set("topic", (pdfTopic || "General").trim());
-      form.set("maxPages", String(Math.max(1, Math.min(200, Math.round(pdfMaxPages || 50)))));
+    const detectSep = (line: string) =>
+      line.includes("\t")
+        ? "\t"
+        : line.includes("|")
+          ? "|"
+          : line.includes(";")
+            ? ";"
+            : ",";
+    let sep: "\t" | "|" | ";" | "," = detectSep(lines[0]!) as "\t" | "|" | ";" | ",";
+    const parseLine = (line: string): string[] => {
+      // TSV path: tabs are safest and avoid image data URL comma issues.
+      if (sep === "\t") return line.split("\t");
+      if (sep === "|") {
+        const t = line.trim().replace(/^\|/, "").replace(/\|$/, "");
+        return t.split("|").map((c) => c.trim());
+      }
 
-      const generated = await apiFetchAdmin<{
-        ok: boolean;
-        pageCount: number;
-        extractedCount: number;
-        imported: number;
-      }>(API_PATHS.admin.pdfGenerate, {
-        method: "POST",
-        body: form,
-      });
+      // CSV fallback with quote handling; keeps commas inside quoted values.
+      const out: string[] = [];
+      let cur = "";
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i]!;
+        if (ch === '"') {
+          if (inQuotes && line[i + 1] === '"') {
+            cur += '"';
+            i++;
+          } else {
+            inQuotes = !inQuotes;
+          }
+          continue;
+        }
+        if (!inQuotes && ch === sep) {
+          out.push(cur);
+          cur = "";
+          continue;
+        }
+        cur += ch;
+      }
+      out.push(cur);
+      return out;
+    };
 
-      if ((generated.extractedCount ?? 0) === 0) {
-        toast.error("No questions could be extracted from this PDF. Try a clearer/digital PDF.");
-        setPdfPreviewRows([]);
-        setPdfExtractedCount(0);
-        setPdfPageCount(Number(generated.pageCount ?? 0));
+    const norm = (h: string) =>
+      h
+        .trim()
+        .replace(/^\uFEFF/, "") // BOM
+        .replace(/^["'`]+|["'`]+$/g, "") // wrapping quotes/backticks
+        .toLowerCase()
+        .replace(/\s+/g, "")
+        .replace(/-/g, "_");
+    const HEADER_ALIASES: Record<string, string> = {
+      subject: "subject_id",
+      subjectid: "subject_id",
+      subject_id: "subject_id",
+      question: "question",
+      q: "question",
+      stem: "question",
+      prompt: "question",
+      imageurls: "image_urls_json",
+      image_urls: "image_urls_json",
+      imageurlsjson: "image_urls_json",
+      image_urls_json: "image_urls_json",
+      images: "image_urls_json",
+      image: "image_urls_json",
+    };
+    const canonicalize = (h: string) => {
+      const n = norm(h);
+      return HEADER_ALIASES[n] ?? n;
+    };
+    const hasRequiredHeader = (cells: string[]) => {
+      const mapped = new Set(cells.map(canonicalize));
+      return mapped.has("subject_id") && mapped.has("question") && mapped.has("image_urls_json");
+    };
+    // Find header row in first few lines (GPT often prepends prose).
+    let headerLineIndex = 0;
+    let rawHeader: string[] = [];
+    for (let i = 0; i < Math.min(lines.length, 16); i++) {
+      const trySep = detectSep(lines[i]!) as "\t" | "|" | ";" | ",";
+      const prevSep = sep;
+      sep = trySep;
+      const cells = parseLine(lines[i]!).map((h) => h.trim());
+      if (hasRequiredHeader(cells)) {
+        headerLineIndex = i;
+        rawHeader = cells;
+        break;
+      }
+      sep = prevSep;
+    }
+    if (!rawHeader.length) {
+      rawHeader = parseLine(lines[0]!).map((h) => h.trim());
+      headerLineIndex = 0;
+    }
+    const header = rawHeader.map(norm);
+    const idx = (canonicalOrAlias: string) => {
+      const key = norm(canonicalOrAlias);
+      const canonical = HEADER_ALIASES[key] ?? key;
+      for (let i = 0; i < header.length; i++) {
+        const mapped = HEADER_ALIASES[header[i]!] ?? header[i]!;
+        if (mapped === canonical) return i;
+      }
+      return -1;
+    };
+
+    let subjectIdx = Math.max(idx("subject_id"), idx("subjectId"), idx("subject"));
+    const questionIdIdx = Math.max(
+      idx("question_id"),
+      idx("questionId"),
+      idx("id"),
+      idx("database_id"),
+    );
+    let questionIdx = Math.max(idx("question"), idx("prompt"), idx("stem"));
+    let imageIdx = Math.max(idx("image_urls_json"), idx("image_urls"), idx("imageUrls"));
+
+    const missing: string[] = [];
+    if (subjectIdx < 0 && questionIdIdx < 0) missing.push("subject_id or question_id");
+    if (questionIdx < 0 && questionIdIdx < 0) missing.push("question or question_id");
+    if (imageIdx < 0) missing.push("image_urls_json");
+    if (missing.length) {
+      // Last-resort compatibility mode:
+      // many AI outputs include noisy/annotated headers, but data rows are still 3-column
+      // in order: subject_id, question, image_urls_json.
+      let fallbackOk = false;
+      for (let i = headerLineIndex + 1; i < lines.length; i++) {
+        const cols = parseLine(lines[i]!);
+        if (cols.length >= 3) {
+          fallbackOk = true;
+          break;
+        }
+      }
+      if (!fallbackOk) {
+        setImageMapError(
+          `Missing required columns: ${missing.join(", ")}. Header must include subject_id, question, image_urls_json.`,
+        );
+        setImageMapRows([]);
         return;
       }
-
-      setPdfPreviewRows([]);
-      setPdfExtractedCount(Number(generated.extractedCount ?? 0));
-      setPdfPageCount(Number(generated.pageCount ?? 0));
-
-      toast.success(
-        `Generated and imported ${generated.imported ?? 0} question(s) from PDF.`,
+      subjectIdx = 0;
+      questionIdx = 1;
+      imageIdx = 2;
+      setImageMapError(
+        "Header row was non-standard, so parser used compatibility mode: column 1=subject_id, 2=question, 3=image_urls_json.",
       );
-      setPdfFile(null);
-      setPdfPreviewRows([]);
-      // Import already succeeded; don't surface refresh issues as import failure.
-      try {
-        await fetchQuestions();
-      } catch {
-        // ignore
+    }
+
+    const out: ImageMapRow[] = [];
+    for (let i = headerLineIndex + 1; i < lines.length; i++) {
+      let cols = parseLine(lines[i]!);
+      // CSV fallback rescue: if image column is last and unquoted JSON contains commas,
+      // join extra tokens back into the final image_urls_json field.
+      if ((sep === "," || sep === ";") && imageIdx >= 0 && cols.length > rawHeader.length) {
+        cols = [...cols.slice(0, imageIdx), cols.slice(imageIdx).join(sep)];
       }
+      const subjectId = String(cols[subjectIdx] ?? "").trim();
+      const rawQid = String(cols[questionIdIdx] ?? "").trim();
+      const questionId = Number(rawQid);
+      const question = String(cols[questionIdx] ?? "").trim();
+      const image_urls_json = String(cols[imageIdx] ?? "").trim();
+      const errors: string[] = [];
+
+      if (!Number.isFinite(questionId) || questionId <= 0) {
+        if (!subjectId) errors.push("subject_id is required (or provide question_id).");
+        if (!question) errors.push("question is required (or provide question_id).");
+      }
+      const imgs = parseFlexibleList(image_urls_json);
+      if (!imgs || imgs.length === 0) {
+        errors.push("image_urls_json must be a JSON array or list with 1+ image values.");
+      }
+
+      out.push({
+        rowNumber: i + 1,
+        subjectId,
+        questionId: Number.isFinite(questionId) && questionId > 0 ? questionId : undefined,
+        question,
+        image_urls_json,
+        errors,
+      });
+    }
+    setImageMapRows(out);
+    // Parsed successfully; do not surface compatibility mode as an error.
+  };
+
+  const importImageMapRows = async () => {
+    setImageMapError("");
+    if (!imageMapRows.length) {
+      toast.error("Nothing to import.");
+      return;
+    }
+    const bad = imageMapRows.filter((r) => r.errors.length > 0);
+    if (bad.length) {
+      toast.error(`Fix ${bad.length} row(s) with errors before attaching images.`);
+      return;
+    }
+
+    setImageMapImporting(true);
+    try {
+      const CHUNK_SIZE = 10;
+      let updatedTotal = 0;
+      const allErrors: { index: number; message: string }[] = [];
+
+      for (let start = 0; start < imageMapRows.length; start += CHUNK_SIZE) {
+        const chunk = imageMapRows.slice(start, start + CHUNK_SIZE);
+        const payload = {
+          mappings: chunk.map((r) => ({
+            subjectId: r.subjectId,
+            questionId: r.questionId,
+            question: r.question,
+            image_urls_json: r.image_urls_json,
+          })),
+        };
+
+        const res = await apiFetchAdmin<{
+          ok: boolean;
+          updated: number;
+          errors?: { index: number; message: string }[];
+        }>(API_PATHS.admin.questionsAttachImagesBulk, {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+
+        updatedTotal += Number(res?.updated ?? 0);
+        if (Array.isArray(res?.errors) && res.errors.length) {
+          allErrors.push(
+            ...res.errors.map((e) => ({
+              index: start + e.index,
+              message: e.message,
+            })),
+          );
+        }
+      }
+
+      if (allErrors.length) {
+        setImageMapError(
+          `Attached ${updatedTotal}. Some rows failed: ` +
+            allErrors
+              .slice(0, 8)
+              .map((e) => `#${e.index + 1} ${e.message}`)
+              .join("; "),
+        );
+        toast.error("Image mapping imported with errors.");
+      } else {
+        toast.success(`Attached images to ${updatedTotal} question(s).`);
+      }
+
+      setImageMapText("");
+      setImageMapRows([]);
+      await fetchQuestions();
     } catch (e) {
-      const msg = e instanceof ApiError ? e.message : "PDF generation failed.";
+      const msg = e instanceof ApiError ? e.message : "Image mapping import failed.";
+      setImageMapError(msg);
       toast.error(msg);
     } finally {
-      setPdfBusy(false);
+      setImageMapImporting(false);
     }
   };
 
-  const reassignSubject = async () => {
-    setReassignMsg("");
-    if (!reassignFrom || !reassignTo) {
-      setReassignMsg("Pick both a FROM subject and a TO subject.");
+  const parseEnglishRows = () => {
+    const normalizedInput = englishBulkText
+      .replace(/\r\n/g, "\n")
+      .replace(/\\n/g, "\n")
+      .replace(/\\t/g, "\t");
+
+    const lines = normalizedInput
+      .split("\n")
+      .map((l) => l.replace(/\uFEFF/g, "").trim())
+      .filter(Boolean);
+    if (lines.length < 2) {
+      return {
+        rows: [] as Array<{ section: "A" | "B"; book: string; prompt: string }>,
+        message: "Paste a header + at least one prompt row.",
+      };
+    }
+
+    const isHeader = /^section\s*(?:\t|[ ,|]+)\s*book\s*(?:\t|[ ,|]+)\s*prompt$/i.test(lines[0]!);
+    const dataLines = lines.slice(isHeader ? 1 : 0);
+    const rows: Array<{ section: "A" | "B"; book: string; prompt: string }> = [];
+    const badRows: number[] = [];
+
+    for (let i = 0; i < dataLines.length; i++) {
+      const raw = dataLines[i]!;
+
+      // Exact requested behavior:
+      // A <book name> ## <prompt>
+      // B <prompt>
+      const aMatch = raw.match(/^\s*A\s+(.+?)\s*##\s*(.+)\s*$/i);
+      if (aMatch) {
+        const book = (aMatch[1] ?? "").trim();
+        const prompt = (aMatch[2] ?? "").trim();
+        if (!book || !prompt) {
+          badRows.push((isHeader ? 2 : 1) + i);
+          continue;
+        }
+        rows.push({ section: "A", book, prompt });
+        continue;
+      }
+
+      const bMatch = raw.match(/^\s*B\s+(.+)\s*$/i);
+      if (bMatch) {
+        const prompt = (bMatch[1] ?? "").trim();
+        if (!prompt) {
+          badRows.push((isHeader ? 2 : 1) + i);
+          continue;
+        }
+        rows.push({ section: "B", book: "", prompt });
+        continue;
+      }
+
+      // Also allow strict TSV row if user provides it.
+      const parts = raw.split("\t");
+      if (parts.length === 3) {
+        const section = (parts[0] ?? "").trim().toUpperCase();
+        const book = (parts[1] ?? "").replace(/\s*##\s*$/g, "").trim();
+        const prompt = (parts[2] ?? "").trim();
+        if (section === "A" && book && prompt) {
+          rows.push({ section: "A", book, prompt });
+          continue;
+        }
+        if (section === "B" && prompt) {
+          rows.push({ section: "B", book: "", prompt });
+          continue;
+        }
+      }
+
+      badRows.push((isHeader ? 2 : 1) + i);
+    }
+
+    if (badRows.length) {
+      return {
+        rows,
+        message: `Preview: ${rows.length} valid row(s), ${badRows.length} invalid row(s). Invalid line(s): ${badRows
+          .slice(0, 8)
+          .join(", ")}`,
+      };
+    }
+    return { rows, message: `Preview: ${rows.length} valid row(s).` };
+  };
+
+  const previewEnglishPrompts = () => {
+    const parsed = parseEnglishRows();
+    setEnglishPreviewRows(parsed.rows);
+    setEnglishMsg(parsed.message);
+  };
+
+  const importEnglishPrompts = async () => {
+    setEnglishMsg("");
+    if (!englishPreviewRows.length) {
+      setEnglishMsg("Preview first, then click Confirm import.");
       return;
     }
-    if (reassignFrom === reassignTo) {
-      setReassignMsg("FROM and TO must be different.");
-      return;
-    }
-    setReassigning(true);
+
+    setEnglishBusy(true);
     try {
-      const r = await apiFetchAdmin<{ ok: boolean; moved: number }>(
-        API_PATHS.admin.questionsReassignSubject,
+      const res = await apiFetchAdmin<{ importedBooks: number; importedPrompts: number; errors?: any[] }>(
+        API_PATHS.admin.englishPromptsBulk,
         {
           method: "POST",
-          body: JSON.stringify({ fromSubjectId: reassignFrom, toSubjectId: reassignTo }),
+          body: JSON.stringify({ rows: englishPreviewRows }),
         },
       );
-      toast.success(`Moved ${r.moved} question(s).`);
-      setReassignMsg(`Moved ${r.moved} question(s) from ${reassignFrom} → ${reassignTo}.`);
-      await fetchQuestions();
-    } catch (e) {
-      const msg = e instanceof ApiError ? e.message : "Failed to reassign subject.";
-      setReassignMsg(msg);
+      const e = Array.isArray(res.errors) ? res.errors.length : 0;
+      const sampleErrors =
+        Array.isArray(res.errors) && res.errors.length
+          ? res.errors
+              .slice(0, 3)
+              .map((x) => String(x?.message ?? "Unknown row error"))
+              .join(" | ")
+          : "";
+      setEnglishMsg(
+        `Imported prompts: ${res.importedPrompts ?? 0} (books in bank: ${res.importedBooks ?? 0})${
+          e ? ` • ${e} row(s) skipped` : ""
+        }${sampleErrors ? ` • sample: ${sampleErrors}` : ""}`,
+      );
+      if (!e) {
+        setEnglishBulkText("");
+        setEnglishPreviewRows([]);
+      }
+      await fetchEnglishPrompts();
+      toast.success("English prompts updated.");
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : "Failed to import English prompts.";
+      setEnglishMsg(msg);
       toast.error(msg);
     } finally {
-      setReassigning(false);
+      setEnglishBusy(false);
     }
   };
 
@@ -1045,126 +1362,37 @@ export default function AdminPage() {
       <div className="mx-auto max-w-4xl space-y-8">
         <Card className="paper-texture">
           <CardHeader>
-            <CardTitle className="font-display text-lg">Import from PDF</CardTitle>
+            <CardTitle className="font-display text-lg">English books & prompts</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Upload an exam PDF and auto-extract questions + embedded images. Review preview, then
-              publish into the question bank.
+              Create English prompt banks by book. Students pick a book in Practice, then write
+              responses and peer-rate out of 10 in the shared viewing space.
             </p>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label>Subject</Label>
-                <Select
-                  value={pdfSubjectId}
-                  onValueChange={(val: string | null) => val && setPdfSubjectId(val)}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select subject" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {baseSubjects.map((s) => (
-                      <SelectItem key={s.id} value={s.id}>
-                        {s.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Topic (optional)</Label>
-                <Input
-                  value={pdfTopic}
-                  onChange={(e) => setPdfTopic(e.target.value)}
-                  placeholder="General"
-                />
-              </div>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-[1fr_140px]">
-              <div className="space-y-1.5">
-                <Label>PDF file</Label>
-                <Input
-                  type="file"
-                  accept="application/pdf,.pdf"
-                  onChange={(e) => setPdfFile(e.target.files?.[0] ?? null)}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Max pages</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={200}
-                  value={pdfMaxPages}
-                  onChange={(e) => setPdfMaxPages(Number(e.target.value))}
-                />
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                onClick={() => void generateQuestionsFromPdf()}
-                disabled={pdfBusy || !pdfFile || !pdfSubjectId}
-                className="gap-2 bg-brand text-white hover:bg-brand-dark"
-              >
-                {pdfBusy ? <Loader2 className="size-4 animate-spin" /> : null}
-                Generate questions from PDF
+            <Textarea
+              value={englishBulkText}
+              onChange={(e) => {
+                setEnglishBulkText(e.target.value);
+                setEnglishMsg("");
+                setEnglishPreviewRows([]);
+              }}
+              rows={8}
+              className="bg-white/60"
+              placeholder={`section\tbook\tprompt
+A\tThe Women of Troy\tHow does Euripides show power and helplessness in The Women of Troy?
+A\tRansom\tHow does Malouf explore grief and healing in Ransom?
+B\t\tWrite a creative piece that reimagines a moment of moral conflict from a modern perspective.`}
+            />
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <Button type="button" variant="secondary" onClick={previewEnglishPrompts} className="gap-2" disabled={englishBusy}>
+                Preview import
               </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => void previewPdfImport()}
-                disabled={pdfBusy || !pdfFile || !pdfSubjectId}
-                className="gap-2"
-              >
-                {pdfBusy ? <Loader2 className="size-4 animate-spin" /> : null}
-                Preview PDF
+              <Button type="button" onClick={() => void importEnglishPrompts()} className="gap-2" disabled={englishBusy || englishPreviewRows.length === 0}>
+                {englishBusy ? <Loader2 className="size-4 animate-spin" /> : null}
+                Confirm import
               </Button>
-              <Button
-                type="button"
-                onClick={() => void publishPdfImport()}
-                disabled={pdfBusy || pdfPreviewRows.length === 0 || !pdfSubjectId}
-                className="gap-2"
-              >
-                {pdfBusy ? <Loader2 className="size-4 animate-spin" /> : null}
-                Publish extracted questions
-              </Button>
-              <p className="text-xs text-muted-foreground">
-                {pdfPreviewRows.length
-                  ? `${pdfExtractedCount} extracted from ${pdfPageCount} page(s)`
-                  : "No PDF preview yet"}
-              </p>
+              {englishMsg ? <p className="text-sm text-muted-foreground">{englishMsg}</p> : null}
             </div>
-
-            {pdfPreviewRows.length > 0 ? (
-              <div className="overflow-auto rounded-xl border border-black/10 bg-white/70">
-                <table className="w-full min-w-[740px] text-left text-xs">
-                  <thead className="sticky top-0 bg-white">
-                    <tr className="border-b border-black/10">
-                      <th className="px-3 py-2">Page</th>
-                      <th className="px-3 py-2">Type</th>
-                      <th className="px-3 py-2">Question</th>
-                      <th className="px-3 py-2">Images</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pdfPreviewRows.slice(0, 80).map((r, idx) => (
-                      <tr key={`${r.localId}-${idx}`} className="border-b border-black/5 align-top">
-                        <td className="px-3 py-2">{r.sourcePage ?? "-"}</td>
-                        <td className="px-3 py-2">{r.type}</td>
-                        <td className="max-w-[460px] whitespace-pre-wrap px-3 py-2">
-                          {r.question}
-                        </td>
-                        <td className="px-3 py-2">{r.imageUrls?.length ?? 0}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : null}
           </CardContent>
         </Card>
 
@@ -1323,7 +1551,7 @@ methods\tmcq\tAlgebra\t\t1. Simplify...\t["A","B","C","D"]\tA\t\t1\t\t["https://
                         <td className="px-3 py-2">{r.topic}</td>
                         <td className="px-3 py-2 max-w-[260px] whitespace-pre-wrap">{r.passage ?? ""}</td>
                         <td className="px-3 py-2 max-w-[320px] whitespace-pre-wrap">
-                          <RichMathText text={r.question} className="prose prose-sm max-w-none prose-p:my-0" />
+                          <RichQuestionContent text={r.question} className="prose prose-sm max-w-none prose-p:my-0" />
                         </td>
                         <td className="px-3 py-2 max-w-[220px] whitespace-pre-wrap text-muted-foreground">
                           {r.image_urls_json ?? ""}
@@ -1352,66 +1580,101 @@ methods\tmcq\tAlgebra\t\t1. Simplify...\t["A","B","C","D"]\tA\t\t1\t\t["https://
 
         <Card className="paper-texture">
           <CardHeader>
-            <CardTitle className="font-display text-lg">Reassign subject (fix wrong imports)</CardTitle>
+            <CardTitle className="font-display text-lg">Bulk image mapping (attach to existing questions)</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              If you imported questions under the wrong <code className="rounded bg-black/10 px-1">subject_id</code>,
-              use this to move them so they show up in the right Practice subject.
+              Use this after text import. Paste TSV with{" "}
+              <code className="rounded bg-black/10 px-1">subject_id</code>,{" "}
+              <code className="rounded bg-black/10 px-1">question</code>,{" "}
+              <code className="rounded bg-black/10 px-1">image_urls_json</code>. We match by exact
+              subject + question text and attach images in bulk.
             </p>
 
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label>From subject</Label>
-                <Input
-                  value={reassignFrom}
-                  onChange={(e) => setReassignFrom(e.target.value)}
-                  placeholder='e.g. "vce_specialist_maths exam"'
-                />
-                <p className="text-xs text-muted-foreground">
-                  This must match the imported <code className="rounded bg-black/10 px-1">subject_id</code> exactly
-                  (we’ll normalize casing/spacing).
-                </p>
-              </div>
-              <div className="space-y-1.5">
-                <Label>To subject</Label>
-                <Select value={reassignTo} onValueChange={(v) => setReassignTo(v ?? "")}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Pick subject_id to move TO" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {baseSubjects.map((s) => (
-                      <SelectItem key={s.id} value={s.id}>
-                        {s.name} ({s.id})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+            <Textarea
+              value={imageMapText}
+              onChange={(e) => setImageMapText(e.target.value)}
+              rows={6}
+              className="bg-white/60"
+              placeholder={`subject_id\tquestion\timage_urls_json
+methods\tThe median bag size bought by customers on the day was\t["data:image/jpeg;base64,..."]
+methods\tThe total number of avocados sold in bags was\t["data:image/jpeg;base64,..."]`}
+            />
 
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <Button type="button" variant="secondary" onClick={buildImageMapPreview} className="gap-2">
+                Preview mappings
+              </Button>
               <Button
                 type="button"
-                onClick={() => void reassignSubject()}
-                disabled={reassigning || !reassignFrom || !reassignTo}
+                onClick={() => void importImageMapRows()}
+                disabled={imageMapImporting || imageMapRows.length === 0}
                 className="gap-2"
               >
-                {reassigning ? (
+                {imageMapImporting ? (
                   <>
                     <Loader2 className="size-4 animate-spin" />
-                    Moving…
+                    Attaching…
                   </>
                 ) : (
-                  "Move questions"
+                  "Attach images to matched questions"
                 )}
               </Button>
-              {reassignMsg ? (
-                <p className="text-sm text-muted-foreground">{reassignMsg}</p>
-              ) : null}
+              <p className="text-xs text-muted-foreground">
+                {imageMapRows.length ? `${imageMapRows.length} row(s) parsed` : "No preview yet"}
+              </p>
             </div>
+
+            {imageMapError ? (
+              <div className="rounded-lg border border-red-500/40 bg-red-500/15 px-3 py-2 text-sm text-foreground">
+                {imageMapError}
+              </div>
+            ) : null}
+
+            {imageMapRows.length ? (
+              <div className="overflow-auto rounded-xl border border-black/10 bg-white/70">
+                <table className="w-full min-w-[860px] text-left text-xs">
+                  <thead className="sticky top-0 bg-white">
+                    <tr className="border-b border-black/10">
+                      <th className="px-3 py-2">Row</th>
+                      <th className="px-3 py-2">Subject</th>
+                      <th className="px-3 py-2">Question</th>
+                      <th className="px-3 py-2">Images</th>
+                      <th className="px-3 py-2">Errors</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {imageMapRows.slice(0, 200).map((r) => (
+                      <tr key={r.rowNumber} className="border-b border-black/5 align-top">
+                        <td className="px-3 py-2 tabular-nums text-muted-foreground">{r.rowNumber}</td>
+                        <td className="px-3 py-2">{r.subjectId}</td>
+                        <td className="px-3 py-2 max-w-[380px] whitespace-pre-wrap">{r.question}</td>
+                        <td className="px-3 py-2 max-w-[220px] whitespace-pre-wrap text-muted-foreground">
+                          {r.image_urls_json ?? ""}
+                        </td>
+                        <td className="px-3 py-2">
+                          {r.errors.length ? (
+                            <div className="space-y-1">
+                              {r.errors.map((e, i) => (
+                                <div key={i} className="text-red-700">
+                                  {e}
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-emerald-700">OK</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
+
+        
 
         {/* Add Question Form */}
         <Card className="paper-texture">
@@ -1761,7 +2024,25 @@ methods\tmcq\tAlgebra\t\t1. Simplify...\t["A","B","C","D"]\tA\t\t1\t\t["https://
             ) : (
               <div className="space-y-2">
                 {subjectFilter === "all" ? (
-                  Object.entries(groupedQuestions).map(
+                  [
+                    ...Object.entries(groupedQuestions),
+                    ...(englishPrompts.length
+                      ? [
+                          [
+                            "English",
+                            englishPrompts.map((p) => ({
+                              id: `english-${p.id}`,
+                              type: "long_answer",
+                              question: p.prompt,
+                              marks: 0,
+                              _english: true,
+                              _book: p.book,
+                              _section: p.section,
+                            })),
+                          ] as [string, any[]],
+                        ]
+                      : []),
+                  ].map(
                     ([subjectName, subjectQuestions]) => {
                       const isExpanded = expandedSubjects.has(subjectName);
 
@@ -1802,15 +2083,20 @@ methods\tmcq\tAlgebra\t\t1. Simplify...\t["A","B","C","D"]\tA\t\t1\t\t["https://
                                         variant="outline"
                                         className="text-[10px] uppercase"
                                       >
-                                        {q.type.replace("_", " ")}
+                                        {q._english ? `Section ${q._section}` : q.type.replace("_", " ")}
                                       </Badge>
+                                      {q._english ? (
+                                        <Badge variant="secondary" className="text-[11px]">
+                                          {q._book || "Section B Creative"}
+                                        </Badge>
+                                      ) : null}
                                     </div>
-                                    <p className="text-sm text-foreground">
+                                    <p className={q._english ? "text-base font-semibold leading-relaxed text-foreground whitespace-pre-wrap" : "text-sm text-foreground"}>
                                       {q.question}
                                     </p>
                                   </div>
 
-                                  {q.type !== "mcq" && (
+                                  {!q._english && q.type !== "mcq" && (
                                     <div className="flex items-center gap-2">
                                       <Input
                                         type="number"
@@ -1846,7 +2132,8 @@ methods\tmcq\tAlgebra\t\t1. Simplify...\t["A","B","C","D"]\tA\t\t1\t\t["https://
                                     </div>
                                   )}
 
-                                  <AlertDialog>
+                                  {!q._english ? (
+                                    <AlertDialog>
                                     <AlertDialogTrigger
                                       render={
                                         <Button
@@ -1880,7 +2167,8 @@ methods\tmcq\tAlgebra\t\t1. Simplify...\t["A","B","C","D"]\tA\t\t1\t\t["https://
                                         </AlertDialogAction>
                                       </AlertDialogFooter>
                                     </AlertDialogContent>
-                                  </AlertDialog>
+                                    </AlertDialog>
+                                  ) : null}
                                 </div>
                               ))}
                             </div>
@@ -1889,6 +2177,35 @@ methods\tmcq\tAlgebra\t\t1. Simplify...\t["A","B","C","D"]\tA\t\t1\t\t["https://
                       );
                     },
                   )
+                ) : subjectFilter === "english" ? (
+                  <div className="rounded-lg border border-border/50">
+                    {!englishPrompts.length ? (
+                      <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+                        No English prompts yet.
+                      </div>
+                    ) : (
+                      englishPrompts.map((r) => (
+                        <div
+                          key={`english-${r.id}`}
+                          className="flex items-start justify-between gap-3 border-b border-border/30 px-4 py-3 last:border-b-0"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="mb-2 flex items-center gap-2">
+                              <Badge variant="outline" className="text-[10px] uppercase">
+                                Section {r.section}
+                              </Badge>
+                              <Badge variant="secondary" className="text-[11px]">
+                                {r.book || "Section B Creative"}
+                              </Badge>
+                            </div>
+                            <p className="text-base font-semibold leading-relaxed text-foreground whitespace-pre-wrap">
+                              {r.prompt}
+                            </p>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
                 ) : (
                   <div className="rounded-lg border border-border/50">
                     {filteredQuestions.length === 0 ? (
@@ -1993,6 +2310,7 @@ methods\tmcq\tAlgebra\t\t1. Simplify...\t["A","B","C","D"]\tA\t\t1\t\t["https://
                 )}
               </div>
             )}
+
           </CardContent>
         </Card>
       </div>

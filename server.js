@@ -86,6 +86,15 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function normalizeEnglishSection(value) {
+  const t = cleanText(value, 24).toUpperCase();
+  if (t === "A" || t === "B" || t === "C") return t;
+  if (/\bA\b/.test(t)) return "A";
+  if (/\bB\b/.test(t)) return "B";
+  if (/\bC\b/.test(t)) return "C";
+  return "A";
+}
+
 function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
   const hash = crypto.scryptSync(password, salt, 64).toString("hex");
   return { salt, hash };
@@ -159,6 +168,24 @@ function safeJsonColumn(raw, label, rowId) {
     str.slice(0, 160),
   );
   return undefined;
+}
+
+function parseFlexibleArrayInput(raw) {
+  if (raw == null) return null;
+  if (Array.isArray(raw)) {
+    const arr = raw.map((x) => String(x || "").trim()).filter(Boolean);
+    return arr.length ? arr : null;
+  }
+  const t = cleanText(raw, 200000);
+  if (!t) return null;
+  const parsed = safeJsonColumn(t, "flex-array", "n/a");
+  if (Array.isArray(parsed)) {
+    const arr = parsed.map((x) => String(x || "").trim()).filter(Boolean);
+    return arr.length ? arr : null;
+  }
+  const sep = t.includes("|") ? "|" : "\n";
+  const parts = t.split(sep).map((s) => s.trim()).filter(Boolean);
+  return parts.length ? parts : null;
 }
 
 // ── DB init ───────────────────────────────────────────────────────────────────
@@ -265,6 +292,53 @@ async function initDb() {
      SET marks = 2
      WHERE type IN ('short_answer','long_answer','short','long') AND marks = 1`,
   );
+
+  // English writing mode: books + prompts + shared responses + peer ratings.
+  await run(`
+    CREATE TABLE IF NOT EXISTS english_books (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL UNIQUE,
+      created_at TEXT NOT NULL
+    )
+  `);
+  await run(`
+    CREATE TABLE IF NOT EXISTS english_prompts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      book_id INTEGER NOT NULL,
+      prompt_text TEXT NOT NULL,
+      section TEXT NOT NULL DEFAULT 'A',
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (book_id) REFERENCES english_books(id) ON DELETE CASCADE
+    )
+  `);
+  await ensureColumn("english_prompts", "section", "TEXT NOT NULL DEFAULT 'A'");
+  await run(`
+    CREATE TABLE IF NOT EXISTS english_responses (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      prompt_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      response_type TEXT NOT NULL DEFAULT 'essay',
+      response_text TEXT NOT NULL DEFAULT '',
+      image_urls TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE(prompt_id, user_id),
+      FOREIGN KEY (prompt_id) REFERENCES english_prompts(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+  await run(`
+    CREATE TABLE IF NOT EXISTS english_response_ratings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      response_id INTEGER NOT NULL,
+      rater_user_id INTEGER NOT NULL,
+      score INTEGER NOT NULL,
+      created_at TEXT NOT NULL,
+      UNIQUE(response_id, rater_user_id),
+      FOREIGN KEY (response_id) REFERENCES english_responses(id) ON DELETE CASCADE,
+      FOREIGN KEY (rater_user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
 
   await run(`
     CREATE TABLE IF NOT EXISTS chat_messages (
@@ -1175,6 +1249,319 @@ app.get("/api/written/:subjectId/:questionKey/all", authMiddleware, async (req, 
   } catch (error) {
     console.error("[Written ALL] Error:", error);
     res.status(500).json({ error: "Could not load written responses." });
+  }
+});
+
+// ── English writing mode (books + prompts + shared responses) ─────────────────
+
+app.post("/api/admin/english/prompts/bulk", authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
+    if (!rows.length) {
+      return res.status(400).json({ error: "rows must be a non-empty array." });
+    }
+
+    let importedBooks = 0;
+    let importedPrompts = 0;
+    const errors = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i] || {};
+      const section = normalizeEnglishSection(r.section ?? r.area ?? r.part);
+      let book = cleanText(r.book ?? r.bookTitle ?? r.title, 180);
+      book = book.replace(/\s*##\s*$/g, "").trim();
+      const prompt = cleanText(r.prompt ?? r.question ?? r.promptText, 20000);
+      const effectiveSection = section === "B" ? "B" : "A";
+      if (effectiveSection === "A") {
+        if (!book || !prompt) {
+          errors.push({ index: i, message: "section A requires book and prompt." });
+          continue;
+        }
+        const bookWordCount = book.split(/\s+/).filter(Boolean).length;
+        const hasSentencePunctuation = /[.!?]/.test(book);
+        if (bookWordCount > 12 || hasSentencePunctuation) {
+          errors.push({
+            index: i,
+            message:
+              "section A book looks malformed. Use full title only (no sentence text) and keep prompts in prompt column.",
+          });
+          continue;
+        }
+      } else {
+        if (!prompt) {
+          errors.push({ index: i, message: "section B requires prompt." });
+          continue;
+        }
+        // Section B never maps to set-text books.
+        book = "Section B Creative";
+      }
+
+      await run(
+        `INSERT INTO english_books (title, created_at)
+         VALUES (?, ?)
+         ON CONFLICT(title) DO NOTHING`,
+        [book, nowIso()],
+      );
+
+      const b = await get(`SELECT id FROM english_books WHERE title = ?`, [book]);
+      const bookId = Number(b?.id);
+      if (!Number.isFinite(bookId) || bookId <= 0) {
+        errors.push({ index: i, message: "Could not resolve book id." });
+        continue;
+      }
+
+      const existing = await get(
+        `SELECT id FROM english_prompts WHERE book_id = ? AND lower(trim(prompt_text)) = lower(trim(?))`,
+        [bookId, prompt],
+      );
+      if (existing?.id) continue;
+
+      await run(
+        `INSERT INTO english_prompts (book_id, prompt_text, section, created_at) VALUES (?, ?, ?, ?)`,
+        [bookId, prompt, effectiveSection, nowIso()],
+      );
+      importedPrompts++;
+    }
+
+    const countBooks = await get(`SELECT COUNT(*) AS c FROM english_books`);
+    importedBooks = Number(countBooks?.c ?? 0);
+    res.json({ ok: errors.length === 0, importedBooks, importedPrompts, errors });
+  } catch (error) {
+    console.error("[Admin English bulk prompts] Error:", error);
+    res.status(500).json({ error: "Could not import English prompts." });
+  }
+});
+
+app.get("/api/admin/english/prompts", authMiddleware, adminMiddleware, async (_req, res) => {
+  try {
+    const rows = await all(
+      `SELECT p.id, p.section, p.prompt_text, b.title AS book_title
+       FROM english_prompts p
+       JOIN english_books b ON b.id = p.book_id
+       ORDER BY p.section ASC, b.title COLLATE NOCASE ASC, p.id ASC`,
+    );
+    res.json({
+      prompts: rows.map((r) => ({
+        id: Number(r.id),
+        section: normalizeEnglishSection(r.section),
+        book: String(r.book_title || ""),
+        prompt: String(r.prompt_text || ""),
+      })),
+    });
+  } catch (error) {
+    console.error("[Admin English prompts GET] Error:", error);
+    res.status(500).json({ error: "Could not load English prompts." });
+  }
+});
+
+app.get("/api/english/books", authMiddleware, async (req, res) => {
+  try {
+    const section = normalizeEnglishSection(req.query.section);
+    const rows = await all(
+      `SELECT b.id, b.title, COUNT(p.id) AS prompt_count
+       FROM english_books b
+       LEFT JOIN english_prompts p ON p.book_id = b.id
+        ${section === "A" ? "WHERE p.section = 'A'" : ""}
+       GROUP BY b.id, b.title
+       ORDER BY b.title COLLATE NOCASE ASC`,
+    );
+    const filtered = section === "A" ? rows.filter((r) => Number(r.prompt_count || 0) > 0) : rows;
+    res.json({
+      books: filtered.map((r) => ({
+        id: Number(r.id),
+        title: String(r.title),
+        promptCount: Number(r.prompt_count || 0),
+      })),
+    });
+  } catch (error) {
+    console.error("[English books GET] Error:", error);
+    res.status(500).json({ error: "Could not load books." });
+  }
+});
+
+app.get("/api/english/prompts", authMiddleware, async (req, res) => {
+  try {
+    const section = normalizeEnglishSection(req.query.section);
+    const bookId = Number(req.query.bookId);
+    let rows = [];
+    if (section === "A") {
+      if (!Number.isFinite(bookId) || bookId <= 0) {
+        return res.status(400).json({ error: "bookId is required for section A." });
+      }
+      rows = await all(
+        `SELECT p.id, p.prompt_text, p.section, b.id AS book_id, b.title AS book_title
+         FROM english_prompts p
+         JOIN english_books b ON b.id = p.book_id
+         WHERE p.book_id = ? AND p.section = 'A'
+         ORDER BY p.id ASC`,
+        [bookId],
+      );
+    } else {
+      rows = await all(
+        `SELECT p.id, p.prompt_text, p.section, b.id AS book_id, b.title AS book_title
+         FROM english_prompts p
+         JOIN english_books b ON b.id = p.book_id
+         WHERE p.section = ?
+         ORDER BY p.id ASC`,
+        [section],
+      );
+    }
+    res.json({
+      prompts: rows.map((r) => ({
+        id: Number(r.id),
+        bookId: Number(r.book_id),
+        bookTitle: String(r.book_title),
+        prompt: String(r.prompt_text),
+        section: String(r.section || section),
+      })),
+    });
+  } catch (error) {
+    console.error("[English prompts GET] Error:", error);
+    res.status(500).json({ error: "Could not load prompts." });
+  }
+});
+
+app.post("/api/english/responses", authMiddleware, async (req, res) => {
+  try {
+    const promptId = Number(req.body?.promptId);
+    const responseTypeRaw = cleanText(req.body?.responseType, 40).toLowerCase();
+    const responseType = responseTypeRaw === "paragraph" ? "paragraph" : "essay";
+    const responseText = cleanText(req.body?.responseText, 20000);
+    const imageUrlsInput = Array.isArray(req.body?.imageUrls) ? req.body.imageUrls : [];
+    const imageUrls = imageUrlsInput
+      .map((u) => String(u || "").trim())
+      .filter(Boolean)
+      .slice(0, 8);
+    const imageUrlsJson = imageUrls.length ? JSON.stringify(imageUrls) : null;
+
+    if (!Number.isFinite(promptId) || promptId <= 0) {
+      return res.status(400).json({ error: "promptId is required." });
+    }
+    if (!responseText && !imageUrls.length) {
+      return res.status(400).json({ error: "Provide response text or at least one image." });
+    }
+
+    const p = await get(`SELECT id FROM english_prompts WHERE id = ?`, [promptId]);
+    if (!p?.id) return res.status(404).json({ error: "Prompt not found." });
+
+    await run(
+      `INSERT INTO english_responses (prompt_id, user_id, response_type, response_text, image_urls, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(prompt_id, user_id) DO UPDATE SET
+         response_type = excluded.response_type,
+         response_text = excluded.response_text,
+         image_urls = excluded.image_urls,
+         updated_at = excluded.updated_at`,
+      [promptId, req.user.id, responseType, responseText || "", imageUrlsJson, nowIso(), nowIso()],
+    );
+
+    res.json({ ok: true });
+  } catch (error) {
+    console.error("[English response POST] Error:", error);
+    res.status(500).json({ error: "Could not save response." });
+  }
+});
+
+app.get("/api/english/responses", authMiddleware, async (req, res) => {
+  try {
+    const section = normalizeEnglishSection(req.query.section);
+    const bookId = Number(req.query.bookId);
+    if (section === "A" && (!Number.isFinite(bookId) || bookId <= 0)) {
+      return res.status(400).json({ error: "bookId is required for section A." });
+    }
+
+    const rows =
+      section === "A"
+        ? await all(
+            `SELECT r.id, r.prompt_id, r.user_id, r.response_type, r.response_text, r.image_urls, r.updated_at,
+                    p.prompt_text, p.section, u.username,
+                    AVG(rr.score) AS avg_score,
+                    COUNT(rr.id) AS rating_count
+             FROM english_responses r
+             JOIN english_prompts p ON p.id = r.prompt_id
+             JOIN english_books b ON b.id = p.book_id
+             JOIN users u ON u.id = r.user_id
+             LEFT JOIN english_response_ratings rr ON rr.response_id = r.id
+             WHERE b.id = ? AND p.section = 'A'
+             GROUP BY r.id
+             ORDER BY r.updated_at DESC`,
+            [bookId],
+          )
+        : await all(
+            `SELECT r.id, r.prompt_id, r.user_id, r.response_type, r.response_text, r.image_urls, r.updated_at,
+                    p.prompt_text, p.section, u.username,
+                    AVG(rr.score) AS avg_score,
+                    COUNT(rr.id) AS rating_count
+             FROM english_responses r
+             JOIN english_prompts p ON p.id = r.prompt_id
+             JOIN users u ON u.id = r.user_id
+             LEFT JOIN english_response_ratings rr ON rr.response_id = r.id
+             WHERE p.section = ?
+             GROUP BY r.id
+             ORDER BY r.updated_at DESC`,
+            [section],
+          );
+
+    const myRatings = await all(
+      `SELECT response_id, score
+       FROM english_response_ratings
+       WHERE rater_user_id = ?`,
+      [req.user.id],
+    );
+    const myMap = new Map(myRatings.map((r) => [Number(r.response_id), Number(r.score)]));
+
+    res.json({
+      responses: rows.map((r) => ({
+        id: Number(r.id),
+        promptId: Number(r.prompt_id),
+        prompt: String(r.prompt_text),
+        section: String(r.section || section),
+        userId: Number(r.user_id),
+        username: String(r.username),
+        responseType: String(r.response_type || "essay"),
+        responseText: String(r.response_text || ""),
+        imageUrls: safeJsonColumn(r.image_urls, "english.image_urls", r.id) || [],
+        updatedAt: r.updated_at,
+        averageScore:
+          Number(r.rating_count || 0) > 0 && r.avg_score != null
+            ? Math.round(Number(r.avg_score) * 10) / 10
+            : null,
+        ratingCount: Number(r.rating_count || 0),
+        myScore: myMap.get(Number(r.id)) ?? null,
+      })),
+    });
+  } catch (error) {
+    console.error("[English responses GET] Error:", error);
+    res.status(500).json({ error: "Could not load responses." });
+  }
+});
+
+app.post("/api/english/responses/:id/rate", authMiddleware, async (req, res) => {
+  try {
+    const responseId = Number(req.params.id);
+    const score = Number(req.body?.score);
+    if (!Number.isFinite(responseId) || responseId <= 0) {
+      return res.status(400).json({ error: "response id is required." });
+    }
+    if (!Number.isFinite(score) || score < 1 || score > 10 || score !== Math.floor(score)) {
+      return res.status(400).json({ error: "score must be an integer from 1 to 10." });
+    }
+    const target = await get(`SELECT user_id FROM english_responses WHERE id = ?`, [responseId]);
+    if (!target?.user_id) return res.status(404).json({ error: "Response not found." });
+    if (Number(target.user_id) === req.user.id) {
+      return res.status(400).json({ error: "You cannot rate your own response." });
+    }
+    await run(
+      `INSERT INTO english_response_ratings (response_id, rater_user_id, score, created_at)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT(response_id, rater_user_id) DO UPDATE SET
+         score = excluded.score`,
+      [responseId, req.user.id, score, nowIso()],
+    );
+    res.json({ ok: true });
+  } catch (error) {
+    console.error("[English rate POST] Error:", error);
+    res.status(500).json({ error: "Could not save rating." });
   }
 });
 
@@ -2664,6 +3051,93 @@ app.post("/api/admin/questions", authMiddleware, adminMiddleware, async (req, re
   } catch (error) {
     console.error("[Admin questions POST] Error:", error);
     res.status(500).json({ error: "Could not add question." });
+  }
+});
+
+app.post("/api/admin/questions/attach-images-bulk", authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const mappings = Array.isArray(req.body?.mappings) ? req.body.mappings : [];
+    if (!mappings.length) {
+      return res.status(400).json({ error: "mappings must be a non-empty array." });
+    }
+    const dryRun = Boolean(req.body?.dryRun);
+    let updated = 0;
+    const errors = [];
+
+    const normalizeQuestion = (raw) =>
+      cleanText(raw, 8000)
+        .toLowerCase()
+        .replace(/[‘’]/g, "'")
+        .replace(/[“”]/g, '"')
+        .replace(/[–—]/g, "-")
+        .replace(/[\u200B-\u200D\uFEFF]/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+
+    for (let i = 0; i < mappings.length; i++) {
+      const r = mappings[i] || {};
+      const questionId = Number(r.questionId ?? r.question_id ?? r.id ?? r.database_id);
+      const subjectId = canonicalSubjectId(cleanText(r.subjectId ?? r.subject_id, 80));
+      const question = cleanText(r.question ?? r.prompt ?? r.stem, 4000);
+      const imageArr =
+        parseFlexibleArrayInput(r.image_urls_json) ??
+        parseFlexibleArrayInput(r.image_urls) ??
+        parseFlexibleArrayInput(r.imageUrls);
+
+      if (!imageArr || !imageArr.length) {
+        errors.push({ index: i, message: "image_urls_json must contain at least one image." });
+        continue;
+      }
+
+      let targetId = null;
+      if (Number.isFinite(questionId) && questionId > 0) {
+        targetId = questionId;
+      } else {
+        if (!subjectId || !question) {
+          errors.push({
+            index: i,
+            message: "subjectId and question are required (or provide questionId).",
+          });
+          continue;
+        }
+        const rows = await all(
+          `SELECT id, question FROM custom_questions WHERE subject_id = ? ORDER BY created_at DESC LIMIT 5000`,
+          [subjectId],
+        );
+        const target = normalizeQuestion(question);
+        let matches = rows.filter((x) => normalizeQuestion(x.question) === target).map((x) => Number(x.id));
+        if (!matches.length && target.length >= 24) {
+          matches = rows
+            .filter((x) => {
+              const n = normalizeQuestion(x.question);
+              return n.includes(target) || target.includes(n);
+            })
+            .map((x) => Number(x.id));
+        }
+        if (!matches.length) {
+          errors.push({ index: i, message: "No matching question found for subject + question text." });
+          continue;
+        }
+        if (matches.length > 1) {
+          errors.push({ index: i, message: "Multiple matching questions found. Use question_id." });
+          continue;
+        }
+        targetId = matches[0];
+      }
+
+      if (!dryRun) {
+        await run(`UPDATE custom_questions SET image_urls = ? WHERE id = ?`, [
+          JSON.stringify(imageArr),
+          targetId,
+        ]);
+      }
+      updated++;
+    }
+
+    res.json({ ok: errors.length === 0, updated, errors });
+  } catch (error) {
+    console.error("[Admin attach images bulk] Error:", error);
+    res.status(500).json({ error: "Could not attach images in bulk." });
   }
 });
 

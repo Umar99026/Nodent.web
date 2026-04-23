@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { RichMathText } from "@/components/quiz/QuestionStimulus";
+import { RichQuestionContent } from "@/components/quiz/RichQuestionContent";
 
 type BattleState = {
   id: string;
@@ -201,7 +201,7 @@ export default function DojoBattlePage() {
                     {question.type === "mcq" ? "Multiple Choice" : "Short Answer"}
                   </div>
                   <div className="font-display text-2xl font-semibold leading-relaxed">
-                    <RichMathText
+                    <RichQuestionContent
                       text={question.question}
                       className="prose prose-sm max-w-none prose-p:my-0"
                     />
@@ -224,7 +224,7 @@ export default function DojoBattlePage() {
                           }`}
                         >
                           <div className="text-sm font-semibold">
-                            <RichMathText
+                            <RichQuestionContent
                               text={opt}
                               className="prose prose-sm max-w-none prose-p:my-0"
                             />

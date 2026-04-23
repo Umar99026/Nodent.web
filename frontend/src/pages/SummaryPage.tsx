@@ -37,6 +37,13 @@ import {
 } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Trophy,
   RotateCcw,
   LayoutDashboard,
@@ -95,6 +102,22 @@ interface CompetitionStats {
   questionStats: QuestionStat[];
   minRankedAttempts?: number;
 }
+
+type EnglishBook = { id: number; title: string; promptCount: number };
+type EnglishResponse = {
+  id: number;
+  promptId: number;
+  prompt: string;
+  userId: number;
+  username: string;
+  responseType: "essay" | "paragraph";
+  responseText: string;
+  imageUrls: string[];
+  updatedAt: string;
+  averageScore: number | null;
+  ratingCount: number;
+  myScore: number | null;
+};
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -157,6 +180,10 @@ export default function SummaryPage() {
   const [statsError, setStatsError] = useState<string | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [questionsLoading, setQuestionsLoading] = useState(true);
+  const [englishBooks, setEnglishBooks] = useState<EnglishBook[]>([]);
+  const [englishBookId, setEnglishBookId] = useState<string>("");
+  const [englishResponses, setEnglishResponses] = useState<EnglishResponse[]>([]);
+  const [showHighScoring, setShowHighScoring] = useState(false);
 
   // Find subject
   const subject: Subject | undefined = useMemo(() => {
@@ -256,6 +283,44 @@ export default function SummaryPage() {
     return randomizedQuestionsForSubject(questions, user.id, subjectId);
   }, [user, subjectId, questions]);
 
+  useEffect(() => {
+    if (subjectId !== "english" || !user) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const b = await apiFetch<{ books: EnglishBook[] }>(API_PATHS.english.books);
+        if (cancelled) return;
+        setEnglishBooks(b.books || []);
+        if (!englishBookId && b.books?.length) setEnglishBookId(String(b.books[0].id));
+      } catch {
+        if (!cancelled) setEnglishBooks([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [subjectId, user, englishBookId]);
+
+  useEffect(() => {
+    if (subjectId !== "english" || !user) return;
+    const id = Number(englishBookId);
+    if (!Number.isFinite(id) || id <= 0) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await apiFetch<{ responses: EnglishResponse[] }>(
+          `${API_PATHS.english.responses}?bookId=${encodeURIComponent(id)}`,
+        );
+        if (!cancelled) setEnglishResponses(r.responses || []);
+      } catch {
+        if (!cancelled) setEnglishResponses([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [subjectId, user, englishBookId]);
+
   /** Your saved answers for this subject (canonical key → score; null = not auto-scored). */
   const myAnswerByCanonicalKey = useMemo(() => {
     if (
@@ -325,6 +390,21 @@ export default function SummaryPage() {
         };
       });
   }, [stats, localTopicRollup]);
+
+  /** Topic with the lowest your % (least marks) among topics you’ve attempted. */
+  const weakestTopicInfo = useMemo(() => {
+    const candidates = displayTopicStats.filter(
+      (t) => t.myTotal > 0 && t.myCorrect !== null,
+    );
+    if (candidates.length === 0) return null;
+    return candidates.reduce((worst, t) => {
+      const pct = (t.myCorrect! / t.myTotal) * 100;
+      const worstPct = (worst.myCorrect! / worst.myTotal) * 100;
+      if (pct < worstPct) return t;
+      if (pct > worstPct) return worst;
+      return t.topic.localeCompare(worst.topic) < 0 ? t : worst;
+    });
+  }, [displayTopicStats]);
 
   const mergedQuestionStats = useMemo((): QuestionStat[] => {
     if (!stats || !subjectId || questions.length === 0) {
@@ -408,6 +488,101 @@ export default function SummaryPage() {
           <Button variant="outline" className="mt-4" onClick={() => navigate("/")}>
             Back to Dashboard
           </Button>
+        </div>
+      </AppShell>
+    );
+  }
+
+  if (subjectId === "english") {
+    const myRows = englishResponses.filter((r) => r.userId === user?.id);
+    const myRated = myRows.filter((r) => r.averageScore != null);
+    const myAvg =
+      myRated.length > 0
+        ? Math.round(
+            (myRated.reduce((acc, r) => acc + Number(r.averageScore ?? 0), 0) / myRated.length) * 10,
+          ) / 10
+        : null;
+    const highRows = englishResponses.filter((r) => (r.averageScore ?? 0) >= 8);
+
+    return (
+      <AppShell title={subject ? `${subject.name} Summary` : "Summary"}>
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="font-display text-lg">English summary</CardTitle>
+              <CardDescription>
+                Track average grades on your submitted essays/paragraphs, and view high-scoring exemplar responses.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="max-w-md">
+                <Select value={englishBookId} onValueChange={(v) => setEnglishBookId(v ?? "")}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select book" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {englishBooks.map((b) => (
+                      <SelectItem key={b.id} value={String(b.id)}>
+                        {b.title}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Badge variant="secondary">Submissions: {myRows.length}</Badge>
+                <Badge variant="secondary">Average grade: {myAvg != null ? `${myAvg}/10` : "No ratings yet"}</Badge>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="font-display text-lg">Your submitted passages/essays</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {myRows.map((r) => (
+                <div key={r.id} className="rounded-xl border border-black/10 bg-white/70 p-3">
+                  <div className="flex items-center gap-2 text-xs">
+                    <Badge>{r.responseType}</Badge>
+                    <span className="text-muted-foreground">Avg: {r.averageScore != null ? `${r.averageScore}/10` : "—"}</span>
+                  </div>
+                  <p className="mt-2 text-sm whitespace-pre-wrap">{r.prompt}</p>
+                </div>
+              ))}
+              {!myRows.length ? <p className="text-sm text-muted-foreground">No submissions for this book yet.</p> : null}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="font-display text-lg">High-scoring responses</CardTitle>
+              <CardDescription>Responses with average rating 8/10 or higher.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Button variant="secondary" onClick={() => setShowHighScoring((v) => !v)}>
+                {showHighScoring ? "Hide high-scoring responses" : "View high-scoring responses"}
+              </Button>
+              {showHighScoring ? (
+                <>
+                  {highRows.map((r) => (
+                    <div key={`high-${r.id}`} className="rounded-xl border border-black/10 bg-white/70 p-3">
+                      <div className="text-xs text-muted-foreground">
+                        @{r.username} • Avg {r.averageScore}/10
+                      </div>
+                      <p className="mt-2 text-sm whitespace-pre-wrap">{r.prompt}</p>
+                      {r.responseText ? (
+                        <p className="mt-2 text-sm whitespace-pre-wrap">{r.responseText.slice(0, 320)}{r.responseText.length > 320 ? "…" : ""}</p>
+                      ) : null}
+                    </div>
+                  ))}
+                  {!highRows.length ? (
+                    <p className="text-sm text-muted-foreground">No responses above 8/10 yet.</p>
+                  ) : null}
+                </>
+              ) : null}
+            </CardContent>
+          </Card>
         </div>
       </AppShell>
     );
@@ -642,7 +817,32 @@ export default function SummaryPage() {
                     this view.
                   </p>
                 ) : (
-                  displayTopicStats.map((topic) => {
+                  <>
+                {weakestTopicInfo &&
+                  weakestTopicInfo.myCorrect !== null &&
+                  weakestTopicInfo.myTotal > 0 && (
+                    <div className="flex items-start gap-3 rounded-xl border border-danger/20 bg-danger/5 px-4 py-3">
+                      <AlertTriangle className="mt-0.5 size-4 shrink-0 text-danger" />
+                      <div className="min-w-0 space-y-0.5">
+                        <div className="text-xs font-semibold uppercase tracking-wide text-danger">
+                          Weakest topic
+                        </div>
+                        <div className="text-sm text-foreground">
+                          <span className="font-semibold">{weakestTopicInfo.topic}</span>
+                          <span className="text-muted-foreground">
+                            {" "}
+                            —{" "}
+                            {Math.round(
+                              (weakestTopicInfo.myCorrect / weakestTopicInfo.myTotal) * 100,
+                            )}
+                            % correct ({weakestTopicInfo.myCorrect}/
+                            {weakestTopicInfo.myTotal} marks)
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {displayTopicStats.map((topic) => {
                     const yourPct =
                       topic.myTotal > 0 && topic.myCorrect !== null
                         ? Math.round(
@@ -715,7 +915,8 @@ export default function SummaryPage() {
                         </div>
                       </div>
                     );
-                  })
+                  })}
+                  </>
                 )}
               </CardContent>
             </Card>

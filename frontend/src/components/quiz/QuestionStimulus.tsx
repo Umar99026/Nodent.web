@@ -1,5 +1,6 @@
 import { BookOpen } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { RichQuestionContent } from "@/components/quiz/RichQuestionContent";
 import { normalizeImageUrls } from "@/lib/practiceQuestions";
 import katex from "katex";
 import "katex/dist/katex.min.css";
@@ -97,9 +98,9 @@ export function PassageBlock({ passage }: { passage?: string }) {
       </CardHeader>
       <CardContent>
         <blockquote className="text-lg leading-relaxed text-foreground/90 sm:text-xl">
-          <RichMathText
+          <RichQuestionContent
             text={passage.trim()}
-            className="max-w-none whitespace-pre-wrap leading-relaxed"
+            className="max-w-none leading-relaxed"
           />
         </blockquote>
       </CardContent>
@@ -130,9 +131,9 @@ export function QuestionImageGrid({
       </p>
       <div className="max-h-[min(70vh,560px)] space-y-4 overflow-y-auto pr-1">
         <div className="grid gap-4 sm:grid-cols-2">
-          {list.map((src) => (
+          {list.map((src, i) => (
             <a
-              key={src}
+              key={`fig-${i}-${src.slice(0, 48)}`}
               href={src}
               target="_blank"
               rel="noopener noreferrer"
@@ -145,6 +146,10 @@ export function QuestionImageGrid({
                 className="max-h-72 w-full bg-muted/20 object-contain object-center sm:max-h-80"
                 loading="lazy"
                 decoding="async"
+                onError={(e) => {
+                  e.currentTarget.alt = "Image failed to load (check data URL / length).";
+                  e.currentTarget.classList.add("opacity-50");
+                }}
               />
             </a>
           ))}

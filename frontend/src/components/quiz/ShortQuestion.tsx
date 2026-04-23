@@ -8,7 +8,8 @@ import { displayMarks, stripQuestionHeadingFromPassage, stripQuestionNumberPrefi
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { PassageBlock, QuestionImageGrid, RichMathText } from "@/components/quiz/QuestionStimulus";
+import { PassageBlock, QuestionImageGrid } from "@/components/quiz/QuestionStimulus";
+import { RichQuestionContent } from "@/components/quiz/RichQuestionContent";
 import { AttachAnswerSection } from "@/components/quiz/AttachAnswerSection";
 import { PeerScansDialog } from "@/components/quiz/PeerScansDialog";
 import { CheckCircle2, XCircle, Send } from "lucide-react";
@@ -42,6 +43,7 @@ export function ShortQuestion({
   const [submitted, setSubmitted] = useState(false);
   const [isCorrect, setIsCorrect] = useState(false);
   const [myImages, setMyImages] = useState<string[]>([]);
+  const [viewedBeforeSubmit, setViewedBeforeSubmit] = useState(false);
   const [yourPeerRating, setYourPeerRating] = useState<{
     average: number | null;
     count: number;
@@ -49,6 +51,11 @@ export function ShortQuestion({
 
   const showUpload =
     Boolean(subjectId && questionKey && enableAnswerUpload);
+  const uploadOnlyPrompt =
+    showUpload &&
+    /\b(draw|sketch|graph|diagram|plot|illustrate|show that|hence show)\b/i.test(
+      `${question.question ?? ""} ${question.topic ?? ""} ${question.guidance ?? ""} ${question.passage ?? ""}`,
+    );
 
   useEffect(() => {
     if (lockedCorrect) {
@@ -94,9 +101,11 @@ export function ShortQuestion({
   }, [showUpload, subjectId, questionKey]);
 
   const canSubmit =
-    (!!answer.trim() || (showUpload && myImages.length > 0)) &&
-    !submitted &&
-    !disabled;
+    (!uploadOnlyPrompt && (!!answer.trim() || (showUpload && myImages.length > 0)) &&
+      !submitted &&
+      !disabled);
+  const canSaveUploadOnly =
+    uploadOnlyPrompt && showUpload && myImages.length > 0 && !submitted && !disabled;
 
   const handleSubmit = () => {
     if (!canSubmit) return;
@@ -109,9 +118,11 @@ export function ShortQuestion({
       );
     }
 
+    const forfeitsMarks = viewedBeforeSubmit;
+    const awardedCorrect = forfeitsMarks ? false : correct;
     setIsCorrect(correct);
     setSubmitted(true);
-    onAnswer(correct);
+    onAnswer(awardedCorrect);
 
     if (showUpload && subjectId && questionKey) {
       void apiFetch(writtenApiPath(subjectId, questionKey), {
@@ -122,6 +133,18 @@ export function ShortQuestion({
         }),
       }).catch(() => {});
     }
+  };
+
+  const handleUploadOnlySave = () => {
+    if (!canSaveUploadOnly || !showUpload || !subjectId || !questionKey) return;
+    setSubmitted(true);
+    void apiFetch(writtenApiPath(subjectId, questionKey), {
+      method: "PUT",
+      body: JSON.stringify({
+        responseText: answer,
+        imageUrls: myImages,
+      }),
+    }).catch(() => {});
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -160,7 +183,7 @@ export function ShortQuestion({
         {displayMarks(question.marks, question.type) === 1 ? "mark" : "marks"}
       </p>
       <div className="font-display text-lg leading-relaxed text-foreground sm:text-xl">
-        <RichMathText
+        <RichQuestionContent
           text={stripQuestionNumberPrefix(question.question)}
           className="prose prose-sm max-w-none prose-p:my-0"
         />
@@ -169,7 +192,7 @@ export function ShortQuestion({
       {/* Guidance */}
       {question.guidance && (
         <div className="rounded-lg bg-amber/10 px-4 py-3 text-sm text-amber">
-          <RichMathText text={question.guidance} className="prose prose-sm max-w-none prose-p:my-0" />
+          <RichQuestionContent text={question.guidance} className="prose prose-sm max-w-none prose-p:my-0" />
         </div>
       )}
 
@@ -187,6 +210,12 @@ export function ShortQuestion({
                   currentUserId={user.id}
                   label="View"
                   className="w-auto border-black/15 bg-white px-4 py-2 text-xs font-semibold"
+                  requireConfirmBeforeOpen={!submitted}
+                  onViewedBeforeSubmit={() => setViewedBeforeSubmit(true)}
+                  modelWorking={{
+                    text: question.guidance ?? undefined,
+                    imageUrls: question.answerImageUrls ?? [],
+                  }}
                 />
               ) : null
             }
@@ -206,28 +235,43 @@ export function ShortQuestion({
 
       {/* Answer input */}
       <div className="space-y-3">
-        <div className="flex gap-2">
-          <Input
-            value={answer}
-            onChange={(e) => setAnswer(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Type your answer..."
-            disabled={submitted || disabled}
-            className={cn(
-              "flex-1 bg-white/60 text-base",
-              submitted && isCorrect && "border-success/60 bg-success/5",
-              submitted && !isCorrect && "border-danger/60 bg-danger/5"
-            )}
-          />
-          <Button
-            onClick={handleSubmit}
-            disabled={!canSubmit}
-            className="shrink-0 gap-2 bg-brand hover:bg-brand-dark"
-          >
-            <Send className="size-4" />
-            Submit
-          </Button>
-        </div>
+        {!uploadOnlyPrompt ? (
+          <div className="flex gap-2">
+            <Input
+              value={answer}
+              onChange={(e) => setAnswer(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Type your answer..."
+              disabled={submitted || disabled}
+              className={cn(
+                "flex-1 bg-white/60 text-base",
+                submitted && isCorrect && "border-success/60 bg-success/5",
+                submitted && !isCorrect && "border-danger/60 bg-danger/5"
+              )}
+            />
+            <Button
+              onClick={handleSubmit}
+              disabled={!canSubmit}
+              className="shrink-0 gap-2 bg-brand hover:bg-brand-dark"
+            >
+              <Send className="size-4" />
+              Submit
+            </Button>
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm text-muted-foreground">
+              Upload-only question: submit is disabled. Save your upload for peer review.
+            </p>
+            <Button
+              onClick={handleUploadOnlySave}
+              disabled={!canSaveUploadOnly}
+              className="gap-2 bg-brand hover:bg-brand-dark"
+            >
+              Save upload
+            </Button>
+          </div>
+        )}
 
         {/* Feedback */}
         {submitted && (
@@ -247,6 +291,18 @@ export function ShortQuestion({
                 <span className="text-muted-foreground">
                   {" "}
                   (image upload — compare with the solution below)
+                </span>
+              </div>
+            ) : uploadOnlyPrompt ? (
+              <div>
+                <span className="font-medium">
+                  Upload saved for peer review.
+                </span>
+              </div>
+            ) : isCorrect && viewedBeforeSubmit ? (
+              <div>
+                <span className="font-medium">
+                  Correct, but marks are forfeited because you viewed working before submitting.
                 </span>
               </div>
             ) : isCorrect ? (

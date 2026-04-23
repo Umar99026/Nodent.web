@@ -111,7 +111,6 @@ export default function DashboardPage() {
     points: number;
     bestSubjectId: string | null;
     weakestSubjectId: string | null;
-    dojoWins: number;
     studyStreak: number;
   }
 
@@ -349,18 +348,6 @@ export default function DashboardPage() {
                       <div className="text-sm text-muted-foreground">
                         Consecutive days meeting your study goal (synced when you use
                         Track My Study while signed in).
-                      </div>
-                    </div>
-
-                    <div className="space-y-2 rounded-2xl border border-border/50 bg-card/40 p-5">
-                      <div className="text-xs text-muted-foreground">
-                        Dojo battles won
-                      </div>
-                      <div className="font-display text-xl font-semibold tabular-nums">
-                        {scoreCard?.dojoWins ?? 0}
-                      </div>
-                      <div className="text-sm text-muted-foreground">
-                        Completed PvP matches where you finished ahead.
                       </div>
                     </div>
                   </div>

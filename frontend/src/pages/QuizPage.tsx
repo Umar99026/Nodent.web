@@ -34,6 +34,7 @@ import { CommentThread } from "@/components/quiz/CommentThread";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { EnglishPracticePanel } from "@/pages/EnglishPracticePage";
 import {
   Select,
   SelectContent,
@@ -500,6 +501,14 @@ export default function QuizPage() {
         <div className="flex items-center justify-center py-20">
           <Loader2 className="size-6 animate-spin text-brand" />
         </div>
+      </AppShell>
+    );
+  }
+
+  if (subjectId === "english") {
+    return (
+      <AppShell title="English Practice" subtitle="Select a book, write responses, and rate peers.">
+        <EnglishPracticePanel />
       </AppShell>
     );
   }

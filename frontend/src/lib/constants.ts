@@ -67,6 +67,7 @@ export const API_PATHS = {
     subjects: "/api/admin/subjects",
     questions: "/api/admin/questions",
     questionsBulk: "/api/admin/questions/bulk",
+    questionsAttachImagesBulk: "/api/admin/questions/attach-images-bulk",
     questionsReassignSubject: "/api/admin/questions/reassign-subject",
     users: "/api/admin/users",
     stats: "/api/admin/stats",
@@ -76,5 +77,13 @@ export const API_PATHS = {
     pdfPreview: "/api/admin/pdf/preview",
     pdfGenerate: "/api/admin/pdf/generate",
     pdfPublish: "/api/admin/pdf/publish",
+    englishPromptsBulk: "/api/admin/english/prompts/bulk",
+    englishPrompts: "/api/admin/english/prompts",
+  },
+  english: {
+    books: "/api/english/books",
+    prompts: "/api/english/prompts",
+    responses: "/api/english/responses",
+    rateResponse: (responseId: number | string) => `/api/english/responses/${responseId}/rate`,
   },
 } as const;

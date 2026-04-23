@@ -1,3 +1,4 @@
+import { NodentWordmark } from "@/components/branding/NodentWordmark";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -80,21 +81,30 @@ export function AppSidebar() {
     >
       {/* Logo */}
       <SidebarHeader className="px-4 pt-5 pb-0 group-data-[collapsible=icon]:px-2">
-        <div className="flex items-center gap-3 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand group-data-[collapsible=icon]:h-9 group-data-[collapsible=icon]:w-9">
+        <div className="group-data-[collapsible=icon]:hidden">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand">
+              <img
+                src="/logo.png"
+                alt="Nodent logo"
+                className="h-7 w-7 object-contain"
+              />
+            </div>
+            <NodentWordmark
+              size="sm"
+              variant="onDark"
+              className="-ml-0.5 pb-2.5"
+            />
+          </div>
+        </div>
+        {/* Collapsed: logo only */}
+        <div className="hidden justify-center group-data-[collapsible=icon]:flex">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand">
             <img
               src="/logo.png"
               alt="Nodent logo"
               className="h-7 w-7 object-contain"
             />
-          </div>
-          <div className="flex flex-col group-data-[collapsible=icon]:hidden">
-            <span className="font-display text-lg tracking-tight text-white">
-              Nodent
-            </span>
-            <span className="text-[11px] leading-tight text-white/35 font-medium">
-              VCE Study Platform
-            </span>
           </div>
         </div>
       </SidebarHeader>

@@ -12,7 +12,8 @@ import type { Question, Subject } from "@/lib/subjects";
 import { questionKeyStable, getStableQuestionIndex } from "@/lib/practiceKeys";
 import { randomizedQuestionsForSubject } from "@/lib/quizShuffle";
 import { buildGroupsFromOrderedFlat } from "@/lib/questionGroups";
-import { PassageBlock, QuestionImageGrid, RichMathText } from "@/components/quiz/QuestionStimulus";
+import { PassageBlock, QuestionImageGrid } from "@/components/quiz/QuestionStimulus";
+import { RichQuestionContent } from "@/components/quiz/RichQuestionContent";
 import { McqQuestion } from "@/components/quiz/McqQuestion";
 import { ShortQuestion } from "@/components/quiz/ShortQuestion";
 import { LongQuestion } from "@/components/quiz/LongQuestion";
@@ -192,14 +193,14 @@ function StudyLongPart({
         {displayMarks(part.marks, part.type) === 1 ? "mark" : "marks"}
       </p>
       <div className="font-display text-lg leading-relaxed text-foreground sm:text-xl">
-        <RichMathText
+        <RichQuestionContent
           text={stripQuestionNumberPrefix(part.question)}
           className="prose prose-sm max-w-none prose-p:my-0"
         />
       </div>
       {part.guidance && (
         <div className="flex items-start gap-3 rounded-lg bg-amber/10 px-4 py-3 text-sm text-amber">
-          <RichMathText text={part.guidance} className="prose prose-sm max-w-none prose-p:my-0" />
+          <RichQuestionContent text={part.guidance} className="prose prose-sm max-w-none prose-p:my-0" />
         </div>
       )}
       <Textarea

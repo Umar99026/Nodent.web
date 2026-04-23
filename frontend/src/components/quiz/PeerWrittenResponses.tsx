@@ -34,6 +34,10 @@ type Props = {
   /** Hide the built-in title blurb (e.g. when the dialog already has a title). */
   hideIntro?: boolean;
   className?: string;
+  modelWorking?: {
+    text?: string;
+    imageUrls?: string[];
+  };
 };
 
 function PeerRateRow({
@@ -134,6 +138,7 @@ export function PeerWrittenResponses({
   enabled = true,
   hideIntro = false,
   className,
+  modelWorking,
 }: Props) {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
@@ -197,6 +202,9 @@ export function PeerWrittenResponses({
   const hasAny =
     rows.some((r) => (r.text ?? "").trim().length > 0) ||
     rows.some((r) => Array.isArray(r.imageUrls) && r.imageUrls.length > 0);
+  const hasModelWorking =
+    (modelWorking?.text ?? "").trim().length > 0 ||
+    (modelWorking?.imageUrls?.length ?? 0) > 0;
 
   return (
     <div
@@ -232,13 +240,32 @@ export function PeerWrittenResponses({
         <p className="text-sm text-destructive">{error}</p>
       ) : loading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
-      ) : !hasAny ? (
+      ) : !hasAny && !hasModelWorking ? (
         <p className="text-sm text-muted-foreground">
           No one else has shared working here yet. Save text or attach images so others can see and
           rate your answer.
         </p>
       ) : (
-        <div className="space-y-3">
+        <div className="grid gap-3 md:grid-cols-2">
+          {hasModelWorking ? (
+            <div className="rounded-xl border border-brand/30 bg-brand/5 p-3">
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-brand">
+                Worked solution (provided)
+              </p>
+              {(modelWorking?.text ?? "").trim() ? (
+                <div className="whitespace-pre-wrap text-sm text-foreground/90">
+                  {modelWorking?.text}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">(image working)</p>
+              )}
+              {(modelWorking?.imageUrls?.length ?? 0) > 0 ? (
+                <div className="mt-2">
+                  <QuestionImageGrid urls={modelWorking?.imageUrls} title="Model working" />
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           {rows.slice(0, 25).map((r, idx) => {
             const hasText = (r.text ?? "").trim().length > 0;
             const imgs = Array.isArray(r.imageUrls) ? r.imageUrls : [];
@@ -246,7 +273,7 @@ export function PeerWrittenResponses({
             return (
               <div
                 key={`${r.userId}-${r.updatedAt ?? idx}`}
-                className="rounded-lg border border-black/10 bg-white/70 p-3"
+                className="rounded-xl border border-black/10 bg-white/70 p-3"
               >
                 <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                   Student ·{" "}
