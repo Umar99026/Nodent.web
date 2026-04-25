@@ -24,7 +24,6 @@ import {
   getAllPartsInGroup,
   type QuestionStimulusGroup,
 } from "@/lib/questionGroups";
-import { questionSupportsAnswerUpload } from "@/lib/writtenAnswerUpload";
 import { stripQuestionHeadingFromPassage } from "@/lib/questionDisplay";
 import { AppShell } from "@/components/layout/AppShell";
 import { McqQuestion } from "@/components/quiz/McqQuestion";
@@ -686,11 +685,6 @@ export default function QuizPage() {
                           {part.type === "short" && (
                             <ShortQuestion
                               question={part}
-                              subjectId={subjectId}
-                              questionKey={qk}
-                              enableAnswerUpload={questionSupportsAnswerUpload(
-                                part,
-                              )}
                               hidePassage={hidePassage}
                               lockedCorrect={lockedCorrect}
                               onAnswer={(correct) =>

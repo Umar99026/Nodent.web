@@ -1,5 +1,4 @@
 import { useEffect, useState, Fragment } from "react";
-import { useAuth } from "@/context/AuthContext";
 import { cn, getQuestionTypeLabel, normalizeAnswer } from "@/lib/utils";
 import type { LongQuestion as LongQuestionType } from "@/lib/subjects";
 import { apiFetch } from "@/lib/api";
@@ -8,8 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { PassageBlock, QuestionImageGrid } from "@/components/quiz/QuestionStimulus";
 import { RichQuestionContent } from "@/components/quiz/RichQuestionContent";
-import { AttachAnswerSection } from "@/components/quiz/AttachAnswerSection";
-import { PeerScansDialog } from "@/components/quiz/PeerScansDialog";
 import { writtenApiPath } from "@/lib/writtenAnswerUpload";
 import { displayMarks, stripQuestionHeadingFromPassage, stripQuestionNumberPrefix } from "@/lib/questionDisplay";
 import { toast } from "sonner";
@@ -42,14 +39,10 @@ export function LongQuestion({
   lockedCorrect = false,
   classFullyCorrectPercent,
 }: LongQuestionProps) {
-  const { user } = useAuth();
   const [response, setResponse] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [autoMarkResult, setAutoMarkResult] = useState<boolean | null>(null);
-  const [myImages, setMyImages] = useState<string[]>([]);
-  const [viewedBeforeSubmit, setViewedBeforeSubmit] = useState(false);
-  const [forfeitedMarks, setForfeitedMarks] = useState(false);
   const [yourPeerRating, setYourPeerRating] = useState<{
     average: number | null;
     count: number;
@@ -60,7 +53,7 @@ export function LongQuestion({
     const load = async () => {
       try {
         const data = await apiFetch<{
-          response: { text: string; imageUrls?: string[] } | null;
+          response: { text: string } | null;
           yourPeerRating?: { average: number | null; count: number };
         }>(writtenApiPath(subjectId, questionKey));
         if (cancelled) return;
@@ -73,9 +66,7 @@ export function LongQuestion({
         if (data?.response) {
           const t = data.response.text?.trim();
           if (t) setResponse((prev) => (prev.trim() ? prev : t));
-          if (Array.isArray(data.response.imageUrls))
-            setMyImages(data.response.imageUrls);
-          if (t || (Array.isArray(data.response.imageUrls) && data.response.imageUrls.length > 0)) {
+          if (t) {
             setSaved(true);
           }
         }
@@ -98,7 +89,7 @@ export function LongQuestion({
   }, [subjectId, questionKey]);
 
   const handleSave = async () => {
-    if ((!response.trim() && myImages.length === 0) || saving || disabled) return;
+    if (!response.trim() || saving || disabled || saved) return;
 
     setSaving(true);
     try {
@@ -106,7 +97,6 @@ export function LongQuestion({
         method: "PUT",
         body: JSON.stringify({
           responseText: response,
-          imageUrls: myImages,
         }),
       });
       setSaved(true);
@@ -123,10 +113,8 @@ export function LongQuestion({
           (accepted) => normalizeAnswer(accepted) === normalized,
         );
       }
-      const forfeits = viewedBeforeSubmit && result === true;
-      setForfeitedMarks(forfeits);
       setAutoMarkResult(result);
-      onAnswer(forfeits ? false : result);
+      onAnswer(result);
       if (result === true) toast.success("Answer saved. Marked correct.");
       else if (result === false)
         toast.error("Answer saved. Not quite right yet.");
@@ -188,29 +176,6 @@ export function LongQuestion({
         title="Solution / marking scheme"
       />
 
-      <AttachAnswerSection
-        images={myImages}
-        onImagesChange={setMyImages}
-        disabled={disabled}
-        inlineAction={
-          user ? (
-            <PeerScansDialog
-              subjectId={subjectId}
-              questionKey={questionKey}
-              currentUserId={user.id}
-              label="View"
-              className="w-auto border-black/15 bg-white px-4 py-2 text-xs font-semibold"
-              requireConfirmBeforeOpen={!saved}
-              onViewedBeforeSubmit={() => setViewedBeforeSubmit(true)}
-              modelWorking={{
-                text: question.guidance ?? question.answer ?? undefined,
-                imageUrls: question.answerImageUrls ?? [],
-              }}
-            />
-          ) : null
-        }
-      />
-
       {yourPeerRating.count > 0 && yourPeerRating.average != null ? (
         <p className="text-sm text-muted-foreground">
           Your peer rating average:{" "}
@@ -238,7 +203,7 @@ export function LongQuestion({
           onChange={(e) => setResponse(e.target.value)}
           placeholder="Write your response here..."
           rows={12}
-          disabled={disabled}
+          disabled={disabled || saved}
           className={cn(
             "bg-white/60 text-sm leading-relaxed resize-y",
             saved && "border-success/40"
@@ -250,7 +215,7 @@ export function LongQuestion({
           <Button
             onClick={handleSave}
             disabled={
-              (!response.trim() && myImages.length === 0) || saving || disabled
+              !response.trim() || saving || disabled || saved
             }
             className="gap-2 bg-brand hover:bg-brand-dark"
           >
@@ -259,19 +224,19 @@ export function LongQuestion({
             ) : (
               <Save className="size-4" />
             )}
-            {saved ? "Update Answer" : "Save Answer"}
+            {saved ? "Saved" : "Save Answer"}
           </Button>
         </div>
         {saved && autoMarkResult !== null && (
           <div
             className={cn(
               "flex items-start gap-3 rounded-lg px-4 py-3 text-sm",
-              autoMarkResult && !forfeitedMarks
+              autoMarkResult
                 ? "bg-success/10 text-success"
                 : "bg-danger/10 text-danger",
             )}
           >
-            {autoMarkResult && !forfeitedMarks ? (
+            {autoMarkResult ? (
               <>
                 <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
                 <span className="font-medium">Correct! Well done.</span>
@@ -279,15 +244,9 @@ export function LongQuestion({
             ) : (
               <>
                 <XCircle className="mt-0.5 size-4 shrink-0" />
-                {forfeitedMarks ? (
-                  <span className="font-medium">
-                    Correct, but marks are forfeited because you viewed working before submitting.
-                  </span>
-                ) : (
-                  <span className="font-medium">
-                    Not quite — keep working on this one.
-                  </span>
-                )}
+                <span className="font-medium">
+                  Not quite — keep working on this one.
+                </span>
               </>
             )}
           </div>

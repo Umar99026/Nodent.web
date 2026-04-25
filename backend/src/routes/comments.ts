@@ -13,7 +13,7 @@ comments.get("/:subjectId/:questionKey", authMiddleware, async (c) => {
   const questionKey = c.req.param("questionKey");
 
   const rows = await db.execute(sql`
-    SELECT qc.id, qc.parent_comment_id, qc.text, qc.created_at,
+    SELECT qc.id, qc.parent_comment_id, qc.text, qc.image_urls, qc.created_at,
            u.username, u.id AS user_id
     FROM quiz_comments qc
     JOIN users u ON u.id = qc.user_id
@@ -26,6 +26,7 @@ comments.get("/:subjectId/:questionKey", authMiddleware, async (c) => {
       id: row.id,
       parentCommentId: row.parent_comment_id,
       text: row.text,
+      imageUrls: row.image_urls ? JSON.parse(String(row.image_urls)) : [],
       time: row.created_at,
       username: row.username,
       userId: row.user_id,
@@ -41,13 +42,16 @@ comments.post("/:subjectId/:questionKey", authMiddleware, async (c) => {
   const body = await c.req.json();
 
   const text = cleanText(body.text, 1000);
+  const imageUrls = Array.isArray((body as any)?.imageUrls)
+    ? (body as any).imageUrls.map(String).map((s: string) => s.trim()).filter(Boolean)
+    : [];
   const rawParent = body.parentCommentId;
   const parentCommentId =
     rawParent === null || rawParent === undefined || rawParent === ""
       ? null
       : Number(rawParent);
 
-  if (!text) {
+  if (!text && imageUrls.length === 0) {
     return c.json({ error: "Comment cannot be empty." }, 400);
   }
 
@@ -77,7 +81,8 @@ comments.post("/:subjectId/:questionKey", authMiddleware, async (c) => {
       questionKey,
       userId: user.id,
       parentCommentId,
-      text,
+      text: text || "",
+      imageUrls: imageUrls.length ? JSON.stringify(imageUrls) : null,
       createdAt,
     })
     .returning({ id: quizComments.id });
@@ -87,6 +92,7 @@ comments.post("/:subjectId/:questionKey", authMiddleware, async (c) => {
       id: result[0].id,
       parentCommentId,
       text,
+      imageUrls,
       time: createdAt,
       username: user.username,
       userId: user.id,

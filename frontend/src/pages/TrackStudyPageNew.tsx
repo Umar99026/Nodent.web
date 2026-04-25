@@ -41,8 +41,6 @@ import {
   CartesianGrid,
 } from "recharts";
 import {
-  Clock,
-  Target,
   Play,
   Pause,
   Maximize2,
@@ -50,8 +48,6 @@ import {
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
-
-type RangeMode = "day" | "week";
 
 const FS_SCALE_STORAGE = "nodent_study_timer_fs_scale";
 const FS_SCALE_MIN = 0.55;
@@ -89,6 +85,12 @@ function dateString(d: Date): string {
 
 function studyStorageKey(userId: string, date: string): string {
   return STORAGE_KEYS.studyPrefix + userId + "_" + date;
+}
+
+function shortXAxisLabel(label: string): string {
+  const cleaned = String(label ?? "").trim();
+  if (cleaned.length <= 11) return cleaned;
+  return `${cleaned.slice(0, 10)}…`;
 }
 
 function loadDay(userId: string, date: string): any | null {
@@ -132,7 +134,6 @@ export default function TrackStudyPageNew() {
     setRunningSession,
   } = useStudyTimer();
 
-  const [rangeMode, setRangeMode] = useState<RangeMode>("day");
   const [timerFullscreen, setTimerFullscreen] = useState(false);
   const [fullscreenScale, setFullscreenScale] = useState(1);
   const fullscreenScaleRef = useRef(fullscreenScale);
@@ -361,39 +362,161 @@ export default function TrackStudyPageNew() {
   return (
     <AppShell title="Track My Study" subtitle="Run your timer and track progress.">
       <div className="mx-auto max-w-6xl space-y-6 text-[#0b0f19]">
-        <div className="flex justify-end">
-          <div className="hidden sm:flex items-center gap-2 rounded-full border border-black/10 bg-white px-4 py-2 text-sm text-[#0b0f19]/70">
-            <Clock className="size-4 text-brand" />
-            {state.phase === "break" ? "Take a break" : "Study time"}
-          </div>
+        {/* Top analytics row */}
+        <div className="grid gap-6 lg:grid-cols-3">
+          <Card className="border-black/10 bg-white text-[#0b0f19] shadow-xl">
+            <CardHeader className="pb-3">
+              <CardTitle className="font-display text-xl">Today Breakdown</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div style={{ width: "100%", height: 220 }}>
+                <ResponsiveContainer>
+                  <BarChart
+                    data={daySubjectRows.map((r) => ({
+                      name: r.subjectName,
+                      minutes: r.seconds / 60,
+                      seconds: r.seconds,
+                    }))}
+                  >
+                    <CartesianGrid stroke="rgba(0,0,0,0.10)" strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="name"
+                      tick={{ fill: "rgba(15,23,42,0.75)", fontSize: 12 }}
+                      interval={0}
+                      tickFormatter={shortXAxisLabel}
+                      angle={-24}
+                      textAnchor="end"
+                      height={58}
+                      tickMargin={8}
+                    />
+                    <YAxis
+                      tick={{ fill: "rgba(15,23,42,0.75)" }}
+                      domain={[0, Math.max(1, state.goalMinutes)]}
+                      allowDataOverflow
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "rgba(255,255,255,0.98)",
+                        border: "1px solid rgba(15,23,42,0.12)",
+                        color: "#0b0f19",
+                      }}
+                      formatter={(value, _name, item) => {
+                        const sec = (item?.payload as { seconds?: number })?.seconds;
+                        const s = typeof sec === "number" ? sec : Math.round(Number(value) * 60);
+                        return [formatSeconds(s), "Time"];
+                      }}
+                    />
+                    <Bar dataKey="minutes" fill="#56abe6" radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-black/10 bg-white text-[#0b0f19] shadow-xl">
+            <CardHeader className="pb-3">
+              <CardTitle className="font-display text-xl">Weekly Progress</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between rounded-xl border border-black/10 bg-slate-50 px-4 py-3">
+                <span className="text-sm text-[#0b0f19]/70">This week total</span>
+                <span className="font-semibold tabular-nums">{formatSeconds(weekData?.weeklySeconds ?? 0)}</span>
+              </div>
+              <div style={{ width: "100%", height: 190 }}>
+                <ResponsiveContainer>
+                  <LineChart
+                    data={(weekData?.perDay ?? []).map((d) => ({
+                      date: d.date,
+                      minutes: d.seconds / 60,
+                      goal: state.goalMinutes,
+                      seconds: d.seconds,
+                    }))}
+                    margin={{ top: 10, right: 10, left: -10, bottom: 10 }}
+                  >
+                    <CartesianGrid stroke="rgba(0,0,0,0.10)" strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fill: "rgba(15,23,42,0.75)", fontSize: 12 }}
+                      interval="preserveStartEnd"
+                      minTickGap={18}
+                    />
+                    <YAxis
+                      tick={{ fill: "rgba(15,23,42,0.75)" }}
+                      domain={[0, Math.max(1, state.goalMinutes)]}
+                      allowDataOverflow
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "rgba(255,255,255,0.98)",
+                        border: "1px solid rgba(15,23,42,0.12)",
+                        color: "#0b0f19",
+                      }}
+                      formatter={(v, name, item) => {
+                        if (String(name) === "goal") return [`${v} min`, "Goal"];
+                        const sec = (item?.payload as { seconds?: number })?.seconds;
+                        const s = typeof sec === "number" ? sec : Math.round(Number(v) * 60);
+                        return [formatSeconds(s), "Time"];
+                      }}
+                    />
+                    <Line type="monotone" dataKey="minutes" stroke="#56abe6" strokeWidth={3} dot={{ r: 3 }} />
+                    <Line type="monotone" dataKey="goal" stroke="rgba(15,23,42,0.45)" strokeDasharray="6 6" />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-black/10 bg-white text-[#0b0f19] shadow-xl">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center justify-between gap-3 font-display text-xl">
+                <span>Today by Subject</span>
+                <span className="text-sm font-medium tabular-nums text-[#0b0f19]/70">
+                  {formatSeconds(state.dailySeconds)}
+                </span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Table className="text-[#0b0f19]">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-[#0b0f19]/60">Subject</TableHead>
+                    <TableHead className="text-right text-[#0b0f19]/60">Questions</TableHead>
+                    <TableHead className="text-right text-[#0b0f19]/60">Time</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {daySubjectRows.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={3} className="text-center text-[#0b0f19]/60">
+                        No study yet today.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    daySubjectRows.slice(0, 8).map((row) => (
+                      <TableRow key={row.subjectId}>
+                        <TableCell className="text-[#0b0f19]">{row.subjectName}</TableCell>
+                        <TableCell className="text-right font-medium text-[#0b0f19] tabular-nums">
+                          {row.questionsAnswered}
+                        </TableCell>
+                        <TableCell className="text-right font-medium text-[#0b0f19] tabular-nums">
+                          {formatSeconds(row.seconds)}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
         </div>
 
-        {/* Range toggle */}
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2 rounded-[999px] border border-black/10 bg-white p-2">
-              <Button
-                size="sm"
-                variant={rangeMode === "day" ? "default" : "ghost"}
-                className={rangeMode === "day" ? "rounded-full bg-brand text-white" : "rounded-full text-[#0b0f19]/70 hover:text-[#0b0f19]"}
-                onClick={() => setRangeMode("day")}
-              >
-                Today
-              </Button>
-              <Button
-                size="sm"
-                variant={rangeMode === "week" ? "default" : "ghost"}
-                className={rangeMode === "week" ? "rounded-full bg-brand text-white" : "rounded-full text-[#0b0f19]/70 hover:text-[#0b0f19]"}
-                onClick={() => setRangeMode("week")}
-              >
-                Week
-              </Button>
-            </div>
-
-          {/* Settings */}
-          <div className="flex flex-wrap items-end gap-4">
-            <div className="space-y-1">
-                <Label htmlFor="goal-minutes" className="text-xs text-[#0b0f19]/60">
-                  Goal (min/day)
+        {/* Daily goal row */}
+        <Card className="border-black/10 bg-white text-[#0b0f19] shadow-xl">
+          <CardContent className="pt-6">
+            <div className="grid gap-4 lg:grid-cols-[240px_1fr_auto] lg:items-end">
+              <div className="space-y-1">
+                <Label htmlFor="goal-minutes" className="text-xs font-semibold uppercase tracking-wide text-[#0b0f19]/60">
+                  Daily Goal (minutes)
                 </Label>
                 <Input
                   id="goal-minutes"
@@ -402,541 +525,373 @@ export default function TrackStudyPageNew() {
                   max={480}
                   value={state.goalMinutes}
                   onChange={(e) => setGoalMinutes(Number(e.target.value))}
-                  className="w-28 border-black/10 bg-white text-[#0b0f19]"
+                  className="w-full border-black/10 bg-white text-[#0b0f19]"
                 />
               </div>
-
-              <div className="space-y-1">
-                <Label htmlFor="session-minutes" className="text-xs text-[#0b0f19]/60">
-                  Session (min)
-                </Label>
-                <Input
-                  id="session-minutes"
-                  type="number"
-                  min={10}
-                  max={120}
-                  value={state.sessionMinutes}
-                  onChange={(e) => setSessionMinutes(Number(e.target.value))}
-                  disabled={state.phase === "session" && state.isRunning}
-                  className="w-28 border-black/10 bg-white text-[#0b0f19]"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <Label htmlFor="break-minutes" className="text-xs text-[#0b0f19]/60">
-                  Break (min)
-                </Label>
-                <Input
-                  id="break-minutes"
-                  type="number"
-                  min={0}
-                  max={90}
-                  value={state.breakMinutes}
-                  onChange={(e) => setBreakMinutes(Number(e.target.value))}
-                  className="w-28 border-black/10 bg-white text-[#0b0f19]"
-                />
-              </div>
-          </div>
-        </div>
-
-          {/* Main grid */}
-          <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-            {/* Timer */}
-            <Card className="border-black/10 bg-white text-[#0b0f19] shadow-xl">
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between gap-3">
-                  <CardTitle className="flex items-center gap-3 text-xl">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand">
-                      <img
-                        src="/logo.png"
-                        alt="Nodent logo"
-                        className="h-7 w-7 object-contain"
-                        draggable={false}
-                      />
-                    </div>
-                    <div className="flex min-w-0 flex-col">
-                      <span className="font-display font-bold leading-tight text-[#0b0f19]">
-                        Nodent
-                      </span>
-                      <span className="text-xs font-medium text-[#0b0f19]/55">
-                        {phaseLabel} timer
-                      </span>
-                    </div>
-                  </CardTitle>
-
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    className="h-9 w-9 rounded-full border-black/10 bg-white text-[#0b0f19] hover:bg-black/5"
-                    onClick={() => setTimerFullscreen(true)}
-                    aria-label="Fullscreen timer"
-                  >
-                    <Maximize2 className="size-4" />
-                  </Button>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-[#0b0f19]/70">Today's goal progress</span>
+                  <span className="font-semibold tabular-nums text-[#0b0f19]">
+                    {Math.min(100, goalPct * 100).toFixed(1)}%
+                  </span>
                 </div>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {/* Active subject selection */}
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <Progress value={Math.min(100, goalPct * 100)} className="h-3 bg-black/10" />
+                <p className="text-xs text-[#0b0f19]/55">
+                  {formatSeconds(state.dailySeconds)} studied today
+                </p>
+              </div>
+              <div className="rounded-xl border border-black/10 bg-slate-50 px-4 py-3 text-right">
+                <div className="text-xs text-[#0b0f19]/60">Current streak</div>
+                <div className="font-display text-2xl font-bold tabular-nums">{streak}</div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Timer + controls */}
+        <Card className="border-black/10 bg-white text-[#0b0f19] shadow-xl">
+          <CardHeader className="pb-3">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <CardTitle className="flex items-center gap-3 text-xl">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand">
+                  <img src="/logo.png" alt="Nodent logo" className="h-7 w-7 object-contain" draggable={false} />
+                </div>
+                <div className="flex min-w-0 flex-col">
+                  <span className="font-display font-bold leading-tight text-[#0b0f19]">Nodent</span>
+                  <span className="text-xs font-medium text-[#0b0f19]/55">{phaseLabel} timer</span>
+                </div>
+              </CardTitle>
+              <div className="flex flex-wrap items-end gap-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9 rounded-full border-black/10 bg-white text-[#0b0f19] hover:bg-black/5"
+                  onClick={() => setTimerFullscreen(true)}
+                  aria-label="Fullscreen timer"
+                >
+                  <Maximize2 className="size-4" />
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Timer control strip */}
+            <div className="rounded-2xl border border-black/10 bg-slate-50 p-4">
+              <div className="grid gap-3 md:grid-cols-[1fr_170px_170px] md:items-end">
+                <div className="space-y-1">
+                  <Label className="text-xs text-[#0b0f19]/60">Subject</Label>
                   <div className="text-sm text-[#0b0f19]/70">
-                    Studying:{" "}
+                    Active:{" "}
                     <span className="font-semibold text-[#0b0f19]">
                       {activeSubject?.name ?? "Select a subject"}
                     </span>
                   </div>
-                  <div className="w-full sm:w-64">
-                    <Select
-                      value={activeSubjectIdOrFirst}
-                      onValueChange={(val) => {
-                        if (!val) return;
-                        selectSubject(val);
-                      }}
-                    >
-                      <SelectTrigger className="bg-white border-brand/30 text-brand focus:ring-brand/30">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {baseSubjects.map((s) => (
-                          <SelectItem key={s.id} value={s.id}>
-                            {s.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
                 </div>
-
-                {/* Circular timer */}
-                <div className="flex items-center justify-center">
-                  <div className="relative" style={{ width: ringSize, height: ringSize }}>
-                    <svg width={ringSize} height={ringSize} viewBox={`0 0 ${ringSize} ${ringSize}`}>
-                      <circle
-                        cx={ringSize / 2}
-                        cy={ringSize / 2}
-                        r={radius}
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth={strokeWidth}
-                        className="text-slate-300"
-                      />
-                      <circle
-                        cx={ringSize / 2}
-                        cy={ringSize / 2}
-                        r={radius}
-                        fill="none"
-                        stroke="#94a3b8"
-                        strokeWidth={strokeWidth}
-                        strokeLinecap="round"
-                        strokeDasharray={circumference}
-                        strokeDashoffset={offset}
-                        className="transition-[stroke-dashoffset] duration-500 ease-out"
-                        style={{
-                          transform: "rotate(-90deg)",
-                          transformOrigin: "50% 50%",
-                        }}
-                      />
-                    </svg>
-                    <div className="absolute inset-0 flex flex-col items-center justify-center">
-                      <span className="font-display text-5xl font-bold tracking-tight">
-                        {formatSeconds(state.remainingSeconds)}
-                      </span>
-                      <span className="mt-2 text-sm text-[#0b0f19]/60">
-                        {state.phase === "break"
-                          ? "Break remaining"
-                          : state.isRunning
-                            ? "Session running"
-                            : "Session paused"}
-                      </span>
-                    </div>
-                  </div>
+                <div className="space-y-1">
+                  <Label htmlFor="session-minutes-inline" className="text-xs text-[#0b0f19]/60">
+                    Session (min)
+                  </Label>
+                  <Input
+                    id="session-minutes-inline"
+                    type="number"
+                    min={10}
+                    max={120}
+                    value={state.sessionMinutes}
+                    onChange={(e) => setSessionMinutes(Number(e.target.value))}
+                    disabled={state.phase === "session" && state.isRunning}
+                    className="w-full border-black/10 bg-white text-[#0b0f19]"
+                  />
                 </div>
-
-                {/* Manual Start / Stop */}
-                <div className="flex items-center justify-center gap-3 pt-1">
-                  <Button
-                    onClick={() => setRunningSession(!state.isRunning)}
-                    className={
-                      state.isRunning
-                        ? "bg-[#0b0f19] text-white hover:bg-[#0b0f19]/90 border border-transparent"
-                        : "bg-brand text-white hover:bg-brand-dark border border-transparent"
-                    }
-                  >
-                    {state.isRunning ? (
-                      <>
-                        <Pause className="size-4" />
-                        Stop timer
-                      </>
-                    ) : (
-                      <>
-                        <Play className="size-4" />
-                        Start timer
-                      </>
-                    )}
-                  </Button>
+                <div className="space-y-1">
+                  <Label htmlFor="break-minutes-inline" className="text-xs text-[#0b0f19]/60">
+                    Break (min)
+                  </Label>
+                  <Input
+                    id="break-minutes-inline"
+                    type="number"
+                    min={0}
+                    max={90}
+                    value={state.breakMinutes}
+                    onChange={(e) => setBreakMinutes(Number(e.target.value))}
+                    className="w-full border-black/10 bg-white text-[#0b0f19]"
+                  />
                 </div>
-
-                {/* Goal progress */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-[#0b0f19]/70 flex items-center gap-2">
-                      <Target className="size-4 text-brand" />
-                      Progress vs goal
-                    </span>
-                    <span className="font-semibold tabular-nums text-[#0b0f19]">
-                      {Math.min(100, goalPct * 100).toFixed(1)}%
-                    </span>
-                  </div>
-                <Progress
-                  value={Math.min(100, goalPct * 100)}
-                  className="h-3 bg-black/10"
-                />
-                </div>
-
-                {/* Streak */}
-                <Separator className="bg-black/10" />
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="text-sm text-[#0b0f19]/70">Streak</div>
-                  <div className="text-right">
-                    <div className="font-display text-3xl font-bold text-[#0b0f19]">
-                      {streak}
-                    </div>
-                    <div className="text-xs text-[#0b0f19]/55">
-                      days in a row reaching your goal
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {timerFullscreen && (
-              <div
-                ref={fsOverlayRef}
-                className="fixed inset-0 z-[200] overflow-x-auto overflow-y-auto overscroll-y-contain bg-black/80 [touch-action:pan-x_pan-y]"
-                role="dialog"
-                aria-modal="true"
-                aria-label="Fullscreen study timer"
-              >
-                {/* Fullscreen surface */}
-                <div
-                  className="flex min-h-[100dvh] w-full flex-col gap-3 pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] sm:gap-4 sm:pl-5 sm:pr-5"
+              </div>
+              <div className="mt-3">
+                <Select
+                  value={activeSubjectIdOrFirst}
+                  onValueChange={(val) => {
+                    if (!val) return;
+                    selectSubject(val);
+                  }}
                 >
-                  <div className="flex shrink-0 flex-wrap items-start justify-between gap-3">
-                    <div className="flex min-w-0 flex-1 flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
-                      <div className="flex w-fit max-w-full items-center gap-0.5 rounded-full border border-white/25 bg-white/10 px-1 py-1 text-white shadow-md">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="icon"
-                          className="h-9 w-9 shrink-0 rounded-full border-white/35 bg-transparent text-white hover:bg-white/15"
-                          onClick={() => nudgeFsScale(-FS_SCALE_STEP)}
-                          aria-label="Zoom out"
-                        >
-                          <ZoomOut className="size-4" />
-                        </Button>
-                        <span className="min-w-[2.75rem] px-1 text-center text-[11px] font-medium tabular-nums sm:min-w-[3.25rem] sm:text-sm">
-                          {Math.round(fullscreenScale * 100)}%
-                        </span>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="icon"
-                          className="h-9 w-9 shrink-0 rounded-full border-white/35 bg-transparent text-white hover:bg-white/15"
-                          onClick={() => nudgeFsScale(FS_SCALE_STEP)}
-                          aria-label="Zoom in"
-                        >
-                          <ZoomIn className="size-4" />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-9 rounded-full px-2.5 text-xs text-white hover:bg-white/15"
-                          onClick={() => setFullscreenScale(storeFsScale(1))}
-                        >
-                          Reset
-                        </Button>
-                      </div>
-                      <p className="text-[10px] leading-snug text-white/55 sm:text-xs">
-                        Pinch on the timer · Ctrl/⌘ + scroll to zoom
-                      </p>
-                    </div>
+                  <SelectTrigger className="bg-white border-brand/30 text-brand focus:ring-brand/30">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {baseSubjects.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Circular timer */}
+            <div className="flex items-center justify-center">
+              <div className="relative" style={{ width: ringSize, height: ringSize }}>
+                <svg width={ringSize} height={ringSize} viewBox={`0 0 ${ringSize} ${ringSize}`}>
+                  <circle
+                    cx={ringSize / 2}
+                    cy={ringSize / 2}
+                    r={radius}
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={strokeWidth}
+                    className="text-slate-300"
+                  />
+                  <circle
+                    cx={ringSize / 2}
+                    cy={ringSize / 2}
+                    r={radius}
+                    fill="none"
+                    stroke="#94a3b8"
+                    strokeWidth={strokeWidth}
+                    strokeLinecap="round"
+                    strokeDasharray={circumference}
+                    strokeDashoffset={offset}
+                    className="transition-[stroke-dashoffset] duration-500 ease-out"
+                    style={{
+                      transform: "rotate(-90deg)",
+                      transformOrigin: "50% 50%",
+                    }}
+                  />
+                </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="font-display text-5xl font-bold tracking-tight">
+                    {formatSeconds(state.remainingSeconds)}
+                  </span>
+                  <span className="mt-2 text-sm text-[#0b0f19]/60">
+                    {state.phase === "break"
+                      ? "Break remaining"
+                      : state.isRunning
+                        ? "Session running"
+                        : "Session paused"}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Manual Start / Stop */}
+            <div className="flex items-center justify-center gap-3 pt-1">
+              <Button
+                onClick={() => setRunningSession(!state.isRunning)}
+                className={
+                  state.isRunning
+                    ? "bg-[#0b0f19] text-white hover:bg-[#0b0f19]/90 border border-transparent"
+                    : "bg-brand text-white hover:bg-brand-dark border border-transparent"
+                }
+              >
+                {state.isRunning ? (
+                  <>
+                    <Pause className="size-4" />
+                    Stop timer
+                  </>
+                ) : (
+                  <>
+                    <Play className="size-4" />
+                    Start timer
+                  </>
+                )}
+              </Button>
+            </div>
+
+            <Separator className="bg-black/10" />
+            <div className="text-sm text-[#0b0f19]/65">
+              Timer is configured with your selected subject, session length, and break length.
+            </div>
+          </CardContent>
+        </Card>
+
+        {timerFullscreen && (
+          <div
+            ref={fsOverlayRef}
+            className="fixed inset-0 z-[200] overflow-x-auto overflow-y-auto overscroll-y-contain bg-black/80 [touch-action:pan-x_pan-y]"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Fullscreen study timer"
+          >
+            {/* Fullscreen surface */}
+            <div
+              className="flex min-h-[100dvh] w-full flex-col gap-3 pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] sm:gap-4 sm:pl-5 sm:pr-5"
+            >
+              <div className="flex shrink-0 flex-wrap items-start justify-between gap-3">
+                <div className="flex min-w-0 flex-1 flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
+                  <div className="flex w-fit max-w-full items-center gap-0.5 rounded-full border border-white/25 bg-white/10 px-1 py-1 text-white shadow-md">
                     <Button
                       type="button"
                       variant="outline"
                       size="icon"
-                      className="h-11 w-11 shrink-0 rounded-full border-white/25 bg-white/10 text-white shadow-md hover:bg-white/18 sm:h-12 sm:w-12"
-                      onClick={() => setTimerFullscreen(false)}
-                      aria-label="Exit fullscreen"
+                      className="h-9 w-9 shrink-0 rounded-full border-white/35 bg-transparent text-white hover:bg-white/15"
+                      onClick={() => nudgeFsScale(-FS_SCALE_STEP)}
+                      aria-label="Zoom out"
                     >
-                      <X className="size-[1.35rem] sm:size-5" strokeWidth={2.25} />
+                      <ZoomOut className="size-4" />
+                    </Button>
+                    <span className="min-w-[2.75rem] px-1 text-center text-[11px] font-medium tabular-nums sm:min-w-[3.25rem] sm:text-sm">
+                      {Math.round(fullscreenScale * 100)}%
+                    </span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-9 w-9 shrink-0 rounded-full border-white/35 bg-transparent text-white hover:bg-white/15"
+                      onClick={() => nudgeFsScale(FS_SCALE_STEP)}
+                      aria-label="Zoom in"
+                    >
+                      <ZoomIn className="size-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-9 rounded-full px-2.5 text-xs text-white hover:bg-white/15"
+                      onClick={() => setFullscreenScale(storeFsScale(1))}
+                    >
+                      Reset
                     </Button>
                   </div>
+                  <p className="text-[10px] leading-snug text-white/55 sm:text-xs">
+                    Pinch on the timer · Ctrl/⌘ + scroll to zoom
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-11 w-11 shrink-0 rounded-full border-white/25 bg-white/10 text-white shadow-md hover:bg-white/18 sm:h-12 sm:w-12"
+                  onClick={() => setTimerFullscreen(false)}
+                  aria-label="Exit fullscreen"
+                >
+                  <X className="size-[1.35rem] sm:size-5" strokeWidth={2.25} />
+                </Button>
+              </div>
 
-                  <div className="flex w-full flex-1 flex-col pb-2">
-                    <div
-                      ref={fsCardWrapRef}
-                      className="flex min-h-0 flex-1 flex-col rounded-3xl border border-white/10 bg-[#111418] text-white shadow-2xl"
-                    >
-                      <div className="flex flex-wrap items-center gap-4 border-b border-white/10 px-4 py-4 sm:px-8 sm:py-5">
-                        <div className="flex min-w-0 flex-1 items-center gap-3">
-                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand">
-                            <img
-                              src="/logo.png"
-                              alt="Nodent logo"
-                              className="h-8 w-8 object-contain"
-                              draggable={false}
-                            />
-                          </div>
-                          <div className="min-w-0">
-                            <div className="font-display text-[clamp(1.25rem,4.5vw,1.875rem)] font-bold leading-tight text-white">
-                              Nodent
-                            </div>
-                            <div className="text-[clamp(0.75rem,3vw,0.875rem)] text-white/60">
-                              {phaseLabel} •{" "}
-                              {state.phase === "break"
-                                ? "Take a break"
-                                : state.isRunning
-                                  ? "Session running"
-                                  : "Session paused"}
-                            </div>
-                          </div>
-                        </div>
+              <div className="flex w-full flex-1 flex-col pb-2">
+                <div
+                  ref={fsCardWrapRef}
+                  className="flex min-h-0 flex-1 flex-col rounded-3xl border border-white/10 bg-[#111418] text-white shadow-2xl"
+                >
+                  <div className="flex flex-wrap items-center gap-4 border-b border-white/10 px-4 py-4 sm:px-8 sm:py-5">
+                    <div className="flex min-w-0 flex-1 items-center gap-3">
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand">
+                        <img
+                          src="/logo.png"
+                          alt="Nodent logo"
+                          className="h-8 w-8 object-contain"
+                          draggable={false}
+                        />
                       </div>
-
-                      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-6 px-4 py-6 sm:gap-8 sm:px-8 sm:py-8">
-                        <div className="flex w-full justify-center">
-                          <div className="relative mx-auto aspect-square w-full max-w-[min(92vw,70dvh,760px)] shrink-0">
-                            <svg
-                              className="h-full w-full"
-                              viewBox="0 0 640 640"
-                              preserveAspectRatio="xMidYMid meet"
-                            >
-                              <circle
-                                cx={320}
-                                cy={320}
-                                r={292}
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth={20}
-                                className="text-white/15"
-                              />
-                              <circle
-                                cx={320}
-                                cy={320}
-                                r={292}
-                                fill="none"
-                                stroke="#94a3b8"
-                                strokeWidth={20}
-                                strokeLinecap="round"
-                                strokeDasharray={2 * Math.PI * 292}
-                                strokeDashoffset={
-                                  2 * Math.PI * 292 -
-                                  (progressPct / 100) * (2 * Math.PI * 292)
-                                }
-                                className="transition-[stroke-dashoffset] duration-500 ease-out"
-                                style={{
-                                  transform: "rotate(-90deg)",
-                                  transformOrigin: "50% 50%",
-                                }}
-                              />
-                            </svg>
-                            <div className="absolute inset-0 flex flex-col items-center justify-center px-[max(0.25rem,2vw)]">
-                              <div className="font-display text-[clamp(2rem,min(14vw,12dvh),7.5rem)] font-bold leading-none tracking-tight text-white">
-                                {formatSeconds(state.remainingSeconds)}
-                              </div>
-                              <div className="mt-[clamp(0.25rem,2dvh,1rem)] text-[clamp(0.7rem,3.2vw,1rem)] text-white/60">
-                                Remaining
-                              </div>
-                            </div>
-                          </div>
+                      <div className="min-w-0">
+                        <div className="font-display text-[clamp(1.25rem,4.5vw,1.875rem)] font-bold leading-tight text-white">
+                          Nodent
                         </div>
-
-                        <Button
-                          onClick={() => setRunningSession(!state.isRunning)}
-                          className={
-                            state.isRunning
-                              ? "min-h-12 w-full max-w-[520px] flex-wrap justify-center gap-2 bg-white text-[#0b0f19] hover:bg-white/90 sm:min-h-14"
-                              : "min-h-12 w-full max-w-[520px] flex-wrap justify-center gap-2 bg-brand text-white hover:bg-brand-dark sm:min-h-14"
-                          }
-                        >
-                          {state.isRunning ? (
-                            <>
-                              <Pause className="size-[clamp(1.1rem,3.5vw,1.5rem)] shrink-0" />
-                              <span className="text-center leading-snug">
-                                <span className="sm:hidden">Stop</span>
-                                <span className="hidden sm:inline">Stop timer</span>
-                              </span>
-                            </>
-                          ) : (
-                            <>
-                              <Play className="size-[clamp(1.1rem,3.5vw,1.5rem)] shrink-0" />
-                              <span className="text-center leading-snug">
-                                <span className="sm:hidden">Start</span>
-                                <span className="hidden sm:inline">Start timer</span>
-                              </span>
-                            </>
-                          )}
-                        </Button>
+                        <div className="text-[clamp(0.75rem,3vw,0.875rem)] text-white/60">
+                          {phaseLabel} •{" "}
+                          {state.phase === "break"
+                            ? "Take a break"
+                            : state.isRunning
+                              ? "Session running"
+                              : "Session paused"}
+                        </div>
                       </div>
                     </div>
+                  </div>
+
+                  <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-6 px-4 py-6 sm:gap-8 sm:px-8 sm:py-8">
+                    <div className="flex w-full justify-center">
+                      <div className="relative mx-auto aspect-square w-full max-w-[min(92vw,70dvh,760px)] shrink-0">
+                        <svg
+                          className="h-full w-full"
+                          viewBox="0 0 640 640"
+                          preserveAspectRatio="xMidYMid meet"
+                        >
+                          <circle
+                            cx={320}
+                            cy={320}
+                            r={292}
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth={20}
+                            className="text-white/15"
+                          />
+                          <circle
+                            cx={320}
+                            cy={320}
+                            r={292}
+                            fill="none"
+                            stroke="#94a3b8"
+                            strokeWidth={20}
+                            strokeLinecap="round"
+                            strokeDasharray={2 * Math.PI * 292}
+                            strokeDashoffset={
+                              2 * Math.PI * 292 -
+                              (progressPct / 100) * (2 * Math.PI * 292)
+                            }
+                            className="transition-[stroke-dashoffset] duration-500 ease-out"
+                            style={{
+                              transform: "rotate(-90deg)",
+                              transformOrigin: "50% 50%",
+                            }}
+                          />
+                        </svg>
+                        <div className="absolute inset-0 flex flex-col items-center justify-center px-[max(0.25rem,2vw)]">
+                          <div className="font-display text-[clamp(2rem,min(14vw,12dvh),7.5rem)] font-bold leading-none tracking-tight text-white">
+                            {formatSeconds(state.remainingSeconds)}
+                          </div>
+                          <div className="mt-[clamp(0.25rem,2dvh,1rem)] text-[clamp(0.7rem,3.2vw,1rem)] text-white/60">
+                            Remaining
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <Button
+                      onClick={() => setRunningSession(!state.isRunning)}
+                      className={
+                        state.isRunning
+                          ? "min-h-12 w-full max-w-[520px] flex-wrap justify-center gap-2 bg-white text-[#0b0f19] hover:bg-white/90 sm:min-h-14"
+                          : "min-h-12 w-full max-w-[520px] flex-wrap justify-center gap-2 bg-brand text-white hover:bg-brand-dark sm:min-h-14"
+                      }
+                    >
+                      {state.isRunning ? (
+                        <>
+                          <Pause className="size-[clamp(1.1rem,3.5vw,1.5rem)] shrink-0" />
+                          <span className="text-center leading-snug">
+                            <span className="sm:hidden">Stop</span>
+                            <span className="hidden sm:inline">Stop timer</span>
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <Play className="size-[clamp(1.1rem,3.5vw,1.5rem)] shrink-0" />
+                          <span className="text-center leading-snug">
+                            <span className="sm:hidden">Start</span>
+                            <span className="hidden sm:inline">Start timer</span>
+                          </span>
+                        </>
+                      )}
+                    </Button>
                   </div>
                 </div>
               </div>
-            )}
-
-            {/* Overview */}
-            <div className="space-y-6">
-            <Card className="border-black/10 bg-white text-[#0b0f19] shadow-xl">
-                <CardHeader className="pb-3">
-                  <CardTitle className="flex items-center justify-between gap-3 font-display text-xl">
-                    <span>
-                      {rangeMode === "day" ? "Today by Subject" : "This Week by Subject"}
-                    </span>
-                    <span className="text-sm font-medium tabular-nums text-[#0b0f19]/70">
-                      {rangeMode === "day"
-                        ? formatSeconds(state.dailySeconds)
-                        : formatSeconds(weekData?.weeklySeconds ?? 0)}
-                    </span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Table className="text-[#0b0f19]">
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="text-[#0b0f19]/60">Subject</TableHead>
-                        <TableHead className="text-right text-[#0b0f19]/60">Questions</TableHead>
-                        <TableHead className="text-right text-[#0b0f19]/60">Time</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {rangeMode === "day" ? (
-                        daySubjectRows.length === 0 ? (
-                          <TableRow>
-                            <TableCell colSpan={3} className="text-center text-[#0b0f19]/60">
-                              No study yet today.
-                            </TableCell>
-                          </TableRow>
-                        ) : (
-                          daySubjectRows.slice(0, 8).map((row) => (
-                            <TableRow key={row.subjectId}>
-                              <TableCell className="text-[#0b0f19]">{row.subjectName}</TableCell>
-                              <TableCell className="text-right font-medium text-[#0b0f19] tabular-nums">
-                                {row.questionsAnswered}
-                              </TableCell>
-                              <TableCell className="text-right font-medium text-[#0b0f19] tabular-nums">
-                                {formatSeconds(row.seconds)}
-                              </TableCell>
-                            </TableRow>
-                          ))
-                        )
-                      ) : weekData?.perSubjectRows?.length ? (
-                        weekData.perSubjectRows.slice(0, 8).map((row) => (
-                          <TableRow key={row.subjectId}>
-                            <TableCell className="text-[#0b0f19]">
-                              {row.subjectName}
-                            </TableCell>
-                            <TableCell className="text-right text-[#0b0f19]/40">—</TableCell>
-                            <TableCell className="text-right font-medium text-[#0b0f19] tabular-nums">
-                              {formatSeconds(row.seconds)}
-                            </TableCell>
-                          </TableRow>
-                        ))
-                      ) : (
-                        <TableRow>
-                        <TableCell colSpan={3} className="text-center text-[#0b0f19]/60">
-                            No study logged this week yet.
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-
-              <Card className="border-black/10 bg-white text-[#0b0f19] shadow-xl">
-                <CardHeader className="pb-3">
-                  <CardTitle className="font-display text-xl">
-                    {rangeMode === "day" ? "Breakdown (Graph)" : "Week Overview (Graph)"}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {rangeMode === "day" ? (
-                    <div style={{ width: "100%", height: 220 }}>
-                      <ResponsiveContainer>
-                        <BarChart
-                          data={daySubjectRows.map((r) => ({
-                            name: r.subjectName,
-                            minutes: r.seconds / 60,
-                            seconds: r.seconds,
-                          }))}
-                        >
-                          <CartesianGrid stroke="rgba(0,0,0,0.10)" strokeDasharray="3 3" />
-                          <XAxis dataKey="name" tick={{ fill: "rgba(15,23,42,0.75)", fontSize: 12 }} interval={0} />
-                          <YAxis
-                            tick={{ fill: "rgba(15,23,42,0.75)" }}
-                            domain={[0, Math.max(1, state.goalMinutes)]}
-                            allowDataOverflow
-                          />
-                          <Tooltip
-                            contentStyle={{ backgroundColor: "rgba(255,255,255,0.98)", border: "1px solid rgba(15,23,42,0.12)", color: "#0b0f19" }}
-                            formatter={(value, _name, item) => {
-                              const sec = (item?.payload as { seconds?: number })?.seconds;
-                              const s =
-                                typeof sec === "number"
-                                  ? sec
-                                  : Math.round(Number(value) * 60);
-                              return [formatSeconds(s), "Time"];
-                            }}
-                          />
-                          <Bar dataKey="minutes" fill="#56abe6" radius={[6, 6, 0, 0]} />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                  ) : weekData ? (
-                    <div style={{ width: "100%", height: 220 }}>
-                      <ResponsiveContainer>
-                        <LineChart
-                          data={weekData.perDay.map((d) => ({
-                            date: d.date,
-                            minutes: d.seconds / 60,
-                            goal: state.goalMinutes,
-                            seconds: d.seconds,
-                          }))}
-                          margin={{ top: 10, right: 10, left: -10, bottom: 10 }}
-                        >
-                          <CartesianGrid stroke="rgba(0,0,0,0.10)" strokeDasharray="3 3" />
-                          <XAxis dataKey="date" tick={{ fill: "rgba(15,23,42,0.75)", fontSize: 12 }} />
-                          <YAxis
-                            tick={{ fill: "rgba(15,23,42,0.75)" }}
-                            domain={[0, Math.max(1, state.goalMinutes)]}
-                            allowDataOverflow
-                          />
-                          <Tooltip
-                            contentStyle={{ backgroundColor: "rgba(255,255,255,0.98)", border: "1px solid rgba(15,23,42,0.12)", color: "#0b0f19" }}
-                            formatter={(v, name, item) => {
-                              if (String(name) === "goal") {
-                                return [`${v} min`, "Goal"];
-                              }
-                              const sec = (item?.payload as { seconds?: number })?.seconds;
-                              const s =
-                                typeof sec === "number"
-                                  ? sec
-                                  : Math.round(Number(v) * 60);
-                              return [formatSeconds(s), "Time"];
-                            }}
-                          />
-                          <Line type="monotone" dataKey="minutes" stroke="#56abe6" strokeWidth={3} dot={{ r: 3 }} />
-                          <Line type="monotone" dataKey="goal" stroke="rgba(15,23,42,0.45)" strokeDasharray="6 6" />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </div>
-                  ) : null}
-                </CardContent>
-              </Card>
             </div>
           </div>
-        </div>
+        )}
+      </div>
     </AppShell>
   );
 }

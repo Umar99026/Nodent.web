@@ -358,155 +358,155 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Section container */}
-      <div className="mt-2 min-w-0 max-w-full rounded-3xl border border-white/20 bg-white/10 p-4 backdrop-blur-md sm:mt-3 sm:p-6 lg:p-8">
-        {/* Section header */}
-        <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="flex items-center gap-3">
-              <h2 className="font-display text-xl font-semibold tracking-tight text-white">
-                My Subjects
-              </h2>
+      {/* Subjects container */}
+      <div className="mt-12 min-w-0 max-w-full rounded-3xl border border-white/20 bg-white/10 p-4 backdrop-blur-md sm:mt-14 sm:p-6 lg:mt-16 lg:p-8">
+          {/* Section header */}
+          <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="flex items-center gap-3">
+                <h2 className="font-display text-2xl font-bold tracking-tight text-white sm:text-3xl">
+                  My Subjects
+                </h2>
 
-              {/* Add subjects icon */}
-              <DropdownMenu>
-                <DropdownMenuTrigger>
-                  <div
-                    role="button"
-                    tabIndex={0}
-                    aria-label="Add subjects"
-                    className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-white/30 bg-white/15 text-white hover:bg-white/20"
-                  >
-                    <Plus className="size-4" />
-                  </div>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-[min(100vw-1.5rem,420px)] max-w-[calc(100vw-1.5rem)] p-0">
-                  <div className="px-4 pb-2 pt-3">
-                    <div className="relative">
-                      <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                      <Input
-                        placeholder="Search subjects..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="h-9 pl-8"
-                      />
+                {/* Add subjects icon */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger>
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      aria-label="Add subjects"
+                      className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-white/30 bg-white/15 text-white hover:bg-white/20"
+                    >
+                      <Plus className="size-4" />
                     </div>
-                  </div>
-                  <ScrollArea className="max-h-[320px] px-4 pb-4">
-                    {availableSubjects.length === 0 ? (
-                      <p className="py-6 text-center text-sm text-muted-foreground">
-                        {baseSubjects.length === 0
-                          ? "No subjects available yet."
-                          : "All subjects have been added or none match your search."}
-                      </p>
-                    ) : (
-                      <div className="space-y-2">
-                        {availableSubjects.map((subject) => (
-                          <button
-                            key={subject.id}
-                            onClick={() => addSubject(subject)}
-                            className="flex w-full items-center justify-between rounded-lg border border-border/50 bg-card/60 px-4 py-3 text-left transition-colors hover:bg-card"
-                          >
-                            <div>
-                              <p className="font-medium text-foreground">
-                                {subject.name}
-                              </p>
-                              <p className="mt-0.5 text-xs text-muted-foreground">
-                                {subject.description}
-                              </p>
-                            </div>
-                            <Plus className="size-4 shrink-0 text-brand" />
-                          </button>
-                        ))}
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="w-[min(100vw-1.5rem,420px)] max-w-[calc(100vw-1.5rem)] p-0">
+                    <div className="px-4 pb-2 pt-3">
+                      <div className="relative">
+                        <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                          placeholder="Search subjects..."
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          className="h-9 pl-8"
+                        />
                       </div>
-                    )}
-                  </ScrollArea>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+                    </div>
+                    <ScrollArea className="max-h-[320px] px-4 pb-4">
+                      {availableSubjects.length === 0 ? (
+                        <p className="py-6 text-center text-sm text-muted-foreground">
+                          {baseSubjects.length === 0
+                            ? "No subjects available yet."
+                            : "All subjects have been added or none match your search."}
+                        </p>
+                      ) : (
+                        <div className="space-y-2">
+                          {availableSubjects.map((subject) => (
+                            <button
+                              key={subject.id}
+                              onClick={() => addSubject(subject)}
+                              className="flex w-full items-center justify-between rounded-lg border border-border/50 bg-card/60 px-4 py-3 text-left transition-colors hover:bg-card"
+                            >
+                              <div>
+                                <p className="font-medium text-foreground">
+                                  {subject.name}
+                                </p>
+                                <p className="mt-0.5 text-xs text-muted-foreground">
+                                  {subject.description}
+                                </p>
+                              </div>
+                              <Plus className="size-4 shrink-0 text-brand" />
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </ScrollArea>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
 
-            <p className="mt-1 text-sm text-white/70">
-              Manage your daily study, launch practice, and open subject discussion today.
-            </p>
+              <p className="mt-1 text-sm text-white/80">
+                Manage your daily study, launch practice, and open subject discussion today.
+              </p>
+            </div>
           </div>
-        </div>
 
-        {/* Subject grid */}
-      {mySubjects.length === 0 ? (
-        <Card className="paper-texture flex flex-col items-center justify-center py-16">
-          <CardContent className="flex flex-col items-center text-center">
-            <div className="mb-4 flex size-14 items-center justify-center rounded-full bg-brand/10">
-              <BookOpen className="size-7 text-brand" />
-            </div>
-            <h3 className="font-display text-lg font-semibold">
-              No subjects yet
-            </h3>
-            <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-              Get started by adding subjects to your dashboard. Click the
-              &ldquo;Add Subject&rdquo; button above to browse available VCE
-              subjects.
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {mySubjects.map((subject) => (
-            <Card
-              key={subject.id}
-              className="group relative flex min-h-0 min-w-0 flex-col gap-0 overflow-x-clip overflow-y-visible rounded-2xl border border-black/10 bg-white p-0 py-0 shadow-sm transition-shadow hover:shadow-md"
-            >
-              <div className="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-br from-brand/10 via-transparent to-transparent" />
-              <CardHeader className="relative z-10 border-b-0 p-4 pb-2 sm:p-5">
-                <div className="flex min-w-0 items-start justify-between gap-2 sm:gap-3">
-                  <div className="min-w-0 flex-1 space-y-1 pr-1">
-                    <CardTitle className="font-display break-words text-lg leading-snug text-[#0b0f19] sm:text-xl">
-                      {subject.name}
-                    </CardTitle>
-                    <CardDescription className="break-words text-sm leading-relaxed text-[#0b0f19]/70">
-                      {subject.description}
-                    </CardDescription>
-                  </div>
-
-                  <div className="flex shrink-0 items-start gap-1.5 sm:gap-2">
-                    <Badge
-                      variant="secondary"
-                      className="rounded-full bg-[#faf8f5] border border-black/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-black sm:px-3 sm:text-xs"
-                    >
-                      vce
-                    </Badge>
-
-                    <button
-                      type="button"
-                      onClick={() => removeSubject(subject.id)}
-                      className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-500/85 text-white border border-red-500/25 transition-colors hover:bg-red-500"
-                      aria-label={`Remove ${subject.name}`}
-                    >
-                      <X className="size-4 text-white" />
-                    </button>
-                  </div>
+          {/* Subject grid */}
+          {mySubjects.length === 0 ? (
+            <Card className="paper-texture flex flex-col items-center justify-center py-16">
+              <CardContent className="flex flex-col items-center text-center">
+                <div className="mb-4 flex size-14 items-center justify-center rounded-full bg-brand/10">
+                  <BookOpen className="size-7 text-brand" />
                 </div>
-              </CardHeader>
-
-              <CardFooter className="relative z-10 mt-auto flex min-w-0 flex-col gap-2 border-t-0 bg-transparent p-4 pt-0 sm:p-5 sm:pt-0 lg:flex-row lg:flex-wrap">
-                <Button
-                  size="sm"
-                  className="h-11 min-h-11 w-full min-w-0 shrink-0 bg-[#0b0f19] px-2 text-sm text-white hover:bg-[#0b0f19]/90 lg:flex-1 lg:px-3"
-                  onClick={() => navigate(`/quiz/${subject.id}`)}
-                >
-                  Practice
-                </Button>
-                <Button
-                  size="sm"
-                  className="h-11 min-h-11 w-full min-w-0 shrink-0 bg-[#0b0f19] px-2 text-[clamp(0.7rem,2.8vw,0.875rem)] text-white hover:bg-[#0b0f19]/90 sm:text-sm lg:flex-1 lg:px-3"
-                  onClick={() => navigate(`/quiz/${subject.id}/summary`)}
-                >
-                  Summary
-                </Button>
-              </CardFooter>
+                <h3 className="font-display text-lg font-semibold">
+                  No subjects yet
+                </h3>
+                <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+                  Get started by adding subjects to your dashboard. Click the
+                  &ldquo;Add Subject&rdquo; button above to browse available VCE
+                  subjects.
+                </p>
+              </CardContent>
             </Card>
-          ))}
-        </div>
-      )}
+          ) : (
+            <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {mySubjects.map((subject) => (
+                <Card
+                  key={subject.id}
+                  className="group relative flex min-h-0 min-w-0 flex-col gap-0 overflow-x-clip overflow-y-visible rounded-2xl border border-black/10 bg-white p-0 py-0 shadow-sm transition-shadow hover:shadow-md"
+                >
+                  <div className="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-br from-brand/10 via-transparent to-transparent" />
+                  <CardHeader className="relative z-10 border-b-0 p-4 pb-2 sm:p-5">
+                    <div className="flex min-w-0 items-start justify-between gap-2 sm:gap-3">
+                      <div className="min-w-0 flex-1 space-y-1 pr-1">
+                        <CardTitle className="font-display break-words text-lg leading-snug text-[#0b0f19] sm:text-xl">
+                          {subject.name}
+                        </CardTitle>
+                        <CardDescription className="break-words text-sm leading-relaxed text-[#0b0f19]/70">
+                          {subject.description}
+                        </CardDescription>
+                      </div>
+
+                      <div className="flex shrink-0 items-start gap-1.5 sm:gap-2">
+                        <Badge
+                          variant="secondary"
+                          className="rounded-full bg-[#faf8f5] border border-black/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-black sm:px-3 sm:text-xs"
+                        >
+                          vce
+                        </Badge>
+
+                        <button
+                          type="button"
+                          onClick={() => removeSubject(subject.id)}
+                          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-500/85 text-white border border-red-500/25 transition-colors hover:bg-red-500"
+                          aria-label={`Remove ${subject.name}`}
+                        >
+                          <X className="size-4 text-white" />
+                        </button>
+                      </div>
+                    </div>
+                  </CardHeader>
+
+                  <CardFooter className="relative z-10 mt-auto flex min-w-0 flex-col gap-2 border-t-0 bg-transparent p-4 pt-0 sm:p-5 sm:pt-0 lg:flex-row lg:flex-wrap">
+                    <Button
+                      size="sm"
+                      className="h-11 min-h-11 w-full min-w-0 shrink-0 bg-[#0b0f19] px-2 text-sm text-white hover:bg-[#0b0f19]/90 lg:flex-1 lg:px-3"
+                      onClick={() => navigate(`/quiz/${subject.id}`)}
+                    >
+                      Practice
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="h-11 min-h-11 w-full min-w-0 shrink-0 bg-[#0b0f19] px-2 text-[clamp(0.7rem,2.8vw,0.875rem)] text-white hover:bg-[#0b0f19]/90 sm:text-sm lg:flex-1 lg:px-3"
+                      onClick={() => navigate(`/quiz/${subject.id}/summary`)}
+                    >
+                      Summary
+                    </Button>
+                  </CardFooter>
+                </Card>
+              ))}
+            </div>
+          )}
       </div>
 
     </AppShell>

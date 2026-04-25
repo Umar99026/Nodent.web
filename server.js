@@ -183,9 +183,37 @@ function parseFlexibleArrayInput(raw) {
     const arr = parsed.map((x) => String(x || "").trim()).filter(Boolean);
     return arr.length ? arr : null;
   }
-  const sep = t.includes("|") ? "|" : "\n";
-  const parts = t.split(sep).map((s) => s.trim()).filter(Boolean);
-  return parts.length ? parts : null;
+  const stripped = t.replace(/^["'`]+|["'`]+$/g, "").trim();
+  const bracketStripped =
+    stripped.startsWith("[") && stripped.endsWith("]") ? stripped.slice(1, -1).trim() : stripped;
+  const candidate = bracketStripped || stripped;
+
+  if (/^data:[^,]+,[\s\S]+$/i.test(candidate)) return [candidate];
+
+  let parts = [];
+  if (candidate.includes("\n")) {
+    parts = candidate.split("\n");
+  } else if (candidate.includes("|")) {
+    parts = candidate.split("|");
+  } else if (candidate.includes(";")) {
+    parts = candidate.split(";");
+  } else if (candidate.includes(",")) {
+    if (/^data:[^,]+,[\s\S]+$/i.test(candidate)) {
+      parts = [candidate];
+    } else if (/(https?:\/\/|data:image\/)/i.test(candidate)) {
+      parts = candidate.split(/,(?=\s*(?:https?:\/\/|data:image\/))/i);
+      if (parts.length <= 1) parts = [candidate];
+    } else {
+      parts = candidate.split(",");
+    }
+  } else {
+    parts = [candidate];
+  }
+
+  const arr = parts
+    .map((s) => String(s || "").trim().replace(/^["'`]+|["'`]+$/g, ""))
+    .filter(Boolean);
+  return arr.length ? arr : null;
 }
 
 // ── DB init ───────────────────────────────────────────────────────────────────
@@ -254,11 +282,13 @@ async function initDb() {
       user_id INTEGER NOT NULL,
       parent_comment_id INTEGER,
       text TEXT NOT NULL,
+      image_urls TEXT,
       created_at TEXT NOT NULL,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
       FOREIGN KEY (parent_comment_id) REFERENCES quiz_comments(id) ON DELETE CASCADE
     )
   `);
+  await ensureColumn("quiz_comments", "image_urls", "TEXT");
 
   await run(`
     CREATE TABLE IF NOT EXISTS custom_questions (
@@ -1106,7 +1136,7 @@ app.get("/api/leaderboard/:subjectId", async (req, res) => {
 app.get("/api/comments/:subjectId/:questionKey", authMiddleware, async (req, res) => {
   try {
     const rows = await all(
-      `SELECT quiz_comments.id, quiz_comments.parent_comment_id, quiz_comments.text,
+      `SELECT quiz_comments.id, quiz_comments.parent_comment_id, quiz_comments.text, quiz_comments.image_urls,
               quiz_comments.created_at, users.username, users.id AS user_id
        FROM quiz_comments
        JOIN users ON users.id = quiz_comments.user_id
@@ -1120,6 +1150,7 @@ app.get("/api/comments/:subjectId/:questionKey", authMiddleware, async (req, res
         id: row.id,
         parentCommentId: row.parent_comment_id,
         text: row.text,
+        imageUrls: row.image_urls ? JSON.parse(row.image_urls) : [],
         time: row.created_at,
         username: row.username,
         userId: row.user_id
@@ -1134,13 +1165,16 @@ app.get("/api/comments/:subjectId/:questionKey", authMiddleware, async (req, res
 app.post("/api/comments/:subjectId/:questionKey", authMiddleware, async (req, res) => {
   try {
     const text = cleanText(req.body.text, 1000);
+    const imageUrls = Array.isArray(req.body?.imageUrls)
+      ? req.body.imageUrls.map(String).map((s) => s.trim()).filter(Boolean)
+      : [];
     const rawParent = req.body.parentCommentId;
     const parentCommentId =
       rawParent === null || rawParent === undefined || rawParent === ""
         ? null
         : Number(rawParent);
 
-    if (!text) {
+    if (!text && imageUrls.length === 0) {
       return res.status(400).json({ error: "Comment cannot be empty." });
     }
 
@@ -1155,13 +1189,21 @@ app.post("/api/comments/:subjectId/:questionKey", authMiddleware, async (req, re
     }
 
     const result = await run(
-      `INSERT INTO quiz_comments (subject_id, question_key, user_id, parent_comment_id, text, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [req.params.subjectId, req.params.questionKey, req.user.id, parentCommentId, text, nowIso()]
+      `INSERT INTO quiz_comments (subject_id, question_key, user_id, parent_comment_id, text, image_urls, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        req.params.subjectId,
+        req.params.questionKey,
+        req.user.id,
+        parentCommentId,
+        text || "",
+        imageUrls.length ? JSON.stringify(imageUrls) : null,
+        nowIso(),
+      ]
     );
 
     const created = await get(
-      `SELECT quiz_comments.id, quiz_comments.parent_comment_id, quiz_comments.text,
+      `SELECT quiz_comments.id, quiz_comments.parent_comment_id, quiz_comments.text, quiz_comments.image_urls,
               quiz_comments.created_at, users.username, users.id AS user_id
        FROM quiz_comments
        JOIN users ON users.id = quiz_comments.user_id
@@ -1176,6 +1218,7 @@ app.post("/api/comments/:subjectId/:questionKey", authMiddleware, async (req, re
         id: created.id,
         parentCommentId: created.parent_comment_id,
         text: created.text,
+        imageUrls: created.image_urls ? JSON.parse(created.image_urls) : [],
         time: created.created_at,
         username: created.username,
         userId: created.user_id

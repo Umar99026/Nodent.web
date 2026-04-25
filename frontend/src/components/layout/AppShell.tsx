@@ -20,6 +20,7 @@ export function AppShell({ children, title, subtitle, headerRight }: AppShellPro
   const navigate = useNavigate();
   const location = useLocation();
   const isDashboard = location.pathname === "/dashboard";
+  const isTrackStudy = location.pathname === "/track-study";
   const handleBack = () => {
     // Prefer browser history when available, but fall back safely.
     if (window.history.length > 1) navigate(-1);
@@ -32,7 +33,9 @@ export function AppShell({ children, title, subtitle, headerRight }: AppShellPro
       <SidebarInset className="bg-transparent">
         <header
           className={`flex shrink-0 items-center gap-2 px-6 backdrop-blur-sm ${
-            isDashboard ? "border-b-0 bg-transparent py-4 text-white" : "h-16 border-b border-white/15 bg-white/10 text-white"
+            isDashboard
+              ? "border-b-0 bg-[#3f8fc9] py-4 text-white"
+              : "h-16 border-b border-white/15 bg-white/10 text-white"
           }`}
         >
           <>
@@ -54,11 +57,27 @@ export function AppShell({ children, title, subtitle, headerRight }: AppShellPro
 
           <div className="flex min-w-0 flex-1 items-center justify-between gap-3 py-2 sm:gap-4">
             <div className="min-w-0 flex-1 pr-2">
-              <h1 className="font-display truncate text-[clamp(0.95rem,3.8vw,1.25rem)] tracking-tight text-white sm:text-xl">
+              <h1
+                className={`font-display truncate tracking-tight text-white ${
+                  isDashboard
+                    ? "text-[clamp(1.8rem,5.2vw,3rem)] font-extrabold"
+                    : isTrackStudy
+                      ? "text-[clamp(1.6rem,4.8vw,2.6rem)] font-extrabold"
+                    : "text-[clamp(0.95rem,3.8vw,1.25rem)] sm:text-xl"
+                }`}
+              >
                 {title}
               </h1>
               {subtitle && (
-                <p className="truncate text-sm text-white/70">
+                <p
+                  className={`truncate ${
+                    isDashboard
+                      ? "text-[clamp(1rem,2.6vw,1.25rem)] font-bold text-white/90"
+                      : isTrackStudy
+                        ? "text-[clamp(0.95rem,2.4vw,1.2rem)] font-bold text-white/85"
+                      : "text-sm text-white/70"
+                  }`}
+                >
                   {subtitle}
                 </p>
               )}
@@ -69,6 +88,7 @@ export function AppShell({ children, title, subtitle, headerRight }: AppShellPro
             ) : null}
           </div>
         </header>
+        {isDashboard && <div className="h-[2px] w-full bg-[#3f8fc9]" />}
         <ScrollArea className="min-h-0 min-w-0 flex-1 bg-transparent">
           <main
             className={`box-border w-full min-w-0 max-w-full px-4 sm:px-6 lg:px-8 ${

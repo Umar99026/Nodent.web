@@ -470,13 +470,34 @@ export default function AdminPage() {
     const asJson = parseJsonArrayString(t);
     if (asJson) return asJson.map((s) => s.trim()).filter(Boolean);
 
-    // Common paste formats: one-per-line OR pipe-separated
-    const sep = t.includes("|") ? "|" : "\n";
-    const parts = t
-      .split(sep)
-      .map((s) => s.trim())
+    const stripped = t.replace(/^["'`]+|["'`]+$/g, "").trim();
+    const bracketStripped =
+      stripped.startsWith("[") && stripped.endsWith("]") ? stripped.slice(1, -1).trim() : stripped;
+    const candidate = bracketStripped || stripped;
+
+    if (/^data:[^,]+,[\s\S]+$/i.test(candidate)) return [candidate];
+
+    let parts: string[] = [];
+    if (candidate.includes("\n")) parts = candidate.split("\n");
+    else if (candidate.includes("|")) parts = candidate.split("|");
+    else if (candidate.includes(";")) parts = candidate.split(";");
+    else if (candidate.includes(",")) {
+      if (/^data:[^,]+,[\s\S]+$/i.test(candidate)) {
+        parts = [candidate];
+      } else if (/(https?:\/\/|data:image\/)/i.test(candidate)) {
+        parts = candidate.split(/,(?=\s*(?:https?:\/\/|data:image\/))/i);
+        if (parts.length <= 1) parts = [candidate];
+      } else {
+        parts = candidate.split(",");
+      }
+    } else {
+      parts = [candidate];
+    }
+
+    const normalized = parts
+      .map((s) => s.trim().replace(/^["'`]+|["'`]+$/g, ""))
       .filter(Boolean);
-    return parts.length ? parts : null;
+    return normalized.length ? normalized : null;
   }
 
   function normalizeType(raw: string): QuestionType | null {
@@ -634,8 +655,22 @@ export default function AdminPage() {
       return;
     }
 
-    const sep = lines[0]!.includes("\t") ? "\t" : ",";
-    const rawHeader = lines[0]!.split(sep).map((h) => h.trim());
+    const sep: "\t" | "," | "|" | "2space" =
+      lines[0]!.includes("\t")
+        ? "\t"
+        : lines[0]!.includes("|")
+          ? "|"
+          : lines[0]!.includes(",")
+            ? ","
+            : /\s{2,}/.test(lines[0]!)
+              ? "2space"
+              : ",";
+    const splitCols = (line: string) => {
+      if (sep === "2space") return line.split(/\s{2,}/).map((x) => x.trim());
+      if (sep === "|") return line.replace(/^\|/, "").replace(/\|$/, "").split("|").map((x) => x.trim());
+      return line.split(sep).map((x) => x.trim());
+    };
+    const rawHeader = splitCols(lines[0]!);
     const norm = (h: string) =>
       h
         .trim()
@@ -705,7 +740,7 @@ export default function AdminPage() {
 
     for (let i = 1; i < lines.length; i++) {
       const rowNumber = i + 1;
-      const cols = lines[i]!.split(sep);
+      const cols = splitCols(lines[i]!);
       const get = (h: string) => {
         const j = idx(h);
         return j >= 0 ? String(cols[j] ?? "").trim() : "";

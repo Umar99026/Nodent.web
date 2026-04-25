@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiFetch } from "@/lib/api";
+import { compressImageFileToDataUrl } from "@/lib/imageCompressor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { toast } from "sonner";
-import { MessageSquare, Loader2, ChevronRight } from "lucide-react";
+import { MessageSquare, Loader2, ChevronRight, Paperclip, X } from "lucide-react";
 import {
   buildCommentTree,
   countDescendants,
@@ -49,6 +50,8 @@ export function CommentThread({ subjectId, questionKey }: CommentThreadProps) {
   const [comments, setComments] = useState<ThreadComment[]>([]);
   const [loading, setLoading] = useState(true);
   const [newComment, setNewComment] = useState("");
+  const [newImages, setNewImages] = useState<string[]>([]);
+  const [attaching, setAttaching] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const fetchComments = useCallback(async () => {
@@ -62,6 +65,7 @@ export function CommentThread({ subjectId, questionKey }: CommentThreadProps) {
           id: String(c.id),
           username: c.username,
           text: c.text,
+          imageUrls: Array.isArray((c as any).imageUrls) ? (c as any).imageUrls.map(String) : [],
           createdAt: c.createdAt || c.time || "",
           userId: c.userId != null ? Number(c.userId) : undefined,
           parentCommentId: c.parentCommentId,
@@ -79,17 +83,19 @@ export function CommentThread({ subjectId, questionKey }: CommentThreadProps) {
   }, [fetchComments]);
 
   const handleSubmit = async () => {
-    if (!newComment.trim() || submitting) return;
+    if ((!newComment.trim() && newImages.length === 0) || submitting) return;
     setSubmitting(true);
     try {
       await apiFetch(`/api/comments/${subjectId}/${questionKey}`, {
         method: "POST",
         body: JSON.stringify({
           text: newComment.trim(),
+          imageUrls: newImages,
           parentCommentId: null,
         }),
       });
       setNewComment("");
+      setNewImages([]);
       toast.success("Posted.");
       await fetchComments();
     } catch (err) {
@@ -98,6 +104,26 @@ export function CommentThread({ subjectId, questionKey }: CommentThreadProps) {
       );
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const onPickImages = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files?.length || attaching || submitting) return;
+    setAttaching(true);
+    try {
+      const next = [...newImages];
+      for (const f of Array.from(files)) {
+        if (!f.type.startsWith("image/")) continue;
+        const url = await compressImageFileToDataUrl(f);
+        next.push(url);
+      }
+      setNewImages(next);
+    } catch {
+      toast.error("Could not attach one or more images.");
+    } finally {
+      setAttaching(false);
+      e.target.value = "";
     }
   };
 
@@ -113,9 +139,7 @@ export function CommentThread({ subjectId, questionKey }: CommentThreadProps) {
             <MessageSquare className="size-4 text-brand" />
           </div>
           <div className="min-w-0">
-            <h4 className="truncate font-display text-sm font-semibold">
-              Discussion
-            </h4>
+            <h4 className="truncate font-display text-sm font-semibold">Chat</h4>
             <p className="truncate text-[11px] text-black/50">
               {totalCount === 0 ? "No posts yet" : `${totalCount} in this thread`}
             </p>
@@ -162,6 +186,14 @@ export function CommentThread({ subjectId, questionKey }: CommentThreadProps) {
                       <p className="mt-0.5 line-clamp-2 break-words text-xs leading-snug text-black/70 [overflow-wrap:anywhere]">
                         {c.text}
                       </p>
+                      {Array.isArray(c.imageUrls) && c.imageUrls.length > 0 && (
+                        <div className="mt-1 flex items-center gap-2">
+                          <img src={c.imageUrls[0]} alt="" className="h-8 w-8 rounded object-cover" />
+                          <span className="text-[10px] text-black/55">
+                            {c.imageUrls.length} image{c.imageUrls.length === 1 ? "" : "s"}
+                          </span>
+                        </div>
+                      )}
                       {n > 0 && (
                         <span className="mt-1 inline-flex items-center gap-0.5 text-[10px] font-medium text-brand">
                           {n} {n === 1 ? "reply" : "replies"}
@@ -182,7 +214,7 @@ export function CommentThread({ subjectId, questionKey }: CommentThreadProps) {
         <h4 className="font-display text-sm font-semibold">New post</h4>
         <div className="mt-3 flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
           <Input
-            placeholder="Start a discussion…"
+            placeholder="Chat…"
             value={newComment}
             onChange={(e) => setNewComment(e.target.value)}
             onKeyDown={(e) => {
@@ -194,10 +226,22 @@ export function CommentThread({ subjectId, questionKey }: CommentThreadProps) {
             disabled={submitting}
             className="h-10 min-w-0 flex-1 border-black/10 bg-white text-sm text-[#0b0f19]"
           />
+          <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-md border border-black/15 px-3 text-xs font-medium text-[#0b0f19] hover:bg-black/[0.03]">
+            {attaching ? <Loader2 className="size-3.5 animate-spin" /> : <Paperclip className="size-3.5" />}
+            Attach
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              className="sr-only"
+              disabled={attaching || submitting}
+              onChange={onPickImages}
+            />
+          </label>
           <Button
             type="button"
             onClick={() => void handleSubmit()}
-            disabled={!newComment.trim() || submitting}
+            disabled={(!newComment.trim() && newImages.length === 0) || submitting}
             className="h-10 shrink-0 bg-[#0b0f19] px-4 text-white hover:bg-[#0b0f19]/90"
           >
             {submitting ? (
@@ -207,6 +251,23 @@ export function CommentThread({ subjectId, questionKey }: CommentThreadProps) {
             )}
           </Button>
         </div>
+        {newImages.length > 0 && (
+          <ul className="mt-3 grid grid-cols-4 gap-2">
+            {newImages.map((url, i) => (
+              <li key={`${i}-${url.slice(0, 20)}`} className="relative overflow-hidden rounded border border-black/10">
+                <img src={url} alt="" className="h-16 w-full object-cover" />
+                <button
+                  type="button"
+                  className="absolute right-1 top-1 rounded bg-white/90 p-0.5"
+                  onClick={() => setNewImages((prev) => prev.filter((_, idx) => idx !== i))}
+                  aria-label="Remove attachment"
+                >
+                  <X className="size-3" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </div>
   );

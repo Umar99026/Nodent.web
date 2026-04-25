@@ -2,13 +2,14 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { apiFetch } from "@/lib/api";
+import { compressImageFileToDataUrl } from "@/lib/imageCompressor";
 import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { Loader2, ArrowLeft, Reply } from "lucide-react";
+import { Loader2, ArrowLeft, Reply, Paperclip, X } from "lucide-react";
 import {
   buildCommentTree,
   findCommentInTree,
@@ -83,6 +84,15 @@ function ThreadBranch({
           <p className="mt-2 break-words text-[15px] leading-relaxed text-black/85 [overflow-wrap:anywhere]">
             {comment.text}
           </p>
+          {Array.isArray(comment.imageUrls) && comment.imageUrls.length > 0 && (
+            <ul className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {comment.imageUrls.map((url, idx) => (
+                <li key={`${comment.id}-img-${idx}`} className="overflow-hidden rounded border border-black/10">
+                  <img src={url} alt="" className="h-28 w-full object-cover" />
+                </li>
+              ))}
+            </ul>
+          )}
           <button
             type="button"
             onClick={() =>
@@ -131,6 +141,8 @@ export default function QuestionForumThreadPage() {
   const [comments, setComments] = useState<ThreadComment[]>([]);
   const [loading, setLoading] = useState(true);
   const [newText, setNewText] = useState("");
+  const [newImages, setNewImages] = useState<string[]>([]);
+  const [attaching, setAttaching] = useState(false);
   const [replyParentId, setReplyParentId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -146,6 +158,7 @@ export default function QuestionForumThreadPage() {
           id: String(c.id),
           username: c.username,
           text: c.text,
+          imageUrls: Array.isArray((c as any).imageUrls) ? (c as any).imageUrls.map(String) : [],
           createdAt: c.createdAt || c.time || "",
           userId: c.userId != null ? Number(c.userId) : undefined,
           parentCommentId: c.parentCommentId,
@@ -167,13 +180,14 @@ export default function QuestionForumThreadPage() {
   const threadRoot = threadId ? findCommentInTree(tree, threadId) : null;
 
   const handlePost = async () => {
-    if (!newText.trim() || !subjectId || !questionKey || submitting) return;
+    if ((!newText.trim() && newImages.length === 0) || !subjectId || !questionKey || submitting) return;
     setSubmitting(true);
     try {
       await apiFetch(`/api/comments/${subjectId}/${questionKey}`, {
         method: "POST",
         body: JSON.stringify({
           text: newText.trim(),
+          imageUrls: newImages,
           parentCommentId:
             replyParentId != null
               ? Number(replyParentId)
@@ -181,6 +195,7 @@ export default function QuestionForumThreadPage() {
         }),
       });
       setNewText("");
+      setNewImages([]);
       setReplyParentId(null);
       toast.success("Posted.");
       await fetchComments();
@@ -190,6 +205,26 @@ export default function QuestionForumThreadPage() {
       );
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const onPickImages = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files?.length || attaching || submitting) return;
+    setAttaching(true);
+    try {
+      const next = [...newImages];
+      for (const f of Array.from(files)) {
+        if (!f.type.startsWith("image/")) continue;
+        const url = await compressImageFileToDataUrl(f);
+        next.push(url);
+      }
+      setNewImages(next);
+    } catch {
+      toast.error("Could not attach one or more images.");
+    } finally {
+      setAttaching(false);
+      e.target.value = "";
     }
   };
 
@@ -281,7 +316,7 @@ export default function QuestionForumThreadPage() {
                 <Button
                   type="button"
                   onClick={() => void handlePost()}
-                  disabled={!newText.trim() || submitting}
+                  disabled={(!newText.trim() && newImages.length === 0) || submitting}
                   className="h-11 shrink-0 bg-[#0b0f19] text-white hover:bg-[#0b0f19]/90"
                 >
                   {submitting ? (
@@ -290,7 +325,36 @@ export default function QuestionForumThreadPage() {
                     "Post"
                   )}
                 </Button>
+                <label className="inline-flex h-11 cursor-pointer items-center gap-2 rounded-md border border-black/15 px-3 text-xs font-medium text-[#0b0f19] hover:bg-black/[0.03]">
+                  {attaching ? <Loader2 className="size-3.5 animate-spin" /> : <Paperclip className="size-3.5" />}
+                  Attach
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="sr-only"
+                    disabled={attaching || submitting}
+                    onChange={onPickImages}
+                  />
+                </label>
               </div>
+              {newImages.length > 0 && (
+                <ul className="mt-3 grid grid-cols-4 gap-2">
+                  {newImages.map((url, i) => (
+                    <li key={`${i}-${url.slice(0, 20)}`} className="relative overflow-hidden rounded border border-black/10">
+                      <img src={url} alt="" className="h-16 w-full object-cover" />
+                      <button
+                        type="button"
+                        className="absolute right-1 top-1 rounded bg-white/90 p-0.5"
+                        onClick={() => setNewImages((prev) => prev.filter((_, idx) => idx !== i))}
+                        aria-label="Remove attachment"
+                      >
+                        <X className="size-3" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </>
         )}

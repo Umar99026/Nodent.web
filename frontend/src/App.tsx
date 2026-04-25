@@ -15,6 +15,9 @@ const TrackStudyPage = lazy(() => import("@/pages/TrackStudyPageNew"));
 const QuestionForumThreadPage = lazy(
   () => import("@/pages/QuestionForumThreadPage"),
 );
+const EnglishPromptResponsesPage = lazy(
+  () => import("@/pages/EnglishPromptResponsesPage"),
+);
 const AdminPage = lazy(() => import("@/pages/AdminPage"));
 const UploadWrittenImagesPage = lazy(() => import("@/pages/UploadWrittenImagesPage"));
 
@@ -138,6 +141,15 @@ function AppRoutes() {
           element={
             <ProtectedRoute>
               <QuestionForumThreadPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/quiz/english/prompt/:promptId/responses"
+          element={
+            <ProtectedRoute>
+              <EnglishPromptResponsesPage />
             </ProtectedRoute>
           }
         />

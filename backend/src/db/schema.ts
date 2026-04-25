@@ -146,6 +146,7 @@ export const quizComments = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     parentCommentId: integer("parent_comment_id"),
     text: text("text").notNull(),
+    imageUrls: text("image_urls"),
     createdAt: text("created_at").notNull(),
   },
   (table) => [

@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useAuth } from "@/context/AuthContext";
 import { AppShell } from "@/components/layout/AppShell";
 import { API_PATHS } from "@/lib/constants";
 import { apiFetch } from "@/lib/api";
@@ -9,12 +11,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Loader2 } from "lucide-react";
+import { Check, Loader2 } from "lucide-react";
 import { compressImageFileToDataUrl } from "@/lib/imageCompressor";
 import { toast } from "sonner";
+import { CommentThread } from "@/components/quiz/CommentThread";
 
 type Book = { id: number; title: string; promptCount: number };
-type Section = "A" | "B";
+type Section = "A" | "B" | "C";
 type Prompt = { id: number; bookId: number; bookTitle: string; prompt: string; section: Section };
 type ResponseRow = {
   id: number;
@@ -32,19 +35,107 @@ type ResponseRow = {
   section: Section;
 };
 
+const SECTION_B_FRAMEWORKS: Record<
+  string,
+  {
+    framework: string;
+    instructions: string[];
+    title: string;
+    promptLine: string;
+    stimuli: string[];
+  }
+> = {
+  Origins: {
+    framework: "Writing about country",
+    title: "Origins",
+    promptLine:
+      "Using at least one stimulus, write a crafted text exploring ideas about country and belonging.",
+    instructions: [
+      "Write a text that explores ideas about country.",
+      "Use the provided title.",
+      "Use at least one stimulus.",
+    ],
+    stimuli: [
+      "My body might go, but my heart can never leave.",
+      "... there is no separation between people, animals, plants, land, sea and sky. It is all Country. It is all family. And everyone is part of the story.",
+    ],
+  },
+  "Small Acts, Big Wins": {
+    framework: "Writing about protest",
+    title: "Small Acts, Big Wins",
+    promptLine:
+      "Using at least one stimulus, write a crafted text exploring ideas about protest and collective action.",
+    instructions: [
+      "Write a text that explores ideas about protest.",
+      "Use the provided title.",
+      "Use at least one stimulus.",
+    ],
+    stimuli: [
+      "\"I want to change the world,\" said Tiny Dragon. \"Start with the next person who needs your help,\" replied Big Panda.",
+      "And now my voice is louder than ever. Louder because people have joined me and together we make a chorus, standing up for what we believe.",
+    ],
+  },
+  "Changing Direction": {
+    framework: "Writing about personal journeys",
+    title: "Changing Direction",
+    promptLine:
+      "Using at least one stimulus, write a crafted text exploring ideas about personal journeys and transformation.",
+    instructions: [
+      "Write a text that explores ideas about personal journeys.",
+      "Use the provided title.",
+      "Use at least one stimulus.",
+    ],
+    stimuli: [
+      "You were looking for the key for years, but the door was always open!",
+      "In the midst of my journey through life I found myself in a dark forest, where the clear way forward was lost.",
+    ],
+  },
+};
+
+function promptForumKey(promptId: number) {
+  return `english-prompt-${promptId}`;
+}
+
+function sectionBFramework(promptText: string) {
+  const m = promptText.match(/Title:\s*['"]?([^'"\n]+)['"]?/i);
+  const titledMatch = promptText.match(/titled\s+([A-Za-z][A-Za-z ,'-]{1,80})/i);
+  const title = (m?.[1] ?? titledMatch?.[1] ?? "").trim().replace(/[.,"']+$/g, "");
+  if (!title) return null;
+  return SECTION_B_FRAMEWORKS[title] ?? null;
+}
+
+function sectionBTitle(promptText: string) {
+  const explicit = promptText.match(/Title:\s*['"]?([^'"\n]+)['"]?/i)?.[1];
+  const titled = promptText.match(/titled\s+([A-Za-z][A-Za-z ,'-]{1,80})/i)?.[1];
+  const title = (explicit ?? titled ?? "").trim().replace(/[.,"']+$/g, "");
+  return title || "Creative writing";
+}
+
+function sectionBPromptInstruction(promptText: string) {
+  const framework = sectionBFramework(promptText);
+  if (framework) return framework.promptLine;
+  return "";
+}
+
+function sectionTone(section: Section) {
+  if (section === "A") return "from-[#2f7ec4]/20 to-[#59a3dc]/10";
+  if (section === "B") return "from-[#7d60e8]/20 to-[#b798ff]/10";
+  return "from-[#18a999]/20 to-[#84e5d8]/10";
+}
+
 export function EnglishPracticePanel() {
+  const navigate = useNavigate();
   const [books, setBooks] = useState<Book[]>([]);
   const [section, setSection] = useState<Section>("A");
   const [selectedBookTitle, setSelectedBookTitle] = useState<string>("");
   const [prompts, setPrompts] = useState<Prompt[]>([]);
-  const [responses, setResponses] = useState<ResponseRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [submittingPromptId, setSubmittingPromptId] = useState<number | null>(null);
 
   const [textByPrompt, setTextByPrompt] = useState<Record<number, string>>({});
   const [imagesByPrompt, setImagesByPrompt] = useState<Record<number, string[]>>({});
-  const [openPromptResponses, setOpenPromptResponses] = useState<Record<number, boolean>>({});
   const [activePromptIndex, setActivePromptIndex] = useState(0);
+  const [submittedPromptIds, setSubmittedPromptIds] = useState<Record<number, true>>({});
 
   const selectedBook = books.find((b) => b.title === selectedBookTitle) ?? null;
   const numericBookId = selectedBook?.id ?? Number.NaN;
@@ -69,12 +160,8 @@ export function EnglishPracticePanel() {
       currentSection === "A"
         ? `?section=A&bookId=${encodeURIComponent(id)}`
         : `?section=${encodeURIComponent(currentSection)}`;
-    const [p, r] = await Promise.all([
-      apiFetch<{ prompts: Prompt[] }>(`${API_PATHS.english.prompts}${suffix}`),
-      apiFetch<{ responses: ResponseRow[] }>(`${API_PATHS.english.responses}${suffix}`),
-    ]);
+    const p = await apiFetch<{ prompts: Prompt[] }>(`${API_PATHS.english.prompts}${suffix}`);
     setPrompts(p.prompts || []);
-    setResponses(r.responses || []);
   }
 
   useEffect(() => {
@@ -124,7 +211,17 @@ export function EnglishPracticePanel() {
     return b ? `${b.promptCount} prompts` : "";
   }, [books, selectedBookTitle]);
 
-  const activePrompt = prompts[activePromptIndex] ?? null;
+  const visiblePrompts = useMemo(() => {
+    if (section !== "B") return prompts;
+    return prompts.filter((p) => !/\bbeginning with\s*:/i.test(p.prompt));
+  }, [prompts, section]);
+
+  useEffect(() => {
+    if (activePromptIndex < visiblePrompts.length) return;
+    setActivePromptIndex(0);
+  }, [activePromptIndex, visiblePrompts.length]);
+
+  const activePrompt = visiblePrompts[activePromptIndex] ?? null;
 
   const handleFiles = async (promptId: number, files: FileList | null) => {
     const list = Array.from(files ?? []).filter((f) => f.type.startsWith("image/")).slice(0, 6);
@@ -161,7 +258,15 @@ export function EnglishPracticePanel() {
         }),
       });
       toast.success("Response uploaded to shared space.");
+      setSubmittedPromptIds((prev) => ({ ...prev, [prompt.id]: true }));
       await loadBookData(numericBookId, section);
+      navigate(
+        `/quiz/english/prompt/${prompt.id}/responses?section=${section}${
+          section === "A" && Number.isFinite(numericBookId) && numericBookId > 0
+            ? `&bookId=${numericBookId}`
+            : ""
+        }`,
+      );
     } catch (e) {
       toast.error("Could not submit response.");
     } finally {
@@ -171,20 +276,23 @@ export function EnglishPracticePanel() {
 
   return (
       <div className="space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="font-display text-lg">Choose section</CardTitle>
-            <CardDescription>A = Book prompts, B = Creative stimulus.</CardDescription>
+        <Card className={`overflow-hidden border-white/30 bg-gradient-to-br ${sectionTone(section)} shadow-[0_20px_50px_rgba(10,18,35,0.25)]`}>
+          <CardHeader className="pb-4">
+            <CardTitle className="font-display text-xl sm:text-2xl">English Practice Studio</CardTitle>
+            <CardDescription className="text-black/70">
+              Choose your section, open prompts, draft responses, and join prompt discussions.
+            </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-4">
             <div className="w-full max-w-xs">
               <Select value={section} onValueChange={(v) => setSection((v as Section) ?? "A")}>
-                <SelectTrigger>
+                <SelectTrigger className="h-11 border-black/15 bg-white/90 font-medium">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="A">Section A - Book prompts</SelectItem>
                   <SelectItem value="B">Section B - Creative stimulus</SelectItem>
+                  <SelectItem value="C">Section C - Argument analysis</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -193,7 +301,7 @@ export function EnglishPracticePanel() {
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                 <div className="w-full max-w-md">
                   <Select value={selectedBookTitle} onValueChange={(v) => setSelectedBookTitle(v ?? "")}>
-                    <SelectTrigger>
+                    <SelectTrigger className="h-11 border-black/15 bg-white/90">
                       <SelectValue placeholder={loading ? "Loading..." : "Select a book"} />
                     </SelectTrigger>
                     <SelectContent>
@@ -205,68 +313,135 @@ export function EnglishPracticePanel() {
                     </SelectContent>
                   </Select>
                 </div>
-                {promptCountLabel ? <Badge variant="secondary">{promptCountLabel}</Badge> : null}
+                {promptCountLabel ? (
+                  <Badge variant="secondary" className="bg-white/90 text-[#0b0f19]">
+                    {promptCountLabel}
+                  </Badge>
+                ) : null}
               </div>
             ) : (
-              <Badge variant="secondary">
-                Creative writing practice
+              <Badge variant="secondary" className="bg-white/90 text-[#0b0f19]">
+                {section === "B" ? "Creative writing practice" : "Argument analysis practice"}
               </Badge>
             )}
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="overflow-hidden border-white/30 bg-white/95 shadow-[0_18px_40px_rgba(10,18,35,0.2)]">
           <CardHeader>
-            <CardTitle className="font-display text-lg">Prompt Practice</CardTitle>
-            <CardDescription>Navigate prompts with previous/next, then write and submit for the current one.</CardDescription>
+            <CardTitle className="font-display text-xl">Prompt Workspace</CardTitle>
+            <CardDescription>Move through prompts, compose your response, attach scans, and submit in one flow.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
-            {!prompts.length ? (
-              <p className="text-sm text-muted-foreground">
+            {!visiblePrompts.length ? (
+              <p className="rounded-lg border border-dashed border-black/15 bg-black/[0.02] p-5 text-sm text-muted-foreground">
                 {section === "A" ? "No prompts for this book yet." : "No prompts in this section yet."}
               </p>
             ) : (
-              <div className="rounded-xl border border-black/10 bg-white/70 p-4 space-y-4">
+              <div className="rounded-2xl border border-black/10 bg-gradient-to-b from-white to-slate-50 p-5 space-y-5">
                 <div className="flex items-center justify-between">
-                  <Badge variant="secondary">
-                    Prompt {activePromptIndex + 1} of {prompts.length}
-                  </Badge>
-                  <div className="flex gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => setActivePromptIndex((i) => Math.max(0, i - 1))}
-                      disabled={activePromptIndex <= 0}
-                    >
-                      Previous
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => setActivePromptIndex((i) => Math.min(prompts.length - 1, i + 1))}
-                      disabled={activePromptIndex >= prompts.length - 1}
-                    >
-                      Next
-                    </Button>
-                  </div>
+                  {section !== "B" && section !== "C" ? (
+                    <Badge variant="secondary" className="bg-black/[0.04] text-[#0b0f19]">
+                      Prompt {activePromptIndex + 1} of {visiblePrompts.length}
+                    </Badge>
+                  ) : (
+                    <span />
+                  )}
+                  {section !== "C" ? (
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="border-black/15 bg-white hover:bg-black/[0.03]"
+                        onClick={() => setActivePromptIndex((i) => Math.max(0, i - 1))}
+                        disabled={activePromptIndex <= 0}
+                      >
+                        Previous
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="border-black/15 bg-white hover:bg-black/[0.03]"
+                        onClick={() => setActivePromptIndex((i) => Math.min(visiblePrompts.length - 1, i + 1))}
+                        disabled={activePromptIndex >= visiblePrompts.length - 1}
+                      >
+                        Next
+                      </Button>
+                    </div>
+                  ) : (
+                    <span />
+                  )}
                 </div>
 
                 {activePrompt ? (
                   <>
-                    <p className="text-lg font-semibold leading-relaxed whitespace-pre-wrap">{activePrompt.prompt}</p>
+                    {section !== "B" ? (
+                      <p className="rounded-xl border border-black/10 bg-white p-4 text-lg font-semibold leading-relaxed whitespace-pre-wrap shadow-sm">
+                        {activePrompt.prompt}
+                      </p>
+                    ) : null}
+                    {section === "B" ? (
+                      <div className="rounded-xl border border-black/10 bg-gradient-to-b from-[#f8f5ff] to-white p-4 space-y-3 shadow-sm">
+                        {sectionBFramework(activePrompt.prompt) ? (
+                          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                            {sectionBFramework(activePrompt.prompt)!.framework}
+                          </p>
+                        ) : null}
+                        <p className="text-base font-semibold text-[#101828]">
+                          title: {sectionBFramework(activePrompt.prompt)?.title ?? sectionBTitle(activePrompt.prompt)}.
+                        </p>
+                        {sectionBPromptInstruction(activePrompt.prompt) ? (
+                          <p className="text-base font-medium leading-relaxed whitespace-pre-wrap text-[#243042]">
+                            {sectionBPromptInstruction(activePrompt.prompt)}
+                          </p>
+                        ) : null}
+                        {sectionBFramework(activePrompt.prompt) ? (
+                          <>
+                            <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+                              {sectionBFramework(activePrompt.prompt)!.instructions.map((ins) => (
+                                <li key={ins}>{ins}</li>
+                              ))}
+                            </ul>
+                            <div className="grid gap-3 sm:grid-cols-2">
+                              {sectionBFramework(activePrompt.prompt)!.stimuli.map((s) => (
+                                <div key={s} className="rounded-lg border border-black/10 bg-white p-3 text-sm shadow-sm">
+                                  {s}
+                                </div>
+                              ))}
+                            </div>
+                          </>
+                        ) : null}
+                      </div>
+                    ) : null}
                     <Textarea
                       rows={8}
                       value={textByPrompt[activePrompt.id] ?? ""}
                       onChange={(e) => setTextByPrompt((m) => ({ ...m, [activePrompt.id]: e.target.value }))}
-                      placeholder="Write your response for this prompt..."
+                      placeholder={
+                        section === "C"
+                          ? "Write your argument analysis response..."
+                          : "Write your response for this prompt..."
+                      }
+                      className="min-h-[220px] border-black/15 bg-white text-[15px] leading-7 shadow-sm"
                     />
+                    {section === "C" ? (
+                      <div className="rounded-xl border border-black/10 bg-gradient-to-b from-[#eefdf9] to-white p-4 shadow-sm">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          Section C Argument Analysis
+                        </p>
+                        <p className="mt-2 text-sm text-muted-foreground">
+                          You can respond directly without an attached article for now. Focus on contention, language, tone, evidence, and persuasive effect.
+                        </p>
+                      </div>
+                    ) : null}
                     <div className="space-y-2">
-                      <Label>Upload handwritten photo(s)</Label>
+                      <Label className="text-sm font-semibold text-[#172033]">Upload handwritten photo(s)</Label>
                       <Input
                         type="file"
                         accept="image/*"
                         multiple
                         onChange={(e) => void handleFiles(activePrompt.id, e.target.files)}
+                        className="border-black/15 bg-white"
                       />
                       {(imagesByPrompt[activePrompt.id] ?? []).length ? (
                         <p className="text-xs text-muted-foreground">
@@ -279,68 +454,207 @@ export function EnglishPracticePanel() {
                         type="button"
                         onClick={() => void submitResponse(activePrompt)}
                         disabled={submittingPromptId === activePrompt.id}
-                        className="gap-2"
+                        className="gap-2 bg-[#0f172a] text-white shadow-md hover:bg-[#111827]"
                       >
                         {submittingPromptId === activePrompt.id ? <Loader2 className="size-4 animate-spin" /> : null}
-                        Submit response
+                        {submittedPromptIds[activePrompt.id] ? (
+                          <>
+                            <Check className="size-4" />
+                            Submitted
+                          </>
+                        ) : (
+                          "Submit response"
+                        )}
                       </Button>
                       <Button
                         type="button"
                         variant="outline"
+                        className="border-black/15 bg-white hover:bg-black/[0.03]"
                         onClick={() =>
-                          setOpenPromptResponses((prev) => ({
-                            ...prev,
-                            [activePrompt.id]: !prev[activePrompt.id],
-                          }))
+                          navigate(
+                            `/quiz/english/prompt/${activePrompt.id}/responses?section=${section}${
+                              section === "A" && Number.isFinite(numericBookId) && numericBookId > 0
+                                ? `&bookId=${numericBookId}`
+                                : ""
+                            }`,
+                          )
                         }
                       >
-                        {openPromptResponses[activePrompt.id]
-                          ? "Hide others for this prompt"
-                          : "View others for this prompt"}
+                        View all responses
                       </Button>
                     </div>
-                    {openPromptResponses[activePrompt.id] ? (
-                      <div className="space-y-2 rounded-lg border border-black/10 bg-white p-3">
-                        {responses
-                          .filter((r) => r.promptId === activePrompt.id)
-                          .map((r) => (
-                            <div
-                              key={`prompt-${activePrompt.id}-resp-${r.id}`}
-                              className="rounded border border-black/10 p-3 space-y-2"
-                            >
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs text-muted-foreground">@{r.username}</span>
-                                <Badge variant="secondary">
-                                  Avg: {r.averageScore != null ? `${r.averageScore}/10` : "No ratings"}
-                                </Badge>
-                              </div>
-                              {r.responseText ? <p className="text-sm whitespace-pre-wrap">{r.responseText}</p> : null}
-                              {r.imageUrls?.length ? (
-                                <div className="grid gap-2 sm:grid-cols-2">
-                                  {r.imageUrls.map((u, i) => (
-                                    <img
-                                      key={`${r.id}-${i}`}
-                                      src={u}
-                                      alt={`prompt-${activePrompt.id}-resp-${i + 1}`}
-                                      className="w-full rounded border border-black/10"
-                                    />
-                                  ))}
-                                </div>
-                              ) : null}
-                            </div>
-                          ))}
-                        {!responses.some((r) => r.promptId === activePrompt.id) ? (
-                          <p className="text-xs text-muted-foreground">No responses for this prompt yet.</p>
-                        ) : null}
-                      </div>
-                    ) : null}
                   </>
                 ) : null}
               </div>
             )}
           </CardContent>
         </Card>
+
+        {activePrompt ? (
+          <Card className="overflow-hidden border-white/30 bg-white/95 shadow-[0_14px_36px_rgba(10,18,35,0.18)]">
+            <CardHeader>
+              <CardTitle className="font-display text-xl">Prompt Discussion</CardTitle>
+              <CardDescription>Chat with others about this exact prompt.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <CommentThread subjectId="english" questionKey={promptForumKey(activePrompt.id)} />
+            </CardContent>
+          </Card>
+        ) : null}
       </div>
+  );
+}
+
+export function EnglishPromptResponsesPage() {
+  const { user } = useAuth();
+  const { promptId } = useParams<{ promptId: string }>();
+  const [searchParams] = useSearchParams();
+  const section = ((searchParams.get("section") ?? "A").toUpperCase() as Section);
+  const bookId = Number(searchParams.get("bookId"));
+  const numericPromptId = Number(promptId);
+  const [loading, setLoading] = useState(true);
+  const [responses, setResponses] = useState<ResponseRow[]>([]);
+  const [ratingByResponseId, setRatingByResponseId] = useState<Record<number, string>>({});
+  const [savingRatingId, setSavingRatingId] = useState<number | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        setLoading(true);
+        const suffix =
+          section === "A"
+            ? `?section=A&bookId=${encodeURIComponent(bookId)}`
+            : `?section=${encodeURIComponent(section)}`;
+        const r = await apiFetch<{ responses: ResponseRow[] }>(`${API_PATHS.english.responses}${suffix}`);
+        const rows = (r.responses ?? []).filter((x) => x.promptId === numericPromptId);
+        setResponses(rows);
+        setRatingByResponseId(() =>
+          rows.reduce<Record<number, string>>((acc, row) => {
+            if (row.myScore != null) acc[row.id] = String(row.myScore);
+            return acc;
+          }, {}),
+        );
+      } catch {
+        toast.error("Could not load responses for this prompt.");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [section, bookId, numericPromptId]);
+
+  const promptTitle = responses[0]?.prompt ?? "Prompt responses";
+  const rateResponse = async (responseId: number, scoreRaw: string) => {
+    const score = Number(scoreRaw);
+    if (!Number.isFinite(score) || score < 1 || score > 10) return;
+    setSavingRatingId(responseId);
+    try {
+      await apiFetch(API_PATHS.english.rateResponse(responseId), {
+        method: "POST",
+        body: JSON.stringify({ score }),
+      });
+      setResponses((prev) =>
+        prev.map((row) =>
+          row.id === responseId
+            ? { ...row, myScore: score }
+            : row,
+        ),
+      );
+      const suffix =
+        section === "A"
+          ? `?section=A&bookId=${encodeURIComponent(bookId)}`
+          : `?section=${encodeURIComponent(section)}`;
+      const refreshed = await apiFetch<{ responses: ResponseRow[] }>(`${API_PATHS.english.responses}${suffix}`);
+      setResponses((refreshed.responses ?? []).filter((x) => x.promptId === numericPromptId));
+      toast.success("Rating saved.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not save rating.");
+    } finally {
+      setSavingRatingId(null);
+    }
+  };
+
+  return (
+    <AppShell title="Prompt Responses" subtitle="All responses for this exact prompt.">
+      <div className="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="font-display text-lg">{promptTitle}</CardTitle>
+            <CardDescription>
+              {loading ? "Loading..." : `${responses.length} response(s)`}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {!responses.length ? (
+              <p className="text-sm text-muted-foreground">No responses yet for this prompt.</p>
+            ) : (
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7">
+                {responses.map((r) => {
+                  const isMine = user?.id != null && Number(user.id) === Number(r.userId);
+                  return (
+                    <div
+                      key={r.id}
+                      className="group relative aspect-square overflow-hidden rounded-md border border-black/10 bg-white shadow-sm"
+                    >
+                      <div className="absolute inset-0 bg-gradient-to-br from-slate-50 via-white to-slate-100" />
+                      <div className="absolute inset-0 flex items-center justify-center p-1.5">
+                        <div className="w-full rounded-sm border border-black/10 bg-white/60 p-1.5 backdrop-blur-sm">
+                          <p className="line-clamp-3 whitespace-pre-wrap text-center text-[10px] leading-tight text-[#111827]/85 blur-[1.6px] select-none">
+                            {(r.responseText || "Handwritten response").trim()}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="absolute inset-x-0 top-0 flex items-center justify-between gap-1 border-b border-black/10 bg-white/88 px-1.5 py-1 backdrop-blur">
+                        <span className="truncate text-[10px] font-semibold text-[#0f172a]">@{r.username}</span>
+                        <Badge variant="secondary" className="shrink-0 px-1 py-0 text-[9px]">
+                          Avg: {r.averageScore != null ? `${r.averageScore}/10` : "—"}
+                        </Badge>
+                      </div>
+
+                      <div className="absolute inset-x-0 bottom-0 border-t border-black/10 bg-white/92 p-1.5 backdrop-blur">
+                        <p className="mb-0.5 text-[9px] font-medium uppercase tracking-wide text-muted-foreground">
+                          Rate out of 10
+                        </p>
+                        <Select
+                          value={ratingByResponseId[r.id] ?? (r.myScore != null ? String(r.myScore) : "")}
+                          onValueChange={(v) => {
+                            if (!v) return;
+                            setRatingByResponseId((prev) => ({ ...prev, [r.id]: v }));
+                            if (!isMine) void rateResponse(r.id, v);
+                          }}
+                          disabled={isMine || savingRatingId === r.id}
+                        >
+                          <SelectTrigger className="h-6 bg-white px-2 text-[10px]">
+                            <SelectValue placeholder={isMine ? "Your response" : "Select score"} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((s) => (
+                              <SelectItem key={s} value={String(s)}>
+                                {s}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="font-display text-lg">Prompt discussion</CardTitle>
+            <CardDescription>Forum for this exact prompt.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <CommentThread subjectId="english" questionKey={promptForumKey(numericPromptId)} />
+          </CardContent>
+        </Card>
+      </div>
+    </AppShell>
   );
 }
 

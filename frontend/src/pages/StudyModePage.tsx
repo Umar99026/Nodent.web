@@ -17,7 +17,6 @@ import { RichQuestionContent } from "@/components/quiz/RichQuestionContent";
 import { McqQuestion } from "@/components/quiz/McqQuestion";
 import { ShortQuestion } from "@/components/quiz/ShortQuestion";
 import { LongQuestion } from "@/components/quiz/LongQuestion";
-import { questionSupportsAnswerUpload } from "@/lib/writtenAnswerUpload";
 import { displayMarks, stripQuestionHeadingFromPassage, stripQuestionNumberPrefix } from "@/lib/questionDisplay";
 import { formatSeconds, getQuestionTypeLabel } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -421,11 +420,6 @@ export default function StudyModePage() {
           {part.type === "short" && (
             <ShortQuestion
               question={part}
-              subjectId={subjectId}
-              questionKey={qk}
-              enableAnswerUpload={
-                Boolean(user) && questionSupportsAnswerUpload(part)
-              }
               hidePassage={hidePassage}
               lockedCorrect={false}
               onAnswer={() => {}}

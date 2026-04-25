@@ -142,13 +142,40 @@ function parseFlexibleArray(raw: unknown): string[] | null {
   const json = safeJsonParseArray(t);
   if (json) return json.map((s) => String(s).trim()).filter(Boolean);
 
-  // Accept common paste formats: pipe-separated or one-per-line
-  const sep = t.includes("|") ? "|" : "\n";
-  const parts = t
-    .split(sep)
-    .map((s) => s.trim())
+  // Accept common paste formats: one-per-line, pipe/semicolon/comma-separated, or single URL.
+  const stripped = t.replace(/^["'`]+|["'`]+$/g, "").trim();
+  const bracketStripped =
+    stripped.startsWith("[") && stripped.endsWith("]") ? stripped.slice(1, -1).trim() : stripped;
+  const candidate = bracketStripped || stripped;
+
+  const isSingleDataUrl = /^data:[^,]+,[\s\S]+$/i.test(candidate);
+  if (isSingleDataUrl) return [candidate];
+
+  let parts: string[] = [];
+  if (candidate.includes("\n")) {
+    parts = candidate.split("\n");
+  } else if (candidate.includes("|")) {
+    parts = candidate.split("|");
+  } else if (candidate.includes(";")) {
+    parts = candidate.split(";");
+  } else if (candidate.includes(",")) {
+    // Keep base64 data URLs intact while still supporting comma-separated URLs.
+    if (/^data:[^,]+,[\s\S]+$/i.test(candidate)) {
+      parts = [candidate];
+    } else if (/(https?:\/\/|data:image\/)/i.test(candidate)) {
+      parts = candidate.split(/,(?=\s*(?:https?:\/\/|data:image\/))/i);
+      if (parts.length <= 1) parts = [candidate];
+    } else {
+      parts = candidate.split(",");
+    }
+  } else {
+    parts = [candidate];
+  }
+
+  const normalized = parts
+    .map((s) => s.trim().replace(/^["'`]+|["'`]+$/g, ""))
     .filter(Boolean);
-  return parts.length ? parts : null;
+  return normalized.length ? normalized : null;
 }
 
 function normalizeQuestionForMatch(raw: unknown): string {

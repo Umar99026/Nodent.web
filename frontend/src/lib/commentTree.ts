@@ -2,6 +2,7 @@ export interface ThreadComment {
   id: string;
   username: string;
   text: string;
+  imageUrls?: string[];
   createdAt: string;
   userId?: number;
   parentCommentId?: string | number | null;
