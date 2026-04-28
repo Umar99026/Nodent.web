@@ -360,8 +360,12 @@ export default function TrackStudyPageNew() {
   }, [userId, state.goalMinutes, state.dailySeconds, todayKey, studyMergeRev]);
 
   return (
-    <AppShell title="Track My Study" subtitle="Run your timer and track progress.">
-      <div className="mx-auto max-w-6xl space-y-6 text-[#0b0f19]">
+    <AppShell
+      title="Track My Study"
+      subtitle="Run your timer and track progress."
+      edgeToEdgeHeader
+    >
+      <div className="max-w-none space-y-6 text-[#0b0f19]">
         {/* Top analytics row */}
         <div className="grid gap-6 lg:grid-cols-3">
           <Card className="border-black/10 bg-white text-[#0b0f19] shadow-xl">
@@ -719,18 +723,15 @@ export default function TrackStudyPageNew() {
         {timerFullscreen && (
           <div
             ref={fsOverlayRef}
-            className="fixed inset-0 z-[200] overflow-x-auto overflow-y-auto overscroll-y-contain bg-black/80 [touch-action:pan-x_pan-y]"
+            className="fixed inset-0 z-[200] overflow-hidden bg-[#0b0f19] [touch-action:pan-x_pan-y]"
             role="dialog"
             aria-modal="true"
             aria-label="Fullscreen study timer"
           >
-            {/* Fullscreen surface */}
-            <div
-              className="flex min-h-[100dvh] w-full flex-col gap-3 pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] sm:gap-4 sm:pl-5 sm:pr-5"
-            >
-              <div className="flex shrink-0 flex-wrap items-start justify-between gap-3">
+            <div className="relative h-full w-full overflow-hidden">
+              <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-3 p-[max(0.75rem,env(safe-area-inset-top))] sm:p-5">
                 <div className="flex min-w-0 flex-1 flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
-                  <div className="flex w-fit max-w-full items-center gap-0.5 rounded-full border border-white/25 bg-white/10 px-1 py-1 text-white shadow-md">
+                  <div className="pointer-events-auto flex w-fit max-w-full items-center gap-0.5 rounded-full border border-white/25 bg-white/10 px-1 py-1 text-white shadow-md backdrop-blur-sm">
                     <Button
                       type="button"
                       variant="outline"
@@ -764,7 +765,7 @@ export default function TrackStudyPageNew() {
                       Reset
                     </Button>
                   </div>
-                  <p className="text-[10px] leading-snug text-white/55 sm:text-xs">
+                  <p className="pointer-events-none text-[10px] leading-snug text-white/55 sm:text-xs">
                     Pinch on the timer · Ctrl/⌘ + scroll to zoom
                   </p>
                 </div>
@@ -772,7 +773,7 @@ export default function TrackStudyPageNew() {
                   type="button"
                   variant="outline"
                   size="icon"
-                  className="h-11 w-11 shrink-0 rounded-full border-white/25 bg-white/10 text-white shadow-md hover:bg-white/18 sm:h-12 sm:w-12"
+                  className="pointer-events-auto h-11 w-11 shrink-0 rounded-full border-white/25 bg-white/10 text-white shadow-md backdrop-blur-sm hover:bg-white/18 sm:h-12 sm:w-12"
                   onClick={() => setTimerFullscreen(false)}
                   aria-label="Exit fullscreen"
                 >
@@ -780,10 +781,10 @@ export default function TrackStudyPageNew() {
                 </Button>
               </div>
 
-              <div className="flex w-full flex-1 flex-col pb-2">
+              <div className="flex h-full w-full items-center justify-center p-[max(1rem,env(safe-area-inset-bottom))] sm:p-5">
                 <div
                   ref={fsCardWrapRef}
-                  className="flex min-h-0 flex-1 flex-col rounded-3xl border border-white/10 bg-[#111418] text-white shadow-2xl"
+                  className="flex h-full w-full flex-col overflow-hidden rounded-none border-0 bg-[#111418] text-white shadow-2xl sm:rounded-3xl sm:border sm:border-white/10"
                 >
                   <div className="flex flex-wrap items-center gap-4 border-b border-white/10 px-4 py-4 sm:px-8 sm:py-5">
                     <div className="flex min-w-0 flex-1 items-center gap-3">
@@ -811,9 +812,15 @@ export default function TrackStudyPageNew() {
                     </div>
                   </div>
 
-                  <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-6 px-4 py-6 sm:gap-8 sm:px-8 sm:py-8">
-                    <div className="flex w-full justify-center">
-                      <div className="relative mx-auto aspect-square w-full max-w-[min(92vw,70dvh,760px)] shrink-0">
+                  <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 px-4 py-4 sm:gap-6 sm:px-8 sm:py-6">
+                    <div
+                      className="flex w-full flex-1 items-center justify-center overflow-hidden"
+                      style={{
+                        transform: `scale(${fullscreenScale})`,
+                        transformOrigin: "center center",
+                      }}
+                    >
+                      <div className="relative mx-auto aspect-square h-full max-h-[min(74vh,calc(100dvh-14rem))] w-full max-w-[min(96vw,calc(100dvh-14rem),980px)] shrink-0">
                         <svg
                           className="h-full w-full"
                           viewBox="0 0 640 640"
@@ -863,8 +870,8 @@ export default function TrackStudyPageNew() {
                       onClick={() => setRunningSession(!state.isRunning)}
                       className={
                         state.isRunning
-                          ? "min-h-12 w-full max-w-[520px] flex-wrap justify-center gap-2 bg-white text-[#0b0f19] hover:bg-white/90 sm:min-h-14"
-                          : "min-h-12 w-full max-w-[520px] flex-wrap justify-center gap-2 bg-brand text-white hover:bg-brand-dark sm:min-h-14"
+                          ? "min-h-12 w-full max-w-[560px] shrink-0 flex-wrap justify-center gap-2 bg-white text-[#0b0f19] hover:bg-white/90 sm:min-h-14"
+                          : "min-h-12 w-full max-w-[560px] shrink-0 flex-wrap justify-center gap-2 bg-brand text-white hover:bg-brand-dark sm:min-h-14"
                       }
                     >
                       {state.isRunning ? (

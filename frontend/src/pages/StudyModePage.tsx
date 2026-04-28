@@ -30,9 +30,9 @@ import {
   Play,
   Pause,
   RotateCcw,
+  ArrowLeft,
   ChevronLeft,
   ChevronRight,
-  LogOut,
   Loader2,
 } from "lucide-react";
 
@@ -455,10 +455,21 @@ export default function StudyModePage() {
 
   return (
     <div className="fixed inset-0 z-50 bg-navy text-white">
-      <div className="h-full overflow-auto p-4 sm:p-8">
-        <div className="mx-auto max-w-5xl">
-          <div className="rounded-2xl bg-white/5 p-8 shadow-xl sm:p-10">
-            <div className="mb-6 flex flex-col items-center gap-6 sm:flex-row sm:justify-between">
+      <div className="flex h-full flex-col p-3 sm:p-5">
+        <div className="mb-3 flex items-start justify-start">
+          <Button
+            onClick={handleExit}
+            variant="ghost"
+            size="sm"
+            className="gap-1.5 text-white/70 hover:bg-white/10 hover:text-white"
+          >
+            <ArrowLeft className="size-4" />
+            Back
+          </Button>
+        </div>
+
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl bg-white/5 p-4 shadow-xl sm:p-6 lg:p-8">
+          <div className="mb-6 flex flex-col items-center gap-6 sm:flex-row sm:justify-between">
               <div className="relative flex items-center justify-center">
                 <svg
                   width={ringSize}
@@ -550,36 +561,28 @@ export default function StudyModePage() {
                     className="w-16 border-white/20 bg-white/5 text-center text-sm text-white"
                   />
                 </div>
-
-                <Button
-                  onClick={handleExit}
-                  variant="ghost"
-                  size="sm"
-                  className="gap-1.5 text-white/60 hover:text-white"
-                >
-                  <LogOut className="size-4" />
-                  Back
-                </Button>
               </div>
             </div>
 
             <Separator className="bg-white/10" />
 
             {questionsLoading ? (
-              <div className="flex items-center justify-center py-20">
+              <div className="flex flex-1 items-center justify-center py-20">
                 <Loader2 className="size-8 animate-spin text-brand" />
               </div>
             ) : questions.length === 0 ? (
-              <div className="py-16 text-center">
+              <div className="flex flex-1 items-center justify-center py-16 text-center">
+                <div>
                 <p className="font-display text-xl text-white/60">
                   No questions available for this subject.
                 </p>
                 <p className="mt-2 text-sm text-white/40">
                   Questions will appear here once the subject data is loaded.
                 </p>
+                </div>
               </div>
             ) : currentGroup ? (
-              <div className="mt-8 space-y-8">
+              <div className="mt-8 flex min-h-0 flex-1 flex-col space-y-8 overflow-auto">
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-white/50">
                     Stimulus {index + 1} of {studyGroups.length}
@@ -614,7 +617,7 @@ export default function StudyModePage() {
                   {currentGroup.parts.map((part) => renderPartCard(part))}
                 </div>
 
-                <div className="flex items-center justify-between pt-2">
+                <div className="mt-auto flex items-center justify-between pt-2">
                   <Button
                     onClick={goPrev}
                     disabled={index === 0}
@@ -638,7 +641,6 @@ export default function StudyModePage() {
                 </div>
               </div>
             ) : null}
-          </div>
         </div>
       </div>
     </div>

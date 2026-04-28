@@ -78,6 +78,51 @@ const customQuestions = pgTable("custom_questions", {
   createdAt: text("created_at").notNull(),
 });
 
+const englishBooks = pgTable("english_books", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  createdAt: text("created_at").notNull(),
+});
+
+const englishPrompts = pgTable("english_prompts", {
+  id: serial("id").primaryKey(),
+  bookId: integer("book_id").notNull(),
+  promptText: text("prompt_text").notNull(),
+  section: text("section").notNull().default("A"),
+  createdAt: text("created_at").notNull(),
+});
+
+const englishResponses = pgTable(
+  "english_responses",
+  {
+    id: serial("id").primaryKey(),
+    promptId: integer("prompt_id").notNull(),
+    userId: integer("user_id").notNull(),
+    responseType: text("response_type").notNull().default("essay"),
+    responseText: text("response_text").notNull().default(""),
+    imageUrls: text("image_urls"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => ({
+    uniq: unique("english_responses_prompt_user_unique").on(t.promptId, t.userId),
+  }),
+);
+
+const englishResponseRatings = pgTable(
+  "english_response_ratings",
+  {
+    id: serial("id").primaryKey(),
+    responseId: integer("response_id").notNull(),
+    raterUserId: integer("rater_user_id").notNull(),
+    score: integer("score").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => ({
+    uniq: unique("english_response_ratings_unique").on(t.responseId, t.raterUserId),
+  }),
+);
+
 const chatMessages = pgTable("chat_messages", {
   id: serial("id").primaryKey(),
   subjectId: text("subject_id").notNull(),
@@ -205,6 +250,11 @@ function canonicalSubjectId(raw: unknown): string {
   return aliases[s] || s;
 }
 
+function normalizeEnglishSection(raw: unknown): "A" | "B" | "C" {
+  const s = String(raw ?? "").trim().toUpperCase();
+  return s === "B" ? "B" : s === "C" ? "C" : "A";
+}
+
 function friendshipPair(a: number, b: number): { low: number; high: number } {
   const aa = Number(a);
   const bb = Number(b);
@@ -257,6 +307,14 @@ function safeJsonParse(value: string | null | undefined): unknown {
       return undefined;
     }
   }
+}
+function safeJsonColumn(value: unknown): string[] | null {
+  if (value == null) return null;
+  const parsed = safeJsonParse(String(value));
+  if (Array.isArray(parsed)) {
+    return parsed.map((v) => String(v ?? "").trim()).filter(Boolean);
+  }
+  return null;
 }
 function nowIso(): string { return new Date().toISOString(); }
 
@@ -1339,6 +1397,234 @@ app.get("/api/admin/questions", adminAccessMiddleware, async (c: any) => {
     };
   });
   return c.json(list);
+});
+
+app.get("/api/admin/english/prompts", adminAccessMiddleware, async (c: any) => {
+  try {
+    const db = c.get("db");
+    const rows = await db.execute(sql`
+      SELECT p.id, p.section, p.prompt_text, b.title AS book_title
+      FROM english_prompts p
+      JOIN english_books b ON b.id = p.book_id
+      ORDER BY p.section ASC, b.title ASC, p.id ASC
+    `);
+    return c.json({
+      prompts: (rows.rows as any[]).map((r) => ({
+        id: Number(r.id),
+        section: normalizeEnglishSection(r.section),
+        book: String(r.book_title || ""),
+        prompt: String(r.prompt_text || ""),
+      })),
+    });
+  } catch (e) {
+    return c.json({ error: errorChain(e) }, 500);
+  }
+});
+
+app.get("/api/english/books", authMiddleware, async (c: any) => {
+  try {
+    const db = c.get("db");
+    const section = normalizeEnglishSection(c.req.query("section"));
+    const rows = await db.execute(sql`
+      SELECT b.id, b.title, COUNT(p.id) AS prompt_count
+      FROM english_books b
+      LEFT JOIN english_prompts p ON p.book_id = b.id
+      ${section === "A" ? sql`WHERE p.section = 'A'` : sql``}
+      GROUP BY b.id, b.title
+      ORDER BY b.title ASC
+    `);
+    const mapped = (rows.rows as any[]).map((r) => ({
+      id: Number(r.id),
+      title: String(r.title || ""),
+      promptCount: Number(r.prompt_count || 0),
+    }));
+    return c.json({ books: section === "A" ? mapped.filter((x) => x.promptCount > 0) : mapped });
+  } catch (e) {
+    return c.json({ error: errorChain(e) }, 500);
+  }
+});
+
+app.get("/api/english/prompts", authMiddleware, async (c: any) => {
+  try {
+    const db = c.get("db");
+    const section = normalizeEnglishSection(c.req.query("section"));
+    const bookId = Number(c.req.query("bookId"));
+    if (section === "A" && (!Number.isFinite(bookId) || bookId <= 0)) {
+      return c.json({ error: "bookId is required for section A." }, 400);
+    }
+
+    const rows =
+      section === "A"
+        ? await db.execute(sql`
+            SELECT p.id, p.prompt_text, p.section, b.id AS book_id, b.title AS book_title
+            FROM english_prompts p
+            JOIN english_books b ON b.id = p.book_id
+            WHERE p.book_id = ${bookId} AND p.section = 'A'
+            ORDER BY p.id ASC
+          `)
+        : await db.execute(sql`
+            SELECT p.id, p.prompt_text, p.section, b.id AS book_id, b.title AS book_title
+            FROM english_prompts p
+            JOIN english_books b ON b.id = p.book_id
+            WHERE p.section = ${section}
+            ORDER BY p.id ASC
+          `);
+
+    return c.json({
+      prompts: (rows.rows as any[]).map((r) => ({
+        id: Number(r.id),
+        bookId: Number(r.book_id),
+        bookTitle: String(r.book_title || ""),
+        prompt: String(r.prompt_text || ""),
+        section: normalizeEnglishSection(r.section),
+      })),
+    });
+  } catch (e) {
+    return c.json({ error: errorChain(e) }, 500);
+  }
+});
+
+app.post("/api/english/responses", authMiddleware, async (c: any) => {
+  try {
+    const db = c.get("db");
+    const user = c.get("user");
+    const body = await c.req.json();
+    const promptId = Number(body?.promptId);
+    const responseTypeRaw = cleanText(body?.responseType, 40).toLowerCase();
+    const responseType = responseTypeRaw === "paragraph" ? "paragraph" : "essay";
+    const responseText = cleanText(body?.responseText, 20000);
+    const imageUrls = Array.isArray(body?.imageUrls)
+      ? body.imageUrls.map((u: unknown) => String(u ?? "").trim()).filter(Boolean).slice(0, 8)
+      : [];
+
+    if (!Number.isFinite(promptId) || promptId <= 0) return c.json({ error: "promptId is required." }, 400);
+    if (!responseText && imageUrls.length === 0) {
+      return c.json({ error: "Provide response text or at least one image." }, 400);
+    }
+
+    const exists = await db
+      .select({ id: englishPrompts.id })
+      .from(englishPrompts)
+      .where(eq(englishPrompts.id, promptId))
+      .limit(1);
+    if (!exists.length) return c.json({ error: "Prompt not found." }, 404);
+
+    const imageUrlsJson = imageUrls.length ? JSON.stringify(imageUrls) : null;
+    const now = nowIso();
+    await db.execute(sql`
+      INSERT INTO english_responses (prompt_id, user_id, response_type, response_text, image_urls, created_at, updated_at)
+      VALUES (${promptId}, ${user.id}, ${responseType}, ${responseText || ""}, ${imageUrlsJson}, ${now}, ${now})
+      ON CONFLICT(prompt_id, user_id) DO UPDATE SET
+        response_type = excluded.response_type,
+        response_text = excluded.response_text,
+        image_urls = excluded.image_urls,
+        updated_at = excluded.updated_at
+    `);
+    return c.json({ ok: true });
+  } catch (e) {
+    return c.json({ error: errorChain(e) }, 500);
+  }
+});
+
+app.get("/api/english/responses", authMiddleware, async (c: any) => {
+  try {
+    const db = c.get("db");
+    const user = c.get("user");
+    const section = normalizeEnglishSection(c.req.query("section"));
+    const bookId = Number(c.req.query("bookId"));
+    if (section === "A" && (!Number.isFinite(bookId) || bookId <= 0)) {
+      return c.json({ error: "bookId is required for section A." }, 400);
+    }
+
+    const rows =
+      section === "A"
+        ? await db.execute(sql`
+            SELECT r.id, r.prompt_id, r.user_id, r.response_type, r.response_text, r.image_urls, r.updated_at,
+                   p.prompt_text, p.section, u.username, AVG(rr.score) AS avg_score, COUNT(rr.id) AS rating_count
+            FROM english_responses r
+            JOIN english_prompts p ON p.id = r.prompt_id
+            JOIN english_books b ON b.id = p.book_id
+            JOIN users u ON u.id = r.user_id
+            LEFT JOIN english_response_ratings rr ON rr.response_id = r.id
+            WHERE b.id = ${bookId} AND p.section = 'A'
+            GROUP BY r.id, p.prompt_text, p.section, u.username
+            ORDER BY r.updated_at DESC
+          `)
+        : await db.execute(sql`
+            SELECT r.id, r.prompt_id, r.user_id, r.response_type, r.response_text, r.image_urls, r.updated_at,
+                   p.prompt_text, p.section, u.username, AVG(rr.score) AS avg_score, COUNT(rr.id) AS rating_count
+            FROM english_responses r
+            JOIN english_prompts p ON p.id = r.prompt_id
+            JOIN users u ON u.id = r.user_id
+            LEFT JOIN english_response_ratings rr ON rr.response_id = r.id
+            WHERE p.section = ${section}
+            GROUP BY r.id, p.prompt_text, p.section, u.username
+            ORDER BY r.updated_at DESC
+          `);
+
+    const myRatings = await db.execute(sql`
+      SELECT response_id, score FROM english_response_ratings WHERE rater_user_id = ${user.id}
+    `);
+    const myMap = new Map((myRatings.rows as any[]).map((r) => [Number(r.response_id), Number(r.score)]));
+
+    return c.json({
+      responses: (rows.rows as any[]).map((r) => ({
+        id: Number(r.id),
+        promptId: Number(r.prompt_id),
+        prompt: String(r.prompt_text || ""),
+        section: normalizeEnglishSection(r.section),
+        userId: Number(r.user_id),
+        username: String(r.username || ""),
+        responseType: String(r.response_type || "essay"),
+        responseText: String(r.response_text || ""),
+        imageUrls: safeJsonColumn(r.image_urls) || [],
+        updatedAt: String(r.updated_at || ""),
+        averageScore:
+          Number(r.rating_count || 0) > 0 && r.avg_score != null
+            ? Math.round(Number(r.avg_score) * 10) / 10
+            : null,
+        ratingCount: Number(r.rating_count || 0),
+        myScore: myMap.get(Number(r.id)) ?? null,
+      })),
+    });
+  } catch (e) {
+    return c.json({ error: errorChain(e) }, 500);
+  }
+});
+
+app.post("/api/english/responses/:id/rate", authMiddleware, async (c: any) => {
+  try {
+    const db = c.get("db");
+    const user = c.get("user");
+    const responseId = Number(c.req.param("id"));
+    const body = await c.req.json();
+    const score = Number(body?.score);
+    if (!Number.isFinite(responseId) || responseId <= 0) {
+      return c.json({ error: "response id is required." }, 400);
+    }
+    if (!Number.isFinite(score) || score < 1 || score > 10 || score !== Math.floor(score)) {
+      return c.json({ error: "score must be an integer from 1 to 10." }, 400);
+    }
+
+    const target = await db
+      .select({ userId: englishResponses.userId })
+      .from(englishResponses)
+      .where(eq(englishResponses.id, responseId))
+      .limit(1);
+    if (!target.length) return c.json({ error: "Response not found." }, 404);
+    if (Number(target[0].userId) === Number(user.id)) {
+      return c.json({ error: "You cannot rate your own response." }, 400);
+    }
+
+    await db.execute(sql`
+      INSERT INTO english_response_ratings (response_id, rater_user_id, score, created_at)
+      VALUES (${responseId}, ${user.id}, ${score}, ${nowIso()})
+      ON CONFLICT(response_id, rater_user_id) DO UPDATE SET score = excluded.score
+    `);
+    return c.json({ ok: true });
+  } catch (e) {
+    return c.json({ error: errorChain(e) }, 500);
+  }
 });
 
 app.post("/api/admin/questions", adminAccessMiddleware, async (c: any) => {

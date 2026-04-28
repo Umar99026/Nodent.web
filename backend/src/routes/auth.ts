@@ -166,9 +166,92 @@ async function handleLogout(c: any) {
   return c.json({ ok: true });
 }
 
+async function handleUpdateAccount(c: any) {
+  const authUser = c.get("user");
+  const db = c.get("db");
+  const body = await c.req.json().catch(() => ({}));
+
+  const hasUsername = Object.prototype.hasOwnProperty.call(body, "username");
+  const hasCurrentPassword = Object.prototype.hasOwnProperty.call(body, "currentPassword");
+  const hasNewPassword = Object.prototype.hasOwnProperty.call(body, "newPassword");
+
+  const username = hasUsername ? cleanText(body.username, 40) : undefined;
+  const currentPassword = hasCurrentPassword ? String(body.currentPassword || "").trim() : "";
+  const newPassword = hasNewPassword ? String(body.newPassword || "").trim() : "";
+
+  const rows = await db.select().from(users).where(eq(users.id, authUser.id)).limit(1);
+  if (rows.length === 0) {
+    return c.json({ error: "User not found." }, 404);
+  }
+
+  const user = rows[0];
+  const updates: Partial<typeof users.$inferInsert> = {};
+
+  if (hasUsername) {
+    if (!username || username.length < 2) {
+      return c.json({ error: "Username must be at least 2 characters." }, 400);
+    }
+
+    const existingUsername = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(
+        sql`LOWER(${users.username}) = LOWER(${username}) AND ${users.id} <> ${authUser.id}`
+      )
+      .limit(1);
+
+    if (existingUsername.length > 0) {
+      return c.json({ error: "That username is already taken." }, 400);
+    }
+
+    updates.username = username;
+  }
+
+  if (hasCurrentPassword || hasNewPassword) {
+    if (!currentPassword || !newPassword) {
+      return c.json(
+        { error: "Enter your current password and a new password." },
+        400
+      );
+    }
+
+    if (newPassword.length < 4) {
+      return c.json({ error: "Password must be at least 4 characters." }, 400);
+    }
+
+    const valid = await verifyPassword(
+      currentPassword,
+      user.passwordSalt,
+      user.passwordHash
+    );
+    if (!valid) {
+      return c.json({ error: "Current password is incorrect." }, 400);
+    }
+
+    const { salt, hash } = await hashPassword(newPassword);
+    updates.passwordSalt = salt;
+    updates.passwordHash = hash;
+    updates.hashAlgorithm = "pbkdf2";
+  }
+
+  if (Object.keys(updates).length > 0) {
+    await db.update(users).set(updates).where(eq(users.id, authUser.id));
+  }
+
+  const nextUsername = updates.username ?? user.username;
+  return c.json({
+    user: {
+      id: user.id,
+      username: nextUsername,
+      email: user.email,
+    },
+  });
+}
+
 // Mount routes
 auth.post("/signup", handleSignup);
 auth.post("/login", handleLogin);
 auth.post("/logout", authMiddleware, handleLogout);
+auth.patch("/account", authMiddleware, handleUpdateAccount);
 
-export { auth, handleSignup, handleLogin, handleLogout };
+export { auth, handleSignup, handleLogin, handleLogout, handleUpdateAccount };

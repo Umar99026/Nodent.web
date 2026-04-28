@@ -5,6 +5,7 @@ import { apiFetch } from "@/lib/api";
 import { STORAGE_KEYS } from "@/lib/constants";
 import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Card,
   CardHeader,
@@ -28,7 +29,6 @@ import {
   Search,
   X,
   Star,
-  User,
 } from "lucide-react";
 
 import { baseSubjects } from "@/lib/subjects";
@@ -64,6 +64,14 @@ export default function DashboardPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const userId = String(user?.id ?? "anonymous");
+  const initials = user?.username
+    ? user.username
+        .split(" ")
+        .map((n) => n[0])
+        .join("")
+        .toUpperCase()
+        .slice(0, 2)
+    : "?";
 
   const [mySubjects, setMySubjects] = useState<Subject[]>(() =>
     getMySubjects(userId),
@@ -176,20 +184,38 @@ export default function DashboardPage() {
 
   return (
     <AppShell
-      title="Dashboard"
-      subtitle={`Welcome back, ${user?.username ?? "Student"}`}
+      title=""
+      subtitle={
+        <>
+          <span className="block text-[0.72rem] font-semibold uppercase tracking-[0.22em] text-white/70 sm:text-[0.8rem]">
+            Welcome back,
+          </span>
+          <span className="mt-1.5 block text-[clamp(1.8rem,4.6vw,3.3rem)] font-black leading-[0.92] tracking-tight text-white/95">
+            {user?.username ?? "Student"}
+          </span>
+        </>
+      }
+      hideTitle
+      subtitleClassName="max-w-none text-left leading-none text-white"
       headerRight={
         <button
           type="button"
           onClick={() => setScoreCardOpen((v) => !v)}
-          className="flex min-w-0 max-w-full items-center gap-2 rounded-full border border-white/25 bg-white/15 px-2.5 py-2 text-left transition-colors hover:bg-white/20 sm:px-3"
+          className={`inline-flex h-12 w-12 items-center justify-center rounded-full text-[#0b0f19] shadow-[0_10px_30px_rgba(0,0,0,0.14)] transition-colors ${
+            user?.profilePhoto ? "bg-transparent hover:opacity-92" : "bg-white hover:bg-white/92"
+          }`}
+          aria-label="Open scorecard"
         >
-          <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/20 bg-white/15">
-            <User className="size-4 text-white/90" />
-          </span>
-          <span className="min-w-0 truncate text-sm font-semibold text-white">
-            {user?.username ?? "Student"}
-          </span>
+          <Avatar
+            className={`shrink-0 after:border-transparent ${
+              user?.profilePhoto ? "size-12" : "size-8"
+            }`}
+          >
+            <AvatarImage src={user?.profilePhoto ?? undefined} alt={user?.username ?? "User"} />
+            <AvatarFallback className="bg-[#f4f7fb] text-xs font-bold text-[#0b0f19]">
+              {user?.profilePhoto ? initials : <Star className="size-4 text-[#0b0f19]" />}
+            </AvatarFallback>
+          </Avatar>
         </button>
       }
     >
@@ -213,34 +239,38 @@ export default function DashboardPage() {
                     Live rating based on your correct answers and marks.
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    className="border-white/20 bg-white/10 text-white hover:bg-white/15"
-                    onClick={() => void fetchScorecard()}
-                    disabled={scoreCardLoading}
-                  >
-                    {scoreCardLoading ? "Refreshing…" : "Refresh"}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="border-white/20 bg-white/10 text-white hover:bg-white/15"
-                    onClick={() => setScoreCardOpen(false)}
-                  >
-                    Close
-                  </Button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setScoreCardOpen(false)}
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-red-400/25 bg-red-500/90 text-white transition-colors hover:bg-red-500"
+                  aria-label="Close scorecard"
+                >
+                  <X className="size-4" />
+                </button>
               </div>
 
               <Card className="paper-texture overflow-hidden">
-                <CardContent className="grid gap-6 p-6 lg:grid-cols-[360px_1fr]">
+                <CardContent className="space-y-6 p-6">
                   {/* Soccer-style rating card */}
                   <div className="relative overflow-hidden rounded-3xl border border-black/10 bg-gradient-to-b from-[#f3fbff] to-white p-6 shadow-xl">
                     <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_20%_10%,rgba(86,171,230,0.22),transparent_55%)]" />
                     <div className="relative">
-                      <div className="flex items-center justify-between">
-                        <div className="rounded-full bg-[#0b0f19] px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-white">
-                          Student
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                          <Avatar className="size-12 shrink-0">
+                            <AvatarImage
+                              src={user?.profilePhoto ?? undefined}
+                              alt={user?.username ?? "User"}
+                            />
+                            <AvatarFallback className="bg-[#0b0f19] text-sm font-bold text-white">
+                              {user?.profilePhoto ? initials : "S"}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <div className="rounded-full bg-[#0b0f19] px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-white">
+                              {user?.username ?? "Student"}
+                            </div>
+                          </div>
                         </div>
                         <div className="text-[11px] font-semibold text-black/60">
                           Live
@@ -310,7 +340,7 @@ export default function DashboardPage() {
                   </div>
 
                   {/* Details */}
-                  <div className="grid gap-4 md:grid-cols-2">
+                  <div className="grid gap-4">
                     <div className="space-y-2 rounded-2xl border border-border/50 bg-card/40 p-5">
                       <div className="text-xs text-muted-foreground">
                         Best subject
@@ -359,7 +389,7 @@ export default function DashboardPage() {
       )}
 
       {/* Subjects container */}
-      <div className="mt-12 min-w-0 max-w-full rounded-3xl border border-white/20 bg-white/10 p-4 backdrop-blur-md sm:mt-14 sm:p-6 lg:mt-16 lg:p-8">
+      <div className="mt-4 min-w-0 max-w-full rounded-3xl border border-white/20 bg-white/10 p-4 backdrop-blur-md sm:mt-5 sm:p-6 lg:mt-6 lg:p-8">
           {/* Section header */}
           <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>

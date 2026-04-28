@@ -1376,8 +1376,12 @@ export default function AdminPage() {
 
   if (!isAdmin) {
     return (
-      <AppShell title="Admin Panel" subtitle="Manage custom questions">
-        <div className="mx-auto max-w-3xl space-y-6">
+      <AppShell
+        title="Admin Panel"
+        subtitle="Manage custom questions"
+        edgeToEdgeHeader
+      >
+        <div className="max-w-none space-y-6">
           <Card className="paper-texture">
             <CardHeader>
               <CardTitle className="font-display text-lg">Admin access required</CardTitle>
@@ -1393,8 +1397,12 @@ export default function AdminPage() {
   }
 
   return (
-    <AppShell title="Admin Panel" subtitle="Manage custom questions">
-      <div className="mx-auto max-w-4xl space-y-8">
+    <AppShell
+      title="Admin Panel"
+      subtitle="Manage custom questions"
+      edgeToEdgeHeader
+    >
+      <div className="max-w-none space-y-8">
         <Card className="paper-texture">
           <CardHeader>
             <CardTitle className="font-display text-lg">English books & prompts</CardTitle>

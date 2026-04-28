@@ -1,6 +1,7 @@
 export const STORAGE_KEYS = {
   currentUser: "nodent_current_user",
   authToken: "nodent_auth_token",
+  profilePhotoPrefix: "nodent_profile_photo_",
   rememberLogin: "nodent_remember_login",
   practiceStatePrefix: "nodent_practice_state_",
   mySubjectsPrefix: "nodent_my_subjects_",
@@ -23,6 +24,7 @@ export const API_PATHS = {
     login: "/api/auth/login",
     signup: "/api/auth/signup",
     logout: "/api/auth/logout",
+    account: "/api/auth/account",
   },
   bootstrap: "/api/bootstrap",
   subjects: "/api/subjects",

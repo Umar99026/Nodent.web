@@ -27,6 +27,7 @@ interface LongQuestionProps {
   hidePassage?: boolean;
   lockedCorrect?: boolean;
   classFullyCorrectPercent?: number | null;
+  submitLabel?: string;
 }
 
 export function LongQuestion({
@@ -38,6 +39,7 @@ export function LongQuestion({
   hidePassage = false,
   lockedCorrect = false,
   classFullyCorrectPercent,
+  submitLabel = "Save Answer",
 }: LongQuestionProps) {
   const [response, setResponse] = useState("");
   const [saving, setSaving] = useState(false);
@@ -115,13 +117,13 @@ export function LongQuestion({
       }
       setAutoMarkResult(result);
       onAnswer(result);
-      if (result === true) toast.success("Answer saved. Marked correct.");
+      if (result === true) toast.success("Answer submitted. Marked correct.");
       else if (result === false)
-        toast.error("Answer saved. Not quite right yet.");
-      else toast.success("Answer saved.");
+        toast.error("Answer submitted. Not quite right yet.");
+      else toast.success("Answer submitted.");
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "Failed to save answer."
+        err instanceof Error ? err.message : "Failed to submit answer."
       );
     } finally {
       setSaving(false);
@@ -156,10 +158,10 @@ export function LongQuestion({
         {displayMarks(question.marks, question.type)}{" "}
         {displayMarks(question.marks, question.type) === 1 ? "mark" : "marks"}
       </p>
-      <div className="font-display text-lg leading-relaxed text-foreground sm:text-xl">
+      <div className="font-display text-[1.18rem] leading-relaxed text-foreground sm:text-[1.45rem]">
         <RichQuestionContent
           text={stripQuestionNumberPrefix(question.question)}
-          className="prose prose-sm max-w-none prose-p:my-0"
+          className="prose prose-base max-w-none prose-p:my-0"
         />
       </div>
 
@@ -224,7 +226,7 @@ export function LongQuestion({
             ) : (
               <Save className="size-4" />
             )}
-            {saved ? "Saved" : "Save Answer"}
+            {saved ? "Submitted" : submitLabel}
           </Button>
         </div>
         {saved && autoMarkResult !== null && (

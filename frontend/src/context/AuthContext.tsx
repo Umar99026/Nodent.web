@@ -13,6 +13,7 @@ export interface User {
   id: number;
   email: string;
   username: string;
+  profilePhoto?: string | null;
 }
 
 interface AuthState {
@@ -30,6 +31,12 @@ interface AuthContextValue extends AuthState {
     password: string,
   ) => Promise<void>;
   logout: () => Promise<void>;
+  updateAccount: (payload: {
+    username?: string;
+    currentPassword?: string;
+    newPassword?: string;
+  }) => Promise<void>;
+  setProfilePhoto: (profilePhoto: string | null) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -43,6 +50,37 @@ interface BootstrapResponse {
 interface AuthResponse {
   token: string;
   user: User;
+}
+
+interface UpdateAccountResponse {
+  user: User;
+}
+
+function profilePhotoStorageKey(userId: number | string): string {
+  return `${STORAGE_KEYS.profilePhotoPrefix}${userId}`;
+}
+
+function readProfilePhoto(userId: number | string): string | null {
+  try {
+    return localStorage.getItem(profilePhotoStorageKey(userId));
+  } catch {
+    return null;
+  }
+}
+
+function withProfilePhoto(user: User): User {
+  return {
+    ...user,
+    profilePhoto: readProfilePhoto(user.id),
+  };
+}
+
+function persistCurrentUser(user: User | null) {
+  if (!user) {
+    localStorage.removeItem(STORAGE_KEYS.currentUser);
+    return;
+  }
+  localStorage.setItem(STORAGE_KEYS.currentUser, JSON.stringify(user));
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -81,8 +119,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Call bootstrap to confirm token validity and get fresh user data
     apiFetch<BootstrapResponse>(API_PATHS.bootstrap)
       .then((data) => {
-        const user = data.user;
-        localStorage.setItem(STORAGE_KEYS.currentUser, JSON.stringify(user));
+        const user = withProfilePhoto(data.user);
+        persistCurrentUser(user);
         if (data.customQuestions) {
           // Cache admin-added questions so practice pages can render them.
           localStorage.setItem(
@@ -134,14 +172,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({ email, password }),
       });
 
+      const user = withProfilePhoto(data.user);
       localStorage.setItem(STORAGE_KEYS.authToken, data.token);
-      localStorage.setItem(
-        STORAGE_KEYS.currentUser,
-        JSON.stringify(data.user),
-      );
+      persistCurrentUser(user);
 
       setState({
-        user: data.user,
+        user,
         token: data.token,
         isAuthenticated: true,
         isLoading: false,
@@ -157,14 +193,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({ username, email, password }),
       });
 
+      const user = withProfilePhoto(data.user);
       localStorage.setItem(STORAGE_KEYS.authToken, data.token);
-      localStorage.setItem(
-        STORAGE_KEYS.currentUser,
-        JSON.stringify(data.user),
-      );
+      persistCurrentUser(user);
 
       setState({
-        user: data.user,
+        user,
         token: data.token,
         isAuthenticated: true,
         isLoading: false,
@@ -191,8 +225,52 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const updateAccount = useCallback(
+    async (payload: {
+      username?: string;
+      currentPassword?: string;
+      newPassword?: string;
+    }) => {
+      const data = await apiFetch<UpdateAccountResponse>(API_PATHS.auth.account, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      });
+
+      const user = withProfilePhoto(data.user);
+      persistCurrentUser(user);
+      setState((prev) => ({
+        ...prev,
+        user,
+      }));
+    },
+    [],
+  );
+
+  const setProfilePhoto = useCallback((profilePhoto: string | null) => {
+    setState((prev) => {
+      if (!prev.user) return prev;
+
+      const key = profilePhotoStorageKey(prev.user.id);
+      if (profilePhoto) {
+        localStorage.setItem(key, profilePhoto);
+      } else {
+        localStorage.removeItem(key);
+      }
+
+      const nextUser = { ...prev.user, profilePhoto };
+      persistCurrentUser(nextUser);
+
+      return {
+        ...prev,
+        user: nextUser,
+      };
+    });
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ ...state, login, signup, logout }}>
+    <AuthContext.Provider
+      value={{ ...state, login, signup, logout, updateAccount, setProfilePhoto }}
+    >
       {children}
     </AuthContext.Provider>
   );

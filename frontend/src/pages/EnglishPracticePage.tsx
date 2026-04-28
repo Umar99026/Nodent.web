@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Check, Loader2 } from "lucide-react";
+import { Check, Loader2, X } from "lucide-react";
 import { compressImageFileToDataUrl } from "@/lib/imageCompressor";
 import { toast } from "sonner";
 import { CommentThread } from "@/components/quiz/CommentThread";
@@ -259,7 +259,8 @@ export function EnglishPracticePanel() {
       });
       toast.success("Response uploaded to shared space.");
       setSubmittedPromptIds((prev) => ({ ...prev, [prompt.id]: true }));
-      await loadBookData(numericBookId, section);
+      setTextByPrompt((prev) => ({ ...prev, [prompt.id]: "" }));
+      setImagesByPrompt((prev) => ({ ...prev, [prompt.id]: [] }));
       navigate(
         `/quiz/english/prompt/${prompt.id}/responses?section=${section}${
           section === "A" && Number.isFinite(numericBookId) && numericBookId > 0
@@ -516,6 +517,7 @@ export function EnglishPromptResponsesPage() {
   const [responses, setResponses] = useState<ResponseRow[]>([]);
   const [ratingByResponseId, setRatingByResponseId] = useState<Record<number, string>>({});
   const [savingRatingId, setSavingRatingId] = useState<number | null>(null);
+  const [openResponseId, setOpenResponseId] = useState<number | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -543,6 +545,7 @@ export function EnglishPromptResponsesPage() {
   }, [section, bookId, numericPromptId]);
 
   const promptTitle = responses[0]?.prompt ?? "Prompt responses";
+  const openResponse = responses.find((r) => r.id === openResponseId) ?? null;
   const rateResponse = async (responseId: number, scoreRaw: string) => {
     const score = Number(scoreRaw);
     if (!Number.isFinite(score) || score < 1 || score > 10) return;
@@ -595,6 +598,12 @@ export function EnglishPromptResponsesPage() {
                       key={r.id}
                       className="group relative aspect-square overflow-hidden rounded-md border border-black/10 bg-white shadow-sm"
                     >
+                      <button
+                        type="button"
+                        className="absolute inset-0 z-[1]"
+                        onClick={() => setOpenResponseId(r.id)}
+                        aria-label={`Open response by ${r.username}`}
+                      />
                       <div className="absolute inset-0 bg-gradient-to-br from-slate-50 via-white to-slate-100" />
                       <div className="absolute inset-0 flex items-center justify-center p-1.5">
                         <div className="w-full rounded-sm border border-black/10 bg-white/60 p-1.5 backdrop-blur-sm">
@@ -654,6 +663,35 @@ export function EnglishPromptResponsesPage() {
           </CardContent>
         </Card>
       </div>
+      {openResponse ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-3xl rounded-xl border border-black/10 bg-white p-4 shadow-2xl">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-[#0f172a]">@{openResponse.username}</p>
+                <p className="text-xs text-muted-foreground">
+                  Avg: {openResponse.averageScore != null ? `${openResponse.averageScore}/10` : "No ratings yet"}
+                </p>
+              </div>
+              <Button type="button" variant="outline" size="icon" onClick={() => setOpenResponseId(null)}>
+                <X className="size-4" />
+              </Button>
+            </div>
+            <div className="max-h-[70vh] overflow-y-auto rounded-lg border border-black/10 bg-slate-50 p-4">
+              <p className="whitespace-pre-wrap text-sm leading-relaxed text-[#111827]">
+                {openResponse.responseText || "No typed response text."}
+              </p>
+              {openResponse.imageUrls?.length ? (
+                <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                  {openResponse.imageUrls.map((u, i) => (
+                    <img key={`${openResponse.id}-${i}`} src={u} alt={`response-${openResponse.id}-${i + 1}`} className="w-full rounded border border-black/10" />
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </AppShell>
   );
 }

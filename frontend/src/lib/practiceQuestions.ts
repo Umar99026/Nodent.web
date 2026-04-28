@@ -256,6 +256,10 @@ export function normalizeCustomQuestion(raw: unknown): Question | null {
     if (!acceptedAnswers.length)
       acceptedAnswers = parseStringArray(q.accepted_answers);
     if (!acceptedAnswers.length) {
+      const single = String(q.answer ?? "").trim();
+      if (single) acceptedAnswers = [single];
+    }
+    if (!acceptedAnswers.length) {
       return {
         type: "long",
         topic,

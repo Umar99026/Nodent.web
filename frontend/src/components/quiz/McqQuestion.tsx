@@ -98,10 +98,10 @@ export function McqQuestion({
         {displayMarks(question.marks, question.type)}{" "}
         {displayMarks(question.marks, question.type) === 1 ? "mark" : "marks"}
       </p>
-      <div className="font-display text-lg leading-relaxed text-foreground sm:text-xl">
+      <div className="font-display text-[1.18rem] leading-relaxed text-foreground sm:text-[1.45rem]">
         <RichQuestionContent
           text={stripQuestionNumberPrefix(question.question)}
-          className="prose prose-sm max-w-none prose-p:my-0"
+          className="prose prose-base max-w-none prose-p:my-0"
         />
       </div>
 
@@ -134,7 +134,7 @@ export function McqQuestion({
 
             {/* Option text (render math) */}
             <span className="flex-1 pt-0.5">
-              <RichQuestionContent text={option} className="prose prose-sm max-w-none prose-p:my-0" />
+              <RichQuestionContent text={option} className="prose prose-base max-w-none prose-p:my-0" />
             </span>
 
             {/* Result icon */}

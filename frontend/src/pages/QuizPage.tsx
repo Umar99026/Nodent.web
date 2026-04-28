@@ -158,6 +158,7 @@ export default function QuizPage() {
   const subject: Subject | undefined = useMemo(() => {
     return baseSubjects.find((s) => s.id === subjectId);
   }, [subjectId]);
+  const isMathSubject = /math/i.test(subject?.name ?? "");
 
   useEffect(() => {
     setInitialized(false);
@@ -583,7 +584,10 @@ export default function QuizPage() {
   }
 
   return (
-    <AppShell title={subject ? `${subject.name} Practice` : "Practice"}>
+    <AppShell
+      title={subject ? `${subject.name} Practice` : "Practice"}
+      edgeToEdgeHeader
+    >
       <div className="space-y-6">
         {isWrongReview && (
           <p className="rounded-lg border border-amber/40 bg-amber/10 px-4 py-3 text-sm text-amber">
@@ -706,6 +710,7 @@ export default function QuizPage() {
                               }
                               disabled={lockedCorrect}
                               classFullyCorrectPercent={partClass ?? null}
+                              submitLabel={isMathSubject ? "Submit Answer" : "Save Answer"}
                             />
                           )}
                         </div>
