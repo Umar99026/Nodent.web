@@ -17,6 +17,8 @@ interface McqQuestionProps {
   lockedCorrect?: boolean;
   /** Share of students who got this question fully correct (all-time class). */
   classFullyCorrectPercent?: number | null;
+  /** Allow multiple attempts (used for wrong-answer practice). */
+  allowRetry?: boolean;
 }
 
 export function McqQuestion({
@@ -26,6 +28,7 @@ export function McqQuestion({
   hidePassage = false,
   lockedCorrect = false,
   classFullyCorrectPercent,
+  allowRetry = false,
 }: McqQuestionProps) {
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
@@ -38,7 +41,9 @@ export function McqQuestion({
   }, [lockedCorrect, question.answer]);
 
   const handleSelect = (option: string) => {
-    if (submitted || disabled) return;
+    const alreadyCorrect = submitted && selectedOption === question.answer;
+    if (disabled) return;
+    if (submitted && (!allowRetry || alreadyCorrect)) return;
     setSelectedOption(option);
     setSubmitted(true);
     const isCorrect = option === question.answer;

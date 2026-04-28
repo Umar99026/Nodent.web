@@ -13,6 +13,63 @@ export function normalizeAnswer(text: string): string {
     .replace(/[.,;:!?]+$/, "");
 }
 
+function parseNumericAnswer(raw: string): number | null {
+  const t = raw
+    .trim()
+    .toLowerCase()
+    .replace(/[.,;:!?]+$/, "")
+    .replace(/,/g, "")
+    .replace(/\s+/g, "");
+  if (!t) return null;
+  // Basic numeric: -12, 3.14, .5, 5., 1e-3
+  const n = Number(t);
+  return Number.isFinite(n) ? n : null;
+}
+
+function decimalPlacesFromLiteral(raw: string): number | null {
+  const t = raw.trim().toLowerCase().replace(/[.,;:!?]+$/, "").replace(/,/g, "");
+  const m = t.match(/^-?(?:\d+)?\.(\d+)(?:e[+-]?\d+)?$/i);
+  if (!m) return null;
+  return m[1]?.length ?? null;
+}
+
+export function inferDpHintFromAccepted(acceptedAnswers: string[]): number | null {
+  const dps = acceptedAnswers
+    .map((a) => decimalPlacesFromLiteral(String(a)))
+    .filter((x): x is number => typeof x === "number" && Number.isFinite(x));
+  if (!dps.length) return null;
+  return Math.max(...dps);
+}
+
+export function isAnswerCorrect(
+  studentAnswer: string,
+  acceptedAnswers: string[],
+): { correct: boolean; dpHint: number | null } {
+  const dpHint = inferDpHintFromAccepted(acceptedAnswers);
+
+  const studentNum = parseNumericAnswer(studentAnswer);
+  if (studentNum != null) {
+    for (const a of acceptedAnswers) {
+      const accNum = parseNumericAnswer(String(a));
+      if (accNum == null) continue;
+      if (dpHint != null && dpHint > 0) {
+        const f = 10 ** dpHint;
+        const sn = Math.round(studentNum * f) / f;
+        const an = Math.round(accNum * f) / f;
+        if (Object.is(sn, an)) return { correct: true, dpHint };
+        continue;
+      }
+      if (Math.abs(studentNum - accNum) < 1e-9) return { correct: true, dpHint };
+    }
+  }
+
+  const normalized = normalizeAnswer(studentAnswer);
+  const correct = acceptedAnswers.some(
+    (accepted) => normalizeAnswer(String(accepted)) === normalized,
+  );
+  return { correct, dpHint };
+}
+
 /** Format a duration in seconds as MM:SS or HH:MM:SS. */
 export function formatSeconds(seconds: number): string {
   const s = Math.max(0, Math.floor(seconds));

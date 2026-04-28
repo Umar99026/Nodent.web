@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { cn, normalizeAnswer, getQuestionTypeLabel } from "@/lib/utils";
+import { cn, getQuestionTypeLabel, isAnswerCorrect } from "@/lib/utils";
 import type { ShortQuestion as ShortQuestionType } from "@/lib/subjects";
 import { displayMarks, stripQuestionHeadingFromPassage, stripQuestionNumberPrefix } from "@/lib/questionDisplay";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +16,8 @@ interface ShortQuestionProps {
   hidePassage?: boolean;
   lockedCorrect?: boolean;
   classFullyCorrectPercent?: number | null;
+  /** Allow multiple attempts (used for wrong-answer practice). */
+  allowRetry?: boolean;
 }
 
 export function ShortQuestion({
@@ -25,31 +27,41 @@ export function ShortQuestion({
   hidePassage = false,
   lockedCorrect = false,
   classFullyCorrectPercent,
+  allowRetry = false,
 }: ShortQuestionProps) {
   const [answer, setAnswer] = useState("");
+  const [partA, setPartA] = useState("");
+  const [partB, setPartB] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [isCorrect, setIsCorrect] = useState(false);
+  const [dpHint, setDpHint] = useState<number | null>(null);
+
+  const hasTwoParts =
+    /\(\s*i\s*\)/i.test(question.question) && /\(\s*ii\s*\)/i.test(question.question);
 
   useEffect(() => {
     if (lockedCorrect) {
       setSubmitted(true);
       setIsCorrect(true);
       setAnswer(question.acceptedAnswers[0] ?? "—");
+      setPartA("");
+      setPartB("");
     }
   }, [lockedCorrect, question]);
 
-  const canSubmit = !!answer.trim() && !submitted && !disabled;
+  const compositeAnswer = hasTwoParts
+    ? `i) ${partA}`.trim() + `; ii) ${partB}`.trim()
+    : answer;
+
+  const canSubmit =
+    !!compositeAnswer.trim() && !disabled && (!submitted || (allowRetry && !isCorrect));
 
   const handleSubmit = () => {
     if (!canSubmit) return;
 
-    let correct = false;
-    if (answer.trim()) {
-      const normalized = normalizeAnswer(answer);
-      correct = question.acceptedAnswers.some(
-        (accepted) => normalizeAnswer(accepted) === normalized,
-      );
-    }
+    const graded = isAnswerCorrect(compositeAnswer, question.acceptedAnswers ?? []);
+    const correct = graded.correct;
+    setDpHint(graded.dpHint);
 
     setIsCorrect(correct);
     setSubmitted(true);
@@ -90,6 +102,7 @@ export function ShortQuestion({
       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         {displayMarks(question.marks, question.type)}{" "}
         {displayMarks(question.marks, question.type) === 1 ? "mark" : "marks"}
+        {dpHint != null && dpHint > 0 ? ` (${dpHint} d.p.)` : ""}
       </p>
       <div className="font-display text-[1.18rem] leading-relaxed text-foreground sm:text-[1.45rem]">
         <RichQuestionContent
@@ -107,26 +120,60 @@ export function ShortQuestion({
 
       {/* Answer input */}
       <div className="space-y-3">
+        {hasTwoParts && (
+          <p className="text-xs text-muted-foreground">
+            Answer format: <span className="font-medium text-foreground">i) … ; ii) …</span>
+          </p>
+        )}
         <div className="flex gap-2">
-          <Input
-            value={answer}
-            onChange={(e) => setAnswer(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Type your answer..."
-            disabled={submitted || disabled}
-            className={cn(
-              "flex-1 bg-white/60 text-base",
-              submitted && isCorrect && "border-success/60 bg-success/5",
-              submitted && !isCorrect && "border-danger/60 bg-danger/5"
-            )}
-          />
+          {hasTwoParts ? (
+            <div className="flex flex-1 flex-col gap-2">
+              <Input
+                value={partA}
+                onChange={(e) => setPartA(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="i) ..."
+                disabled={disabled || (submitted && isCorrect && !allowRetry)}
+                className={cn(
+                  "bg-white/60 text-base",
+                  submitted && isCorrect && "border-success/60 bg-success/5",
+                  submitted && !isCorrect && "border-danger/60 bg-danger/5"
+                )}
+              />
+              <Input
+                value={partB}
+                onChange={(e) => setPartB(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="ii) ..."
+                disabled={disabled || (submitted && isCorrect && !allowRetry)}
+                className={cn(
+                  "bg-white/60 text-base",
+                  submitted && isCorrect && "border-success/60 bg-success/5",
+                  submitted && !isCorrect && "border-danger/60 bg-danger/5"
+                )}
+              />
+            </div>
+          ) : (
+            <Input
+              value={answer}
+              onChange={(e) => setAnswer(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Type your answer..."
+              disabled={disabled || (submitted && isCorrect && !allowRetry)}
+              className={cn(
+                "flex-1 bg-white/60 text-base",
+                submitted && isCorrect && "border-success/60 bg-success/5",
+                submitted && !isCorrect && "border-danger/60 bg-danger/5"
+              )}
+            />
+          )}
           <Button
             onClick={handleSubmit}
             disabled={!canSubmit}
             className="shrink-0 gap-2 bg-brand hover:bg-brand-dark"
           >
             <Send className="size-4" />
-            Submit
+            {submitted && isCorrect ? "Correct" : "Submit"}
           </Button>
         </div>
 

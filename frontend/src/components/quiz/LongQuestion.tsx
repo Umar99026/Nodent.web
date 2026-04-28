@@ -1,5 +1,5 @@
 import { useEffect, useState, Fragment } from "react";
-import { cn, getQuestionTypeLabel, normalizeAnswer } from "@/lib/utils";
+import { cn, getQuestionTypeLabel, isAnswerCorrect } from "@/lib/utils";
 import type { LongQuestion as LongQuestionType } from "@/lib/subjects";
 import { apiFetch } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +28,8 @@ interface LongQuestionProps {
   lockedCorrect?: boolean;
   classFullyCorrectPercent?: number | null;
   submitLabel?: string;
+  /** Practice-only mode (no API save). Used for wrong-answer review. */
+  practiceOnly?: boolean;
 }
 
 export function LongQuestion({
@@ -40,17 +42,21 @@ export function LongQuestion({
   lockedCorrect = false,
   classFullyCorrectPercent,
   submitLabel = "Save Answer",
+  practiceOnly = false,
 }: LongQuestionProps) {
   const [response, setResponse] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
   const [autoMarkResult, setAutoMarkResult] = useState<boolean | null>(null);
+  const [dpHint, setDpHint] = useState<number | null>(null);
   const [yourPeerRating, setYourPeerRating] = useState<{
     average: number | null;
     count: number;
   }>({ average: null, count: 0 });
 
   useEffect(() => {
+    if (practiceOnly) return;
     let cancelled = false;
     const load = async () => {
       try {
@@ -91,17 +97,20 @@ export function LongQuestion({
   }, [subjectId, questionKey]);
 
   const handleSave = async () => {
-    if (!response.trim() || saving || disabled || saved) return;
+    if (!response.trim() || saving || disabled || (!practiceOnly && saved)) return;
 
     setSaving(true);
     try {
-      await apiFetch(writtenApiPath(subjectId, questionKey), {
-        method: "PUT",
-        body: JSON.stringify({
-          responseText: response,
-        }),
-      });
-      setSaved(true);
+      if (!practiceOnly) {
+        await apiFetch(writtenApiPath(subjectId, questionKey), {
+          method: "PUT",
+          body: JSON.stringify({
+            responseText: response,
+          }),
+        });
+        setSaved(true);
+      }
+      setSubmitted(true);
       const acceptedPool = [
         ...(Array.isArray(question.acceptedAnswers) ? question.acceptedAnswers : []),
         ...(question.answer ? [question.answer] : []),
@@ -110,16 +119,14 @@ export function LongQuestion({
         .filter(Boolean);
       let result: boolean | null = null;
       if (response.trim() && acceptedPool.length > 0) {
-        const normalized = normalizeAnswer(response);
-        result = acceptedPool.some(
-          (accepted) => normalizeAnswer(accepted) === normalized,
-        );
+        const graded = isAnswerCorrect(response, acceptedPool);
+        setDpHint(graded.dpHint);
+        result = graded.correct;
       }
       setAutoMarkResult(result);
       onAnswer(result);
       if (result === true) toast.success("Answer submitted. Marked correct.");
-      else if (result === false)
-        toast.error("Answer submitted. Not quite right yet.");
+      else if (result === false) toast.error("Answer submitted. Not quite right yet.");
       else toast.success("Answer submitted.");
     } catch (err) {
       toast.error(
@@ -157,6 +164,7 @@ export function LongQuestion({
       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         {displayMarks(question.marks, question.type)}{" "}
         {displayMarks(question.marks, question.type) === 1 ? "mark" : "marks"}
+        {dpHint != null && dpHint > 0 ? ` (${dpHint} d.p.)` : ""}
       </p>
       <div className="font-display text-[1.18rem] leading-relaxed text-foreground sm:text-[1.45rem]">
         <RichQuestionContent
@@ -205,7 +213,7 @@ export function LongQuestion({
           onChange={(e) => setResponse(e.target.value)}
           placeholder="Write your response here..."
           rows={12}
-          disabled={disabled || saved}
+          disabled={disabled || (!practiceOnly && saved)}
           className={cn(
             "bg-white/60 text-sm leading-relaxed resize-y",
             saved && "border-success/40"
@@ -217,7 +225,7 @@ export function LongQuestion({
           <Button
             onClick={handleSave}
             disabled={
-              !response.trim() || saving || disabled || saved
+              !response.trim() || saving || disabled || (!practiceOnly && saved)
             }
             className="gap-2 bg-brand hover:bg-brand-dark"
           >
@@ -226,10 +234,10 @@ export function LongQuestion({
             ) : (
               <Save className="size-4" />
             )}
-            {saved ? "Submitted" : submitLabel}
+            {!practiceOnly && saved ? "Submitted" : submitLabel}
           </Button>
         </div>
-        {saved && autoMarkResult !== null && (
+        {(practiceOnly ? submitted : saved) && autoMarkResult !== null && (
           <div
             className={cn(
               "flex items-start gap-3 rounded-lg px-4 py-3 text-sm",

@@ -45,7 +45,6 @@ import {
 } from "@/components/ui/select";
 import {
   Trophy,
-  RotateCcw,
   LayoutDashboard,
   Star,
   AlertTriangle,
@@ -471,13 +470,6 @@ export default function SummaryPage() {
     };
   }, [subjectId, leaderboardRange]);
 
-  // Reset practice
-  const handleReset = () => {
-    if (!user || !subjectId) return;
-    localStorage.removeItem(getPracticeStorageKey(user.id, subjectId));
-    navigate(`/quiz/${subjectId}`);
-  };
-
   if (!subjectId) {
     return (
       <AppShell title="Summary">
@@ -605,14 +597,6 @@ export default function SummaryPage() {
                 correct ({percentage}%)
               </p>
               <div className="mt-6 flex flex-wrap justify-center gap-3">
-                <Button
-                  onClick={handleReset}
-                  variant="outline"
-                  className="gap-2"
-                >
-                  <RotateCcw className="size-4" />
-                  Reset Practice
-                </Button>
                 <Button
                   onClick={() => navigate("/")}
                   className="gap-2 bg-brand hover:bg-brand-dark"

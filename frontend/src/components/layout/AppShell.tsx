@@ -12,6 +12,7 @@ interface AppShellProps {
   hideTitle?: boolean;
   subtitleClassName?: string;
   edgeToEdgeHeader?: boolean;
+  edgeToEdgeMain?: boolean;
 }
 
 export function AppShell({
@@ -22,6 +23,7 @@ export function AppShell({
   hideTitle = false,
   subtitleClassName,
   edgeToEdgeHeader = false,
+  edgeToEdgeMain = false,
 }: AppShellProps) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -97,8 +99,12 @@ export function AppShell({
       </header>
       <ScrollArea className="min-h-0 min-w-0 flex-1 bg-transparent">
         <main
-          className={`box-border w-full min-w-0 max-w-full px-4 sm:px-6 lg:px-8 ${
-            isDashboard ? "max-w-none text-white" : "mx-auto max-w-7xl text-white"
+          className={`box-border w-full min-w-0 max-w-full ${
+            isDashboard
+              ? "max-w-none px-4 sm:px-6 lg:px-8 text-white"
+              : edgeToEdgeMain
+                ? "max-w-none px-2 sm:px-3 lg:px-4 text-white"
+                : "mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-white"
           } ${isDashboard ? "pt-2 pb-8" : "py-8"}`}
         >
           <div className="animate-fade-in-up min-w-0 max-w-full">{children}</div>

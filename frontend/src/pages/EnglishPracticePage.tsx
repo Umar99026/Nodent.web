@@ -698,7 +698,12 @@ export function EnglishPromptResponsesPage() {
 
 export default function EnglishPracticePage() {
   return (
-    <AppShell title="English Practice" subtitle="Book prompts, writing uploads, and peer ratings out of 10.">
+    <AppShell
+      title="English Practice"
+      subtitle="Book prompts, writing uploads, and peer ratings out of 10."
+      edgeToEdgeHeader
+      edgeToEdgeMain
+    >
       <EnglishPracticePanel />
     </AppShell>
   );

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useParams, useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { apiFetch } from "@/lib/api";
@@ -151,8 +151,11 @@ export default function QuizPage() {
   const [questionsLoading, setQuestionsLoading] = useState(true);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [topicFilter, setTopicFilter] = useState<string>("all");
+  const [pinnedGroupKey, setPinnedGroupKey] = useState<string | null>(null);
 
   const [classByKey, setClassByKey] = useState<Record<string, number>>({});
+  const saveTimerRef = useRef<number | null>(null);
+  const pendingSaveRef = useRef<PracticeState | null>(null);
 
   // Find subject (used for display metadata only)
   const subject: Subject | undefined = useMemo(() => {
@@ -162,7 +165,32 @@ export default function QuizPage() {
 
   useEffect(() => {
     setInitialized(false);
+    setPinnedGroupKey(null);
   }, [subjectId, user?.id, isWrongReview]);
+
+  const schedulePracticeSave = useCallback(
+    (next: PracticeState) => {
+      if (!user || !subjectId) return;
+      pendingSaveRef.current = next;
+      if (saveTimerRef.current != null) return;
+      saveTimerRef.current = window.setTimeout(() => {
+        saveTimerRef.current = null;
+        const st = pendingSaveRef.current;
+        pendingSaveRef.current = null;
+        if (!st) return;
+        savePracticeState(user.id, subjectId, st);
+      }, 160);
+    },
+    [user, subjectId],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current != null) window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+      pendingSaveRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     if (!user || !subjectId) return;
@@ -327,6 +355,7 @@ export default function QuizPage() {
   const activeGroups = useMemo(() => {
     if (!subjectId) return allGroupsFlat;
     return allGroupsFlat.filter((g) =>
+      g.key === pinnedGroupKey ||
       !g.parts.every((p) => {
         const qk = questionKeyStable(
           subjectId,
@@ -336,7 +365,7 @@ export default function QuizPage() {
         return answers[qk] === true;
       }),
     );
-  }, [allGroupsFlat, answers, subjectId, questions]);
+  }, [allGroupsFlat, answers, subjectId, questions, pinnedGroupKey]);
 
   const displayGroups: QuestionStimulusGroup[] = isWrongReview
     ? wrongReviewGroups ?? []
@@ -400,12 +429,7 @@ export default function QuizPage() {
     (qKey: string, isCorrect: boolean | null, marks: number, topic: string) => {
       setAnswers((prev) => {
         const next = { ...prev, [qKey]: isCorrect };
-        if (user && subjectId) {
-          savePracticeState(user.id, subjectId, {
-            currentIndex,
-            answers: next,
-          });
-        }
+        schedulePracticeSave({ currentIndex, answers: next });
         return next;
       });
 
@@ -424,18 +448,16 @@ export default function QuizPage() {
         });
       }
     },
-    [currentIndex, user, subjectId, isWrongReview]
+    [currentIndex, subjectId, isWrongReview, schedulePracticeSave]
   );
 
   // Navigation (index = stimulus group)
   const goTo = (index: number) => {
     const clamped = Math.max(0, Math.min(displayGroups.length - 1, index));
     setCurrentIndex(clamped);
+    setPinnedGroupKey(displayGroups[clamped]?.key ?? null);
     if (user && subjectId && displayGroups.length > 0) {
-      savePracticeState(user.id, subjectId, {
-        currentIndex: clamped,
-        answers,
-      });
+      schedulePracticeSave({ currentIndex: clamped, answers });
     }
   };
 
@@ -590,7 +612,7 @@ export default function QuizPage() {
     >
       <div className="space-y-6">
         {isWrongReview && (
-          <p className="rounded-lg border border-amber/40 bg-amber/10 px-4 py-3 text-sm text-amber">
+          <p className="rounded-lg border border-amber/40 bg-amber/10 px-4 py-3 text-sm text-white">
             Wrong-answer review: answers here are not sent to the competition and do not change your rank or marks.
           </p>
         )}
@@ -683,6 +705,7 @@ export default function QuizPage() {
                                 handleAnswer(qk, correct, partMarks, partTopic)
                               }
                               disabled={lockedCorrect}
+                              allowRetry={isWrongReview}
                               classFullyCorrectPercent={partClass ?? null}
                             />
                           )}
@@ -695,6 +718,7 @@ export default function QuizPage() {
                                 handleAnswer(qk, correct, partMarks, partTopic)
                               }
                               disabled={lockedCorrect}
+                              allowRetry={isWrongReview}
                               classFullyCorrectPercent={partClass ?? null}
                             />
                           )}
@@ -709,6 +733,7 @@ export default function QuizPage() {
                                 handleAnswer(qk, correct, partMarks, partTopic)
                               }
                               disabled={lockedCorrect}
+                              practiceOnly={isWrongReview}
                               classFullyCorrectPercent={partClass ?? null}
                               submitLabel={isMathSubject ? "Submit Answer" : "Save Answer"}
                             />
