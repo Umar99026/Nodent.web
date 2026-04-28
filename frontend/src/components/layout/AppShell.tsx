@@ -13,6 +13,8 @@ interface AppShellProps {
   subtitleClassName?: string;
   edgeToEdgeHeader?: boolean;
   edgeToEdgeMain?: boolean;
+  hideBackButton?: boolean;
+  edgeToEdgeHeaderClassName?: string;
 }
 
 export function AppShell({
@@ -24,6 +26,8 @@ export function AppShell({
   subtitleClassName,
   edgeToEdgeHeader = false,
   edgeToEdgeMain = false,
+  hideBackButton = false,
+  edgeToEdgeHeaderClassName,
 }: AppShellProps) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -44,13 +48,13 @@ export function AppShell({
             isDashboard
               ? "px-4 sm:px-6 lg:px-8"
               : edgeToEdgeHeader
-                ? "px-2 sm:px-3 lg:px-4"
+                ? edgeToEdgeHeaderClassName ?? "px-2 sm:px-3 lg:px-4"
                 : "mx-auto max-w-[1600px] px-4 sm:px-6 lg:px-8"
           } ${
             isDashboard ? "min-h-12 py-3" : "min-h-14 py-4"
           }`}
         >
-          {!isDashboard && (
+          {!isDashboard && !hideBackButton && (
             <>
               <button
                 onClick={handleBack}

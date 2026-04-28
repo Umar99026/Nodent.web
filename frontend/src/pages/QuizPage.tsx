@@ -529,7 +529,12 @@ export default function QuizPage() {
 
   if (subjectId === "english") {
     return (
-      <AppShell title="English Practice" subtitle="Select a book, write responses, and rate peers.">
+      <AppShell
+        title="English Practice"
+        subtitle="Select a book, write responses, and rate peers."
+        edgeToEdgeHeader
+        edgeToEdgeMain
+      >
         <EnglishPracticePanel />
       </AppShell>
     );
