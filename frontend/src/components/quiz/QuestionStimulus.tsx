@@ -11,9 +11,116 @@ function autoMathify(text: string): string {
   //
   // Users can still write full LaTeX like \(x^2 + 1\) or $$...$$.
   let out = text;
+  // Normalize over-escaped LaTeX pasted from JSON/CSV imports.
+  out = out.replace(/\\{2,}(frac|sqrt|begin|end|le|ge|ne|times|div|hat)\b/g, "\\$1");
+  out = out.replace(/\\{2,}int\b/g, "\\int");
+  // Normalize malformed exponent braces: ^{{2}}, ^{ {2} }, ^{{{2}}} -> ^{2}
+  for (let i = 0; i < 4; i++) {
+    const prev = out;
+    out = out.replace(/\^\s*\{\s*\{\s*([^{}]+?)\s*\}\s*\}/g, "^{$1}");
+    out = out.replace(/\^\{+\s*([^{}]+?)\s*\}+/g, "^{$1}");
+    if (out === prev) break;
+  }
 
+  // Strip zero-width/odd spacing artifacts from OCR/imports.
+  out = out.replace(/[\u200B-\u200D\uFEFF]/g, "");
+  // Rebuild broken integral bounds from OCR/newline splits:
+  // "\int 0 ^{1}" or "\int\n0\n^{1}" -> "\int_{0}^{1}"
+  out = out.replace(
+    /\\int\s*[_]?\s*\{?\s*([+\-]?\d+(?:\.\d+)?)\s*\}?\s*\^\s*\{?\s*([+\-]?\d+(?:\.\d+)?)\s*\}?/g,
+    "\\int_{$1}^{$2}",
+  );
+  // Also support compact variant with no explicit ^ braces after split cleanup.
+  out = out.replace(
+    /\\int\s*_\{\s*([+\-]?\d+(?:\.\d+)?)\s*\}\s*\^\{\s*([+\-]?\d+(?:\.\d+)?)\s*\}/g,
+    "\\int_{$1}^{$2}",
+  );
+  // Compact unicode integral pattern: ∫01(...)dx -> \int_{0}^{1}(...)dx
+  out = out.replace(
+    /∫\s*([+\-]?\d+(?:\.\d+)?)\s*([+\-]?\d+(?:\.\d+)?)\s*(\([^)]+\))\s*d([A-Za-z])/g,
+    "\\int_{$1}^{$2}$3\\,d$4",
+  );
+  // OCR corruption: "?(a to b)" is usually a definite integral.
+  out = out.replace(
+    /\?\s*\(\s*([^\s)]+)\s*to\s*([^\s)]+)\s*\)/gi,
+    "\\int_{$1}^{$2}",
+  );
+  // Common OCR shorthand: "e 7x" -> "e^{7x}" (exponential term).
+  out = out.replace(/\be\s+([+-]?\d+(?:\.\d+)?\s*[A-Za-z])\b/g, (_m, p1) => {
+    const exp = String(p1).replace(/\s+/g, "");
+    return `e^{${exp}}`;
+  });
   // Normalize some common ASCII comparators to LaTeX tokens.
   out = out.replace(/<=/g, "\\le").replace(/>=/g, "\\ge").replace(/!=/g, "\\ne");
+  // Common estimate notation: p-hat / p hat / p̂ -> \hat{p}
+  out = out.replace(/\b([A-Za-z])\s*-\s*hat\b/gi, "\\hat{$1}");
+  out = out.replace(/\b([A-Za-z])\s+hat\b/gi, "\\hat{$1}");
+  out = out.replace(/\b([A-Za-z])\u0302\b/g, "\\hat{$1}");
+  // Unit shorthand m/s^2 -> \frac{m}{s^2}
+  out = out.replace(/\bm\s*\/\s*s\s*\^\s*2\b/gi, "\\frac{m}{s^2}");
+  // Fractions with grouped denominator/numerator e.g. 1/(4+3i), (x+1)/(x-1)
+  out = out.replace(
+    /(\b\d+(?:\.\d+)?|\([^()]+\))\s*\/\s*(\([^()]+\))/g,
+    "\\frac{$1}{$2}",
+  );
+  // Common sequence notation e.g. "L 0" / "L 52" => L_{0}, L_{52}
+  out = out.replace(/\b([A-Za-z])\s+(\d+)\b/g, "$1_{$2}");
+  // sqrt(...)
+  out = out.replace(/\bsqrt\s*\(\s*([^)]+?)\s*\)/gi, "\\sqrt{$1}");
+  // Common fractions like 3/4 or x/y -> \frac{3}{4}
+  out = out.replace(
+    /\b([A-Za-z]?\d+(?:\.\d+)?|[A-Za-z])\s*\/\s*([A-Za-z]?\d+(?:\.\d+)?|[A-Za-z])\b/g,
+    "\\frac{$1}{$2}",
+  );
+  // Multiplication/division glyphs in plain text
+  out = out.replace(/(\d|\))\s*[xX*]\s*(\d|\()/g, "$1 \\times $2");
+  out = out.replace(/(\d|\))\s*[÷]\s*(\d|\()/g, "$1 \\div $2");
+  // OCR often replaces multiplication with "?" between terms.
+  out = out.replace(/([A-Za-z0-9\)])\s*\?\s*([A-Za-z0-9(])/g, "$1 \\times $2");
+  // Spaced variable groups before powers: "s m ^2" -> "sm^2"
+  out = out.replace(/\b([A-Za-z](?:\s+[A-Za-z]){1,5})\s*\^\s*(\d+)\b/g, (_m, base, exp) => {
+    const b = String(base).replace(/\s+/g, "");
+    return `${b}^${exp}`;
+  });
+  // Bracket-list matrices like [[a,b],[c,d]] or [[1,2,3],[4,5,6],[7,8,9]]
+  out = out.replace(/\[\[\s*[\s\S]*?\s*\]\]/g, (m) => {
+    const inner = m.slice(2, -2).trim();
+    const rows = inner
+      .split(/\]\s*,\s*\[/)
+      .map((r) => r.trim())
+      .filter(Boolean);
+    if (rows.length < 2) return m;
+    const latexRows = rows
+      .map((r) =>
+        r
+          .split(",")
+          .map((c) => c.trim())
+          .filter(Boolean)
+          .join(" & "),
+      )
+      .join("\\\\");
+    if (!latexRows.includes("&")) return m;
+    return `\\begin{bmatrix}${latexRows}\\end{bmatrix}`;
+  });
+  // Matrix style [a b; c d] -> bmatrix
+  out = out.replace(
+    /\[\s*([^\[\]]+?)\s*;\s*([^\[\]]+?)\s*\]/g,
+    (_m, r1, r2) => {
+      const row1 = String(r1).trim().replace(/\s+/g, " & ");
+      const row2 = String(r2).trim().replace(/\s+/g, " & ");
+      return `\\begin{bmatrix}${row1}\\\\${row2}\\end{bmatrix}`;
+    },
+  );
+  // Parenthesized 2-row matrices like (a b; c d)
+  out = out.replace(
+    /\(\s*([^()]+?)\s*;\s*([^()]+?)\s*\)/g,
+    (_m, r1, r2) => {
+      const row1 = String(r1).trim().replace(/\s+/g, " & ");
+      const row2 = String(r2).trim().replace(/\s+/g, " & ");
+      if (!row1.includes("&") && !row2.includes("&")) return _m;
+      return `\\begin{bmatrix}${row1}\\\\${row2}\\end{bmatrix}`;
+    },
+  );
 
   return out;
 }
@@ -29,9 +136,9 @@ function renderInlineLatex(latex: string): string {
 function renderTextWithMath(text: string): React.ReactNode {
   const src = autoMathify(text);
 
-  // Match comparators (\le, \ge, \ne) and caret-powers (t^3, at^2, (x+1)^2, 10^5).
+  // Match comparators/fractions/sqrt/subscripts and caret-powers.
   const re =
-    /\\(?:le|ge|ne)|(?:\([^\n]{1,80}?\)|\b[A-Za-z][A-Za-z0-9_]*\b|\b\d+\b)\s*\^\s*(?:\b\d+\b|\b[A-Za-z][A-Za-z0-9_]*\b|\([^\n]{1,60}?\))/g;
+    /\\int(?:_\{[^}]+\})?(?:\^\{[^}]+\})?|\\(?:le|ge|ne|times|div)|\\hat\{[^}]+\}|\\frac\{[^{}]+\}\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}|\\sqrt\{[^}]+\}|\\begin\{bmatrix\}[\s\S]*?\\end\{bmatrix\}|[A-Za-z]_\{\d+\}|[A-Za-z]_\d+|(?:\|[^|\n]{1,80}\||\([^\n]{1,80}?\)|\b[A-Za-z][A-Za-z0-9_]*\b|\b\d+(?:\.\d+)?\b)\s*\^\s*(?:\b\d+(?:\.\d+)?\b|\b[A-Za-z][A-Za-z0-9_]*\b|\([^\n]{1,60}?\))/g;
 
   const parts: React.ReactNode[] = [];
   let last = 0;
@@ -46,8 +153,13 @@ function renderTextWithMath(text: string): React.ReactNode {
     if (caretIdx >= 0) {
       const base = latex.slice(0, caretIdx).trim();
       const expRaw = latex.slice(caretIdx + 1).trim();
-      const exp = expRaw.replace(/^\((.*)\)$/, "$1");
+      const exp = expRaw
+        .replace(/^\((.*)\)$/, "$1")
+        .replace(/^\{(.*)\}$/, "$1");
       latex = `${base}^{${exp}}`;
+    } else {
+      // Normalize plain subscripts to LaTeX brace form.
+      latex = latex.replace(/\b([A-Za-z])_(\d+)\b/g, "$1_{$2}");
     }
 
     parts.push(

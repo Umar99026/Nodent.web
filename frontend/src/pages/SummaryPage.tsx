@@ -37,13 +37,6 @@ import {
 } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Trophy,
   LayoutDashboard,
   Star,
@@ -54,6 +47,7 @@ import {
   CheckCircle2,
   XCircle,
   CircleDot,
+  X,
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
@@ -102,7 +96,6 @@ interface CompetitionStats {
   minRankedAttempts?: number;
 }
 
-type EnglishBook = { id: number; title: string; promptCount: number };
 type EnglishResponse = {
   id: number;
   promptId: number;
@@ -116,6 +109,7 @@ type EnglishResponse = {
   averageScore: number | null;
   ratingCount: number;
   myScore: number | null;
+  section?: "A" | "B" | "C";
 };
 
 /* ------------------------------------------------------------------ */
@@ -179,10 +173,9 @@ export default function SummaryPage() {
   const [statsError, setStatsError] = useState<string | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [questionsLoading, setQuestionsLoading] = useState(true);
-  const [englishBooks, setEnglishBooks] = useState<EnglishBook[]>([]);
-  const [englishBookId, setEnglishBookId] = useState<string>("");
   const [englishResponses, setEnglishResponses] = useState<EnglishResponse[]>([]);
   const [showHighScoring, setShowHighScoring] = useState(false);
+  const [openEnglishResponseId, setOpenEnglishResponseId] = useState<number | null>(null);
 
   // Find subject
   const subject: Subject | undefined = useMemo(() => {
@@ -282,43 +275,46 @@ export default function SummaryPage() {
     return randomizedQuestionsForSubject(questions, user.id, subjectId);
   }, [user, subjectId, questions]);
 
-  useEffect(() => {
-    if (subjectId !== "english" || !user) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const b = await apiFetch<{ books: EnglishBook[] }>(API_PATHS.english.books);
-        if (cancelled) return;
-        setEnglishBooks(b.books || []);
-        if (!englishBookId && b.books?.length) setEnglishBookId(String(b.books[0].id));
-      } catch {
-        if (!cancelled) setEnglishBooks([]);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [subjectId, user, englishBookId]);
+  const fetchEnglishResponses = useMemo(
+    () => async () => {
+      if (subjectId !== "english" || !user) return;
+      const [a, b, c] = await Promise.all([
+        apiFetch<{ responses: EnglishResponse[] }>(
+          `${API_PATHS.english.responses}?section=A`,
+        ),
+        apiFetch<{ responses: EnglishResponse[] }>(
+          `${API_PATHS.english.responses}?section=B`,
+        ),
+        apiFetch<{ responses: EnglishResponse[] }>(
+          `${API_PATHS.english.responses}?section=C`,
+        ),
+      ]);
+      const merged = [...(a.responses || []), ...(b.responses || []), ...(c.responses || [])];
+      const byId = new Map<number, EnglishResponse>();
+      for (const row of merged) byId.set(Number(row.id), row);
+      setEnglishResponses(Array.from(byId.values()));
+    },
+    [subjectId, user],
+  );
 
   useEffect(() => {
     if (subjectId !== "english" || !user) return;
-    const id = Number(englishBookId);
-    if (!Number.isFinite(id) || id <= 0) return;
     let cancelled = false;
     (async () => {
       try {
-        const r = await apiFetch<{ responses: EnglishResponse[] }>(
-          `${API_PATHS.english.responses}?bookId=${encodeURIComponent(id)}`,
-        );
-        if (!cancelled) setEnglishResponses(r.responses || []);
+        await fetchEnglishResponses();
       } catch {
         if (!cancelled) setEnglishResponses([]);
       }
     })();
+    const t = setInterval(() => {
+      void fetchEnglishResponses().catch(() => {});
+    }, 6000);
     return () => {
       cancelled = true;
+      clearInterval(t);
     };
-  }, [subjectId, user, englishBookId]);
+  }, [subjectId, user, fetchEnglishResponses]);
 
   /** Your saved answers for this subject (canonical key → score; null = not auto-scored). */
   const myAnswerByCanonicalKey = useMemo(() => {
@@ -486,7 +482,11 @@ export default function SummaryPage() {
   }
 
   if (subjectId === "english") {
-    const myRows = englishResponses.filter((r) => r.userId === user?.id);
+    const myRows = englishResponses.filter(
+      (r) => Number(r.userId) === Number(user?.id),
+    );
+    const openEnglishResponse =
+      myRows.find((r) => r.id === openEnglishResponseId) ?? null;
     const myRated = myRows.filter((r) => r.averageScore != null);
     const myAvg =
       myRated.length > 0
@@ -495,35 +495,53 @@ export default function SummaryPage() {
           ) / 10
         : null;
     const highRows = englishResponses.filter((r) => (r.averageScore ?? 0) >= 8);
+    const leaderboard = Object.values(
+      englishResponses.reduce<Record<string, {
+        username: string;
+        totalResponses: number;
+        ratedResponses: number;
+        sumScores: number;
+        avg: number;
+      }>>((acc, row) => {
+        const key = String(row.username || `user-${row.userId}`);
+        const cur = acc[key] ?? {
+          username: String(row.username || "Unknown"),
+          totalResponses: 0,
+          ratedResponses: 0,
+          sumScores: 0,
+          avg: 0,
+        };
+        cur.totalResponses += 1;
+        if (row.averageScore != null) {
+          cur.ratedResponses += 1;
+          cur.sumScores += Number(row.averageScore);
+        }
+        cur.avg = cur.ratedResponses > 0 ? cur.sumScores / cur.ratedResponses : 0;
+        acc[key] = cur;
+        return acc;
+      }, {}),
+    )
+      .sort((a, b) => b.sumScores - a.sumScores || b.avg - a.avg)
+      .slice(0, 10);
 
     return (
-      <AppShell title={subject ? `${subject.name} Summary` : "Summary"}>
+      <AppShell
+        title={subject ? `${subject.name} Summary` : "Summary"}
+        edgeToEdgeHeader
+        edgeToEdgeHeaderClassName="px-0 sm:px-1 lg:px-2"
+      >
         <div className="space-y-6">
           <Card>
             <CardHeader>
               <CardTitle className="font-display text-lg">English summary</CardTitle>
               <CardDescription>
-                Track average grades on your submitted essays/paragraphs, and view high-scoring exemplar responses.
+                View all your submitted responses with per-response ratings, your overall average, and the English leaderboard.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="max-w-md">
-                <Select value={englishBookId} onValueChange={(v) => setEnglishBookId(v ?? "")}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select book" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {englishBooks.map((b) => (
-                      <SelectItem key={b.id} value={String(b.id)}>
-                        {b.title}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
               <div className="flex flex-wrap gap-2">
                 <Badge variant="secondary">Submissions: {myRows.length}</Badge>
-                <Badge variant="secondary">Average grade: {myAvg != null ? `${myAvg}/10` : "No ratings yet"}</Badge>
+                <Badge variant="secondary">Overall average: {myAvg != null ? `${myAvg}/10` : "No ratings yet"}</Badge>
               </div>
             </CardContent>
           </Card>
@@ -533,16 +551,76 @@ export default function SummaryPage() {
               <CardTitle className="font-display text-lg">Your submitted passages/essays</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {myRows.map((r) => (
-                <div key={r.id} className="rounded-xl border border-black/10 bg-white/70 p-3">
-                  <div className="flex items-center gap-2 text-xs">
-                    <Badge>{r.responseType}</Badge>
-                    <span className="text-muted-foreground">Avg: {r.averageScore != null ? `${r.averageScore}/10` : "—"}</span>
-                  </div>
-                  <p className="mt-2 text-sm whitespace-pre-wrap">{r.prompt}</p>
+              {myRows.length ? (
+                <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7">
+                  {myRows.map((r) => (
+                    <div
+                      key={`my-response-${r.id}`}
+                      className="group relative aspect-square overflow-hidden rounded-md border border-black/10 bg-white shadow-sm"
+                    >
+                      <button
+                        type="button"
+                        className="absolute inset-0 z-[1]"
+                        onClick={() => setOpenEnglishResponseId(r.id)}
+                        aria-label={`Open your response ${r.id}`}
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-br from-slate-50 via-white to-slate-100" />
+                      <div className="absolute inset-0 flex items-center justify-center p-1.5">
+                        <div className="w-full rounded-sm border border-black/10 bg-white/60 p-1.5 backdrop-blur-sm">
+                          <p className="line-clamp-3 whitespace-pre-wrap text-center text-[10px] leading-tight text-[#111827]/85 blur-[1.6px] select-none">
+                            {(r.responseText || "Handwritten response").trim()}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="absolute inset-x-0 top-0 flex items-center justify-between gap-1 border-b border-black/10 bg-white/88 px-1.5 py-1 backdrop-blur">
+                        <span className="truncate text-[10px] font-semibold text-[#0f172a]">
+                          {r.section ? `Section ${r.section}` : "Section —"}
+                        </span>
+                        <Badge variant="secondary" className="shrink-0 px-1 py-0 text-[9px]">
+                          Avg: {r.averageScore != null ? `${r.averageScore}/10` : "—"}
+                        </Badge>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-              {!myRows.length ? <p className="text-sm text-muted-foreground">No submissions for this book yet.</p> : null}
+              ) : null}
+              {!myRows.length ? <p className="text-sm text-muted-foreground">No submissions yet.</p> : null}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="font-display text-lg">English leaderboard</CardTitle>
+              <CardDescription>Ranked by total combined response score (sum of response averages).</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {!leaderboard.length ? (
+                <p className="text-sm text-muted-foreground">No ranked responses yet.</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-16">Rank</TableHead>
+                      <TableHead>Student</TableHead>
+                      <TableHead className="text-right">Sum score</TableHead>
+                      <TableHead className="text-right">Average</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {leaderboard.map((row, idx) => (
+                      <TableRow
+                        key={`${row.username}-${idx}`}
+                        className={Number(user?.id) === Number(englishResponses.find((r) => r.username === row.username)?.userId) ? "bg-brand/8 font-medium" : ""}
+                      >
+                        <TableCell className="font-semibold">{idx + 1}</TableCell>
+                        <TableCell>{row.username}</TableCell>
+                        <TableCell className="text-right tabular-nums">{row.sumScores.toFixed(1)}</TableCell>
+                        <TableCell className="text-right tabular-nums">{row.avg.toFixed(1)}/10</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
             </CardContent>
           </Card>
 
@@ -576,12 +654,63 @@ export default function SummaryPage() {
             </CardContent>
           </Card>
         </div>
+        {openEnglishResponse ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setOpenEnglishResponseId(null)}>
+            <div
+              className="relative w-full max-w-3xl rounded-xl border border-black/10 bg-white p-4 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="absolute right-3 top-3 z-10 border-black/20 bg-white/95 hover:bg-white"
+                onClick={() => setOpenEnglishResponseId(null)}
+                aria-label="Close response"
+              >
+                <X className="size-4" />
+              </Button>
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-[#0f172a]">@{openEnglishResponse.username}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Avg: {openEnglishResponse.averageScore != null ? `${openEnglishResponse.averageScore}/10` : "No ratings yet"}
+                  </p>
+                </div>
+              </div>
+              <div className="max-h-[70vh] overflow-y-auto rounded-lg border border-black/10 bg-slate-50 p-4">
+                <p className="mb-3 whitespace-pre-wrap text-sm font-medium leading-relaxed text-[#111827]">
+                  {openEnglishResponse.prompt}
+                </p>
+                <p className="whitespace-pre-wrap text-sm leading-relaxed text-[#111827]">
+                  {openEnglishResponse.responseText || "No typed response text."}
+                </p>
+                {openEnglishResponse.imageUrls?.length ? (
+                  <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                    {openEnglishResponse.imageUrls.map((u, i) => (
+                      <img
+                        key={`${openEnglishResponse.id}-${i}`}
+                        src={u}
+                        alt={`response-${openEnglishResponse.id}-${i + 1}`}
+                        className="w-full rounded border border-black/10"
+                      />
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        ) : null}
       </AppShell>
     );
   }
 
   return (
-    <AppShell title={subject ? `${subject.name} Summary` : "Summary"}>
+    <AppShell
+      title={subject ? `${subject.name} Summary` : "Summary"}
+      edgeToEdgeHeader
+      edgeToEdgeHeaderClassName="px-0 sm:px-1 lg:px-2"
+    >
       <div className="space-y-8">
         {/* ---- Score hero ---- */}
         <Card className="paper-texture overflow-hidden">

@@ -282,9 +282,6 @@ export default function DashboardPage() {
                           <div className="text-sm text-black/60">Loading…</div>
                         ) : scoreCard?.overallRank ? (
                           (() => {
-                            const total = Math.max(1, scoreCard.totalStudents - 1);
-                            const t = scoreCard.overallRank! - 1;
-                            const rating = Math.max(1, 10 - Math.round((t / total) * 9));
                             const percentile = Math.max(
                               0,
                               Math.min(
@@ -299,10 +296,13 @@ export default function DashboardPage() {
 
                             return (
                               <>
-                                <div className="font-display text-7xl font-bold leading-none text-[#0b0f19] tabular-nums">
-                                  {rating}
+                                <div className="font-display text-6xl font-bold leading-none text-[#0b0f19] tabular-nums">
+                                  {scoreCard.points ?? 0}
                                 </div>
                                 <div className="mt-2 text-sm font-semibold text-black/60">
+                                  Total points
+                                </div>
+                                <div className="mt-1 text-sm font-semibold text-black/60">
                                   Rank #{scoreCard.overallRank} of {scoreCard.totalStudents}
                                 </div>
                                 <div className="mt-1 text-sm font-semibold text-black/70">

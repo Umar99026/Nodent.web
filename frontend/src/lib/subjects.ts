@@ -1,5 +1,11 @@
 export type QuestionType = "mcq" | "short" | "long";
 
+export interface AnswerPart {
+  key: string;
+  label: string;
+  type?: "text" | "number";
+}
+
 export interface BaseQuestion {
   type: QuestionType;
   topic: string;
@@ -14,6 +20,8 @@ export interface BaseQuestion {
   groupId?: string;
   /** Set for admin / DB-backed questions (stable practice keys). */
   id?: number;
+  /** Explicit multipart answer schema (preferred over text parsing). */
+  answerParts?: AnswerPart[];
 }
 
 export interface McqQuestion extends BaseQuestion {

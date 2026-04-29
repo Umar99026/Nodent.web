@@ -36,7 +36,7 @@ interface AuthContextValue extends AuthState {
     currentPassword?: string;
     newPassword?: string;
   }) => Promise<void>;
-  setProfilePhoto: (profilePhoto: string | null) => void;
+  setProfilePhoto: (profilePhoto: string | null) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -56,22 +56,13 @@ interface UpdateAccountResponse {
   user: User;
 }
 
-function profilePhotoStorageKey(userId: number | string): string {
-  return `${STORAGE_KEYS.profilePhotoPrefix}${userId}`;
-}
-
-function readProfilePhoto(userId: number | string): string | null {
-  try {
-    return localStorage.getItem(profilePhotoStorageKey(userId));
-  } catch {
-    return null;
-  }
-}
-
 function withProfilePhoto(user: User): User {
   return {
     ...user,
-    profilePhoto: readProfilePhoto(user.id),
+    profilePhoto:
+      typeof user.profilePhoto === "string" && user.profilePhoto.trim()
+        ? user.profilePhoto
+        : null,
   };
 }
 
@@ -246,25 +237,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  const setProfilePhoto = useCallback((profilePhoto: string | null) => {
-    setState((prev) => {
-      if (!prev.user) return prev;
-
-      const key = profilePhotoStorageKey(prev.user.id);
-      if (profilePhoto) {
-        localStorage.setItem(key, profilePhoto);
-      } else {
-        localStorage.removeItem(key);
-      }
-
-      const nextUser = { ...prev.user, profilePhoto };
-      persistCurrentUser(nextUser);
-
-      return {
-        ...prev,
-        user: nextUser,
-      };
+  const setProfilePhoto = useCallback(async (profilePhoto: string | null) => {
+    const data = await apiFetch<UpdateAccountResponse>(API_PATHS.auth.account, {
+      method: "PATCH",
+      body: JSON.stringify({ profilePhoto }),
     });
+    const user = withProfilePhoto(data.user);
+    persistCurrentUser(user);
+    setState((prev) => ({
+      ...prev,
+      user,
+    }));
   }, []);
 
   return (

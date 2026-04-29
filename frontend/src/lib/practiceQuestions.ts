@@ -1,4 +1,4 @@
-import type { Question } from "@/lib/subjects";
+import type { AnswerPart, Question } from "@/lib/subjects";
 
 /**
  * Sheet / DB rows often use a human label; Practice URLs use baseSubjects `id`
@@ -32,6 +32,47 @@ function normalizeTopicLabel(raw: unknown): string {
   // Hide legacy placeholder topic names from old PDF test imports.
   if (/^(?:test(?:\s*pdf)?|pdf\s*test)$/i.test(topic)) return "General";
   return topic;
+}
+
+function cleanQuestionText(raw: unknown): string {
+  const base = String(raw ?? "").replace(/\r\n?/g, "\n").trim();
+  if (!base) return "";
+
+  const lines = base
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+  if (!lines.length) return "";
+
+  const singleCharLines = lines.filter((l) => /^[A-Za-z0-9]$/.test(l)).length;
+  const shouldDechunk =
+    lines.length >= 6 &&
+    (singleCharLines / lines.length >= 0.35 ||
+      lines.some((l) => l === "," || l === "." || l === ":" || l === ";"));
+
+  if (shouldDechunk) {
+    const recombined = lines
+      .join("")
+      .replace(/\s+/g, " ")
+      .replace(/\s*([,.;:!?])\s*/g, "$1 ")
+      .replace(/\s+/g, " ")
+      .trim();
+    return recombined
+      .replace(/annualrate/gi, "annual rate")
+      .replace(/([a-z])([A-Z])/g, "$1 $2")
+      .replace(/([A-Za-z])(\d)/g, "$1 $2")
+      .replace(/(\d)([A-Za-z])/g, "$1 $2")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  return lines
+    .join("\n")
+    .replace(/annualrate/gi, "annual rate")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/([A-Za-z])(\d)/g, "$1 $2")
+    .replace(/(\d)([A-Za-z])/g, "$1 $2")
+    .trim();
 }
 
 function parseJsonArrayFromString(s: string): unknown[] | undefined {
@@ -117,6 +158,83 @@ function parseStringArray(val: unknown): string[] {
   return [];
 }
 
+function parseAnswerParts(val: unknown): AnswerPart[] | undefined {
+  const toParts = (arr: unknown[]): AnswerPart[] =>
+    arr
+      .map((it, idx) => {
+        if (!it || typeof it !== "object") return null;
+        const row = it as Record<string, unknown>;
+        const label = String(row.label ?? "").trim();
+        const keyRaw = String(row.key ?? "").trim();
+        const key = keyRaw || `part${idx + 1}`;
+        if (!label) return null;
+        const typeRaw = String(row.type ?? "").trim().toLowerCase();
+        const type =
+          typeRaw === "number" || typeRaw === "text"
+            ? (typeRaw as "number" | "text")
+            : undefined;
+        return { key, label, ...(type ? { type } : {}) };
+      })
+      .filter((p): p is AnswerPart => p != null);
+
+  if (Array.isArray(val)) {
+    const direct = toParts(val);
+    return direct.length ? direct : undefined;
+  }
+  if (typeof val === "string" && val.trim()) {
+    try {
+      const parsed = JSON.parse(val);
+      if (Array.isArray(parsed)) {
+        const fromJson = toParts(parsed);
+        return fromJson.length ? fromJson : undefined;
+      }
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
+function inferAnswerPartsFromQuestion(
+  questionText: string,
+  acceptedAnswersCount: number,
+): AnswerPart[] | undefined {
+  if (acceptedAnswersCount < 2) return undefined;
+
+  const eToken = questionText.match(/\bE\s*\([^)]*\)/i)?.[0]?.replace(/\s+/g, "");
+  const sdToken = questionText.match(/\bsd\s*\([^)]*\)/i)?.[0]?.replace(/\s+/g, "");
+  const prToken = questionText.match(/\b(?:Pr|P)\s*\([^)]*\)/i)?.[0]?.replace(/\s+/g, "");
+  if (eToken && sdToken && prToken && acceptedAnswersCount >= 3) {
+    return [
+      { key: "part1", label: eToken, type: "number" },
+      { key: "part2", label: sdToken, type: "number" },
+      { key: "part3", label: prToken, type: "number" },
+    ];
+  }
+
+  const directiveParts = parseDirectiveParts(questionText);
+  if (directiveParts.length >= 2) {
+    return directiveParts.map((label, idx) => ({ key: `part${idx + 1}`, label }));
+  }
+
+  return undefined;
+}
+
+function parseDirectiveParts(questionText: string): string[] {
+  const actionRegex =
+    /\b(find|determine|calculate|compute|evaluate|state)\b\s+([\s\S]*?)(?:[.?!]|$)/i;
+  const m = questionText.match(actionRegex);
+  if (!m?.[2]) return [];
+  const body = m[2].replace(/\s+/g, " ").trim();
+  if (!body) return [];
+  const chunks = body
+    .split(/\s*,\s*then\s+|\s+then\s+|\s*,\s*and\s+|\s+and\s+/i)
+    .map((x) => x.trim().replace(/^[,;:\-]+/, "").replace(/[;:,.]+$/g, ""))
+    .filter(Boolean);
+  if (chunks.length < 2) return [];
+  return chunks;
+}
+
 /**
  * Bootstrap groups questions by `subject_id`. URLs use canonical ids (`methods`,
  * `general-maths`, `specialist-maths`); sheet rows sometimes use different casing.
@@ -144,7 +262,7 @@ export function normalizeCustomQuestion(raw: unknown): Question | null {
   const q = raw as Record<string, unknown>;
 
   const topic = normalizeTopicLabel(q.topic);
-  const questionText = String(q.question ?? "").trim();
+  const questionText = cleanQuestionText(q.question);
   if (!questionText) return null;
 
   let imageUrls: string[] | undefined;
@@ -177,16 +295,26 @@ export function normalizeCustomQuestion(raw: unknown): Question | null {
       ? groupIdRaw.trim()
       : undefined;
   const marks = typeof q.marks === "number" ? q.marks : undefined;
-  const passage =
-    typeof q.passage === "string" && q.passage.trim() ? q.passage : undefined;
-  const guidance =
-    typeof q.guidance === "string" && q.guidance.trim() ? q.guidance : undefined;
+  const passageRaw = cleanQuestionText(q.passage);
+  const guidanceRaw = cleanQuestionText(q.guidance);
+  const passage = passageRaw ? passageRaw : undefined;
+  const guidance = guidanceRaw ? guidanceRaw : undefined;
   const id =
     typeof q.id === "number"
       ? q.id
       : typeof q.id === "string" && /^\d+$/.test(q.id)
         ? Number(q.id)
         : undefined;
+  const answerParts =
+    parseAnswerParts((q as any).answerParts) ??
+    parseAnswerParts((q as any).answer_parts) ??
+    parseAnswerParts((q as any).answer_parts_json);
+  const inferredAnswerParts = inferAnswerPartsFromQuestion(
+    questionText,
+    parseStringArray(q.acceptedAnswers).length ||
+      parseStringArray(q.accepted_answers).length ||
+      (String(q.answer ?? "").trim() ? 1 : 0),
+  );
 
   const typeRaw = String(q.type ?? "")
     .trim()
@@ -223,6 +351,9 @@ export function normalizeCustomQuestion(raw: unknown): Question | null {
       marks,
       passage,
       id,
+      ...((answerParts ?? inferredAnswerParts)?.length
+        ? { answerParts: answerParts ?? inferredAnswerParts }
+        : {}),
       ...(groupId ? { groupId } : {}),
     };
   }
@@ -230,6 +361,7 @@ export function normalizeCustomQuestion(raw: unknown): Question | null {
   if (typeRaw === "mcq") {
     let options = parseStringArray(q.options);
     if (!options.length) options = parseStringArray(q.options_json);
+    options = options.map((opt) => cleanQuestionText(opt)).filter(Boolean);
     let answer = String(q.answer ?? "").trim();
     if (/^[A-Za-z]$/.test(answer) && options.length) {
       const i = answer.toUpperCase().charCodeAt(0) - "A".charCodeAt(0);
@@ -247,6 +379,9 @@ export function normalizeCustomQuestion(raw: unknown): Question | null {
       marks,
       passage,
       id,
+      ...((answerParts ?? inferredAnswerParts)?.length
+        ? { answerParts: answerParts ?? inferredAnswerParts }
+        : {}),
       ...(groupId ? { groupId } : {}),
     };
   }
@@ -272,6 +407,9 @@ export function normalizeCustomQuestion(raw: unknown): Question | null {
         marks,
         passage,
         id,
+        ...((answerParts ?? inferredAnswerParts)?.length
+          ? { answerParts: answerParts ?? inferredAnswerParts }
+          : {}),
         ...(groupId ? { groupId } : {}),
       };
     }
@@ -285,6 +423,9 @@ export function normalizeCustomQuestion(raw: unknown): Question | null {
       marks,
       passage,
       id,
+      ...((answerParts ?? inferredAnswerParts)?.length
+        ? { answerParts: answerParts ?? inferredAnswerParts }
+        : {}),
       ...(groupId ? { groupId } : {}),
     };
   }
@@ -310,6 +451,9 @@ export function normalizeCustomQuestion(raw: unknown): Question | null {
       marks,
       passage,
       id,
+      ...((answerParts ?? inferredAnswerParts)?.length
+        ? { answerParts: answerParts ?? inferredAnswerParts }
+        : {}),
       ...(groupId ? { groupId } : {}),
     };
   }

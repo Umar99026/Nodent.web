@@ -12,18 +12,15 @@ import type { Question, Subject } from "@/lib/subjects";
 import { questionKeyStable, getStableQuestionIndex } from "@/lib/practiceKeys";
 import { randomizedQuestionsForSubject } from "@/lib/quizShuffle";
 import { buildGroupsFromOrderedFlat } from "@/lib/questionGroups";
-import { PassageBlock, QuestionImageGrid } from "@/components/quiz/QuestionStimulus";
-import { RichQuestionContent } from "@/components/quiz/RichQuestionContent";
 import { McqQuestion } from "@/components/quiz/McqQuestion";
 import { ShortQuestion } from "@/components/quiz/ShortQuestion";
 import { LongQuestion } from "@/components/quiz/LongQuestion";
-import { displayMarks, stripQuestionHeadingFromPassage, stripQuestionNumberPrefix } from "@/lib/questionDisplay";
+import { stripQuestionHeadingFromPassage } from "@/lib/questionDisplay";
 import { formatSeconds, getQuestionTypeLabel } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import {
@@ -45,14 +42,44 @@ interface StudyModeState {
   durationMinutes: number;
   remainingSeconds: number;
   running: boolean;
+  questionGoal: number;
+  completedQuestionKeys: string[];
+}
+
+function normalizeStudyState(
+  raw: unknown,
+  defaultDuration: number,
+): StudyModeState {
+  const safeRaw =
+    raw && typeof raw === "object" ? (raw as Partial<StudyModeState>) : {};
+  const safeDuration = Math.max(
+    10,
+    Math.min(90, Number(safeRaw.durationMinutes) || defaultDuration),
+  );
+  const safeRemaining = Math.max(
+    0,
+    Number(safeRaw.remainingSeconds) || safeDuration * 60,
+  );
+  const safeIndex = Math.max(0, Number(safeRaw.index) || 0);
+  const safeGoal = Math.max(1, Math.min(300, Number(safeRaw.questionGoal) || 10));
+  const safeCompleted = Array.isArray(safeRaw.completedQuestionKeys)
+    ? safeRaw.completedQuestionKeys.filter(
+        (k): k is string => typeof k === "string" && k.trim().length > 0,
+      )
+    : [];
+
+  return {
+    index: safeIndex,
+    durationMinutes: safeDuration,
+    remainingSeconds: safeRemaining,
+    running: Boolean(safeRaw.running),
+    questionGoal: safeGoal,
+    completedQuestionKeys: safeCompleted,
+  };
 }
 
 function stateKey(userId: string, subjectId: string) {
   return STORAGE_KEYS.studyModePrefix + userId + "_" + subjectId;
-}
-
-function studyAnswerKey(subjectId: string, questionKey: string) {
-  return `${subjectId}__${questionKey}`;
 }
 
 function loadStudyState(
@@ -62,16 +89,11 @@ function loadStudyState(
 ): StudyModeState {
   try {
     const raw = localStorage.getItem(stateKey(userId, subjectId));
-    if (raw) return JSON.parse(raw) as StudyModeState;
+    if (raw) return normalizeStudyState(JSON.parse(raw), defaultDuration);
   } catch {
     // ignore
   }
-  return {
-    index: 0,
-    durationMinutes: defaultDuration,
-    remainingSeconds: defaultDuration * 60,
-    running: false,
-  };
+  return normalizeStudyState({}, defaultDuration);
 }
 
 function saveStudyState(
@@ -81,26 +103,6 @@ function saveStudyState(
 ) {
   try {
     localStorage.setItem(stateKey(userId, subjectId), JSON.stringify(state));
-  } catch {
-    // ignore
-  }
-}
-
-function loadAnswers(): Record<string, string> {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEYS.studyModeAnswers);
-    if (raw) return JSON.parse(raw) as Record<string, string>;
-  } catch {
-    // ignore
-  }
-  return {};
-}
-
-function saveAnswer(subjectId: string, questionKey: string, value: string) {
-  const all = loadAnswers();
-  all[studyAnswerKey(subjectId, questionKey)] = value;
-  try {
-    localStorage.setItem(STORAGE_KEYS.studyModeAnswers, JSON.stringify(all));
   } catch {
     // ignore
   }
@@ -134,83 +136,6 @@ function typeBadgeColor(type: Question["type"]): string {
     default:
       return "bg-white/20 text-white";
   }
-}
-
-/** Long-answer notes for study (no written API); same stimulus layout as quiz. */
-function StudyLongPart({
-  subjectId,
-  part,
-  bank,
-  hidePassage,
-}: {
-  subjectId: string;
-  part: Extract<Question, { type: "long" }>;
-  bank: Question[];
-  hidePassage: boolean;
-}) {
-  const qk = questionKeyStable(
-    subjectId,
-    part,
-    Math.max(0, getStableQuestionIndex(bank, part)),
-  );
-  const [value, setValue] = useState(() => {
-    const all = loadAnswers();
-    return all[studyAnswerKey(subjectId, qk)] ?? "";
-  });
-
-  useEffect(() => {
-    const all = loadAnswers();
-    setValue(all[studyAnswerKey(subjectId, qk)] ?? "");
-  }, [subjectId, qk]);
-
-  const handleChange = (v: string) => {
-    setValue(v);
-    saveAnswer(subjectId, qk, v);
-  };
-
-  return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-center gap-2">
-        <Badge variant="secondary" className="text-xs font-normal">
-          {getQuestionTypeLabel(part.type)}
-        </Badge>
-        {part.topic && (
-          <Badge
-            variant="outline"
-            className="text-xs font-normal text-muted-foreground"
-          >
-            {part.topic}
-          </Badge>
-        )}
-      </div>
-      {!hidePassage && (
-        <PassageBlock passage={stripQuestionHeadingFromPassage(part.passage)} />
-      )}
-      <QuestionImageGrid urls={part.imageUrls} />
-      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        {displayMarks(part.marks, part.type)}{" "}
-        {displayMarks(part.marks, part.type) === 1 ? "mark" : "marks"}
-      </p>
-      <div className="font-display text-lg leading-relaxed text-foreground sm:text-xl">
-        <RichQuestionContent
-          text={stripQuestionNumberPrefix(part.question)}
-          className="prose prose-sm max-w-none prose-p:my-0"
-        />
-      </div>
-      {part.guidance && (
-        <div className="flex items-start gap-3 rounded-lg bg-amber/10 px-4 py-3 text-sm text-amber">
-          <RichQuestionContent text={part.guidance} className="prose prose-sm max-w-none prose-p:my-0" />
-        </div>
-      )}
-      <Textarea
-        placeholder="Write your answer here..."
-        value={value}
-        onChange={(e) => handleChange(e.target.value)}
-        rows={12}
-        className="resize-y border-black/10 bg-white/80 text-base leading-relaxed text-foreground placeholder:text-muted-foreground"
-      />
-    </div>
-  );
 }
 
 const DEFAULT_DURATION = 30;
@@ -296,6 +221,7 @@ export default function StudyModePage() {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const { index, durationMinutes, remainingSeconds, running } = studyState;
+  const completedCount = studyState.completedQuestionKeys.length;
 
   useEffect(() => {
     setStudyState((prev) =>
@@ -367,6 +293,7 @@ export default function StudyModePage() {
       ...prev,
       running: false,
       remainingSeconds: prev.durationMinutes * 60,
+      completedQuestionKeys: [],
     }));
 
   const handleDurationChange = (value: string) => {
@@ -377,6 +304,21 @@ export default function StudyModePage() {
       remainingSeconds: prev.running ? prev.remainingSeconds : mins * 60,
     }));
   };
+
+  const handleGoalChange = (value: string) => {
+    const goal = Math.max(1, Math.min(300, Number(value) || 1));
+    setStudyState((prev) => ({ ...prev, questionGoal: goal }));
+  };
+
+  const markQuestionCompleted = useCallback((qk: string) => {
+    setStudyState((prev) => {
+      if (prev.completedQuestionKeys.includes(qk)) return prev;
+      return {
+        ...prev,
+        completedQuestionKeys: [...prev.completedQuestionKeys, qk],
+      };
+    });
+  }, []);
 
   const handleExit = () => {
     if (window.history.length > 1) navigate(-1);
@@ -412,7 +354,7 @@ export default function StudyModePage() {
               question={part}
               hidePassage={hidePassage}
               lockedCorrect={false}
-              onAnswer={() => {}}
+              onAnswer={() => markQuestionCompleted(qk)}
               disabled={false}
               classFullyCorrectPercent={null}
             />
@@ -422,35 +364,28 @@ export default function StudyModePage() {
               question={part}
               hidePassage={hidePassage}
               lockedCorrect={false}
-              onAnswer={() => {}}
+              onAnswer={() => markQuestionCompleted(qk)}
               disabled={false}
               classFullyCorrectPercent={null}
             />
           )}
-          {part.type === "long" && user && (
+          {part.type === "long" && (
             <LongQuestion
               question={part}
               subjectId={subjectId}
               questionKey={qk}
               hidePassage={hidePassage}
               lockedCorrect={false}
-              onAnswer={() => {}}
+              onAnswer={() => markQuestionCompleted(qk)}
               disabled={false}
               classFullyCorrectPercent={null}
-            />
-          )}
-          {part.type === "long" && !user && (
-            <StudyLongPart
-              subjectId={subjectId}
-              part={part}
-              bank={questions}
-              hidePassage={hidePassage}
+              practiceOnly
             />
           )}
         </div>
       );
     },
-    [subjectId, questions, hidePassageForParts, user],
+    [subjectId, questions, hidePassageForParts, markQuestionCompleted],
   );
 
   return (
@@ -560,6 +495,23 @@ export default function StudyModePage() {
                     disabled={running}
                     className="w-16 border-white/20 bg-white/5 text-center text-sm text-white"
                   />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="study-goal" className="text-xs text-white/60">
+                    Question goal
+                  </Label>
+                  <Input
+                    id="study-goal"
+                    type="number"
+                    min={1}
+                    max={300}
+                    value={studyState.questionGoal}
+                    onChange={(e) => handleGoalChange(e.target.value)}
+                    className="w-20 border-white/20 bg-white/5 text-center text-sm text-white"
+                  />
+                  <Badge className="border-white/20 bg-white/10 text-white">
+                    {completedCount}/{studyState.questionGoal}
+                  </Badge>
                 </div>
               </div>
             </div>

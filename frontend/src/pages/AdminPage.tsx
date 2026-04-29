@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { apiFetchAdmin, ApiError } from "@/lib/api";
+import { apiFetch, apiFetchAdmin, ApiError } from "@/lib/api";
 import { API_PATHS, ADMIN_EMAIL } from "@/lib/constants";
 import { compressImageFileToDataUrl } from "@/lib/imageCompressor";
 import { RichQuestionContent } from "@/components/quiz/RichQuestionContent";
@@ -101,7 +101,7 @@ type ImageMapRow = {
 
 type EnglishAdminPrompt = {
   id: number;
-  section: "A" | "B";
+  section: "A" | "B" | "C";
   book: string;
   prompt: string;
 };
@@ -235,8 +235,46 @@ export default function AdminPage() {
 
   const fetchEnglishPrompts = useCallback(async () => {
     try {
-      const data = await apiFetchAdmin<{ prompts: EnglishAdminPrompt[] }>(API_PATHS.admin.englishPrompts);
-      setEnglishPrompts(Array.isArray(data?.prompts) ? data.prompts : []);
+      const booksResp = await apiFetch<{ books: Array<{ id: number; title: string }> }>(
+        `${API_PATHS.english.books}?section=A`,
+      );
+      const books = Array.isArray(booksResp?.books) ? booksResp.books : [];
+      const aPrompts: EnglishAdminPrompt[] = [];
+      for (const b of books) {
+        const promptsResp = await apiFetch<{ prompts: Array<{ id: number; prompt: string }> }>(
+          `${API_PATHS.english.prompts}?section=A&bookId=${encodeURIComponent(b.id)}`,
+        );
+        const rows = Array.isArray(promptsResp?.prompts) ? promptsResp.prompts : [];
+        rows.forEach((p) =>
+          aPrompts.push({
+            id: Number(p.id),
+            section: "A",
+            book: String(b.title || ""),
+            prompt: String(p.prompt || ""),
+          }),
+        );
+      }
+
+      const bResp = await apiFetch<{ prompts: Array<{ id: number; bookTitle: string; prompt: string }> }>(
+        `${API_PATHS.english.prompts}?section=B`,
+      );
+      const cResp = await apiFetch<{ prompts: Array<{ id: number; bookTitle: string; prompt: string }> }>(
+        `${API_PATHS.english.prompts}?section=C`,
+      );
+      const bPrompts: EnglishAdminPrompt[] = (bResp?.prompts ?? []).map((p) => ({
+        id: Number(p.id),
+        section: "B",
+        book: String(p.bookTitle || ""),
+        prompt: String(p.prompt || ""),
+      }));
+      const cPrompts: EnglishAdminPrompt[] = (cResp?.prompts ?? []).map((p) => ({
+        id: Number(p.id),
+        section: "C",
+        book: String(p.bookTitle || ""),
+        prompt: String(p.prompt || ""),
+      }));
+
+      setEnglishPrompts([...aPrompts, ...bPrompts, ...cPrompts]);
     } catch {
       setEnglishPrompts([]);
     }
@@ -1435,6 +1473,33 @@ B\t\tWrite a creative piece that reimagines a moment of moral conflict from a mo
                 Confirm import
               </Button>
               {englishMsg ? <p className="text-sm text-muted-foreground">{englishMsg}</p> : null}
+            </div>
+
+            <Separator />
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-foreground">Current English prompt bank</p>
+              {!englishPrompts.length ? (
+                <p className="text-sm text-muted-foreground">No English prompts yet.</p>
+              ) : (
+                <div className="max-h-80 overflow-y-auto rounded-lg border border-border/50 bg-white/60">
+                  {englishPrompts.map((r) => (
+                    <div
+                      key={`english-bank-${r.id}`}
+                      className="border-b border-border/30 px-3 py-2 last:border-b-0"
+                    >
+                      <div className="mb-1 flex items-center gap-2">
+                        <Badge variant="outline" className="text-[10px] uppercase">
+                          Section {r.section}
+                        </Badge>
+                        <Badge variant="secondary" className="text-[11px]">
+                          {r.book || "English Prompt Bank"}
+                        </Badge>
+                      </div>
+                      <p className="whitespace-pre-wrap text-sm text-foreground">{r.prompt}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>

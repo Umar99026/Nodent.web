@@ -13,10 +13,8 @@ export default defineConfig({
   server: {
     proxy: {
       "/api": {
-        // Local dev: use the Workers API (wrangler dev).
-        // If you want to use the legacy Express server instead, change back to :3000.
-        // Local backend dev server.
-        target: "http://127.0.0.1:8787",
+        // Local backend dev server (SQLite-backed server.js).
+        target: "http://127.0.0.1:3000",
         changeOrigin: true,
       },
     },

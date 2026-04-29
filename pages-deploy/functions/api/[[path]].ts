@@ -23,6 +23,7 @@ const users = pgTable("users", {
   passwordHash: text("password_hash").notNull(),
   passwordSalt: text("password_salt").notNull(),
   hashAlgorithm: text("hash_algorithm").notNull().default("pbkdf2"),
+  profilePhoto: text("profile_photo"),
   createdAt: text("created_at").notNull(),
 });
 
@@ -395,9 +396,10 @@ type Env = {
   GOOGLE_SERVICE_ACCOUNT_JSON?: string;
   GOOGLE_SHEETS_SUBJECT_FROM_TAB?: string;
 };
-type Vars = { user: { id: number; email: string; username: string; token: string }; db: ReturnType<typeof createDb> };
+type Vars = { user: { id: number; email: string; username: string; token: string; profilePhoto?: string | null }; db: ReturnType<typeof createDb> };
 
 const app = new Hono<{ Bindings: Env; Variables: Vars }>();
+let englishResponsesConstraintDropped = false;
 
 // CORS
 app.use("/api/*", cors({
@@ -415,7 +417,20 @@ app.use("/api/*", cors({
 
 // DB middleware
 app.use("/api/*", async (c, next) => {
-  c.set("db", createDb(c.env.DATABASE_URL));
+  const db = createDb(c.env.DATABASE_URL);
+  if (!englishResponsesConstraintDropped) {
+    try {
+      await db.execute(sql`
+        ALTER TABLE english_responses
+        DROP CONSTRAINT IF EXISTS english_responses_prompt_user_unique
+      `);
+    } catch {
+      // ignore
+    } finally {
+      englishResponsesConstraintDropped = true;
+    }
+  }
+  c.set("db", db);
   await next();
 });
 
@@ -425,14 +440,20 @@ async function authMiddleware(c: any, next: any) {
   if (!authHeader?.startsWith("Bearer ")) return c.json({ error: "Authentication required." }, 401);
   const token = authHeader.slice(7);
   const db = c.get("db");
-  const result = await db.select({ userId: users.id, email: users.email, username: users.username, expiresAt: sessions.expiresAt })
+  const result = await db.select({ userId: users.id, email: users.email, username: users.username, profilePhoto: users.profilePhoto, expiresAt: sessions.expiresAt })
     .from(sessions).innerJoin(users, eq(sessions.userId, users.id)).where(eq(sessions.token, token)).limit(1);
   if (result.length === 0) return c.json({ error: "Invalid session." }, 401);
   if (new Date(result[0].expiresAt) < new Date()) {
     await db.delete(sessions).where(eq(sessions.token, token));
     return c.json({ error: "Session expired." }, 401);
   }
-  c.set("user", { id: result[0].userId, email: result[0].email, username: result[0].username, token });
+  c.set("user", {
+    id: result[0].userId,
+    email: result[0].email,
+    username: result[0].username,
+    profilePhoto: result[0].profilePhoto ?? null,
+    token,
+  });
   await next();
 }
 
@@ -496,7 +517,7 @@ app.post("/api/auth/signup", async (c) => {
   const result = await db.insert(users).values({ username, email, passwordHash: hash, passwordSalt: salt, hashAlgorithm: "pbkdf2", createdAt: nowIso() }).returning({ id: users.id });
   const token = createToken();
   await db.insert(sessions).values({ token, userId: result[0].id, createdAt: nowIso(), expiresAt: sessionExpiry() });
-  return c.json({ token, user: { id: result[0].id, username, email } });
+  return c.json({ token, user: { id: result[0].id, username, email, profilePhoto: null } });
 });
 
 app.post("/api/auth/login", async (c) => {
@@ -513,13 +534,106 @@ app.post("/api/auth/login", async (c) => {
   if (!valid) return c.json({ error: "Invalid login details." }, 400);
   const token = createToken();
   await db.insert(sessions).values({ token, userId: user.id, createdAt: nowIso(), expiresAt: sessionExpiry() });
-  return c.json({ token, user: { id: user.id, username: user.username || user.email, email: user.email } });
+  return c.json({
+    token,
+    user: {
+      id: user.id,
+      username: user.username || user.email,
+      email: user.email,
+      profilePhoto: user.profilePhoto ?? null,
+    },
+  });
 });
 
 app.post("/api/auth/logout", authMiddleware, async (c: any) => {
   const user = c.get("user");
   await c.get("db").delete(sessions).where(eq(sessions.token, user.token));
   return c.json({ ok: true });
+});
+
+app.patch("/api/auth/account", authMiddleware, async (c: any) => {
+  try {
+    const db = c.get("db");
+    const user = c.get("user");
+    const body = await c.req.json();
+    const usernameRaw = body?.username;
+    const currentPassword = String(body?.currentPassword || "").trim();
+    const newPassword = String(body?.newPassword || "").trim();
+    const profilePhotoProvided = Object.prototype.hasOwnProperty.call(body ?? {}, "profilePhoto");
+    const profilePhotoRaw = body?.profilePhoto;
+
+    const rows = await db.select().from(users).where(eq(users.id, user.id)).limit(1);
+    if (!rows.length) return c.json({ error: "User not found." }, 404);
+    const current = rows[0];
+
+    const updateData: Record<string, unknown> = {};
+
+    if (typeof usernameRaw === "string") {
+      const username = cleanText(usernameRaw, 40);
+      if (username.length < 2) return c.json({ error: "Username must be at least 2 characters." }, 400);
+      const exists = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(and(sql`LOWER(${users.username}) = LOWER(${username})`, sql`${users.id} <> ${user.id}`))
+        .limit(1);
+      if (exists.length) return c.json({ error: "That username is already taken." }, 400);
+      updateData.username = username;
+    }
+
+    if (newPassword || currentPassword) {
+      if (!newPassword || !currentPassword) {
+        return c.json({ error: "Provide both current and new password." }, 400);
+      }
+      if (newPassword.length < 4) {
+        return c.json({ error: "New password must be at least 4 characters." }, 400);
+      }
+      const valid = await verifyPassword(
+        currentPassword,
+        current.passwordSalt,
+        current.passwordHash,
+      );
+      if (!valid) return c.json({ error: "Current password is incorrect." }, 400);
+      const { salt, hash } = await hashPassword(newPassword);
+      updateData.passwordSalt = salt;
+      updateData.passwordHash = hash;
+      updateData.hashAlgorithm = "pbkdf2";
+    }
+
+    if (profilePhotoProvided) {
+      const profilePhoto =
+        typeof profilePhotoRaw === "string" && profilePhotoRaw.trim()
+          ? String(profilePhotoRaw).trim()
+          : null;
+      if (profilePhoto && profilePhoto.length > 2_500_000) {
+        return c.json({ error: "Profile photo is too large." }, 400);
+      }
+      updateData.profilePhoto = profilePhoto;
+    }
+
+    if (Object.keys(updateData).length > 0) {
+      await db.update(users).set(updateData).where(eq(users.id, user.id));
+    }
+    const refreshed = await db
+      .select({
+        id: users.id,
+        username: users.username,
+        email: users.email,
+        profilePhoto: users.profilePhoto,
+      })
+      .from(users)
+      .where(eq(users.id, user.id))
+      .limit(1);
+    return c.json({
+      user: {
+        id: refreshed[0].id,
+        username: refreshed[0].username || refreshed[0].email,
+        email: refreshed[0].email,
+        profilePhoto: refreshed[0].profilePhoto ?? null,
+      },
+    });
+  } catch (e) {
+    return c.json({ error: errorChain(e) }, 500);
+  }
 });
 
 // Legacy aliases
@@ -556,7 +670,15 @@ app.get("/api/bootstrap", authMiddleware, async (c: any) => {
       marks,
     });
   }
-  return c.json({ user: { id: user.id, email: user.email, username: user.username }, customQuestions: grouped });
+  return c.json({
+    user: {
+      id: user.id,
+      email: user.email,
+      username: user.username,
+      profilePhoto: user.profilePhoto ?? null,
+    },
+    customQuestions: grouped,
+  });
 });
 
 // ---- Friends ----
@@ -1426,19 +1548,55 @@ app.get("/api/english/books", authMiddleware, async (c: any) => {
     const db = c.get("db");
     const section = normalizeEnglishSection(c.req.query("section"));
     const rows = await db.execute(sql`
-      SELECT b.id, b.title, COUNT(p.id) AS prompt_count
+      SELECT
+        b.id,
+        b.title,
+        SUM(
+          CASE
+            WHEN LEFT(UPPER(TRIM(COALESCE(p.section, ''))), 1) = 'A' THEN 1
+            ELSE 0
+          END
+        ) AS prompt_count_a,
+        SUM(
+          CASE
+            WHEN LEFT(UPPER(TRIM(COALESCE(p.section, ''))), 1) = 'B' THEN 1
+            ELSE 0
+          END
+        ) AS prompt_count_b,
+        SUM(
+          CASE
+            WHEN LEFT(UPPER(TRIM(COALESCE(p.section, ''))), 1) = 'C' THEN 1
+            ELSE 0
+          END
+        ) AS prompt_count_c
       FROM english_books b
       LEFT JOIN english_prompts p ON p.book_id = b.id
-      ${section === "A" ? sql`WHERE p.section = 'A'` : sql``}
       GROUP BY b.id, b.title
       ORDER BY b.title ASC
     `);
-    const mapped = (rows.rows as any[]).map((r) => ({
-      id: Number(r.id),
-      title: String(r.title || ""),
-      promptCount: Number(r.prompt_count || 0),
-    }));
-    return c.json({ books: section === "A" ? mapped.filter((x) => x.promptCount > 0) : mapped });
+    const mapped = (rows.rows as any[]).map((r) => {
+      const countA = Number(r.prompt_count_a || 0);
+      const countB = Number(r.prompt_count_b || 0);
+      const countC = Number(r.prompt_count_c || 0);
+      const totalCount = countA + countB + countC;
+      return {
+        id: Number(r.id),
+        title: String(r.title || ""),
+        promptCount:
+          section === "A" ? countA : section === "B" ? countB : countC,
+        totalPromptCount: totalCount,
+      };
+    });
+    const sectionScoped = mapped.filter((x) => x.promptCount > 0);
+    if (sectionScoped.length > 0) {
+      return c.json({ books: sectionScoped.map(({ totalPromptCount: _, ...rest }) => rest) });
+    }
+    // Fallback: if a section has no prompts at all, still return books with prompts from any section.
+    return c.json({
+      books: mapped
+        .filter((x) => x.totalPromptCount > 0)
+        .map(({ totalPromptCount, ...rest }) => ({ ...rest, promptCount: totalPromptCount })),
+    });
   } catch (e) {
     return c.json({ error: errorChain(e) }, 500);
   }
@@ -1449,29 +1607,43 @@ app.get("/api/english/prompts", authMiddleware, async (c: any) => {
     const db = c.get("db");
     const section = normalizeEnglishSection(c.req.query("section"));
     const bookId = Number(c.req.query("bookId"));
-    if (section === "A" && (!Number.isFinite(bookId) || bookId <= 0)) {
-      return c.json({ error: "bookId is required for section A." }, 400);
-    }
-
     const rows =
       section === "A"
-        ? await db.execute(sql`
-            SELECT p.id, p.prompt_text, p.section, b.id AS book_id, b.title AS book_title
-            FROM english_prompts p
-            JOIN english_books b ON b.id = p.book_id
-            WHERE p.book_id = ${bookId} AND p.section = 'A'
-            ORDER BY p.id ASC
-          `)
+        ? Number.isFinite(bookId) && bookId > 0
+          ? await db.execute(sql`
+              SELECT p.id, p.prompt_text, p.section, b.id AS book_id, b.title AS book_title
+              FROM english_prompts p
+              JOIN english_books b ON b.id = p.book_id
+              WHERE p.book_id = ${bookId} AND LEFT(UPPER(TRIM(COALESCE(p.section, ''))), 1) = 'A'
+              ORDER BY p.id ASC
+            `)
+          : await db.execute(sql`
+              SELECT p.id, p.prompt_text, p.section, b.id AS book_id, b.title AS book_title
+              FROM english_prompts p
+              JOIN english_books b ON b.id = p.book_id
+              WHERE LEFT(UPPER(TRIM(COALESCE(p.section, ''))), 1) = 'A'
+              ORDER BY p.id ASC
+            `)
         : await db.execute(sql`
             SELECT p.id, p.prompt_text, p.section, b.id AS book_id, b.title AS book_title
             FROM english_prompts p
             JOIN english_books b ON b.id = p.book_id
-            WHERE p.section = ${section}
+            WHERE LEFT(UPPER(TRIM(COALESCE(p.section, ''))), 1) = UPPER(${section})
             ORDER BY p.id ASC
           `);
+    const effectiveRows =
+      section === "A" && ((rows.rows as any[])?.length ?? 0) === 0
+        ? await db.execute(sql`
+            SELECT p.id, p.prompt_text, p.section, b.id AS book_id, b.title AS book_title
+            FROM english_prompts p
+            JOIN english_books b ON b.id = p.book_id
+            WHERE p.book_id = ${bookId}
+            ORDER BY p.id ASC
+          `)
+        : rows;
 
     return c.json({
-      prompts: (rows.rows as any[]).map((r) => ({
+      prompts: (effectiveRows.rows as any[]).map((r) => ({
         id: Number(r.id),
         bookId: Number(r.book_id),
         bookTitle: String(r.book_title || ""),
@@ -1514,11 +1686,6 @@ app.post("/api/english/responses", authMiddleware, async (c: any) => {
     await db.execute(sql`
       INSERT INTO english_responses (prompt_id, user_id, response_type, response_text, image_urls, created_at, updated_at)
       VALUES (${promptId}, ${user.id}, ${responseType}, ${responseText || ""}, ${imageUrlsJson}, ${now}, ${now})
-      ON CONFLICT(prompt_id, user_id) DO UPDATE SET
-        response_type = excluded.response_type,
-        response_text = excluded.response_text,
-        image_urls = excluded.image_urls,
-        updated_at = excluded.updated_at
     `);
     return c.json({ ok: true });
   } catch (e) {
@@ -1532,24 +1699,32 @@ app.get("/api/english/responses", authMiddleware, async (c: any) => {
     const user = c.get("user");
     const section = normalizeEnglishSection(c.req.query("section"));
     const bookId = Number(c.req.query("bookId"));
-    if (section === "A" && (!Number.isFinite(bookId) || bookId <= 0)) {
-      return c.json({ error: "bookId is required for section A." }, 400);
-    }
-
     const rows =
       section === "A"
-        ? await db.execute(sql`
-            SELECT r.id, r.prompt_id, r.user_id, r.response_type, r.response_text, r.image_urls, r.updated_at,
-                   p.prompt_text, p.section, u.username, AVG(rr.score) AS avg_score, COUNT(rr.id) AS rating_count
-            FROM english_responses r
-            JOIN english_prompts p ON p.id = r.prompt_id
-            JOIN english_books b ON b.id = p.book_id
-            JOIN users u ON u.id = r.user_id
-            LEFT JOIN english_response_ratings rr ON rr.response_id = r.id
-            WHERE b.id = ${bookId} AND p.section = 'A'
-            GROUP BY r.id, p.prompt_text, p.section, u.username
-            ORDER BY r.updated_at DESC
-          `)
+        ? Number.isFinite(bookId) && bookId > 0
+          ? await db.execute(sql`
+              SELECT r.id, r.prompt_id, r.user_id, r.response_type, r.response_text, r.image_urls, r.updated_at,
+                     p.prompt_text, p.section, u.username, AVG(rr.score) AS avg_score, COUNT(rr.id) AS rating_count
+              FROM english_responses r
+              JOIN english_prompts p ON p.id = r.prompt_id
+              JOIN english_books b ON b.id = p.book_id
+              JOIN users u ON u.id = r.user_id
+              LEFT JOIN english_response_ratings rr ON rr.response_id = r.id
+              WHERE b.id = ${bookId} AND LEFT(UPPER(TRIM(COALESCE(p.section, ''))), 1) = 'A'
+              GROUP BY r.id, p.prompt_text, p.section, u.username
+              ORDER BY r.updated_at DESC
+            `)
+          : await db.execute(sql`
+              SELECT r.id, r.prompt_id, r.user_id, r.response_type, r.response_text, r.image_urls, r.updated_at,
+                     p.prompt_text, p.section, u.username, AVG(rr.score) AS avg_score, COUNT(rr.id) AS rating_count
+              FROM english_responses r
+              JOIN english_prompts p ON p.id = r.prompt_id
+              JOIN users u ON u.id = r.user_id
+              LEFT JOIN english_response_ratings rr ON rr.response_id = r.id
+              WHERE LEFT(UPPER(TRIM(COALESCE(p.section, ''))), 1) = 'A'
+              GROUP BY r.id, p.prompt_text, p.section, u.username
+              ORDER BY r.updated_at DESC
+            `)
         : await db.execute(sql`
             SELECT r.id, r.prompt_id, r.user_id, r.response_type, r.response_text, r.image_urls, r.updated_at,
                    p.prompt_text, p.section, u.username, AVG(rr.score) AS avg_score, COUNT(rr.id) AS rating_count
@@ -1557,7 +1732,7 @@ app.get("/api/english/responses", authMiddleware, async (c: any) => {
             JOIN english_prompts p ON p.id = r.prompt_id
             JOIN users u ON u.id = r.user_id
             LEFT JOIN english_response_ratings rr ON rr.response_id = r.id
-            WHERE p.section = ${section}
+            WHERE LEFT(UPPER(TRIM(COALESCE(p.section, ''))), 1) = UPPER(${section})
             GROUP BY r.id, p.prompt_text, p.section, u.username
             ORDER BY r.updated_at DESC
           `);

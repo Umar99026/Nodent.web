@@ -127,7 +127,7 @@ export function AppSidebar() {
       }
 
       if (photoChanged) {
-        setProfilePhoto(photoPreview ?? null);
+        await setProfilePhoto(photoPreview ?? null);
       }
 
       toast.success("Account updated.");

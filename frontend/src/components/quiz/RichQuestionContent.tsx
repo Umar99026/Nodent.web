@@ -80,6 +80,23 @@ function stripPlainOptOut(text: string): { usePlainFallback: boolean; body: stri
   return { usePlainFallback: false, body: t };
 }
 
+function looksLikePlainMathText(text: string): boolean {
+  const t = String(text ?? "");
+  // If the author already used markdown/math syntax, keep markdown renderer.
+  if (/[`#>|]|!\[[^\]]*\]\([^)]+\)|\$\$?/.test(t)) return false;
+  // Heuristic math patterns from imports/paste.
+  return /(\d+\s*\/\s*\d+)|(\b[a-zA-Z]\s*\^\s*\d+)|(\bsqrt\s*\()|([<>]=|!=)|([xX*]\s*\d)|(\d\s*[xX*]\s*\d)|(\[\[.+\],\s*\[.+\]\])|(\[[^\]]+;[^\]]+\])/.test(
+    t,
+  );
+}
+
+function looksLikeStructuredMarkdown(text: string): boolean {
+  const t = String(text ?? "");
+  return /(^|\n)\s*[-*]\s+|(^|\n)\s*\d+\.\s+|(^|\n)\s*>|(^|\n)\s*#{1,6}\s|!\[[^\]]*\]\([^)]+\)|\[[^\]]+\]\([^)]+\)|```/.test(
+    t,
+  );
+}
+
 type RichQuestionContentProps = {
   text: string;
   className?: string;
@@ -93,7 +110,13 @@ export function RichQuestionContent({ text, className }: RichQuestionContentProp
   const { forced, body: afterForce } = stripRichForcePrefix(text);
   const { usePlainFallback, body } = stripPlainOptOut(afterForce);
 
-  if (usePlainFallback && !forced) {
+  // For plain imported text (across all subjects), use RichMathText so
+  // fractions/powers/matrices are consistently rendered in notation.
+  if (
+    (usePlainFallback && !forced) ||
+    (!forced && !looksLikeStructuredMarkdown(body)) ||
+    looksLikePlainMathText(body)
+  ) {
     return <RichMathText text={body} className={className} />;
   }
 

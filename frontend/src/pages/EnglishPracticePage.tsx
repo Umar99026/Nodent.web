@@ -96,18 +96,39 @@ function promptForumKey(promptId: number) {
   return `english-prompt-${promptId}`;
 }
 
+function cleanSectionBPromptText(promptText: string) {
+  return String(promptText ?? "")
+    .replace(/\s+/g, " ")
+    .replace(/\.\s*begin(?:ning)?\s+with\s*:\s*\.?\s*$/i, "")
+    .replace(/\bbegin(?:ning)?\s+with\s*:\s*\.?\s*$/i, "")
+    .trim();
+}
+
+function isMalformedSectionBPrompt(promptText: string) {
+  const t = String(promptText ?? "").trim();
+  if (!t) return true;
+  if (/\bbegin(?:ning)?\s+with\s*:\s*\.?\s*$/i.test(t)) return true;
+  if (/^\s*title\s*:\s*creative writing\b/i.test(t)) return true;
+  if (/^\s*title\s*:\s*[^.\n]{0,2}\s*$/i.test(t)) return true;
+  if (t.length < 48) return true;
+  return false;
+}
+
+function extractSectionBTitle(promptText: string) {
+  const cleaned = cleanSectionBPromptText(promptText);
+  const explicit = cleaned.match(/Title:\s*['"]?([^'"\n]+?)['"]?(?:\s*$)/i)?.[1];
+  const titled = cleaned.match(/titled\s+([A-Za-z][A-Za-z ,'-]{1,80})/i)?.[1];
+  return (explicit ?? titled ?? "").trim().replace(/[.,"']+$/g, "");
+}
+
 function sectionBFramework(promptText: string) {
-  const m = promptText.match(/Title:\s*['"]?([^'"\n]+)['"]?/i);
-  const titledMatch = promptText.match(/titled\s+([A-Za-z][A-Za-z ,'-]{1,80})/i);
-  const title = (m?.[1] ?? titledMatch?.[1] ?? "").trim().replace(/[.,"']+$/g, "");
+  const title = extractSectionBTitle(promptText);
   if (!title) return null;
   return SECTION_B_FRAMEWORKS[title] ?? null;
 }
 
 function sectionBTitle(promptText: string) {
-  const explicit = promptText.match(/Title:\s*['"]?([^'"\n]+)['"]?/i)?.[1];
-  const titled = promptText.match(/titled\s+([A-Za-z][A-Za-z ,'-]{1,80})/i)?.[1];
-  const title = (explicit ?? titled ?? "").trim().replace(/[.,"']+$/g, "");
+  const title = extractSectionBTitle(promptText);
   return title || "Creative writing";
 }
 
@@ -127,7 +148,7 @@ export function EnglishPracticePanel() {
   const navigate = useNavigate();
   const [books, setBooks] = useState<Book[]>([]);
   const [section, setSection] = useState<Section>("A");
-  const [selectedBookTitle, setSelectedBookTitle] = useState<string>("");
+  const [selectedBookId, setSelectedBookId] = useState<string>("");
   const [prompts, setPrompts] = useState<Prompt[]>([]);
   const [loading, setLoading] = useState(true);
   const [submittingPromptId, setSubmittingPromptId] = useState<number | null>(null);
@@ -137,49 +158,43 @@ export function EnglishPracticePanel() {
   const [activePromptIndex, setActivePromptIndex] = useState(0);
   const [submittedPromptIds, setSubmittedPromptIds] = useState<Record<number, true>>({});
 
-  const selectedBook = books.find((b) => b.title === selectedBookTitle) ?? null;
-  const numericBookId = selectedBook?.id ?? Number.NaN;
+  const numericBookId = Number(selectedBookId);
+  const effectiveBookId =
+    Number.isFinite(numericBookId) && numericBookId > 0
+      ? numericBookId
+      : books[0]?.id ?? Number.NaN;
 
   async function loadBooks(currentSection: Section) {
     const data = await apiFetch<{ books: Book[] }>(
       `${API_PATHS.english.books}?section=${encodeURIComponent(currentSection)}`,
     );
-    setBooks(data.books || []);
+    const nextBooks = data.books || [];
+    setBooks(nextBooks);
     if (currentSection === "A") {
-      if (!selectedBookTitle && data.books?.length) setSelectedBookTitle(data.books[0].title);
-      if (selectedBookTitle && !data.books.some((b) => b.title === selectedBookTitle)) {
-        setSelectedBookTitle(data.books.length ? data.books[0].title : "");
-      }
+      setSelectedBookId((prev) => {
+        if (!nextBooks.length) return "";
+        if (!prev) return String(nextBooks[0].id);
+        return nextBooks.some((b) => String(b.id) === prev) ? prev : String(nextBooks[0].id);
+      });
     } else {
-      setSelectedBookTitle("");
+      setSelectedBookId("");
     }
   }
 
   async function loadBookData(id: number, currentSection: Section) {
+    const resolvedBookId =
+      currentSection === "A" && (!Number.isFinite(id) || id <= 0)
+        ? (books[0]?.id ?? Number.NaN)
+        : id;
     const suffix =
       currentSection === "A"
-        ? `?section=A&bookId=${encodeURIComponent(id)}`
+        ? Number.isFinite(resolvedBookId) && resolvedBookId > 0
+          ? `?section=A&bookId=${encodeURIComponent(resolvedBookId)}`
+          : `?section=A`
         : `?section=${encodeURIComponent(currentSection)}`;
     const p = await apiFetch<{ prompts: Prompt[] }>(`${API_PATHS.english.prompts}${suffix}`);
     setPrompts(p.prompts || []);
   }
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        setLoading(true);
-        await loadBooks(section);
-      } catch (e) {
-        toast.error("Could not load English books.");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     (async () => {
@@ -195,26 +210,29 @@ export function EnglishPracticePanel() {
   }, [section]);
 
   useEffect(() => {
-    if (section === "A" && (!Number.isFinite(numericBookId) || numericBookId <= 0)) return;
+    if (section === "A" && (!Number.isFinite(effectiveBookId) || effectiveBookId <= 0)) return;
     (async () => {
       try {
-        await loadBookData(numericBookId, section);
+        await loadBookData(effectiveBookId, section);
         setActivePromptIndex(0);
       } catch {
         toast.error("Could not load prompts/responses.");
       }
     })();
-  }, [numericBookId, section]);
-
-  const promptCountLabel = useMemo(() => {
-    const b = books.find((x) => x.title === selectedBookTitle);
-    return b ? `${b.promptCount} prompts` : "";
-  }, [books, selectedBookTitle]);
+  }, [effectiveBookId, section, books]);
 
   const visiblePrompts = useMemo(() => {
     if (section !== "B") return prompts;
-    return prompts.filter((p) => !/\bbeginning with\s*:/i.test(p.prompt));
+    const cleaned = prompts
+      .map((p) => ({ ...p, prompt: cleanSectionBPromptText(p.prompt) }))
+      .filter((p) => !isMalformedSectionBPrompt(p.prompt));
+    // Safety fallback: never blank the workspace because of cleanup rules.
+    return cleaned.length > 0 ? cleaned : prompts;
   }, [prompts, section]);
+  const selectedBook = useMemo(
+    () => books.find((b) => String(b.id) === selectedBookId) ?? null,
+    [books, selectedBookId],
+  );
 
   useEffect(() => {
     if (activePromptIndex < visiblePrompts.length) return;
@@ -293,7 +311,7 @@ export function EnglishPracticePanel() {
                 <SelectContent>
                   <SelectItem value="A">Section A - Book prompts</SelectItem>
                   <SelectItem value="B">Section B - Creative stimulus</SelectItem>
-                  <SelectItem value="C">Section C - Argument analysis</SelectItem>
+                  <SelectItem value="C">Section C - Writing prompts</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -301,28 +319,28 @@ export function EnglishPracticePanel() {
             {section === "A" ? (
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                 <div className="w-full max-w-md">
-                  <Select value={selectedBookTitle} onValueChange={(v) => setSelectedBookTitle(v ?? "")}>
+                  <Select
+                    value={selectedBookId}
+                    onValueChange={(v) => setSelectedBookId(v ?? "")}
+                  >
                     <SelectTrigger className="h-11 border-black/15 bg-white/90">
-                      <SelectValue placeholder={loading ? "Loading..." : "Select a book"} />
+                      <SelectValue placeholder={loading ? "Loading..." : "Select a book"}>
+                        {selectedBook?.title ?? (loading ? "Loading..." : "Select a book")}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       {books.map((b) => (
-                        <SelectItem key={b.id} value={b.title}>
+                        <SelectItem key={b.id} value={String(b.id)}>
                           {b.title}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-                {promptCountLabel ? (
-                  <Badge variant="secondary" className="bg-white/90 text-[#0b0f19]">
-                    {promptCountLabel}
-                  </Badge>
-                ) : null}
               </div>
             ) : (
               <Badge variant="secondary" className="bg-white/90 text-[#0b0f19]">
-                {section === "B" ? "Creative writing practice" : "Argument analysis practice"}
+                {section === "B" ? "Creative writing practice" : "Section C writing practice"}
               </Badge>
             )}
           </CardContent>
@@ -383,6 +401,9 @@ export function EnglishPracticePanel() {
                     ) : null}
                     {section === "B" ? (
                       <div className="rounded-xl border border-black/10 bg-gradient-to-b from-[#f8f5ff] to-white p-4 space-y-3 shadow-sm">
+                        <p className="text-sm font-medium text-[#243042]">
+                          Respond with a creative piece on the following prompt.
+                        </p>
                         {sectionBFramework(activePrompt.prompt) ? (
                           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                             {sectionBFramework(activePrompt.prompt)!.framework}
@@ -428,10 +449,10 @@ export function EnglishPracticePanel() {
                     {section === "C" ? (
                       <div className="rounded-xl border border-black/10 bg-gradient-to-b from-[#eefdf9] to-white p-4 shadow-sm">
                         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                          Section C Argument Analysis
+                          Section C Writing
                         </p>
                         <p className="mt-2 text-sm text-muted-foreground">
-                          You can respond directly without an attached article for now. Focus on contention, language, tone, evidence, and persuasive effect.
+                          Respond directly to the prompt. Build a clear contention, develop your ideas, and use strong language choices.
                         </p>
                       </div>
                     ) : null}
@@ -508,6 +529,7 @@ export function EnglishPracticePanel() {
 
 export function EnglishPromptResponsesPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const { promptId } = useParams<{ promptId: string }>();
   const [searchParams] = useSearchParams();
   const section = ((searchParams.get("section") ?? "A").toUpperCase() as Section);
@@ -577,7 +599,13 @@ export function EnglishPromptResponsesPage() {
   };
 
   return (
-    <AppShell title="Prompt Responses" subtitle="All responses for this exact prompt.">
+    <AppShell
+      title="Prompt Responses"
+      subtitle="All responses for this exact prompt."
+      edgeToEdgeHeader
+      edgeToEdgeMain
+      edgeToEdgeHeaderClassName="px-0 sm:px-1 lg:px-2"
+    >
       <div className="space-y-6">
         <Card>
           <CardHeader>
@@ -664,8 +692,24 @@ export function EnglishPromptResponsesPage() {
         </Card>
       </div>
       {openResponse ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="w-full max-w-3xl rounded-xl border border-black/10 bg-white p-4 shadow-2xl">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => setOpenResponseId(null)}
+        >
+          <div
+            className="relative w-full max-w-3xl rounded-xl border border-black/10 bg-white p-4 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="absolute right-3 top-3 z-10 border-black/20 bg-white/95 hover:bg-white"
+              onClick={() => setOpenResponseId(null)}
+              aria-label="Close response"
+            >
+              <X className="size-4" />
+            </Button>
             <div className="mb-3 flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold text-[#0f172a]">@{openResponse.username}</p>
@@ -675,6 +719,23 @@ export function EnglishPromptResponsesPage() {
               </div>
               <Button type="button" variant="outline" size="icon" onClick={() => setOpenResponseId(null)}>
                 <X className="size-4" />
+              </Button>
+            </div>
+            <div className="mb-3 flex justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() =>
+                  navigate(
+                    `/quiz/english?section=${section}${
+                      section === "A" && Number.isFinite(bookId) && bookId > 0
+                        ? `&bookId=${bookId}`
+                        : ""
+                    }`,
+                  )
+                }
+              >
+                Exit page
               </Button>
             </div>
             <div className="max-h-[70vh] overflow-y-auto rounded-lg border border-black/10 bg-slate-50 p-4">
