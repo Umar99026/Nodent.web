@@ -400,6 +400,7 @@ type Vars = { user: { id: number; email: string; username: string; token: string
 
 const app = new Hono<{ Bindings: Env; Variables: Vars }>();
 let englishResponsesConstraintDropped = false;
+let usersTablePatched = false;
 
 // CORS
 app.use("/api/*", cors({
@@ -418,6 +419,22 @@ app.use("/api/*", cors({
 // DB middleware
 app.use("/api/*", async (c, next) => {
   const db = createDb(c.env.DATABASE_URL);
+  if (!usersTablePatched) {
+    try {
+      await db.execute(sql`
+        ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS profile_photo text
+      `);
+      await db.execute(sql`
+        ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS hash_algorithm text DEFAULT 'pbkdf2'
+      `);
+    } catch {
+      // ignore
+    } finally {
+      usersTablePatched = true;
+    }
+  }
   if (!englishResponsesConstraintDropped) {
     try {
       await db.execute(sql`
@@ -1543,7 +1560,7 @@ app.get("/api/admin/english/prompts", adminAccessMiddleware, async (c: any) => {
   }
 });
 
-app.get("/api/english/books", authMiddleware, async (c: any) => {
+app.get("/api/english/books", async (c: any) => {
   try {
     const db = c.get("db");
     const section = normalizeEnglishSection(c.req.query("section"));
@@ -1553,19 +1570,19 @@ app.get("/api/english/books", authMiddleware, async (c: any) => {
         b.title,
         SUM(
           CASE
-            WHEN LEFT(UPPER(TRIM(COALESCE(p.section, ''))), 1) = 'A' THEN 1
+            WHEN LEFT(UPPER(TRIM(REGEXP_REPLACE(COALESCE(p.section, ''), '^SECTION\\s*', '', 'i'))), 1) = 'A' THEN 1
             ELSE 0
           END
         ) AS prompt_count_a,
         SUM(
           CASE
-            WHEN LEFT(UPPER(TRIM(COALESCE(p.section, ''))), 1) = 'B' THEN 1
+            WHEN LEFT(UPPER(TRIM(REGEXP_REPLACE(COALESCE(p.section, ''), '^SECTION\\s*', '', 'i'))), 1) = 'B' THEN 1
             ELSE 0
           END
         ) AS prompt_count_b,
         SUM(
           CASE
-            WHEN LEFT(UPPER(TRIM(COALESCE(p.section, ''))), 1) = 'C' THEN 1
+            WHEN LEFT(UPPER(TRIM(REGEXP_REPLACE(COALESCE(p.section, ''), '^SECTION\\s*', '', 'i'))), 1) = 'C' THEN 1
             ELSE 0
           END
         ) AS prompt_count_c
@@ -1602,7 +1619,7 @@ app.get("/api/english/books", authMiddleware, async (c: any) => {
   }
 });
 
-app.get("/api/english/prompts", authMiddleware, async (c: any) => {
+app.get("/api/english/prompts", async (c: any) => {
   try {
     const db = c.get("db");
     const section = normalizeEnglishSection(c.req.query("section"));
@@ -1614,21 +1631,21 @@ app.get("/api/english/prompts", authMiddleware, async (c: any) => {
               SELECT p.id, p.prompt_text, p.section, b.id AS book_id, b.title AS book_title
               FROM english_prompts p
               JOIN english_books b ON b.id = p.book_id
-              WHERE p.book_id = ${bookId} AND LEFT(UPPER(TRIM(COALESCE(p.section, ''))), 1) = 'A'
+              WHERE p.book_id = ${bookId} AND LEFT(UPPER(TRIM(REGEXP_REPLACE(COALESCE(p.section, ''), '^SECTION\\s*', '', 'i'))), 1) = 'A'
               ORDER BY p.id ASC
             `)
           : await db.execute(sql`
               SELECT p.id, p.prompt_text, p.section, b.id AS book_id, b.title AS book_title
               FROM english_prompts p
               JOIN english_books b ON b.id = p.book_id
-              WHERE LEFT(UPPER(TRIM(COALESCE(p.section, ''))), 1) = 'A'
+              WHERE LEFT(UPPER(TRIM(REGEXP_REPLACE(COALESCE(p.section, ''), '^SECTION\\s*', '', 'i'))), 1) = 'A'
               ORDER BY p.id ASC
             `)
         : await db.execute(sql`
             SELECT p.id, p.prompt_text, p.section, b.id AS book_id, b.title AS book_title
             FROM english_prompts p
             JOIN english_books b ON b.id = p.book_id
-            WHERE LEFT(UPPER(TRIM(COALESCE(p.section, ''))), 1) = UPPER(${section})
+            WHERE LEFT(UPPER(TRIM(REGEXP_REPLACE(COALESCE(p.section, ''), '^SECTION\\s*', '', 'i'))), 1) = UPPER(${section})
             ORDER BY p.id ASC
           `);
     const effectiveRows =
@@ -1710,7 +1727,7 @@ app.get("/api/english/responses", authMiddleware, async (c: any) => {
               JOIN english_books b ON b.id = p.book_id
               JOIN users u ON u.id = r.user_id
               LEFT JOIN english_response_ratings rr ON rr.response_id = r.id
-              WHERE b.id = ${bookId} AND LEFT(UPPER(TRIM(COALESCE(p.section, ''))), 1) = 'A'
+              WHERE b.id = ${bookId} AND LEFT(UPPER(TRIM(REGEXP_REPLACE(COALESCE(p.section, ''), '^SECTION\\s*', '', 'i'))), 1) = 'A'
               GROUP BY r.id, p.prompt_text, p.section, u.username
               ORDER BY r.updated_at DESC
             `)
@@ -1721,7 +1738,7 @@ app.get("/api/english/responses", authMiddleware, async (c: any) => {
               JOIN english_prompts p ON p.id = r.prompt_id
               JOIN users u ON u.id = r.user_id
               LEFT JOIN english_response_ratings rr ON rr.response_id = r.id
-              WHERE LEFT(UPPER(TRIM(COALESCE(p.section, ''))), 1) = 'A'
+              WHERE LEFT(UPPER(TRIM(REGEXP_REPLACE(COALESCE(p.section, ''), '^SECTION\\s*', '', 'i'))), 1) = 'A'
               GROUP BY r.id, p.prompt_text, p.section, u.username
               ORDER BY r.updated_at DESC
             `)
@@ -1732,7 +1749,7 @@ app.get("/api/english/responses", authMiddleware, async (c: any) => {
             JOIN english_prompts p ON p.id = r.prompt_id
             JOIN users u ON u.id = r.user_id
             LEFT JOIN english_response_ratings rr ON rr.response_id = r.id
-            WHERE LEFT(UPPER(TRIM(COALESCE(p.section, ''))), 1) = UPPER(${section})
+            WHERE LEFT(UPPER(TRIM(REGEXP_REPLACE(COALESCE(p.section, ''), '^SECTION\\s*', '', 'i'))), 1) = UPPER(${section})
             GROUP BY r.id, p.prompt_text, p.section, u.username
             ORDER BY r.updated_at DESC
           `);

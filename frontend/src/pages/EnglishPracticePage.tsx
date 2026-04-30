@@ -138,12 +138,6 @@ function sectionBPromptInstruction(promptText: string) {
   return "";
 }
 
-function sectionTone(section: Section) {
-  if (section === "A") return "from-[#2f7ec4]/20 to-[#59a3dc]/10";
-  if (section === "B") return "from-[#7d60e8]/20 to-[#b798ff]/10";
-  return "from-[#18a999]/20 to-[#84e5d8]/10";
-}
-
 export function EnglishPracticePanel() {
   const navigate = useNavigate();
   const [books, setBooks] = useState<Book[]>([]);
@@ -287,26 +281,31 @@ export function EnglishPracticePanel() {
         }`,
       );
     } catch (e) {
-      toast.error("Could not submit response.");
+      const message =
+        e instanceof Error && e.message ? e.message : "Could not submit response.";
+      toast.error(message);
     } finally {
       setSubmittingPromptId(null);
     }
   };
 
+  const sectionDisplayLabel =
+    section === "A" ? "Section A" : section === "B" ? "Section B" : "Section C";
+
   return (
       <div className="space-y-6">
-        <Card className={`overflow-hidden border-white/30 bg-gradient-to-br ${sectionTone(section)} shadow-[0_20px_50px_rgba(10,18,35,0.25)]`}>
+        <Card className="overflow-hidden border-white/30 bg-gradient-to-br from-[#1d4e89] via-[#2563a6] to-[#2b7bc3] text-white shadow-[0_20px_50px_rgba(10,18,35,0.25)]">
           <CardHeader className="pb-4">
-            <CardTitle className="font-display text-xl sm:text-2xl">English Practice Studio</CardTitle>
-            <CardDescription className="text-black/70">
+            <CardTitle className="font-display text-xl sm:text-2xl">English Practice</CardTitle>
+            <CardDescription className="text-white/80">
               Choose your section, open prompts, draft responses, and join prompt discussions.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="w-full max-w-xs">
               <Select value={section} onValueChange={(v) => setSection((v as Section) ?? "A")}>
-                <SelectTrigger className="h-11 border-black/15 bg-white/90 font-medium">
-                  <SelectValue />
+                <SelectTrigger className="h-11 border-white/20 bg-white/95 font-medium text-black">
+                  <SelectValue placeholder="Choose your section">{sectionDisplayLabel}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="A">Section A - Book prompts</SelectItem>
@@ -323,9 +322,9 @@ export function EnglishPracticePanel() {
                     value={selectedBookId}
                     onValueChange={(v) => setSelectedBookId(v ?? "")}
                   >
-                    <SelectTrigger className="h-11 border-black/15 bg-white/90">
-                      <SelectValue placeholder={loading ? "Loading..." : "Select a book"}>
-                        {selectedBook?.title ?? (loading ? "Loading..." : "Select a book")}
+                    <SelectTrigger className="h-11 border-white/20 bg-white/95 text-black">
+                      <SelectValue placeholder={loading ? "Loading..." : "Choose your text"}>
+                        {selectedBook?.title ?? (loading ? "Loading..." : "Choose your text")}
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
@@ -347,10 +346,6 @@ export function EnglishPracticePanel() {
         </Card>
 
         <Card className="overflow-hidden border-white/30 bg-white/95 shadow-[0_18px_40px_rgba(10,18,35,0.2)]">
-          <CardHeader>
-            <CardTitle className="font-display text-xl">Prompt Workspace</CardTitle>
-            <CardDescription>Move through prompts, compose your response, attach scans, and submit in one flow.</CardDescription>
-          </CardHeader>
           <CardContent className="space-y-5">
             {!visiblePrompts.length ? (
               <p className="rounded-lg border border-dashed border-black/15 bg-black/[0.02] p-5 text-sm text-muted-foreground">

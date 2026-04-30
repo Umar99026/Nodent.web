@@ -6,6 +6,7 @@ import { formatSeconds, localDateISO, mergeSecondsBySubject } from "@/lib/utils"
 import { baseSubjects } from "@/lib/subjects";
 import type { Subject } from "@/lib/subjects";
 import { AppShell } from "@/components/layout/AppShell";
+import { NodentWordmark } from "@/components/branding/NodentWordmark";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -45,36 +46,9 @@ import {
   Pause,
   Maximize2,
   X,
-  ZoomIn,
-  ZoomOut,
 } from "lucide-react";
 
-const FS_SCALE_STORAGE = "nodent_study_timer_fs_scale";
-const FS_SCALE_MIN = 0.55;
-const FS_SCALE_MAX = 1.75;
-const FS_SCALE_STEP = 0.08;
-
-function clampFsScale(n: number): number {
-  return Math.min(FS_SCALE_MAX, Math.max(FS_SCALE_MIN, n));
-}
-
-function touchPinchDistance(t: TouchList): number {
-  if (t.length < 2) return 0;
-  const a = t[0];
-  const b = t[1];
-  return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
-}
-
-function loadStoredFsScale(): number {
-  try {
-    const v = sessionStorage.getItem(FS_SCALE_STORAGE);
-    if (v == null) return 1;
-    const n = Number(v);
-    return Number.isFinite(n) ? clampFsScale(n) : 1;
-  } catch {
-    return 1;
-  }
-}
+const PROGRESS_VIEW_STORAGE = "nodent_study_progress_view";
 
 function dateString(d: Date): string {
   const yyyy = d.getFullYear();
@@ -135,88 +109,8 @@ export default function TrackStudyPageNew() {
   } = useStudyTimer();
 
   const [timerFullscreen, setTimerFullscreen] = useState(false);
-  const [fullscreenScale, setFullscreenScale] = useState(1);
-  const fullscreenScaleRef = useRef(fullscreenScale);
-  fullscreenScaleRef.current = fullscreenScale;
-  const pinchRef = useRef<{
-    initialDist: number;
-    initialScale: number;
-  } | null>(null);
-  const fsCardWrapRef = useRef<HTMLDivElement | null>(null);
+  const [progressView, setProgressView] = useState<"weekly" | "heatmap">("weekly");
   const fsOverlayRef = useRef<HTMLDivElement | null>(null);
-
-  const storeFsScale = (value: number) => {
-    const c = clampFsScale(value);
-    try {
-      sessionStorage.setItem(FS_SCALE_STORAGE, String(c));
-    } catch {
-      /* ignore */
-    }
-    return c;
-  };
-
-  const nudgeFsScale = (delta: number) => {
-    setFullscreenScale((prev) => storeFsScale(prev + delta));
-  };
-
-  useEffect(() => {
-    if (!timerFullscreen) return;
-    setFullscreenScale(loadStoredFsScale());
-  }, [timerFullscreen]);
-
-  useLayoutEffect(() => {
-    if (!timerFullscreen) return;
-    const el = fsOverlayRef.current;
-    if (!el) return;
-    const onWheel = (e: WheelEvent) => {
-      if (!e.ctrlKey && !e.metaKey) return;
-      e.preventDefault();
-      const delta = e.deltaY > 0 ? -FS_SCALE_STEP : FS_SCALE_STEP;
-      setFullscreenScale((prev) => storeFsScale(prev + delta));
-    };
-    el.addEventListener("wheel", onWheel, { passive: false });
-    return () => el.removeEventListener("wheel", onWheel);
-  }, [timerFullscreen]);
-
-  useEffect(() => {
-    if (!timerFullscreen) return;
-    const el = fsCardWrapRef.current;
-    if (!el) return;
-
-    const onTouchStart = (e: TouchEvent) => {
-      if (e.touches.length === 2) {
-        pinchRef.current = {
-          initialDist: touchPinchDistance(e.touches),
-          initialScale: fullscreenScaleRef.current,
-        };
-      }
-    };
-
-    const onTouchMove = (e: TouchEvent) => {
-      if (e.touches.length !== 2 || !pinchRef.current) return;
-      e.preventDefault();
-      const d = touchPinchDistance(e.touches);
-      const { initialDist, initialScale } = pinchRef.current;
-      if (initialDist < 10) return;
-      setFullscreenScale(storeFsScale(initialScale * (d / initialDist)));
-    };
-
-    const endPinch = () => {
-      pinchRef.current = null;
-    };
-
-    el.addEventListener("touchstart", onTouchStart, { passive: true });
-    el.addEventListener("touchmove", onTouchMove, { passive: false });
-    el.addEventListener("touchend", endPinch);
-    el.addEventListener("touchcancel", endPinch);
-
-    return () => {
-      el.removeEventListener("touchstart", onTouchStart);
-      el.removeEventListener("touchmove", onTouchMove);
-      el.removeEventListener("touchend", endPinch);
-      el.removeEventListener("touchcancel", endPinch);
-    };
-  }, [timerFullscreen]);
 
   const activeSubject: Subject | undefined = useMemo(() => {
     if (!state.activeSubjectId) return undefined;
@@ -359,6 +253,51 @@ export default function TrackStudyPageNew() {
     return count;
   }, [userId, state.goalMinutes, state.dailySeconds, todayKey, studyMergeRev]);
 
+  useEffect(() => {
+    if (!userId) return;
+    try {
+      const saved = localStorage.getItem(`${PROGRESS_VIEW_STORAGE}_${userId}`);
+      if (saved === "weekly" || saved === "heatmap") {
+        setProgressView(saved);
+      }
+    } catch {
+      // ignore
+    }
+  }, [userId]);
+
+  const handleProgressViewChange = (next: "weekly" | "heatmap") => {
+    setProgressView(next);
+    if (!userId) return;
+    try {
+      localStorage.setItem(`${PROGRESS_VIEW_STORAGE}_${userId}`, next);
+    } catch {
+      // ignore
+    }
+  };
+
+  const heatmapData = useMemo(() => {
+    if (!userId) return [];
+    const today = new Date();
+    const cells: { date: string; seconds: number; met: boolean }[] = [];
+    const daysBack = 140;
+    for (let i = daysBack - 1; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      const key = dateString(d);
+      const day = loadDay(userId, key);
+      let seconds = typeof day?.dailySeconds === "number" ? day.dailySeconds : 0;
+      if (key === todayKey) {
+        seconds = Math.max(seconds, state.dailySeconds);
+      }
+      cells.push({
+        date: key,
+        seconds,
+        met: seconds >= state.goalMinutes * 60,
+      });
+    }
+    return cells;
+  }, [userId, todayKey, state.dailySeconds, state.goalMinutes, studyMergeRev]);
+
   return (
     <AppShell
       title="Track My Study"
@@ -419,54 +358,118 @@ export default function TrackStudyPageNew() {
 
           <Card className="border-black/10 bg-white text-[#0b0f19] shadow-xl">
             <CardHeader className="pb-3">
-              <CardTitle className="font-display text-xl">Weekly Progress</CardTitle>
+              <CardTitle className="flex items-center justify-between gap-3 font-display text-xl">
+                <span>{progressView === "weekly" ? "Weekly Progress" : "Over-time Heatmap"}</span>
+                <div className="inline-flex rounded-lg border border-black/10 bg-slate-50 p-1">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={progressView === "weekly" ? "default" : "ghost"}
+                    className={
+                      progressView === "weekly"
+                        ? "h-7 bg-[#0b0f19] px-2.5 text-xs text-white hover:bg-[#0b0f19]/90"
+                        : "h-7 px-2.5 text-xs text-[#0b0f19]/70 hover:bg-black/5"
+                    }
+                    onClick={() => handleProgressViewChange("weekly")}
+                  >
+                    Weekly
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={progressView === "heatmap" ? "default" : "ghost"}
+                    className={
+                      progressView === "heatmap"
+                        ? "h-7 bg-[#0b0f19] px-2.5 text-xs text-white hover:bg-[#0b0f19]/90"
+                        : "h-7 px-2.5 text-xs text-[#0b0f19]/70 hover:bg-black/5"
+                    }
+                    onClick={() => handleProgressViewChange("heatmap")}
+                  >
+                    Heatmap
+                  </Button>
+                </div>
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between rounded-xl border border-black/10 bg-slate-50 px-4 py-3">
                 <span className="text-sm text-[#0b0f19]/70">This week total</span>
                 <span className="font-semibold tabular-nums">{formatSeconds(weekData?.weeklySeconds ?? 0)}</span>
               </div>
-              <div style={{ width: "100%", height: 190 }}>
-                <ResponsiveContainer>
-                  <LineChart
-                    data={(weekData?.perDay ?? []).map((d) => ({
-                      date: d.date,
-                      minutes: d.seconds / 60,
-                      goal: state.goalMinutes,
-                      seconds: d.seconds,
-                    }))}
-                    margin={{ top: 10, right: 10, left: -10, bottom: 10 }}
-                  >
-                    <CartesianGrid stroke="rgba(0,0,0,0.10)" strokeDasharray="3 3" />
-                    <XAxis
-                      dataKey="date"
-                      tick={{ fill: "rgba(15,23,42,0.75)", fontSize: 12 }}
-                      interval="preserveStartEnd"
-                      minTickGap={18}
-                    />
-                    <YAxis
-                      tick={{ fill: "rgba(15,23,42,0.75)" }}
-                      domain={[0, Math.max(1, state.goalMinutes)]}
-                      allowDataOverflow
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "rgba(255,255,255,0.98)",
-                        border: "1px solid rgba(15,23,42,0.12)",
-                        color: "#0b0f19",
-                      }}
-                      formatter={(v, name, item) => {
-                        if (String(name) === "goal") return [`${v} min`, "Goal"];
-                        const sec = (item?.payload as { seconds?: number })?.seconds;
-                        const s = typeof sec === "number" ? sec : Math.round(Number(v) * 60);
-                        return [formatSeconds(s), "Time"];
-                      }}
-                    />
-                    <Line type="monotone" dataKey="minutes" stroke="#56abe6" strokeWidth={3} dot={{ r: 3 }} />
-                    <Line type="monotone" dataKey="goal" stroke="rgba(15,23,42,0.45)" strokeDasharray="6 6" />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
+              {progressView === "weekly" ? (
+                <div style={{ width: "100%", height: 190 }}>
+                  <ResponsiveContainer>
+                    <LineChart
+                      data={(weekData?.perDay ?? []).map((d) => ({
+                        date: d.date,
+                        minutes: d.seconds / 60,
+                        goal: state.goalMinutes,
+                        seconds: d.seconds,
+                      }))}
+                      margin={{ top: 10, right: 10, left: -10, bottom: 10 }}
+                    >
+                      <CartesianGrid stroke="rgba(0,0,0,0.10)" strokeDasharray="3 3" />
+                      <XAxis
+                        dataKey="date"
+                        tick={{ fill: "rgba(15,23,42,0.75)", fontSize: 12 }}
+                        interval="preserveStartEnd"
+                        minTickGap={18}
+                      />
+                      <YAxis
+                        tick={{ fill: "rgba(15,23,42,0.75)" }}
+                        domain={[0, Math.max(1, state.goalMinutes)]}
+                        allowDataOverflow
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: "rgba(255,255,255,0.98)",
+                          border: "1px solid rgba(15,23,42,0.12)",
+                          color: "#0b0f19",
+                        }}
+                        formatter={(v, name, item) => {
+                          if (String(name) === "goal") return [`${v} min`, "Goal"];
+                          const sec = (item?.payload as { seconds?: number })?.seconds;
+                          const s = typeof sec === "number" ? sec : Math.round(Number(v) * 60);
+                          return [formatSeconds(s), "Time"];
+                        }}
+                      />
+                      <Line type="monotone" dataKey="minutes" stroke="#56abe6" strokeWidth={3} dot={{ r: 3 }} />
+                      <Line type="monotone" dataKey="goal" stroke="rgba(15,23,42,0.45)" strokeDasharray="6 6" />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-20 gap-1.5">
+                    {heatmapData.map((cell) => (
+                      <div
+                        key={cell.date}
+                        title={`${cell.date}: ${formatSeconds(cell.seconds)}${cell.met ? " (target met)" : ""}`}
+                        className={
+                          cell.met
+                            ? "h-3.5 w-3.5 rounded-[3px] bg-emerald-500"
+                            : cell.seconds > 0
+                              ? "h-3.5 w-3.5 rounded-[3px] bg-emerald-200"
+                              : "h-3.5 w-3.5 rounded-[3px] bg-slate-200"
+                        }
+                      />
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-4 text-xs text-[#0b0f19]/65">
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="h-3 w-3 rounded-[3px] bg-emerald-500" />
+                      target met
+                    </span>
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="h-3 w-3 rounded-[3px] bg-emerald-200" />
+                      studied, below target
+                    </span>
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="h-3 w-3 rounded-[3px] bg-slate-200" />
+                      no study
+                    </span>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -561,7 +564,7 @@ export default function TrackStudyPageNew() {
                   <img src="/logo.png" alt="Nodent logo" className="h-7 w-7 object-contain" draggable={false} />
                 </div>
                 <div className="flex min-w-0 flex-col">
-                  <span className="font-display font-bold leading-tight text-[#0b0f19]">Nodent</span>
+                  <NodentWordmark size="sm" variant="onCream" className="-ml-0.5 pb-1.5" />
                   <span className="text-xs font-medium text-[#0b0f19]/55">{phaseLabel} timer</span>
                 </div>
               </CardTitle>
@@ -729,46 +732,7 @@ export default function TrackStudyPageNew() {
             aria-label="Fullscreen study timer"
           >
             <div className="relative h-full w-full overflow-hidden">
-              <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-3 p-[max(0.75rem,env(safe-area-inset-top))] sm:p-5">
-                <div className="flex min-w-0 flex-1 flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
-                  <div className="pointer-events-auto flex w-fit max-w-full items-center gap-0.5 rounded-full border border-white/25 bg-white/10 px-1 py-1 text-white shadow-md backdrop-blur-sm">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      className="h-9 w-9 shrink-0 rounded-full border-white/35 bg-transparent text-white hover:bg-white/15"
-                      onClick={() => nudgeFsScale(-FS_SCALE_STEP)}
-                      aria-label="Zoom out"
-                    >
-                      <ZoomOut className="size-4" />
-                    </Button>
-                    <span className="min-w-[2.75rem] px-1 text-center text-[11px] font-medium tabular-nums sm:min-w-[3.25rem] sm:text-sm">
-                      {Math.round(fullscreenScale * 100)}%
-                    </span>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      className="h-9 w-9 shrink-0 rounded-full border-white/35 bg-transparent text-white hover:bg-white/15"
-                      onClick={() => nudgeFsScale(FS_SCALE_STEP)}
-                      aria-label="Zoom in"
-                    >
-                      <ZoomIn className="size-4" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-9 rounded-full px-2.5 text-xs text-white hover:bg-white/15"
-                      onClick={() => setFullscreenScale(storeFsScale(1))}
-                    >
-                      Reset
-                    </Button>
-                  </div>
-                  <p className="pointer-events-none text-[10px] leading-snug text-white/55 sm:text-xs">
-                    Pinch on the timer · Ctrl/⌘ + scroll to zoom
-                  </p>
-                </div>
+              <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-end gap-3 p-[max(0.75rem,env(safe-area-inset-top))] sm:p-5">
                 <Button
                   type="button"
                   variant="outline"
@@ -782,10 +746,7 @@ export default function TrackStudyPageNew() {
               </div>
 
               <div className="flex h-full w-full items-center justify-center p-[max(1rem,env(safe-area-inset-bottom))] sm:p-5">
-                <div
-                  ref={fsCardWrapRef}
-                  className="flex h-full w-full flex-col overflow-hidden rounded-none border-0 bg-[#111418] text-white shadow-2xl sm:rounded-3xl sm:border sm:border-white/10"
-                >
+                <div className="flex h-full w-full flex-col overflow-hidden rounded-none border-0 bg-[#111418] text-white shadow-2xl sm:rounded-3xl sm:border sm:border-white/10">
                   <div className="flex flex-wrap items-center gap-4 border-b border-white/10 px-4 py-4 sm:px-8 sm:py-5">
                     <div className="flex min-w-0 flex-1 items-center gap-3">
                       <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand">
@@ -797,9 +758,7 @@ export default function TrackStudyPageNew() {
                         />
                       </div>
                       <div className="min-w-0">
-                        <div className="font-display text-[clamp(1.25rem,4.5vw,1.875rem)] font-bold leading-tight text-white">
-                          Nodent
-                        </div>
+                        <NodentWordmark size="sm" variant="onDark" className="-ml-0.5 pb-1.5" />
                         <div className="text-[clamp(0.75rem,3vw,0.875rem)] text-white/60">
                           {phaseLabel} •{" "}
                           {state.phase === "break"
@@ -813,13 +772,7 @@ export default function TrackStudyPageNew() {
                   </div>
 
                   <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 px-4 py-4 sm:gap-6 sm:px-8 sm:py-6">
-                    <div
-                      className="flex w-full flex-1 items-center justify-center overflow-hidden"
-                      style={{
-                        transform: `scale(${fullscreenScale})`,
-                        transformOrigin: "center center",
-                      }}
-                    >
+                    <div className="flex w-full flex-1 items-center justify-center overflow-hidden">
                       <div className="relative mx-auto aspect-square h-full max-h-[min(74vh,calc(100dvh-14rem))] w-full max-w-[min(96vw,calc(100dvh-14rem),980px)] shrink-0">
                         <svg
                           className="h-full w-full"

@@ -1538,14 +1538,14 @@ app.get("/api/admin/english/prompts", authMiddleware, adminMiddleware, async (_r
   }
 });
 
-app.get("/api/english/books", authMiddleware, async (req, res) => {
+app.get("/api/english/books", async (req, res) => {
   try {
     const section = normalizeEnglishSection(req.query.section);
     const rows = await all(
       `SELECT b.id, b.title,
-              SUM(CASE WHEN SUBSTR(UPPER(TRIM(COALESCE(p.section, ''))), 1, 1) = 'A' THEN 1 ELSE 0 END) AS prompt_count_a,
-              SUM(CASE WHEN SUBSTR(UPPER(TRIM(COALESCE(p.section, ''))), 1, 1) = 'B' THEN 1 ELSE 0 END) AS prompt_count_b,
-              SUM(CASE WHEN SUBSTR(UPPER(TRIM(COALESCE(p.section, ''))), 1, 1) = 'C' THEN 1 ELSE 0 END) AS prompt_count_c
+              SUM(CASE WHEN SUBSTR(TRIM(REPLACE(UPPER(COALESCE(p.section, '')), 'SECTION ', '')), 1, 1) = 'A' THEN 1 ELSE 0 END) AS prompt_count_a,
+              SUM(CASE WHEN SUBSTR(TRIM(REPLACE(UPPER(COALESCE(p.section, '')), 'SECTION ', '')), 1, 1) = 'B' THEN 1 ELSE 0 END) AS prompt_count_b,
+              SUM(CASE WHEN SUBSTR(TRIM(REPLACE(UPPER(COALESCE(p.section, '')), 'SECTION ', '')), 1, 1) = 'C' THEN 1 ELSE 0 END) AS prompt_count_c
        FROM english_books b
        LEFT JOIN english_prompts p ON p.book_id = b.id
        GROUP BY b.id, b.title
@@ -1583,7 +1583,7 @@ app.get("/api/english/books", authMiddleware, async (req, res) => {
   }
 });
 
-app.get("/api/english/prompts", authMiddleware, async (req, res) => {
+app.get("/api/english/prompts", async (req, res) => {
   try {
     const section = normalizeEnglishSection(req.query.section);
     const bookId = Number(req.query.bookId);
@@ -1594,7 +1594,7 @@ app.get("/api/english/prompts", authMiddleware, async (req, res) => {
           `SELECT p.id, p.prompt_text, p.section, b.id AS book_id, b.title AS book_title
            FROM english_prompts p
            JOIN english_books b ON b.id = p.book_id
-           WHERE p.book_id = ? AND SUBSTR(UPPER(TRIM(COALESCE(p.section, ''))), 1, 1) = 'A'
+           WHERE p.book_id = ? AND SUBSTR(TRIM(REPLACE(UPPER(COALESCE(p.section, '')), 'SECTION ', '')), 1, 1) = 'A'
            ORDER BY p.id ASC`,
           [bookId],
         );
@@ -1613,7 +1613,7 @@ app.get("/api/english/prompts", authMiddleware, async (req, res) => {
           `SELECT p.id, p.prompt_text, p.section, b.id AS book_id, b.title AS book_title
            FROM english_prompts p
            JOIN english_books b ON b.id = p.book_id
-           WHERE SUBSTR(UPPER(TRIM(COALESCE(p.section, ''))), 1, 1) = 'A'
+           WHERE SUBSTR(TRIM(REPLACE(UPPER(COALESCE(p.section, '')), 'SECTION ', '')), 1, 1) = 'A'
            ORDER BY p.id ASC`,
         );
       }
@@ -1622,7 +1622,7 @@ app.get("/api/english/prompts", authMiddleware, async (req, res) => {
         `SELECT p.id, p.prompt_text, p.section, b.id AS book_id, b.title AS book_title
          FROM english_prompts p
          JOIN english_books b ON b.id = p.book_id
-         WHERE SUBSTR(UPPER(TRIM(COALESCE(p.section, ''))), 1, 1) = UPPER(?)
+         WHERE SUBSTR(TRIM(REPLACE(UPPER(COALESCE(p.section, '')), 'SECTION ', '')), 1, 1) = UPPER(?)
          ORDER BY p.id ASC`,
         [section],
       );
@@ -1695,7 +1695,7 @@ app.get("/api/english/responses", authMiddleware, async (req, res) => {
                JOIN english_books b ON b.id = p.book_id
                JOIN users u ON u.id = r.user_id
                LEFT JOIN english_response_ratings rr ON rr.response_id = r.id
-               WHERE b.id = ? AND SUBSTR(UPPER(TRIM(COALESCE(p.section, ''))), 1, 1) = 'A'
+               WHERE b.id = ? AND SUBSTR(TRIM(REPLACE(UPPER(COALESCE(p.section, '')), 'SECTION ', '')), 1, 1) = 'A'
                GROUP BY r.id
                ORDER BY r.updated_at DESC`,
               [bookId],
@@ -1709,7 +1709,7 @@ app.get("/api/english/responses", authMiddleware, async (req, res) => {
                JOIN english_prompts p ON p.id = r.prompt_id
                JOIN users u ON u.id = r.user_id
                LEFT JOIN english_response_ratings rr ON rr.response_id = r.id
-               WHERE SUBSTR(UPPER(TRIM(COALESCE(p.section, ''))), 1, 1) = 'A'
+               WHERE SUBSTR(TRIM(REPLACE(UPPER(COALESCE(p.section, '')), 'SECTION ', '')), 1, 1) = 'A'
                GROUP BY r.id
                ORDER BY r.updated_at DESC`,
             )
@@ -1722,7 +1722,7 @@ app.get("/api/english/responses", authMiddleware, async (req, res) => {
              JOIN english_prompts p ON p.id = r.prompt_id
              JOIN users u ON u.id = r.user_id
              LEFT JOIN english_response_ratings rr ON rr.response_id = r.id
-             WHERE SUBSTR(UPPER(TRIM(COALESCE(p.section, ''))), 1, 1) = UPPER(?)
+             WHERE SUBSTR(TRIM(REPLACE(UPPER(COALESCE(p.section, '')), 'SECTION ', '')), 1, 1) = UPPER(?)
              GROUP BY r.id
              ORDER BY r.updated_at DESC`,
             [section],
