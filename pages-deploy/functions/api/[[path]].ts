@@ -91,7 +91,9 @@ const englishPrompts = pgTable("english_prompts", {
   promptText: text("prompt_text").notNull(),
   section: text("section").notNull().default("A"),
   createdAt: text("created_at").notNull(),
-});
+}, (t) => ({
+  bookSectionIdx: index("english_prompts_book_section_idx").on(t.bookId, t.section),
+}));
 
 const englishResponses = pgTable(
   "english_responses",
@@ -107,6 +109,8 @@ const englishResponses = pgTable(
   },
   (t) => ({
     uniq: unique("english_responses_prompt_user_unique").on(t.promptId, t.userId),
+    promptUpdatedIdx: index("english_responses_prompt_updated_idx").on(t.promptId, t.updatedAt),
+    userUpdatedIdx: index("english_responses_user_updated_idx").on(t.userId, t.updatedAt),
   }),
 );
 
@@ -401,6 +405,8 @@ type Vars = { user: { id: number; email: string; username: string; token: string
 const app = new Hono<{ Bindings: Env; Variables: Vars }>();
 let englishResponsesConstraintDropped = false;
 let usersTablePatched = false;
+let performanceIndexesPatched = false;
+let lastSessionCleanupAt = 0;
 
 // CORS
 app.use("/api/*", cors({
@@ -445,6 +451,43 @@ app.use("/api/*", async (c, next) => {
       // ignore
     } finally {
       englishResponsesConstraintDropped = true;
+    }
+  }
+  if (!performanceIndexesPatched) {
+    try {
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS english_prompts_book_section_idx
+        ON english_prompts (book_id, section)
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS english_responses_prompt_updated_idx
+        ON english_responses (prompt_id, updated_at)
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS english_responses_user_updated_idx
+        ON english_responses (user_id, updated_at)
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS sessions_expires_at_idx
+        ON sessions (expires_at)
+      `);
+    } catch {
+      // ignore
+    } finally {
+      performanceIndexesPatched = true;
+    }
+  }
+  const nowMs = Date.now();
+  if (nowMs - lastSessionCleanupAt > 10 * 60 * 1000) {
+    try {
+      await db.execute(sql`
+        DELETE FROM sessions
+        WHERE expires_at < ${new Date().toISOString()}
+      `);
+    } catch {
+      // ignore
+    } finally {
+      lastSessionCleanupAt = nowMs;
     }
   }
   c.set("db", db);

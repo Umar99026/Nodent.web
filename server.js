@@ -31,6 +31,7 @@ const db = new sqlite3.Database(DB_PATH, (err) => {
 db.run("PRAGMA journal_mode=WAL");
 db.run("PRAGMA foreign_keys=ON");
 db.run("PRAGMA synchronous=NORMAL");
+let lastSessionCleanupAt = 0;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -402,6 +403,10 @@ async function initDb() {
       FOREIGN KEY (rater_user_id) REFERENCES users(id) ON DELETE CASCADE
     )
   `);
+  await run(`CREATE INDEX IF NOT EXISTS idx_english_prompts_book_section ON english_prompts(book_id, section)`);
+  await run(`CREATE INDEX IF NOT EXISTS idx_english_responses_prompt_updated ON english_responses(prompt_id, updated_at)`);
+  await run(`CREATE INDEX IF NOT EXISTS idx_english_responses_user_updated ON english_responses(user_id, updated_at)`);
+  await run(`CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at)`);
 
   await run(`
     CREATE TABLE IF NOT EXISTS chat_messages (
@@ -604,6 +609,16 @@ app.use("/api", (req, _res, next) => {
 
 async function authMiddleware(req, res, next) {
   try {
+    const nowMs = Date.now();
+    if (nowMs - lastSessionCleanupAt > 10 * 60 * 1000) {
+      try {
+        await run(`DELETE FROM sessions WHERE expires_at < ?`, [nowIso()]);
+      } catch {
+        // ignore cleanup failures
+      } finally {
+        lastSessionCleanupAt = nowMs;
+      }
+    }
     const authHeader = req.headers.authorization || "";
     const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
 
