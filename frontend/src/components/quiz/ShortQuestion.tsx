@@ -102,7 +102,6 @@ function inferUnitHint(text: string): string | null {
 
 function inferPartUnitHint(
   descriptor: string,
-  questionText: string,
   expectedAnswer: string | undefined,
 ): string | null {
   const fromDescriptor = inferUnitHint(descriptor);
@@ -350,7 +349,6 @@ export function ShortQuestion({
                   {(() => {
                     const partUnit = inferPartUnitHint(
                       partDescriptors[idx] ?? "",
-                      question.question,
                       expectedAnswersForDisplay[idx],
                     );
                     return (
@@ -423,9 +421,9 @@ export function ShortQuestion({
           ) : (
             <div className="flex-1 space-y-1">
               <div className="flex items-stretch">
-                {inferPartUnitHint("", question.question, expectedAnswersForDisplay[0]) ? (
+                {inferPartUnitHint("", expectedAnswersForDisplay[0]) ? (
                   <span className="inline-flex items-center rounded-l-md border border-r-0 border-black/15 bg-muted px-2 text-xs font-semibold text-muted-foreground">
-                    {inferPartUnitHint("", question.question, expectedAnswersForDisplay[0])}
+                    {inferPartUnitHint("", expectedAnswersForDisplay[0])}
                   </span>
                 ) : null}
                 <Input
@@ -436,7 +434,7 @@ export function ShortQuestion({
                   disabled={disabled || (submitted && !allowRetry)}
                   className={cn(
                     "flex-1 bg-white/60 text-base",
-                    inferPartUnitHint("", question.question, expectedAnswersForDisplay[0]) && "rounded-l-none",
+                    inferPartUnitHint("", expectedAnswersForDisplay[0]) && "rounded-l-none",
                     submitted && isCorrect && "border-success/60 bg-success/5",
                     submitted && !isCorrect && "border-danger/60 bg-danger/5"
                   )}

@@ -117,7 +117,6 @@ function inferUnitHint(text: string): string | null {
 
 function inferPartUnitHint(
   descriptor: string,
-  questionText: string,
   expectedAnswer: string | undefined,
 ): string | null {
   const fromDescriptor = inferUnitHint(descriptor);
@@ -466,7 +465,6 @@ export function LongQuestion({
                 {(() => {
                   const partUnit = inferPartUnitHint(
                     partDescriptors[idx] ?? "",
-                    question.question,
                     expectedAnswersForDisplay[idx],
                   );
                   return (
