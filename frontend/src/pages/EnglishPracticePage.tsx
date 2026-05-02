@@ -98,9 +98,21 @@ function promptForumKey(promptId: number) {
 
 function cleanSectionBPromptText(promptText: string) {
   return String(promptText ?? "")
+    .replace(/â€™|’/g, "'")
+    .replace(/â€œ|â€|“|”/g, '"')
+    .replace(/â€“|–/g, "-")
+    .replace(/â€”|—/g, "-")
+    .replace(/(\w)\?(\w)/g, "$1'$2")
+    .replace(/\?([^?\n]*[.!][^?\n]*)\?/g, '"$1"')
     .replace(/\s+/g, " ")
     .replace(/\.\s*begin(?:ning)?\s+with\s*:\s*\.?\s*$/i, "")
     .replace(/\bbegin(?:ning)?\s+with\s*:\s*\.?\s*$/i, "")
+    .trim();
+}
+
+function cleanSectionAPromptText(promptText: string) {
+  return cleanSectionBPromptText(promptText)
+    .replace(/^\s*\(?[ivxlcdm]+\)?[.)\-:\s]+/i, "")
     .trim();
 }
 
@@ -109,9 +121,28 @@ function isMalformedSectionBPrompt(promptText: string) {
   if (!t) return true;
   if (/\bbegin(?:ning)?\s+with\s*:\s*\.?\s*$/i.test(t)) return true;
   if (/^\s*title\s*:\s*creative writing\b/i.test(t)) return true;
+  if (/^\s*creative writing\s*\.?\s*$/i.test(t)) return true;
+  if (/^\s*title\s*:\s*creative writing\s*\.?\s*$/i.test(t)) return true;
   if (/^\s*title\s*:\s*[^.\n]{0,2}\s*$/i.test(t)) return true;
   if (t.length < 48) return true;
   return false;
+}
+
+function dedupePrompts(list: Prompt[]): Prompt[] {
+  const seen = new Set<string>();
+  const out: Prompt[] = [];
+  for (const p of list) {
+    const key = String(p.prompt ?? "")
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .replace(/[“”]/g, '"')
+      .replace(/[‘’]/g, "'")
+      .trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(p);
+  }
+  return out;
 }
 
 function extractSectionBTitle(promptText: string) {
@@ -216,12 +247,19 @@ export function EnglishPracticePanel() {
   }, [effectiveBookId, section, books]);
 
   const visiblePrompts = useMemo(() => {
-    if (section !== "B") return prompts;
-    const cleaned = prompts
-      .map((p) => ({ ...p, prompt: cleanSectionBPromptText(p.prompt) }))
-      .filter((p) => !isMalformedSectionBPrompt(p.prompt));
-    // Safety fallback: never blank the workspace because of cleanup rules.
-    return cleaned.length > 0 ? cleaned : prompts;
+    const cleaned = prompts.map((p) => {
+      const nextPrompt =
+        section === "A"
+          ? cleanSectionAPromptText(p.prompt)
+          : cleanSectionBPromptText(p.prompt);
+      return { ...p, prompt: nextPrompt };
+    });
+    if (section === "B") {
+      return dedupePrompts(
+        cleaned.filter((p) => !isMalformedSectionBPrompt(p.prompt)),
+      );
+    }
+    return dedupePrompts(cleaned);
   }, [prompts, section]);
   const selectedBook = useMemo(
     () => books.find((b) => String(b.id) === selectedBookId) ?? null,
@@ -545,7 +583,9 @@ export function EnglishPromptResponsesPage() {
             ? `?section=A&bookId=${encodeURIComponent(bookId)}`
             : `?section=${encodeURIComponent(section)}`;
         const r = await apiFetch<{ responses: ResponseRow[] }>(`${API_PATHS.english.responses}${suffix}`);
-        const rows = (r.responses ?? []).filter((x) => x.promptId === numericPromptId);
+        const rows = (r.responses ?? [])
+          .map((x) => ({ ...x, prompt: cleanSectionBPromptText(x.prompt) }))
+          .filter((x) => x.promptId === numericPromptId);
         setResponses(rows);
         setRatingByResponseId(() =>
           rows.reduce<Record<number, string>>((acc, row) => {
@@ -584,7 +624,11 @@ export function EnglishPromptResponsesPage() {
           ? `?section=A&bookId=${encodeURIComponent(bookId)}`
           : `?section=${encodeURIComponent(section)}`;
       const refreshed = await apiFetch<{ responses: ResponseRow[] }>(`${API_PATHS.english.responses}${suffix}`);
-      setResponses((refreshed.responses ?? []).filter((x) => x.promptId === numericPromptId));
+      setResponses(
+        (refreshed.responses ?? [])
+          .map((x) => ({ ...x, prompt: cleanSectionBPromptText(x.prompt) }))
+          .filter((x) => x.promptId === numericPromptId),
+      );
       toast.success("Rating saved.");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not save rating.");

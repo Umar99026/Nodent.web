@@ -19,6 +19,11 @@ interface McqQuestionProps {
   classFullyCorrectPercent?: number | null;
   /** Allow multiple attempts (used for wrong-answer practice). */
   allowRetry?: boolean;
+  persistedState?: {
+    selectedOption?: string | null;
+    submitted?: boolean;
+  };
+  onStateChange?: (state: { selectedOption: string | null; submitted: boolean }) => void;
 }
 
 export function McqQuestion({
@@ -29,9 +34,13 @@ export function McqQuestion({
   lockedCorrect = false,
   classFullyCorrectPercent,
   allowRetry = false,
+  persistedState,
+  onStateChange,
 }: McqQuestionProps) {
-  const [selectedOption, setSelectedOption] = useState<string | null>(null);
-  const [submitted, setSubmitted] = useState(false);
+  const [selectedOption, setSelectedOption] = useState<string | null>(
+    persistedState?.selectedOption ?? null,
+  );
+  const [submitted, setSubmitted] = useState(Boolean(persistedState?.submitted));
 
   useEffect(() => {
     if (lockedCorrect) {
@@ -39,6 +48,10 @@ export function McqQuestion({
       setSelectedOption(question.answer);
     }
   }, [lockedCorrect, question.answer]);
+
+  useEffect(() => {
+    onStateChange?.({ selectedOption, submitted });
+  }, [selectedOption, submitted]);
 
   const handleSelect = (option: string) => {
     const alreadyCorrect = submitted && selectedOption === question.answer;

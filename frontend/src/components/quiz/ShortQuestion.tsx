@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { cn, getQuestionTypeLabel, isAnswerCorrect } from "@/lib/utils";
+import { cn, getQuestionTypeLabel, inferDpHintFromAccepted, isAnswerCorrect } from "@/lib/utils";
 import type { ShortQuestion as ShortQuestionType } from "@/lib/subjects";
 import { displayMarks, stripQuestionHeadingFromPassage, stripQuestionNumberPrefix } from "@/lib/questionDisplay";
 import { Badge } from "@/components/ui/badge";
@@ -18,39 +18,125 @@ interface ShortQuestionProps {
   classFullyCorrectPercent?: number | null;
   /** Allow multiple attempts (used for wrong-answer practice). */
   allowRetry?: boolean;
+  persistedState?: {
+    answer?: string;
+    parts?: string[];
+    submitted?: boolean;
+    isCorrect?: boolean;
+    dpHint?: number | null;
+    partResults?: (boolean | null)[];
+  };
+  onStateChange?: (state: {
+    answer: string;
+    parts: string[];
+    submitted: boolean;
+    isCorrect: boolean;
+    dpHint: number | null;
+    partResults: (boolean | null)[];
+  }) => void;
+}
+
+function splitMarksAcrossParts(totalMarks: number, partCount: number): number[] {
+  const safeParts = Math.max(1, partCount);
+  const safeTotal = Math.max(1, Math.round(Number(totalMarks) || 1));
+  if (safeTotal <= safeParts) {
+    return Array(safeParts).fill(1);
+  }
+  const base = Math.floor(safeTotal / safeParts);
+  const rem = safeTotal % safeParts;
+  return Array.from({ length: safeParts }, (_, idx) => base + (idx < rem ? 1 : 0));
+}
+
+function expandAcceptedForMultipart(acceptedPool: string[]): string[] {
+  if (acceptedPool.length !== 1) return acceptedPool;
+  const raw = String(acceptedPool[0] ?? "").trim();
+  if (!raw) return acceptedPool;
+  const labelled = raw.match(/(?:^|[;\n])\s*(?:\(?i+\)?|[a-z]|\d+)\)\s*([^;\n]+)/gi);
+  if (labelled && labelled.length >= 2) {
+    return labelled
+      .map((x) => x.replace(/^(?:^|[;\n])\s*(?:\(?i+\)?|[a-z]|\d+)\)\s*/i, "").trim())
+      .filter(Boolean);
+  }
+  const split = raw.split(/\s*;\s*|\s*\n+\s*/).map((x) => x.trim()).filter(Boolean);
+  if (split.length >= 2) return split;
+  const splitCommaAndAnd = raw
+    .split(/\s*,\s*|\s+\band\b\s+/i)
+    .map((x) => x.trim())
+    .filter(Boolean);
+  return splitCommaAndAnd.length >= 2 ? splitCommaAndAnd : acceptedPool;
+}
+
+function cleanAcceptedCandidate(raw: string): string {
+  return String(raw ?? "")
+    .replace(/^\s*(?:\(?i+\)?|[a-z]|\d+)\)\s*/i, "")
+    .trim();
+}
+
+function formatExpectedAnswer(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (value && typeof value === "object") {
+    const row = value as Record<string, unknown>;
+    if (typeof row.answer === "string" && row.answer.trim()) return row.answer.trim();
+    if (typeof row.value === "string" && row.value.trim()) return row.value.trim();
+    if (typeof row.label === "string" && row.label.trim()) return row.label.trim();
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+  return String(value ?? "");
+}
+
+function inferUnitHint(text: string): string | null {
+  const t = String(text ?? "").toLowerCase();
+  if (/%/.test(t) || /\b(percent|percentage|rate|ear|effective annual rate)\b/i.test(t)) return "%";
+  if (/\bkm\b/i.test(t) || /\bdistance\b/i.test(t)) return "km";
+  if (/\bdays?\b/i.test(t)) return "days";
+  if (/\bweeks?\b/i.test(t)) return "weeks";
+  if (/\bmonths?\b/i.test(t)) return "months";
+  if (/\$(?!\s*%)/.test(t) || /\b(price|cost|balance|residual|repayment|loan|dollar)\b/i.test(t)) return "$";
+  return null;
+}
+
+function inferPartUnitHint(
+  descriptor: string,
+  questionText: string,
+  expectedAnswer: string | undefined,
+): string | null {
+  const fromDescriptor = inferUnitHint(descriptor);
+  if (fromDescriptor) return fromDescriptor;
+  const fromExpected = inferUnitHint(expectedAnswer ?? "");
+  if (fromExpected) return fromExpected;
+  return null;
+}
+
+function gradeMultipartIndividually(parts: string[], acceptedPool: string[]) {
+  const expandedAccepted = expandAcceptedForMultipart(acceptedPool).map(cleanAcceptedCandidate);
+  const byPosition =
+    expandedAccepted.length >= parts.length
+      ? parts.map((part, idx) => isAnswerCorrect((part ?? "").trim(), [expandedAccepted[idx]]))
+      : null;
+  if (byPosition) return byPosition;
+  const partGrades = parts.map((part) => {
+    const trimmed = (part ?? "").trim();
+    if (!trimmed) return { correct: false, dpHint: null as number | null };
+    for (let i = 0; i < expandedAccepted.length; i += 1) {
+      const graded = isAnswerCorrect(trimmed, [expandedAccepted[i]]);
+      if (graded.correct) {
+        return graded;
+      }
+    }
+    const fallback = expandedAccepted[0] ? isAnswerCorrect(trimmed, [expandedAccepted[0]]) : null;
+    return { correct: false, dpHint: fallback?.dpHint ?? null };
+  });
+  return partGrades;
 }
 
 function detectMultipartLabels(questionText: string): string[] {
-  const labels: string[] = [];
-  const seen = new Set<string>();
-  const parenLabelRegex = /(^|[\s,;:])\(\s*(i|ii|iii|iv|v|vi|vii|viii|ix|x|[a-z]|[1-9])\s*\)/gi;
-  let match: RegExpExecArray | null;
-  while ((match = parenLabelRegex.exec(questionText)) != null) {
-    const raw = String(match[2] || "").toLowerCase();
-    if (!raw || seen.has(raw)) continue;
-    seen.add(raw);
-    labels.push(raw);
-  }
-
-  if (labels.length >= 2) return labels;
-
-  const looksLikeStatsTriple =
-    /(?:^|[^a-z])E\s*\([^)]*\)/i.test(questionText) &&
-    /sd\s*\([^)]*\)/i.test(questionText) &&
-    /(?:Pr|P)\s*\([^)]*\)/i.test(questionText);
-  if (looksLikeStatsTriple) return ["i", "ii", "iii"];
-
-  const hasPartI = /(?:\(\s*i\s*\)|\bi\s*[).:])/i.test(questionText);
-  const hasPartII = /(?:\(\s*ii\s*\)|\bii\s*[).:])/i.test(questionText);
-  const hasPartIII = /(?:\(\s*iii\s*\)|\biii\s*[).:])/i.test(questionText);
-  if (hasPartI && hasPartII && hasPartIII) return ["i", "ii", "iii"];
-  if (hasPartI && hasPartII) return ["i", "ii"];
-
-  const directiveParts = parseDirectiveParts(questionText);
-  if (directiveParts.length >= 2) {
-    return directiveParts.map((_, idx) => `part${idx + 1}`);
-  }
-
+  // Multipart answer UI is disabled: always render a single answer input.
+  void questionText;
   return [];
 }
 
@@ -105,27 +191,56 @@ export function ShortQuestion({
   lockedCorrect = false,
   classFullyCorrectPercent,
   allowRetry = false,
+  persistedState,
+  onStateChange,
 }: ShortQuestionProps) {
-  const [answer, setAnswer] = useState("");
-  const [parts, setParts] = useState<string[]>([]);
-  const [submitted, setSubmitted] = useState(false);
-  const [isCorrect, setIsCorrect] = useState(false);
-  const [dpHint, setDpHint] = useState<number | null>(null);
+  const [answer, setAnswer] = useState(persistedState?.answer ?? "");
+  const [parts, setParts] = useState<string[]>(persistedState?.parts ?? []);
+  const [submitted, setSubmitted] = useState(Boolean(persistedState?.submitted));
+  const [isCorrect, setIsCorrect] = useState(Boolean(persistedState?.isCorrect));
+  const [dpHint, setDpHint] = useState<number | null>(persistedState?.dpHint ?? null);
+  const [partResults, setPartResults] = useState<(boolean | null)[]>(persistedState?.partResults ?? []);
 
-  const configuredParts = question.answerParts?.filter((p) => p?.label?.trim()) ?? [];
+  const configuredParts: ShortQuestionType["answerParts"] = [];
   const partLabels =
     configuredParts.length >= 2
       ? configuredParts.map((p, idx) => p.key?.trim() || `part${idx + 1}`)
       : detectMultipartLabels(question.question);
   const isMultipart = partLabels.length >= 2;
+  const effectiveTotalMarks = isMultipart
+    ? Math.max(displayMarks(question.marks, question.type), partLabels.length)
+    : displayMarks(question.marks, question.type);
+  const partMarks = isMultipart
+    ? splitMarksAcrossParts(effectiveTotalMarks, partLabels.length)
+    : [];
   const partDescriptors =
     configuredParts.length >= 2
       ? configuredParts.map((p) => p.label.trim())
       : detectMultipartDescriptors(question.question, partLabels);
+  const expectedAnswersForDisplay = isMultipart
+    ? expandAcceptedForMultipart(question.acceptedAnswers ?? [])
+        .map(formatExpectedAnswer)
+        .map(cleanAcceptedCandidate)
+    : (question.acceptedAnswers ?? []).map(formatExpectedAnswer);
+  const partDpHints = isMultipart
+    ? partLabels.map((_, idx) =>
+        inferDpHintFromAccepted([expectedAnswersForDisplay[idx] ?? ""]),
+      )
+    : [];
+  const singleDpHint = !isMultipart
+    ? inferDpHintFromAccepted([expectedAnswersForDisplay[0] ?? ""])
+    : null;
 
   useEffect(() => {
-    setParts(Array(partLabels.length).fill(""));
-  }, [question.question, partLabels.length]);
+    onStateChange?.({
+      answer,
+      parts,
+      submitted,
+      isCorrect,
+      dpHint,
+      partResults,
+    });
+  }, [answer, parts, submitted, isCorrect, dpHint, partResults]);
 
   useEffect(() => {
     if (lockedCorrect) {
@@ -133,6 +248,7 @@ export function ShortQuestion({
       setIsCorrect(true);
       setAnswer(question.acceptedAnswers[0] ?? "—");
       setParts(Array(partLabels.length).fill(""));
+      setPartResults(Array(partLabels.length).fill(true));
     }
   }, [lockedCorrect, question, partLabels.length]);
 
@@ -154,19 +270,12 @@ export function ShortQuestion({
     let nextDpHint: number | null = null;
 
     if (isMultipart) {
-      // Prefer per-part grading when accepted answers are provided per part.
-      if (accepted.length >= partLabels.length) {
-        const gradedParts = partLabels.map((_, idx) =>
-          isAnswerCorrect(parts[idx] ?? "", [accepted[idx]]),
-        );
-        correct = gradedParts.every((g) => g.correct);
-        nextDpHint = Math.max(...gradedParts.map((g) => g.dpHint ?? 0)) || null;
-      } else {
-        const gradedCombined = isAnswerCorrect(compositeAnswer, accepted);
-        correct = gradedCombined.correct;
-        nextDpHint = gradedCombined.dpHint;
-      }
+      const gradedParts = gradeMultipartIndividually(parts, accepted);
+      setPartResults(gradedParts.map((g) => g.correct));
+      correct = gradedParts.every((g) => g.correct);
+      nextDpHint = Math.max(...gradedParts.map((g) => g.dpHint ?? 0)) || null;
     } else {
+      setPartResults([]);
       const graded = isAnswerCorrect(compositeAnswer, accepted);
       correct = graded.correct;
       nextDpHint = graded.dpHint;
@@ -210,8 +319,8 @@ export function ShortQuestion({
       <QuestionImageGrid urls={question.imageUrls} title="Question figures & images" />
 
       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        {displayMarks(question.marks, question.type)}{" "}
-        {displayMarks(question.marks, question.type) === 1 ? "mark" : "marks"}
+        {effectiveTotalMarks}{" "}
+        {effectiveTotalMarks === 1 ? "mark" : "marks"}
         {dpHint != null && dpHint > 0 ? ` (${dpHint} d.p.)` : ""}
       </p>
       <div className="font-display text-[1.18rem] leading-relaxed text-foreground sm:text-[1.45rem]">
@@ -238,41 +347,119 @@ export function ShortQuestion({
             <div className="flex flex-1 flex-col gap-2">
               {partLabels.map((label, idx) => (
                 <div key={`${label}-${idx}`} className="space-y-1">
-                  <p className="text-xs font-medium text-muted-foreground">{partDescriptors[idx]}</p>
-                  <Input
-                    value={parts[idx] ?? ""}
-                    onChange={(e) =>
-                      setParts((prev) => {
-                        const next = [...prev];
-                        next[idx] = e.target.value;
-                        return next;
-                      })
-                    }
-                    onKeyDown={handleKeyDown}
-                    placeholder="Type your answer..."
-                    disabled={disabled || (submitted && isCorrect && !allowRetry)}
-                    className={cn(
-                      "bg-white/60 text-base",
-                      submitted && isCorrect && "border-success/60 bg-success/5",
-                      submitted && !isCorrect && "border-danger/60 bg-danger/5"
-                    )}
-                  />
+                  {(() => {
+                    const partUnit = inferPartUnitHint(
+                      partDescriptors[idx] ?? "",
+                      question.question,
+                      expectedAnswersForDisplay[idx],
+                    );
+                    return (
+                      <>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-medium text-muted-foreground">{partDescriptors[idx]}</p>
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      {partMarks[idx]} {partMarks[idx] === 1 ? "mark" : "marks"}
+                    </span>
+                  </div>
+                  {submitted && (
+                    <p
+                      className={cn(
+                        "text-[11px] font-semibold",
+                        partResults[idx] === true ? "text-success" : "text-danger",
+                      )}
+                    >
+                      {partResults[idx] === true ? "Correct" : "Incorrect"}
+                    </p>
+                  )}
+                  <div className="flex items-stretch">
+                    {partUnit ? (
+                      <span className="inline-flex items-center rounded-l-md border border-r-0 border-black/15 bg-muted px-2 text-xs font-semibold text-muted-foreground">
+                        {partUnit}
+                      </span>
+                    ) : null}
+                    <Input
+                      value={parts[idx] ?? ""}
+                      onChange={(e) =>
+                        setParts((prev) => {
+                          const next = [...prev];
+                          next[idx] = e.target.value;
+                          return next;
+                        })
+                      }
+                      onKeyDown={handleKeyDown}
+                      placeholder="Type your answer..."
+                      disabled={disabled || (submitted && !allowRetry)}
+                      className={cn(
+                        "bg-white/60 text-base",
+                        partUnit && "rounded-l-none",
+                        submitted && isCorrect && "border-success/60 bg-success/5",
+                        submitted && !isCorrect && "border-danger/60 bg-danger/5"
+                      )}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                    <span>
+                      {partDpHints[idx] === 2
+                        ? "Answer to 2 d.p."
+                        : partDpHints[idx] === 0
+                          ? "Whole number (no decimals)"
+                          : "Any valid format"}
+                    </span>
+                  </div>
+                  {submitted && partResults[idx] === false && (
+                    <p className="text-[11px] text-muted-foreground">
+                      Correct answer:{" "}
+                      <span className="font-semibold text-foreground">
+                        {expectedAnswersForDisplay[idx] ?? "—"}
+                      </span>
+                    </p>
+                  )}
+                      </>
+                    );
+                  })()}
                 </div>
               ))}
             </div>
           ) : (
-            <Input
-              value={answer}
-              onChange={(e) => setAnswer(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Type your answer..."
-              disabled={disabled || (submitted && isCorrect && !allowRetry)}
-              className={cn(
-                "flex-1 bg-white/60 text-base",
-                submitted && isCorrect && "border-success/60 bg-success/5",
-                submitted && !isCorrect && "border-danger/60 bg-danger/5"
+            <div className="flex-1 space-y-1">
+              <div className="flex items-stretch">
+                {inferPartUnitHint("", question.question, expectedAnswersForDisplay[0]) ? (
+                  <span className="inline-flex items-center rounded-l-md border border-r-0 border-black/15 bg-muted px-2 text-xs font-semibold text-muted-foreground">
+                    {inferPartUnitHint("", question.question, expectedAnswersForDisplay[0])}
+                  </span>
+                ) : null}
+                <Input
+                  value={answer}
+                  onChange={(e) => setAnswer(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Type your answer..."
+                  disabled={disabled || (submitted && !allowRetry)}
+                  className={cn(
+                    "flex-1 bg-white/60 text-base",
+                    inferPartUnitHint("", question.question, expectedAnswersForDisplay[0]) && "rounded-l-none",
+                    submitted && isCorrect && "border-success/60 bg-success/5",
+                    submitted && !isCorrect && "border-danger/60 bg-danger/5"
+                  )}
+                />
+              </div>
+              <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                <span>
+                  {singleDpHint === 2
+                    ? "Answer to 2 d.p."
+                    : singleDpHint === 0
+                      ? "Whole number (no decimals)"
+                      : "Any valid format"}
+                </span>
+              </div>
+              {submitted && !isCorrect && (
+                <p className="text-[11px] text-muted-foreground">
+                  Correct answer:{" "}
+                  <span className="font-semibold text-foreground">
+                    {expectedAnswersForDisplay[0] ?? "—"}
+                  </span>
+                </p>
               )}
-            />
+            </div>
           )}
           <Button
             onClick={handleSubmit}
@@ -285,7 +472,7 @@ export function ShortQuestion({
         </div>
 
         {/* Feedback */}
-        {submitted && (
+        {submitted && !isMultipart && (
           <div
             className={cn(
               "flex items-start gap-3 rounded-lg px-4 py-3 text-sm",

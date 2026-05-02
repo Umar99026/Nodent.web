@@ -70,10 +70,23 @@ import {
 
 interface PracticeState {
   currentIndex: number;
-  /** questionKey -> isCorrect (null for long/written answers) */
+  /** questionKey -> result (true/false, null = submitted but not auto-scored) */
   answers: Record<string, boolean | null>;
   completedAt?: string;
 }
+
+type QuestionUiState = {
+  selectedOption?: string | null;
+  submitted?: boolean;
+  isCorrect?: boolean;
+  answer?: string;
+  parts?: string[];
+  response?: string;
+  saved?: boolean;
+  autoMarkResult?: boolean | null;
+  dpHint?: number | null;
+  partResults?: (boolean | null)[];
+};
 
 function getPracticeStorageKey(
   userId: number | string,
@@ -150,8 +163,10 @@ export default function QuizPage() {
   const [initialized, setInitialized] = useState(false);
   const [questionsLoading, setQuestionsLoading] = useState(true);
   const [questions, setQuestions] = useState<Question[]>([]);
+  const [questionUiState, setQuestionUiState] = useState<Record<string, QuestionUiState>>({});
   const [topicFilter, setTopicFilter] = useState<string>("all");
   const [pinnedGroupKey, setPinnedGroupKey] = useState<string | null>(null);
+  const [answeredAtSessionStart, setAnsweredAtSessionStart] = useState<Set<string>>(new Set());
 
   const [classByKey, setClassByKey] = useState<Record<string, number>>({});
   const saveTimerRef = useRef<number | null>(null);
@@ -166,6 +181,8 @@ export default function QuizPage() {
   useEffect(() => {
     setInitialized(false);
     setPinnedGroupKey(null);
+    setQuestionUiState({});
+    setAnsweredAtSessionStart(new Set());
   }, [subjectId, user?.id, isWrongReview]);
 
   const schedulePracticeSave = useCallback(
@@ -182,6 +199,21 @@ export default function QuizPage() {
       }, 160);
     },
     [user, subjectId],
+  );
+
+  const updateQuestionUiState = useCallback(
+    (qKey: string, patch: QuestionUiState) => {
+      setQuestionUiState((prev) => {
+        const curr = prev[qKey] ?? {};
+        const nextForKey = { ...curr, ...patch };
+        const same = Object.keys(nextForKey).every(
+          (k) => (nextForKey as Record<string, unknown>)[k] === (curr as Record<string, unknown>)[k],
+        );
+        if (same) return prev;
+        return { ...prev, [qKey]: nextForKey };
+      });
+    },
+    [],
   );
 
   useEffect(() => {
@@ -351,7 +383,7 @@ export default function QuizPage() {
     [topicFilteredFlat, questions],
   );
 
-  /** Main quiz: stimulus groups where at least one part is not yet correct. */
+  /** Main quiz: hide only questions already answered before this session started. */
   const activeGroups = useMemo(() => {
     if (!subjectId) return allGroupsFlat;
     return allGroupsFlat.filter((g) =>
@@ -362,10 +394,10 @@ export default function QuizPage() {
           p,
           Math.max(0, getStableQuestionIndex(questions, p)),
         );
-        return answers[qk] === true;
+        return answeredAtSessionStart.has(qk);
       }),
     );
-  }, [allGroupsFlat, answers, subjectId, questions, pinnedGroupKey]);
+  }, [allGroupsFlat, subjectId, questions, pinnedGroupKey, answeredAtSessionStart]);
 
   const displayGroups: QuestionStimulusGroup[] = isWrongReview
     ? wrongReviewGroups ?? []
@@ -386,6 +418,7 @@ export default function QuizPage() {
     if (isWrongReview) {
       setCurrentIndex(0);
       setAnswers({});
+      setAnsweredAtSessionStart(new Set());
       setInitialized(true);
       return;
     }
@@ -405,6 +438,9 @@ export default function QuizPage() {
       }
       setCurrentIndex(Math.min(saved.currentIndex, maxIdx));
       setAnswers(norm);
+      setAnsweredAtSessionStart(new Set(Object.keys(norm)));
+    } else {
+      setAnsweredAtSessionStart(new Set());
     }
     setInitialized(true);
   }, [
@@ -468,6 +504,15 @@ export default function QuizPage() {
   }, [displayGroups.length]);
 
   const currentGroup = displayGroups[currentIndex] ?? null;
+
+  // Keep the currently visible group pinned so a correct answer
+  // doesn't immediately remove it from the active list and "jump" UI.
+  useEffect(() => {
+    if (isWrongReview) return;
+    const key = currentGroup?.key;
+    if (!key) return;
+    setPinnedGroupKey((prev) => (prev === key ? prev : key));
+  }, [isWrongReview, currentGroup?.key]);
 
   const focusPart =
     subjectId && currentGroup
@@ -681,7 +726,9 @@ export default function QuizPage() {
                         Math.max(0, getStableQuestionIndex(questions, part)),
                       );
                       const ans = answers[qk];
-                      const lockedCorrect = ans === true;
+                      const alreadySubmitted = ans !== undefined;
+                      const markedCorrect = ans === true;
+                      const lockAfterSubmit = !isWrongReview && alreadySubmitted;
                       const hidePassage = Boolean(currentGroup.passage?.trim());
                       const partMarks =
                         typeof part.marks === "number"
@@ -696,7 +743,7 @@ export default function QuizPage() {
                           key={qk}
                           className={cn(
                             "rounded-xl border p-3 sm:p-4",
-                            lockedCorrect
+                            markedCorrect
                               ? "border-success/35 bg-success/5"
                               : "border-black/10 bg-white/50",
                           )}
@@ -705,26 +752,30 @@ export default function QuizPage() {
                             <McqQuestion
                               question={part}
                               hidePassage={hidePassage}
-                              lockedCorrect={lockedCorrect}
+                              lockedCorrect={false}
                               onAnswer={(correct) =>
                                 handleAnswer(qk, correct, partMarks, partTopic)
                               }
-                              disabled={lockedCorrect}
+                              disabled={lockAfterSubmit}
                               allowRetry={isWrongReview}
                               classFullyCorrectPercent={partClass ?? null}
+                              persistedState={questionUiState[qk]}
+                              onStateChange={(state) => updateQuestionUiState(qk, state)}
                             />
                           )}
                           {part.type === "short" && (
                             <ShortQuestion
                               question={part}
                               hidePassage={hidePassage}
-                              lockedCorrect={lockedCorrect}
+                              lockedCorrect={false}
                               onAnswer={(correct) =>
                                 handleAnswer(qk, correct, partMarks, partTopic)
                               }
-                              disabled={lockedCorrect}
+                              disabled={lockAfterSubmit}
                               allowRetry={isWrongReview}
                               classFullyCorrectPercent={partClass ?? null}
+                              persistedState={questionUiState[qk]}
+                              onStateChange={(state) => updateQuestionUiState(qk, state)}
                             />
                           )}
                           {part.type === "long" && (
@@ -733,14 +784,16 @@ export default function QuizPage() {
                               subjectId={subjectId}
                               questionKey={qk}
                               hidePassage={hidePassage}
-                              lockedCorrect={lockedCorrect}
+                              lockedCorrect={false}
                               onAnswer={(correct) =>
                                 handleAnswer(qk, correct, partMarks, partTopic)
                               }
-                              disabled={lockedCorrect}
+                              disabled={lockAfterSubmit}
                               practiceOnly={isWrongReview}
                               classFullyCorrectPercent={partClass ?? null}
                               submitLabel={isMathSubject ? "Submit Answer" : "Save Answer"}
+                              persistedState={questionUiState[qk]}
+                              onStateChange={(state) => updateQuestionUiState(qk, state)}
                             />
                           )}
                         </div>

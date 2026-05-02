@@ -66,6 +66,9 @@ interface AdminQuestion {
   guidance?: string;
   passage?: string;
   marks: number;
+  _english?: boolean;
+  _book?: string;
+  _section?: "A" | "B" | "C";
 }
 
 const QUESTION_TYPES: { value: QuestionType; label: string }[] = [
@@ -164,6 +167,10 @@ export default function AdminPage() {
 
   const [marksEdits, setMarksEdits] = useState<Record<string, number>>({});
   const [marksSaving, setMarksSaving] = useState<string | null>(null);
+  const [acceptedAnswersEdits, setAcceptedAnswersEdits] = useState<Record<string, string>>({});
+  const [acceptedAnswersSaving, setAcceptedAnswersSaving] = useState<string | null>(null);
+  const [autoFillingExpected, setAutoFillingExpected] = useState(false);
+  const autoRepairExpectedRunRef = useRef(false);
 
   /* ------ Bulk import (paste table) ------ */
   const [bulkText, setBulkText] = useState("");
@@ -186,6 +193,205 @@ export default function AdminPage() {
   const [bulkImagesProcessing, setBulkImagesProcessing] = useState(false);
   const [bulkImagesJson, setBulkImagesJson] = useState("");
 
+  function formatExpectedAnswer(value: unknown): string {
+    if (typeof value === "string") {
+      const t = value.trim();
+      if (!t || /object\s*object/i.test(t)) return "";
+      if ((t.startsWith("{") && t.endsWith("}")) || (t.startsWith("[") && t.endsWith("]"))) {
+        try {
+          return formatExpectedAnswer(JSON.parse(t));
+        } catch {
+          return t;
+        }
+      }
+      return t;
+    }
+    if (typeof value === "number" || typeof value === "boolean") return String(value);
+    if (value && typeof value === "object") {
+      const row = value as Record<string, unknown>;
+      if (typeof row.answer === "string" && row.answer.trim()) return row.answer.trim();
+      if (typeof row.value === "string" && row.value.trim()) return row.value.trim();
+      if (typeof row.label === "string" && row.label.trim()) return row.label.trim();
+      return "";
+    }
+    return String(value ?? "").trim();
+  }
+
+  function normalizeExpectedAnswerList(raw: unknown): string[] | undefined {
+    if (Array.isArray(raw)) {
+      const arr = raw.map((x) => formatExpectedAnswer(x)).filter(Boolean);
+      return arr.length ? arr : undefined;
+    }
+    if (typeof raw === "string") {
+      const arr = parseFlexibleList(raw)?.map((x) => formatExpectedAnswer(x)).filter(Boolean);
+      return arr?.length ? arr : undefined;
+    }
+    return undefined;
+  }
+
+  function normalizeAdminQuestion(q: any, subjectIdFallback?: string): AdminQuestion {
+    const normalizedCorrect = formatExpectedAnswer(q.correctAnswer ?? q.answer);
+    return {
+      id: String(q.id ?? ""),
+      subjectId: String(q.subjectId ?? subjectIdFallback ?? ""),
+      type: (q.type as QuestionType) ?? "long_answer",
+      question: String(q.question ?? ""),
+      options: Array.isArray(q.options) ? q.options.map(String) : undefined,
+      correctAnswer: normalizedCorrect || undefined,
+      acceptedAnswers:
+        normalizeExpectedAnswerList(q.acceptedAnswers) ??
+        normalizeExpectedAnswerList(q.accepted_answers) ??
+        normalizeExpectedAnswerList(q.accepted_answers_json),
+      guidance: q.guidance ? String(q.guidance) : undefined,
+      passage: q.passage ? String(q.passage) : undefined,
+      marks: Number(q.marks ?? 1) || 1,
+      imageUrls: Array.isArray(q.imageUrls) ? q.imageUrls.map(String) : undefined,
+    };
+  }
+
+  function roundTo(value: number, dp: number): number {
+    const f = 10 ** dp;
+    return Math.round(value * f) / f;
+  }
+
+  function formatNumeric(value: number, dp = 2): string {
+    if (!Number.isFinite(value)) return "";
+    return Number.isInteger(value) ? String(value) : roundTo(value, dp).toFixed(dp);
+  }
+
+  function computeExpectedAnswersFromQuestionText(questionRaw: string): string[] {
+    const question = String(questionRaw ?? "").replace(/\s+/g, " ").trim();
+    if (!question) return [];
+
+    // Least-squares linear model: price = a + (b)*distance
+    const leastSquares = question.match(
+      /price\s*=\s*([+-]?\d+(?:\.\d+)?)\s*\+\s*\(\s*([+-]?\d+(?:\.\d+)?)\s*\)\s*\*?\s*distance[\s\S]*?(\d+(?:\.\d+)?)\s*km[\s\S]*?sold\s*for\s*\$?\s*([+-]?\d+(?:\.\d+)?)/i,
+    );
+    if (leastSquares) {
+      const a = Number(leastSquares[1]);
+      const b = Number(leastSquares[2]);
+      const d = Number(leastSquares[3]);
+      const sold = Number(leastSquares[4]);
+      const predicted = a + b * d;
+      const residual = sold - predicted;
+      const modelText = residual >= 0 ? "under-predicted" : "over-predicted";
+      return [
+        formatNumeric(predicted, 2),
+        formatNumeric(residual, 2),
+        modelText,
+      ];
+    }
+
+    // Weekly recurrence loan: L0=..., L(n+1)=r*L(n)-p, find effective annual rate and L52
+    const weeklyLoan = question.match(
+      /L\s*0\s*=\s*([+-]?\d+(?:\.\d+)?)\s*,?\s*L\s*\(\s*n\s*\+\s*1\s*\)\s*=\s*([+-]?\d+(?:\.\d+)?)\s*\*?\s*L\s*\(\s*n\s*\)\s*-\s*([+-]?\d+(?:\.\d+)?)/i,
+    );
+    if (weeklyLoan && /effective annual rate/i.test(question) && /L\s*52/i.test(question)) {
+      const L0 = Number(weeklyLoan[1]);
+      const r = Number(weeklyLoan[2]);
+      const p = Number(weeklyLoan[3]);
+      let L = L0;
+      for (let i = 0; i < 52; i++) L = r * L - p;
+      const earPct = (r ** 52 - 1) * 100;
+      return [formatNumeric(earPct, 2), formatNumeric(L, 2)];
+    }
+
+    // Project network critical path + crashing one critical activity by 2 days
+    const paths = question.match(
+      /path lengths:\s*([+-]?\d+(?:\.\d+)?)\s*,\s*([+-]?\d+(?:\.\d+)?)\s*,\s*([+-]?\d+(?:\.\d+)?)/i,
+    );
+    if (paths && /critical path length/i.test(question) && /crashed by 2 days/i.test(question)) {
+      const values = [Number(paths[1]), Number(paths[2]), Number(paths[3])];
+      const critical = Math.max(...values);
+      const idx = values.indexOf(critical);
+      const afterCrash = [...values];
+      afterCrash[idx] = afterCrash[idx] - 2;
+      const newDuration = Math.max(...afterCrash);
+      return [formatNumeric(critical, 0), formatNumeric(newDuration, 0)];
+    }
+
+    // Reducing-balance monthly loan month-1 interest and balance after payment 1
+    const reducing = question.match(
+      /starting balance\s*\$?\s*([+-]?\d+(?:\.\d+)?)[\s\S]*?annual rate\s*([+-]?\d+(?:\.\d+)?)%\s*compounding monthly[\s\S]*?monthly repayment\s*\$?\s*([+-]?\d+(?:\.\d+)?)/i,
+    );
+    if (reducing && /month-?1 interest/i.test(question) && /new balance/i.test(question)) {
+      const balance = Number(reducing[1]);
+      const annualPct = Number(reducing[2]);
+      const repayment = Number(reducing[3]);
+      const interest = balance * (annualPct / 100 / 12);
+      const newBalance = balance + interest - repayment;
+      return [formatNumeric(interest, 2), formatNumeric(newBalance, 2)];
+    }
+
+    // Constant acceleration particle
+    const particle = question.match(
+      /initial velocity\s*([+-]?\d+(?:\.\d+)?)\s*m\/s[\s\S]*?acceleration\s*([+-]?\d+(?:\.\d+)?)\s*m\/s[\s\S]*?after\s*([+-]?\d+(?:\.\d+)?)\s*s/i,
+    );
+    if (particle && /displacement/i.test(question) && /reversed direction/i.test(question)) {
+      const u = Number(particle[1]);
+      const a = Number(particle[2]);
+      const t = Number(particle[3]);
+      const v = u + a * t;
+      const s = u * t + 0.5 * a * t * t;
+      const reversed = u !== 0 && Math.sign(u) !== Math.sign(v) ? "Yes" : "No";
+      return [formatNumeric(v, 2), formatNumeric(s, 2), reversed];
+    }
+
+    // Quadratic in vertex form: g(x)=a(x-h)^2+k, find g(n) and minimum value
+    const quadratic = question.match(
+      /g\s*\(\s*x\s*\)\s*=\s*([+-]?\d+(?:\.\d+)?)\s*\(\s*x\s*-\s*([+-]?\d+(?:\.\d+)?)\s*\)\s*\^?\s*2\s*\+\s*([+-]?\d+(?:\.\d+)?)[\s\S]*?g\s*\(\s*([+-]?\d+(?:\.\d+)?)\s*\)[\s\S]*?minimum value/i,
+    );
+    if (quadratic) {
+      const a = Number(quadratic[1]);
+      const h = Number(quadratic[2]);
+      const k = Number(quadratic[3]);
+      const x = Number(quadratic[4]);
+      const gx = a * (x - h) ** 2 + k;
+      return [formatNumeric(gx, 2), formatNumeric(k, 2)];
+    }
+
+    const quadraticStd = question.match(
+      /f\s*\(\s*x\s*\)\s*=\s*([+-]?\d+(?:\.\d+)?)\s*x\s*\^?\s*2\s*([+-])\s*(\d+(?:\.\d+)?)\s*x\s*([+-])\s*(\d+(?:\.\d+)?)/i,
+    );
+    if (quadraticStd && /axis of symmetry/i.test(question) && /minimum value/i.test(question)) {
+      const a = Number(quadraticStd[1]);
+      const b = Number(quadraticStd[3]) * (quadraticStd[2] === "-" ? -1 : 1);
+      const c = Number(quadraticStd[5]) * (quadraticStd[4] === "-" ? -1 : 1);
+      if (a !== 0) {
+        const xVertex = -b / (2 * a);
+        const yVertex = a * xVertex * xVertex + b * xVertex + c;
+        return [formatNumeric(xVertex, 2), formatNumeric(yVertex, 2), formatNumeric(xVertex, 2)];
+      }
+    }
+
+    const complexReciprocal = question.match(
+      /express\s*1\s*\/\s*\(\s*([+-]?\d+(?:\.\d+)?)\s*([+-])\s*(\d+(?:\.\d+)?)\s*i\s*\)\s*in\s*the\s*form\s*p\s*\+\s*q\s*i/i,
+    );
+    if (complexReciprocal) {
+      const a = Number(complexReciprocal[1]);
+      const sign = complexReciprocal[2] === "-" ? -1 : 1;
+      const b = Number(complexReciprocal[3]) * sign;
+      const den = a * a + b * b;
+      if (den !== 0) {
+        const p = a / den;
+        const q = -b / den;
+        const qSign = q >= 0 ? "+" : "-";
+        const qAbs = Math.abs(q);
+        const decimal = `${formatNumeric(p, 4)}${qSign}${formatNumeric(qAbs, 4)}i`;
+        const ai = Number.isInteger(a);
+        const bi = Number.isInteger(Math.abs(b));
+        const di = Number.isInteger(den);
+        if (ai && bi && di) {
+          const exact = `${a}/${den}${b >= 0 ? "-" : "+"}${Math.abs(b)}/${den}i`;
+          return [exact, decimal];
+        }
+        return [decimal];
+      }
+    }
+
+    return [];
+  }
+
   /* ------ fetch existing questions ------ */
 
   const fetchQuestions = useCallback(async () => {
@@ -199,27 +405,13 @@ export default function AdminPage() {
       >(API_PATHS.admin.questions);
 
       if (Array.isArray(data)) {
-        setQuestions(data ?? []);
+        setQuestions((data ?? []).map((q) => normalizeAdminQuestion(q)));
       } else if (data && typeof data === "object" && (data as any).customQuestions) {
         const grouped = (data as any).customQuestions as Record<string, any[]>;
         const flat: AdminQuestion[] = [];
         for (const [sid, arr] of Object.entries(grouped)) {
           for (const q of arr ?? []) {
-            flat.push({
-              id: String(q.id ?? ""),
-              subjectId: String(sid),
-              type: q.type as QuestionType,
-              question: String(q.question ?? ""),
-              options: Array.isArray(q.options) ? q.options.map(String) : undefined,
-              correctAnswer: q.answer ? String(q.answer) : undefined,
-              acceptedAnswers: Array.isArray(q.acceptedAnswers)
-                ? q.acceptedAnswers.map(String)
-                : undefined,
-              guidance: q.guidance ? String(q.guidance) : undefined,
-              passage: q.passage ? String(q.passage) : undefined,
-              marks: Number(q.marks ?? 1) || 1,
-              imageUrls: Array.isArray(q.imageUrls) ? q.imageUrls.map(String) : undefined,
-            });
+            flat.push(normalizeAdminQuestion(q, sid));
           }
         }
         setQuestions(flat);
@@ -488,6 +680,72 @@ export default function AdminPage() {
     }
   };
 
+  const handleUpdateAcceptedAnswers = async (questionId: string, rawText: string) => {
+    const acceptedAnswers = rawText
+      .split("\n")
+      .map((a) => a.trim())
+      .filter(Boolean);
+    if (!acceptedAnswers.length) {
+      toast.error("Add at least one allowable answer.");
+      return;
+    }
+    try {
+      setAcceptedAnswersSaving(questionId);
+      await apiFetchAdmin(`${API_PATHS.admin.questions}/${questionId}`, {
+        method: "PUT",
+        body: JSON.stringify({ acceptedAnswers }),
+      });
+      setQuestions((prev) =>
+        prev.map((q) => (q.id === questionId ? { ...q, acceptedAnswers } : q)),
+      );
+      toast.success("Allowable answers updated.");
+    } catch (err) {
+      if (err instanceof ApiError) toast.error(err.message);
+      else toast.error("Failed to update allowable answers.");
+    } finally {
+      setAcceptedAnswersSaving(null);
+    }
+  };
+
+  const handleAppendAllowableAnswer = (questionId: string, fallback: string) => {
+    const current = acceptedAnswersEdits[questionId] ?? fallback;
+    const next = current.trim() ? `${current}\n` : "";
+    setAcceptedAnswersEdits((prev) => ({ ...prev, [questionId]: `${next}new answer` }));
+  };
+
+  const handleAutoFillMissingExpectedAnswers = async () => {
+    setAutoFillingExpected(true);
+    try {
+      const result = await apiFetchAdmin<{ ok: boolean; updated?: number; unresolved?: number }>(
+        `${API_PATHS.admin.questions}/autofill-answers`,
+        { method: "POST" },
+      );
+      const updated = Number(result?.updated ?? 0);
+      const unresolved = Number(result?.unresolved ?? 0);
+      if (updated > 0) {
+        toast.success(`Saved expected answers for ${updated} question${updated === 1 ? "" : "s"}.`);
+      } else {
+        toast("No questions needed updates.");
+      }
+      if (unresolved > 0) {
+        toast.error(`${unresolved} question${unresolved === 1 ? "" : "s"} still need manual answers.`);
+      }
+      await fetchQuestions();
+    } catch (err) {
+      if (err instanceof ApiError) toast.error(err.message);
+      else toast.error("Failed to auto-fill expected answers.");
+    } finally {
+      setAutoFillingExpected(false);
+    }
+  };
+
+  useEffect(() => {
+    if (questionsLoading || autoFillingExpected || autoRepairExpectedRunRef.current) return;
+    if (!questions.length) return;
+    autoRepairExpectedRunRef.current = true;
+    void handleAutoFillMissingExpectedAnswers();
+  }, [questionsLoading, autoFillingExpected, questions]);
+
   function parseJsonArrayString(raw: string): string[] | null {
     const t = String(raw ?? "").trim();
     if (!t) return null;
@@ -536,6 +794,35 @@ export default function AdminPage() {
       .map((s) => s.trim().replace(/^["'`]+|["'`]+$/g, ""))
       .filter(Boolean);
     return normalized.length ? normalized : null;
+  }
+
+  function getExpectedAnswersForQuestion(q: AdminQuestion): string[] {
+    if (q.type === "mcq") {
+      const raw = String(q.correctAnswer ?? "").trim();
+      if (!raw) return [];
+      if (/^[A-Za-z]$/.test(raw) && Array.isArray(q.options) && q.options.length > 0) {
+        const idx = raw.toUpperCase().charCodeAt(0) - "A".charCodeAt(0);
+        if (idx >= 0 && idx < q.options.length) {
+          const opt = String(q.options[idx] ?? "").trim();
+          return [opt ? `${raw.toUpperCase()}: ${opt}` : raw.toUpperCase()];
+        }
+      }
+      return [raw];
+    }
+    const base = Array.isArray(q.acceptedAnswers)
+      ? q.acceptedAnswers.map((x) => formatExpectedAnswer(x)).filter(Boolean)
+      : [];
+    if (base.length) return base;
+    const answerFallback = formatExpectedAnswer(q.correctAnswer ?? "");
+    if (answerFallback) return [answerFallback];
+    const fallback = parseFlexibleList(String((q as any).acceptedAnswers ?? "")) ?? [];
+    const parsedFallback = fallback.map((x) => formatExpectedAnswer(x)).filter(Boolean);
+    if (parsedFallback.length) return parsedFallback;
+    return computeExpectedAnswersFromQuestionText(q.question);
+  }
+
+  function getExpectedAnswersEditText(q: AdminQuestion): string {
+    return getExpectedAnswersForQuestion(q).join("\n");
   }
 
   function normalizeType(raw: string): QuestionType | null {
@@ -2105,7 +2392,20 @@ methods\tThe total number of avocados sold in bags was\t["data:image/jpeg;base64
           </CardHeader>
           <CardContent>
             <div className="mb-4 space-y-1.5">
-              <Label>Filter by Subject</Label>
+              <div className="flex items-center justify-between gap-2">
+                <Label>Filter by Subject</Label>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="gap-2"
+                  disabled={autoFillingExpected}
+                  onClick={() => void handleAutoFillMissingExpectedAnswers()}
+                >
+                  {autoFillingExpected ? <Loader2 className="size-4 animate-spin" /> : null}
+                  Auto-fill missing expected answers
+                </Button>
+              </div>
               <Select value={subjectFilter} onValueChange={(val: string | null) => val && setSubjectFilter(val)}>
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="All subjects" />
@@ -2202,6 +2502,78 @@ methods\tThe total number of avocados sold in bags was\t["data:image/jpeg;base64
                                     <p className={q._english ? "text-base font-semibold leading-relaxed text-foreground whitespace-pre-wrap" : "text-sm text-foreground"}>
                                       {q.question}
                                     </p>
+                                    {!q._english && q.type !== "mcq" ? (
+                                      <div className="mt-2 space-y-2">
+                                        <div className="flex items-center justify-between">
+                                          <Label className="text-xs text-muted-foreground">Expected answers</Label>
+                                          <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-7 px-2 text-xs"
+                                            onClick={() =>
+                                              handleAppendAllowableAnswer(
+                                                q.id,
+                                                getExpectedAnswersEditText(q),
+                                              )
+                                            }
+                                          >
+                                            + Add answer
+                                          </Button>
+                                        </div>
+                                        <Textarea
+                                          rows={3}
+                                          className="bg-white/70 text-xs"
+                                          value={
+                                            acceptedAnswersEdits[q.id] ??
+                                            getExpectedAnswersEditText(q)
+                                          }
+                                          onChange={(e) =>
+                                            setAcceptedAnswersEdits((prev) => ({
+                                              ...prev,
+                                              [q.id]: e.target.value,
+                                            }))
+                                          }
+                                        />
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          className="h-8"
+                                          disabled={acceptedAnswersSaving === q.id}
+                                          onClick={() =>
+                                            handleUpdateAcceptedAnswers(
+                                              q.id,
+                                              acceptedAnswersEdits[q.id] ??
+                                                getExpectedAnswersEditText(q),
+                                            )
+                                          }
+                                        >
+                                          {acceptedAnswersSaving === q.id ? (
+                                            <Loader2 className="size-4 animate-spin" />
+                                          ) : (
+                                            "Save expected answers"
+                                          )}
+                                        </Button>
+                                      </div>
+                                    ) : null}
+                                    {!q._english && q.type === "mcq" ? (
+                                      <div className="mt-2 rounded-lg border border-black/10 bg-white/60 px-2.5 py-2">
+                                        <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                          Expected answer
+                                        </p>
+                                        {getExpectedAnswersForQuestion(q).length ? (
+                                          <div className="space-y-0.5">
+                                            {getExpectedAnswersForQuestion(q).map((ans, i) => (
+                                              <p key={`${q.id}-exp-${i}`} className="text-xs text-foreground">
+                                                {ans}
+                                              </p>
+                                            ))}
+                                          </div>
+                                        ) : (
+                                          <p className="text-xs font-medium text-danger">Missing expected answer</p>
+                                        )}
+                                      </div>
+                                    ) : null}
                                   </div>
 
                                   {!q._english && q.type !== "mcq" && (
@@ -2338,6 +2710,77 @@ methods\tThe total number of avocados sold in bags was\t["data:image/jpeg;base64
                             <p className="text-sm text-foreground">
                               {q.question}
                             </p>
+                            {q.type !== "mcq" ? (
+                              <div className="mt-2 space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <Label className="text-xs text-muted-foreground">Expected answers</Label>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 px-2 text-xs"
+                                    onClick={() =>
+                                      handleAppendAllowableAnswer(
+                                        q.id,
+                                        getExpectedAnswersEditText(q),
+                                      )
+                                    }
+                                  >
+                                    + Add answer
+                                  </Button>
+                                </div>
+                                <Textarea
+                                  rows={3}
+                                  className="bg-white/70 text-xs"
+                                  value={
+                                    acceptedAnswersEdits[q.id] ??
+                                    getExpectedAnswersEditText(q)
+                                  }
+                                  onChange={(e) =>
+                                    setAcceptedAnswersEdits((prev) => ({
+                                      ...prev,
+                                      [q.id]: e.target.value,
+                                    }))
+                                  }
+                                />
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8"
+                                  disabled={acceptedAnswersSaving === q.id}
+                                  onClick={() =>
+                                    handleUpdateAcceptedAnswers(
+                                      q.id,
+                                      acceptedAnswersEdits[q.id] ??
+                                        getExpectedAnswersEditText(q),
+                                    )
+                                  }
+                                >
+                                  {acceptedAnswersSaving === q.id ? (
+                                    <Loader2 className="size-4 animate-spin" />
+                                  ) : (
+                                    "Save expected answers"
+                                  )}
+                                </Button>
+                              </div>
+                            ) : (
+                              <div className="mt-2 rounded-lg border border-black/10 bg-white/60 px-2.5 py-2">
+                                <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                  Expected answer
+                                </p>
+                                {getExpectedAnswersForQuestion(q).length ? (
+                                  <div className="space-y-0.5">
+                                    {getExpectedAnswersForQuestion(q).map((ans, i) => (
+                                      <p key={`${q.id}-exp-flat-${i}`} className="text-xs text-foreground">
+                                        {ans}
+                                      </p>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <p className="text-xs font-medium text-danger">Missing expected answer</p>
+                                )}
+                              </div>
+                            )}
                           </div>
 
                           {q.type !== "mcq" && (

@@ -17,13 +17,45 @@ function parseNumericAnswer(raw: string): number | null {
   const t = raw
     .trim()
     .toLowerCase()
+    .replace(/[−–—]/g, "-")
     .replace(/[.,;:!?]+$/, "")
     .replace(/,/g, "")
     .replace(/\s+/g, "");
   if (!t) return null;
   // Basic numeric: -12, 3.14, .5, 5., 1e-3
   const n = Number(t);
-  return Number.isFinite(n) ? n : null;
+  if (Number.isFinite(n)) return n;
+  // Avoid misreading labels like "g(2)" as numeric answer 2.
+  if (!t.includes("=") && /^[a-z]\w*\(\s*[-+]?(?:\d+\.\d+|\d+|\.\d+)\s*\)$/i.test(t)) {
+    return null;
+  }
+  // Fallback: allow answers embedded in text, e.g. "g(2)=9" or "minimum is 6".
+  const rhs = t.includes("=") ? t.split("=").pop() ?? t : t;
+  const rhsNum = Number(rhs);
+  if (Number.isFinite(rhsNum)) return rhsNum;
+  const fractionMatch = rhs.match(/^([+-]?\d+)\/([+-]?\d+)$/);
+  if (fractionMatch) {
+    const num = Number(fractionMatch[1]);
+    const den = Number(fractionMatch[2]);
+    if (Number.isFinite(num) && Number.isFinite(den) && den !== 0) return num / den;
+  }
+
+  const numericTokens =
+    rhs.match(/[+-]?(?:\d+\.\d+|\d+|\.\d+)(?:e[+-]?\d+)?|[+-]?\d+\/[+-]?\d+/g) ??
+    t.match(/[+-]?(?:\d+\.\d+|\d+|\.\d+)(?:e[+-]?\d+)?|[+-]?\d+\/[+-]?\d+/g) ??
+    [];
+  if (numericTokens.length < 1) return null;
+  const last = numericTokens[numericTokens.length - 1];
+  let parsed = Number(last);
+  if (!Number.isFinite(parsed)) {
+    const fm = String(last).match(/^([+-]?\d+)\/([+-]?\d+)$/);
+    if (fm) {
+      const num = Number(fm[1]);
+      const den = Number(fm[2]);
+      parsed = den !== 0 ? num / den : NaN;
+    }
+  }
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function decimalPlacesFromLiteral(raw: string): number | null {
@@ -33,12 +65,31 @@ function decimalPlacesFromLiteral(raw: string): number | null {
   return m[1]?.length ?? null;
 }
 
+function studentDecimalPlaces(raw: string): number | null {
+  const t = String(raw ?? "").trim().toLowerCase().replace(/,/g, "");
+  const rhs = t.includes("=") ? t.split("=").pop() ?? t : t;
+  const decimalMatch = rhs.match(/[+-]?\d*\.(\d+)(?:e[+-]?\d+)?/);
+  if (decimalMatch?.[1]) return decimalMatch[1].length;
+  const fractionMatch = rhs.match(/^([+-]?\d+)\/([+-]?\d+)$/);
+  if (fractionMatch) return 0;
+  const intMatch = rhs.match(/[+-]?\d+/);
+  if (intMatch) return 0;
+  return null;
+}
+
 export function inferDpHintFromAccepted(acceptedAnswers: string[]): number | null {
   const dps = acceptedAnswers
     .map((a) => decimalPlacesFromLiteral(String(a)))
     .filter((x): x is number => typeof x === "number" && Number.isFinite(x));
-  if (!dps.length) return null;
-  return Math.max(...dps);
+  if (dps.length) {
+    // If any accepted answer is decimal, standardize to 2 d.p.
+    return 2;
+  }
+  // Whole-number answers: 0 d.p. is valid.
+  const hasNumericAccepted = acceptedAnswers.some(
+    (a) => parseNumericAnswer(String(a)) != null,
+  );
+  return hasNumericAccepted ? 0 : null;
 }
 
 export function isAnswerCorrect(
@@ -46,6 +97,7 @@ export function isAnswerCorrect(
   acceptedAnswers: string[],
 ): { correct: boolean; dpHint: number | null } {
   const dpHint = inferDpHintFromAccepted(acceptedAnswers);
+  const studentDp = studentDecimalPlaces(studentAnswer);
 
   const studentNum = parseNumericAnswer(studentAnswer);
   if (studentNum != null) {
@@ -53,12 +105,14 @@ export function isAnswerCorrect(
       const accNum = parseNumericAnswer(String(a));
       if (accNum == null) continue;
       if (dpHint != null && dpHint > 0) {
-        const f = 10 ** dpHint;
+        if (studentDp === 0) continue;
+        const f = 10 ** 2;
         const sn = Math.round(studentNum * f) / f;
         const an = Math.round(accNum * f) / f;
         if (Object.is(sn, an)) return { correct: true, dpHint };
         continue;
       }
+      if (dpHint === 0 && studentDp != null && studentDp > 0) continue;
       if (Math.abs(studentNum - accNum) < 1e-9) return { correct: true, dpHint };
     }
   }

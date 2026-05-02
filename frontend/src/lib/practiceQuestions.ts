@@ -134,11 +134,36 @@ export function normalizeImageUrls(
 }
 
 function parseStringArray(val: unknown): string[] {
-  if (Array.isArray(val)) return val.map(String);
+  const toDisplayString = (entry: unknown): string => {
+    if (typeof entry === "string") return entry.trim();
+    if (typeof entry === "number" || typeof entry === "boolean") return String(entry);
+    if (entry && typeof entry === "object") {
+      const row = entry as Record<string, unknown>;
+      const preferred = [row.answer, row.value, row.text, row.label];
+      for (const candidate of preferred) {
+        if (typeof candidate === "string" && candidate.trim()) return candidate.trim();
+        if (typeof candidate === "number" || typeof candidate === "boolean")
+          return String(candidate);
+      }
+      try {
+        return JSON.stringify(entry);
+      } catch {
+        return String(entry);
+      }
+    }
+    return String(entry ?? "").trim();
+  };
+
+  const sanitize = (arr: string[]) =>
+    arr
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0 && s !== "[object Object]");
+
+  if (Array.isArray(val)) return sanitize(val.map(toDisplayString));
   if (typeof val === "string" && val.trim()) {
     const trimmed = val.trim();
     const arr = parseJsonArrayFromString(trimmed);
-    if (arr) return arr.map(String);
+    if (arr) return sanitize(arr.map(toDisplayString));
     // Single URL in a cell (no JSON array) — common in Sheets
     if (
       /^https?:\/\//i.test(trimmed) ||
@@ -351,7 +376,7 @@ export function normalizeCustomQuestion(raw: unknown): Question | null {
       marks,
       passage,
       id,
-      ...((answerParts ?? inferredAnswerParts)?.length
+      ...((false && (answerParts ?? inferredAnswerParts)?.length)
         ? { answerParts: answerParts ?? inferredAnswerParts }
         : {}),
       ...(groupId ? { groupId } : {}),
@@ -379,7 +404,7 @@ export function normalizeCustomQuestion(raw: unknown): Question | null {
       marks,
       passage,
       id,
-      ...((answerParts ?? inferredAnswerParts)?.length
+      ...((false && (answerParts ?? inferredAnswerParts)?.length)
         ? { answerParts: answerParts ?? inferredAnswerParts }
         : {}),
       ...(groupId ? { groupId } : {}),
@@ -407,7 +432,7 @@ export function normalizeCustomQuestion(raw: unknown): Question | null {
         marks,
         passage,
         id,
-        ...((answerParts ?? inferredAnswerParts)?.length
+        ...((false && (answerParts ?? inferredAnswerParts)?.length)
           ? { answerParts: answerParts ?? inferredAnswerParts }
           : {}),
         ...(groupId ? { groupId } : {}),
@@ -423,7 +448,7 @@ export function normalizeCustomQuestion(raw: unknown): Question | null {
       marks,
       passage,
       id,
-      ...((answerParts ?? inferredAnswerParts)?.length
+      ...((false && (answerParts ?? inferredAnswerParts)?.length)
         ? { answerParts: answerParts ?? inferredAnswerParts }
         : {}),
       ...(groupId ? { groupId } : {}),
@@ -451,7 +476,7 @@ export function normalizeCustomQuestion(raw: unknown): Question | null {
       marks,
       passage,
       id,
-      ...((answerParts ?? inferredAnswerParts)?.length
+      ...((false && (answerParts ?? inferredAnswerParts)?.length)
         ? { answerParts: answerParts ?? inferredAnswerParts }
         : {}),
       ...(groupId ? { groupId } : {}),

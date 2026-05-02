@@ -321,6 +321,189 @@ function safeJsonColumn(value: unknown): string[] | null {
   }
   return null;
 }
+function parseFlexibleStringArray(value: unknown): string[] | null {
+  const normalizeAnswerEntry = (v: unknown): string => {
+    if (typeof v === "string") {
+      const t = v.trim();
+      if (!t || /^\[object object\]$/i.test(t)) return "";
+      if ((t.startsWith("{") && t.endsWith("}")) || (t.startsWith("[") && t.endsWith("]"))) {
+        try {
+          return normalizeAnswerEntry(JSON.parse(t));
+        } catch {
+          return t;
+        }
+      }
+      return t;
+    }
+    if (typeof v === "number" || typeof v === "boolean") return String(v);
+    if (v && typeof v === "object") {
+      const row = v as Record<string, unknown>;
+      const candidate = row.answer ?? row.value ?? row.text ?? row.label;
+      if (typeof candidate === "string") return candidate.trim();
+      if (typeof candidate === "number" || typeof candidate === "boolean") return String(candidate);
+      return "";
+    }
+    return String(v ?? "").trim();
+  };
+  const sanitize = (arr: unknown[]): string[] =>
+    arr
+      .map((v) => normalizeAnswerEntry(v))
+      .filter((s) => Boolean(s) && s !== "[object Object]");
+
+  if (value == null) return null;
+  if (Array.isArray(value)) {
+    const arr = sanitize(value);
+    return arr.length ? arr : null;
+  }
+  const t = String(value ?? "").trim();
+  if (!t) return null;
+  const parsed = safeJsonParse(t);
+  if (Array.isArray(parsed)) {
+    const arr = sanitize(parsed);
+    if (arr.length) return arr;
+  }
+  const stripped = t.replace(/^["'`]+|["'`]+$/g, "").trim();
+  const inner =
+    stripped.startsWith("[") && stripped.endsWith("]")
+      ? stripped.slice(1, -1).trim()
+      : stripped;
+  const candidate = inner || stripped;
+  const parts = candidate.includes("\n")
+    ? candidate.split("\n")
+    : candidate.includes("|")
+      ? candidate.split("|")
+      : candidate.includes(";")
+        ? candidate.split(";")
+        : candidate.includes(",")
+          ? candidate.split(",")
+          : [candidate];
+  const out = sanitize(parts.map((p) => p.trim().replace(/^["'`]+|["'`]+$/g, "")));
+  return out.length ? out : null;
+}
+function roundTo(value: number, dp: number): number {
+  const f = 10 ** dp;
+  return Math.round(value * f) / f;
+}
+function formatNumeric(value: number, dp = 2): string {
+  if (!Number.isFinite(value)) return "";
+  return Number.isInteger(value) ? String(value) : roundTo(value, dp).toFixed(dp);
+}
+function computeExpectedAnswersFromQuestionText(questionRaw: unknown): string[] {
+  const question = String(questionRaw ?? "").replace(/\s+/g, " ").trim();
+  if (!question) return [];
+
+  const leastSquares = question.match(
+    /price\s*=\s*([+-]?\d+(?:\.\d+)?)\s*\+\s*\(\s*([+-]?\d+(?:\.\d+)?)\s*\)\s*\*?\s*distance[\s\S]*?(\d+(?:\.\d+)?)\s*km[\s\S]*?sold\s*for\s*\$?\s*([+-]?\d+(?:\.\d+)?)/i,
+  );
+  if (leastSquares) {
+    const a = Number(leastSquares[1]);
+    const b = Number(leastSquares[2]);
+    const d = Number(leastSquares[3]);
+    const sold = Number(leastSquares[4]);
+    const predicted = a + b * d;
+    const residual = sold - predicted;
+    return [formatNumeric(predicted, 2), formatNumeric(residual, 2), residual >= 0 ? "under-predicted" : "over-predicted"];
+  }
+
+  const weeklyLoan = question.match(
+    /L\s*0\s*=\s*([+-]?\d+(?:\.\d+)?)\s*,?\s*L\s*\(\s*n\s*\+\s*1\s*\)\s*=\s*([+-]?\d+(?:\.\d+)?)\s*\*?\s*L\s*\(\s*n\s*\)\s*-\s*([+-]?\d+(?:\.\d+)?)/i,
+  );
+  if (weeklyLoan && /effective annual rate/i.test(question) && /L\s*52/i.test(question)) {
+    const L0 = Number(weeklyLoan[1]);
+    const r = Number(weeklyLoan[2]);
+    const p = Number(weeklyLoan[3]);
+    let L = L0;
+    for (let i = 0; i < 52; i++) L = r * L - p;
+    return [formatNumeric((r ** 52 - 1) * 100, 2), formatNumeric(L, 2)];
+  }
+
+  const paths = question.match(
+    /path lengths:\s*([+-]?\d+(?:\.\d+)?)\s*,\s*([+-]?\d+(?:\.\d+)?)\s*,\s*([+-]?\d+(?:\.\d+)?)/i,
+  );
+  if (paths && /critical path length/i.test(question) && /crashed by 2 days/i.test(question)) {
+    const values = [Number(paths[1]), Number(paths[2]), Number(paths[3])];
+    const critical = Math.max(...values);
+    const idx = values.indexOf(critical);
+    const afterCrash = [...values];
+    afterCrash[idx] -= 2;
+    return [formatNumeric(critical, 0), formatNumeric(Math.max(...afterCrash), 0)];
+  }
+
+  const reducing = question.match(
+    /starting balance\s*\$?\s*([+-]?\d+(?:\.\d+)?)[\s\S]*?annual rate\s*([+-]?\d+(?:\.\d+)?)%\s*compounding monthly[\s\S]*?monthly repayment\s*\$?\s*([+-]?\d+(?:\.\d+)?)/i,
+  );
+  if (reducing && /month-?1 interest/i.test(question) && /new balance/i.test(question)) {
+    const balance = Number(reducing[1]);
+    const annualPct = Number(reducing[2]);
+    const repayment = Number(reducing[3]);
+    const interest = balance * (annualPct / 100 / 12);
+    return [formatNumeric(interest, 2), formatNumeric(balance + interest - repayment, 2)];
+  }
+
+  const particle = question.match(
+    /initial velocity\s*([+-]?\d+(?:\.\d+)?)\s*m\/s[\s\S]*?acceleration\s*([+-]?\d+(?:\.\d+)?)\s*m\/s[\s\S]*?after\s*([+-]?\d+(?:\.\d+)?)\s*s/i,
+  );
+  if (particle && /displacement/i.test(question) && /reversed direction/i.test(question)) {
+    const u = Number(particle[1]);
+    const a = Number(particle[2]);
+    const t = Number(particle[3]);
+    const v = u + a * t;
+    const s = u * t + 0.5 * a * t * t;
+    const reversed = u !== 0 && Math.sign(u) !== Math.sign(v) ? "Yes" : "No";
+    return [formatNumeric(v, 2), formatNumeric(s, 2), reversed];
+  }
+
+  const quadratic = question.match(
+    /g\s*\(\s*x\s*\)\s*=\s*([+-]?\d+(?:\.\d+)?)\s*\(\s*x\s*-\s*([+-]?\d+(?:\.\d+)?)\s*\)\s*\^?\s*2\s*\+\s*([+-]?\d+(?:\.\d+)?)[\s\S]*?g\s*\(\s*([+-]?\d+(?:\.\d+)?)\s*\)[\s\S]*?minimum value/i,
+  );
+  if (quadratic) {
+    const a = Number(quadratic[1]);
+    const h = Number(quadratic[2]);
+    const k = Number(quadratic[3]);
+    const x = Number(quadratic[4]);
+    return [formatNumeric(a * (x - h) ** 2 + k, 2), formatNumeric(k, 2)];
+  }
+
+  const quadraticStd = question.match(
+    /f\s*\(\s*x\s*\)\s*=\s*([+-]?\d+(?:\.\d+)?)\s*x\s*\^?\s*2\s*([+-])\s*(\d+(?:\.\d+)?)\s*x\s*([+-])\s*(\d+(?:\.\d+)?)/i,
+  );
+  if (quadraticStd && /axis of symmetry/i.test(question) && /minimum value/i.test(question)) {
+    const a = Number(quadraticStd[1]);
+    const b = Number(quadraticStd[3]) * (quadraticStd[2] === "-" ? -1 : 1);
+    const c = Number(quadraticStd[5]) * (quadraticStd[4] === "-" ? -1 : 1);
+    if (a !== 0) {
+      const xVertex = -b / (2 * a);
+      const yVertex = a * xVertex * xVertex + b * xVertex + c;
+      return [formatNumeric(xVertex, 2), formatNumeric(yVertex, 2), formatNumeric(xVertex, 2)];
+    }
+  }
+
+  const complexReciprocal = question.match(
+    /express\s*1\s*\/\s*\(\s*([+-]?\d+(?:\.\d+)?)\s*([+-])\s*(\d+(?:\.\d+)?)\s*i\s*\)\s*in\s*the\s*form\s*p\s*\+\s*q\s*i/i,
+  );
+  if (complexReciprocal) {
+    const a = Number(complexReciprocal[1]);
+    const sign = complexReciprocal[2] === "-" ? -1 : 1;
+    const b = Number(complexReciprocal[3]) * sign;
+    const den = a * a + b * b;
+    if (den !== 0) {
+      const p = a / den;
+      const q = -b / den;
+      const qSign = q >= 0 ? "+" : "-";
+      const qAbs = Math.abs(q);
+      const decimal = `${formatNumeric(p, 4)}${qSign}${formatNumeric(qAbs, 4)}i`;
+      const ai = Number.isInteger(a);
+      const bi = Number.isInteger(Math.abs(b));
+      const di = Number.isInteger(den);
+      if (ai && bi && di) {
+        const exact = `${a}/${den}${b >= 0 ? "-" : "+"}${Math.abs(b)}/${den}i`;
+        return [exact, decimal];
+      }
+      return [decimal];
+    }
+  }
+  return [];
+}
 function nowIso(): string { return new Date().toISOString(); }
 
 /** Neon/Drizzle often wrap the real Postgres message in `cause`. */
@@ -710,7 +893,9 @@ app.get("/api/bootstrap", authMiddleware, async (c: any) => {
     const sid = canonicalSubjectId(row.subjectId);
     if (!grouped[sid]) grouped[sid] = [];
     const opts = safeJsonParse(row.options) as string[] | undefined;
-    const acc = safeJsonParse(row.acceptedAnswers) as string[] | undefined;
+    const acc = parseFlexibleStringArray(
+      (safeJsonParse(row.acceptedAnswers) as unknown) ?? row.acceptedAnswers,
+    ) ?? undefined;
     const imgs = safeJsonParse(row.imageUrls) as string[] | undefined;
     const t = String(row.type || "");
     const marksNum = Number(row.marks);
@@ -1560,7 +1745,12 @@ app.get("/api/admin/questions", adminAccessMiddleware, async (c: any) => {
     .orderBy(asc(customQuestions.subjectId), asc(customQuestions.createdAt));
   const list = rows.map((row) => {
     const opts = safeJsonParse(row.options) as string[] | undefined;
-    const acc = safeJsonParse(row.acceptedAnswers) as string[] | undefined;
+    const acc = parseFlexibleStringArray(
+      (safeJsonParse(row.acceptedAnswers) as unknown) ?? row.acceptedAnswers,
+    ) ?? undefined;
+    const answerFallback = String(row.answer ?? "").trim();
+    const normalizedAcc =
+      acc?.length || row.type === "mcq" || !answerFallback ? acc : [answerFallback];
     const imgs = safeJsonParse(row.imageUrls) as string[] | undefined;
     return {
       id: String(row.id),
@@ -1572,7 +1762,7 @@ app.get("/api/admin/questions", adminAccessMiddleware, async (c: any) => {
       imageUrls: imgs,
       options: opts,
       correctAnswer: row.answer || undefined,
-      acceptedAnswers: acc,
+      acceptedAnswers: normalizedAcc,
       marks: typeof row.marks === "number" ? row.marks : 1,
       guidance: row.guidance || undefined,
       passage: row.passage || undefined,
@@ -1938,13 +2128,53 @@ app.post("/api/admin/questions", adminAccessMiddleware, async (c: any) => {
 
 app.put("/api/admin/questions/:id", adminAccessMiddleware, async (c: any) => {
   const body = await c.req.json();
-  const marks = Math.max(1, Math.round(Number(body.marks ?? 1)));
+  const updates: Record<string, unknown> = {};
+  if (body.marks != null) {
+    updates.marks = Math.max(1, Math.round(Number(body.marks ?? 1)));
+  }
+  if (Array.isArray(body.acceptedAnswers)) {
+    const accepted = body.acceptedAnswers
+      .map((x: unknown) => String(x ?? "").trim())
+      .filter(Boolean);
+    updates.acceptedAnswers = JSON.stringify(accepted);
+  }
+  if (!Object.keys(updates).length) {
+    return c.json({ error: "No updatable fields provided." }, 400);
+  }
   await c
     .get("db")
     .update(customQuestions)
-    .set({ marks })
+    .set(updates)
     .where(eq(customQuestions.id, Number(c.req.param("id"))));
-  return c.json({ ok: true, marks });
+  return c.json({ ok: true });
+});
+
+app.post("/api/admin/questions/autofill-answers", adminAccessMiddleware, async (c: any) => {
+  const db = c.get("db");
+  const rows = await db.select().from(customQuestions).orderBy(asc(customQuestions.id));
+  let updated = 0;
+  let unresolved = 0;
+  for (const row of rows as any[]) {
+    const t = String(row.type ?? "").toLowerCase();
+    if (t === "mcq") continue;
+    const current = parseFlexibleStringArray(
+      (safeJsonParse(row.acceptedAnswers) as unknown) ?? row.acceptedAnswers,
+    ) ?? [];
+    const fallback = String(row.answer ?? "").trim();
+    const computed = computeExpectedAnswersFromQuestionText(row.question);
+    const next = computed.length ? computed : fallback ? [fallback] : current.length ? current : [];
+    if (!next.length) {
+      unresolved++;
+      continue;
+    }
+    if (JSON.stringify(current) === JSON.stringify(next)) continue;
+    await db
+      .update(customQuestions)
+      .set({ acceptedAnswers: JSON.stringify(next) })
+      .where(eq(customQuestions.id, Number(row.id)));
+    updated++;
+  }
+  return c.json({ ok: true, updated, unresolved });
 });
 
 app.delete("/api/admin/questions/:id", adminAccessMiddleware, async (c: any) => {
