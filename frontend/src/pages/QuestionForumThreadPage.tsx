@@ -228,12 +228,6 @@ export default function QuestionForumThreadPage() {
     }
   };
 
-  const back = () => {
-    if (window.history.length > 1) navigate(-1);
-    else if (subjectId) navigate(`/quiz/${subjectId}`);
-    else navigate("/dashboard");
-  };
-
   if (!subjectId || !questionKey || !threadId) {
     return (
       <AppShell title="Discussion">
