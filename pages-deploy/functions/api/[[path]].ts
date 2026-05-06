@@ -1228,20 +1228,25 @@ app.get("/api/friends/:friendId/scorecard", authMiddleware, async (c: any) => {
   const friendId = Number(c.req.param("friendId"));
   if (!Number.isFinite(friendId) || friendId <= 0) return c.json({ error: "Invalid user." }, 400);
 
-  // Hosted (Pages) DB schema may not have per-attempt marks; expose assignment points reliably.
+  // Points here are for friend-assignments, not competition attempts.
   const assigned = await db.execute(sql`
     SELECT
+      u.username AS username,
       COUNT(*)::integer AS total_assigned,
       COUNT(*) FILTER (WHERE answered_at IS NOT NULL)::integer AS total_answered,
+      COUNT(*) FILTER (WHERE is_correct = 1)::integer AS correct_answers,
       COALESCE(SUM(CASE WHEN is_correct = 1 THEN marks ELSE 0 END), 0)::integer AS points
-    FROM friend_assignments
-    WHERE to_user_id = ${friendId}
+    FROM friend_assignments fa
+    JOIN users u ON u.id = fa.to_user_id
+    WHERE fa.to_user_id = ${friendId}
+    GROUP BY u.username
   `);
   const r = (assigned.rows as any[])[0] || {};
   return c.json({
     userId: friendId,
+    username: String(r.username ?? ""),
     points: Number(r.points ?? 0),
-    correct: null,
+    correctAnswers: Number(r.correct_answers ?? 0),
     attempts: Number(r.total_answered ?? 0),
     totalAssigned: Number(r.total_assigned ?? 0),
   });

@@ -530,7 +530,7 @@ export default function DashboardPage() {
                       className="h-11 min-h-11 w-full min-w-0 shrink-0 bg-[#0b0f19] px-2 text-[clamp(0.7rem,2.8vw,0.875rem)] text-white hover:bg-[#0b0f19]/90 sm:text-sm lg:flex-1 lg:px-3"
                       onClick={() => navigate(`/quiz/${subject.id}/summary`)}
                     >
-                      Summary
+                      Statistics
                     </Button>
                   </CardFooter>
                 </Card>

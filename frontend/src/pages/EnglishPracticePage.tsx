@@ -667,7 +667,7 @@ export function EnglishPromptResponsesPage() {
                     >
                       <button
                         type="button"
-                        className="absolute inset-0 z-[1]"
+                        className="absolute inset-x-0 top-0 bottom-12 z-[1]"
                         onClick={() => setOpenResponseId(r.id)}
                         aria-label={`Open response by ${r.username}`}
                       />
@@ -687,7 +687,7 @@ export function EnglishPromptResponsesPage() {
                         </Badge>
                       </div>
 
-                      <div className="absolute inset-x-0 bottom-0 border-t border-black/10 bg-white/92 p-1.5 backdrop-blur">
+                      <div className="absolute inset-x-0 bottom-0 z-[2] border-t border-black/10 bg-white/92 p-1.5 backdrop-blur">
                         <p className="mb-0.5 text-[9px] font-medium uppercase tracking-wide text-muted-foreground">
                           Rate out of 10
                         </p>
@@ -700,12 +700,21 @@ export function EnglishPromptResponsesPage() {
                           }}
                           disabled={isMine || savingRatingId === r.id}
                         >
-                          <SelectTrigger className="h-6 bg-white px-2 text-[10px]">
+                          <SelectTrigger
+                            className="h-6 bg-white px-2 text-[10px]"
+                            onPointerDown={(e) => e.stopPropagation()}
+                            onClick={(e) => e.stopPropagation()}
+                          >
                             <SelectValue placeholder={isMine ? "Your response" : "Select score"} />
                           </SelectTrigger>
                           <SelectContent>
                             {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((s) => (
-                              <SelectItem key={s} value={String(s)}>
+                              <SelectItem
+                                key={s}
+                                value={String(s)}
+                                onPointerDown={(e) => e.stopPropagation()}
+                                onClick={(e) => e.stopPropagation()}
+                              >
                                 {s}
                               </SelectItem>
                             ))}

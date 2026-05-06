@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { Loader2, ArrowLeft, Reply, Paperclip, X } from "lucide-react";
+import { Loader2, Reply, Paperclip, X } from "lucide-react";
 import {
   buildCommentTree,
   findCommentInTree,
@@ -251,17 +251,6 @@ export default function QuestionForumThreadPage() {
     <AppShell
       title="Discussion"
       subtitle="Question thread"
-      headerRight={
-        <Button
-          variant="outline"
-          size="sm"
-          className="border-white/25 bg-white/10 text-white hover:bg-white/15"
-          onClick={back}
-        >
-          <ArrowLeft className="mr-2 size-4" />
-          Back
-        </Button>
-      }
     >
       <div className="mx-auto flex min-h-[calc(100vh-12rem)] max-w-2xl flex-col gap-4">
         {loading ? (

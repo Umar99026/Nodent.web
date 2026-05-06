@@ -626,7 +626,7 @@ export default function QuizPage() {
             className="mt-6"
             onClick={() => navigate(`/quiz/${subjectId}/summary`)}
           >
-            Back to summary
+            Back to statistics
           </Button>
         </div>
       </AppShell>
@@ -646,7 +646,7 @@ export default function QuizPage() {
           </p>
           <div className="flex flex-wrap justify-center gap-2 pt-2">
             <Button variant="outline" onClick={() => navigate(`/quiz/${subjectId}/summary`)}>
-              Go to summary
+              Go to statistics
             </Button>
             <Button onClick={() => navigate("/")}>Dashboard</Button>
           </div>

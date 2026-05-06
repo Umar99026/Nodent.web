@@ -42,7 +42,8 @@ interface StudyModeState {
   durationMinutes: number;
   remainingSeconds: number;
   running: boolean;
-  questionGoal: number;
+  /** If null/empty => unlimited questions. */
+  questionGoal: number | null;
   completedQuestionKeys: string[];
 }
 
@@ -61,7 +62,12 @@ function normalizeStudyState(
     Number(safeRaw.remainingSeconds) || safeDuration * 60,
   );
   const safeIndex = Math.max(0, Number(safeRaw.index) || 0);
-  const safeGoal = Math.max(1, Math.min(300, Number(safeRaw.questionGoal) || 10));
+  const rawGoal = (safeRaw as any).questionGoal;
+  const numericGoal = rawGoal == null || rawGoal === "" ? NaN : Number(rawGoal);
+  const safeGoal =
+    Number.isFinite(numericGoal) && numericGoal > 0
+      ? Math.max(1, Math.min(300, Math.round(numericGoal)))
+      : null;
   const safeCompleted = Array.isArray(safeRaw.completedQuestionKeys)
     ? safeRaw.completedQuestionKeys.filter(
         (k): k is string => typeof k === "string" && k.trim().length > 0,
@@ -306,17 +312,38 @@ export default function StudyModePage() {
   };
 
   const handleGoalChange = (value: string) => {
-    const goal = Math.max(1, Math.min(300, Number(value) || 1));
+    const trimmed = String(value ?? "").trim();
+    if (!trimmed) {
+      setStudyState((prev) => ({ ...prev, questionGoal: null }));
+      return;
+    }
+    const parsed = Number(trimmed);
+    const goal =
+      Number.isFinite(parsed) && parsed > 0
+        ? Math.max(1, Math.min(300, Math.round(parsed)))
+        : null;
     setStudyState((prev) => ({ ...prev, questionGoal: goal }));
   };
 
   const markQuestionCompleted = useCallback((qk: string) => {
     setStudyState((prev) => {
       if (prev.completedQuestionKeys.includes(qk)) return prev;
+      const nextCompleted = [...prev.completedQuestionKeys, qk];
+      const hitGoal =
+        prev.questionGoal != null && nextCompleted.length >= prev.questionGoal;
       return {
         ...prev,
-        completedQuestionKeys: [...prev.completedQuestionKeys, qk],
+        completedQuestionKeys: nextCompleted,
+        ...(hitGoal ? { running: false } : {}),
       };
+    });
+    setStudyState((prev) => {
+      const goal = prev.questionGoal;
+      if (goal == null) return prev;
+      if (prev.completedQuestionKeys.length >= goal) {
+        toast.success("Question goal reached — great work.");
+      }
+      return prev;
     });
   }, []);
 
@@ -505,13 +532,19 @@ export default function StudyModePage() {
                     type="number"
                     min={1}
                     max={300}
-                    value={studyState.questionGoal}
+                    value={studyState.questionGoal ?? ""}
                     onChange={(e) => handleGoalChange(e.target.value)}
                     className="w-20 border-white/20 bg-white/5 text-center text-sm text-white"
                   />
-                  <Badge className="border-white/20 bg-white/10 text-white">
-                    {completedCount}/{studyState.questionGoal}
-                  </Badge>
+                  {studyState.questionGoal != null ? (
+                    <Badge className="border-white/20 bg-white/10 text-white">
+                      {completedCount}/{studyState.questionGoal}
+                    </Badge>
+                  ) : (
+                    <Badge className="border-white/20 bg-white/10 text-white">
+                      Unlimited
+                    </Badge>
+                  )}
                 </div>
               </div>
             </div>

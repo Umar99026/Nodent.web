@@ -156,7 +156,7 @@ function getRankMedal(rank: number): string {
 }
 
 /* ------------------------------------------------------------------ */
-/*  SummaryPage                                                        */
+/*  StatisticsPage                                                     */
 /* ------------------------------------------------------------------ */
 
 export default function SummaryPage() {
@@ -468,7 +468,7 @@ export default function SummaryPage() {
 
   if (!subjectId) {
     return (
-      <AppShell title="Summary">
+      <AppShell title="Statistics">
         <div className="flex flex-col items-center justify-center py-20">
           <h2 className="font-display text-xl text-foreground">
             Subject not found
@@ -526,14 +526,14 @@ export default function SummaryPage() {
 
     return (
       <AppShell
-        title={subject ? `${subject.name} Summary` : "Summary"}
+        title={subject ? `${subject.name} Statistics` : "Statistics"}
         edgeToEdgeHeader
         edgeToEdgeHeaderClassName="px-0 sm:px-1 lg:px-2"
       >
         <div className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle className="font-display text-lg">English summary</CardTitle>
+              <CardTitle className="font-display text-lg">English statistics</CardTitle>
               <CardDescription>
                 View all your submitted responses with per-response ratings, your overall average, and the English leaderboard.
               </CardDescription>
@@ -707,7 +707,7 @@ export default function SummaryPage() {
 
   return (
     <AppShell
-      title={subject ? `${subject.name} Summary` : "Summary"}
+      title={subject ? `${subject.name} Statistics` : "Statistics"}
       edgeToEdgeHeader
       edgeToEdgeHeaderClassName="px-0 sm:px-1 lg:px-2"
     >
