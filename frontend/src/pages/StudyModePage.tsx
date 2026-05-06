@@ -44,7 +44,10 @@ interface StudyModeState {
   running: boolean;
   /** If null/empty => unlimited questions. */
   questionGoal: number | null;
-  completedQuestionKeys: string[];
+  /** One entry per completed stimulus group (not per part). */
+  completedGroupKeys: string[];
+  /** True when a finite question goal was reached; cleared by Reset goal or full Reset. */
+  goalFinished: boolean;
 }
 
 function normalizeStudyState(
@@ -68,8 +71,8 @@ function normalizeStudyState(
     Number.isFinite(numericGoal) && numericGoal > 0
       ? Math.max(1, Math.min(300, Math.round(numericGoal)))
       : null;
-  const safeCompleted = Array.isArray(safeRaw.completedQuestionKeys)
-    ? safeRaw.completedQuestionKeys.filter(
+  const safeGroupKeys = Array.isArray((safeRaw as Partial<StudyModeState>).completedGroupKeys)
+    ? (safeRaw as Partial<StudyModeState>).completedGroupKeys!.filter(
         (k): k is string => typeof k === "string" && k.trim().length > 0,
       )
     : [];
@@ -80,7 +83,8 @@ function normalizeStudyState(
     remainingSeconds: safeRemaining,
     running: Boolean(safeRaw.running),
     questionGoal: safeGoal,
-    completedQuestionKeys: safeCompleted,
+    completedGroupKeys: safeGroupKeys,
+    goalFinished: Boolean((safeRaw as Partial<StudyModeState>).goalFinished),
   };
 }
 
@@ -227,7 +231,8 @@ export default function StudyModePage() {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const { index, durationMinutes, remainingSeconds, running } = studyState;
-  const completedCount = studyState.completedQuestionKeys.length;
+  const completedCount = studyState.completedGroupKeys.length;
+  const goalFinished = studyState.goalFinished;
 
   useEffect(() => {
     setStudyState((prev) =>
@@ -299,7 +304,15 @@ export default function StudyModePage() {
       ...prev,
       running: false,
       remainingSeconds: prev.durationMinutes * 60,
-      completedQuestionKeys: [],
+      completedGroupKeys: [],
+      goalFinished: false,
+    }));
+
+  const handleResetGoal = () =>
+    setStudyState((prev) => ({
+      ...prev,
+      completedGroupKeys: [],
+      goalFinished: false,
     }));
 
   const handleDurationChange = (value: string) => {
@@ -314,7 +327,11 @@ export default function StudyModePage() {
   const handleGoalChange = (value: string) => {
     const trimmed = String(value ?? "").trim();
     if (!trimmed) {
-      setStudyState((prev) => ({ ...prev, questionGoal: null }));
+      setStudyState((prev) => ({
+        ...prev,
+        questionGoal: null,
+        goalFinished: false,
+      }));
       return;
     }
     const parsed = Number(trimmed);
@@ -322,28 +339,36 @@ export default function StudyModePage() {
       Number.isFinite(parsed) && parsed > 0
         ? Math.max(1, Math.min(300, Math.round(parsed)))
         : null;
-    setStudyState((prev) => ({ ...prev, questionGoal: goal }));
-  };
-
-  const markQuestionCompleted = useCallback((qk: string) => {
     setStudyState((prev) => {
-      if (prev.completedQuestionKeys.includes(qk)) return prev;
-      const nextCompleted = [...prev.completedQuestionKeys, qk];
-      const hitGoal =
-        prev.questionGoal != null && nextCompleted.length >= prev.questionGoal;
+      if (goal == null) return { ...prev, questionGoal: null, goalFinished: false };
+      const alreadyMet = prev.completedGroupKeys.length >= goal;
       return {
         ...prev,
-        completedQuestionKeys: nextCompleted,
-        ...(hitGoal ? { running: false } : {}),
+        questionGoal: goal,
+        goalFinished: alreadyMet,
+        ...(alreadyMet ? { running: false } : {}),
       };
     });
+  };
+
+  const markQuestionCompleted = useCallback((groupKey: string) => {
+    if (!groupKey.trim()) return;
     setStudyState((prev) => {
-      const goal = prev.questionGoal;
-      if (goal == null) return prev;
-      if (prev.completedQuestionKeys.length >= goal) {
-        toast.success("Question goal reached — great work.");
+      if (prev.goalFinished) return prev;
+      if (prev.completedGroupKeys.includes(groupKey)) return prev;
+      const nextCompleted = [...prev.completedGroupKeys, groupKey];
+      const hitGoal =
+        prev.questionGoal != null && nextCompleted.length >= prev.questionGoal;
+      if (hitGoal) {
+        toast.success("You’ve finished your question goal.");
+        return {
+          ...prev,
+          completedGroupKeys: nextCompleted,
+          goalFinished: true,
+          running: false,
+        };
       }
-      return prev;
+      return { ...prev, completedGroupKeys: nextCompleted };
     });
   }, []);
 
@@ -362,7 +387,7 @@ export default function StudyModePage() {
   const offset = circumference - (progress / 100) * circumference;
 
   const renderPartCard = useCallback(
-    (part: Question) => {
+    (part: Question, groupKey: string, partsDisabled: boolean) => {
       if (!subjectId) return null;
       const qk = questionKeyStable(
         subjectId,
@@ -381,8 +406,8 @@ export default function StudyModePage() {
               question={part}
               hidePassage={hidePassage}
               lockedCorrect={false}
-              onAnswer={() => markQuestionCompleted(qk)}
-              disabled={false}
+              onAnswer={() => markQuestionCompleted(groupKey)}
+              disabled={partsDisabled}
               classFullyCorrectPercent={null}
             />
           )}
@@ -391,8 +416,8 @@ export default function StudyModePage() {
               question={part}
               hidePassage={hidePassage}
               lockedCorrect={false}
-              onAnswer={() => markQuestionCompleted(qk)}
-              disabled={false}
+              onAnswer={() => markQuestionCompleted(groupKey)}
+              disabled={partsDisabled}
               classFullyCorrectPercent={null}
             />
           )}
@@ -403,8 +428,8 @@ export default function StudyModePage() {
               questionKey={qk}
               hidePassage={hidePassage}
               lockedCorrect={false}
-              onAnswer={() => markQuestionCompleted(qk)}
-              disabled={false}
+              onAnswer={() => markQuestionCompleted(groupKey)}
+              disabled={partsDisabled}
               classFullyCorrectPercent={null}
               practiceOnly
             />
@@ -566,6 +591,27 @@ export default function StudyModePage() {
                 </p>
                 </div>
               </div>
+            ) : goalFinished && studyState.questionGoal != null ? (
+              <div className="mt-8 flex min-h-0 flex-1 flex-col items-center justify-center gap-6 px-4 text-center">
+                <div className="max-w-md space-y-2">
+                  <p className="font-display text-xl font-semibold text-white">
+                    You’ve finished your question goal.
+                  </p>
+                  <p className="text-sm text-white/60">
+                    Reset the goal to keep practicing with the same timer and duration, or use Reset
+                    above to also clear the clock.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  onClick={handleResetGoal}
+                  size="sm"
+                  className="gap-1.5 bg-brand text-white hover:bg-brand-dark"
+                >
+                  <RotateCcw className="size-4" />
+                  Reset goal
+                </Button>
+              </div>
             ) : currentGroup ? (
               <div className="mt-8 flex min-h-0 flex-1 flex-col space-y-8 overflow-auto">
                 <div className="flex items-center justify-between">
@@ -599,7 +645,9 @@ export default function StudyModePage() {
                 )}
 
                 <div className="space-y-6">
-                  {currentGroup.parts.map((part) => renderPartCard(part))}
+                  {currentGroup.parts.map((part) =>
+                    renderPartCard(part, currentGroup.key, false),
+                  )}
                 </div>
 
                 <div className="mt-auto flex items-center justify-between pt-2">

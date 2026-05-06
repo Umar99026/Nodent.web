@@ -230,7 +230,7 @@ export default function QuestionForumThreadPage() {
 
   if (!subjectId || !questionKey || !threadId) {
     return (
-      <AppShell title="Discussion">
+      <AppShell title="Discussion" compactHeader>
         <div className="mx-auto max-w-lg rounded-xl border border-white/15 bg-white/10 p-6 text-center text-white/90">
           <p className="text-sm">Invalid link. Open a thread from the practice page.</p>
           <Button variant="outline" className="mt-4" onClick={() => navigate("/dashboard")}>
@@ -242,10 +242,7 @@ export default function QuestionForumThreadPage() {
   }
 
   return (
-    <AppShell
-      title="Discussion"
-      subtitle="Question thread"
-    >
+    <AppShell title="Discussion" subtitle="Question thread" compactHeader>
       <div className="mx-auto flex min-h-[calc(100vh-12rem)] max-w-2xl flex-col gap-4">
         {loading ? (
           <div className="flex flex-1 items-center justify-center py-20">

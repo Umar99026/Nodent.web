@@ -688,38 +688,46 @@ export function EnglishPromptResponsesPage() {
                       </div>
 
                       <div className="absolute inset-x-0 bottom-0 z-[2] border-t border-black/10 bg-white/92 p-1.5 backdrop-blur">
-                        <p className="mb-0.5 text-[9px] font-medium uppercase tracking-wide text-muted-foreground">
-                          Rate out of 10
-                        </p>
-                        <Select
-                          value={ratingByResponseId[r.id] ?? (r.myScore != null ? String(r.myScore) : "")}
-                          onValueChange={(v) => {
-                            if (!v) return;
-                            setRatingByResponseId((prev) => ({ ...prev, [r.id]: v }));
-                            if (!isMine) void rateResponse(r.id, v);
-                          }}
-                          disabled={isMine || savingRatingId === r.id}
-                        >
-                          <SelectTrigger
-                            className="h-6 bg-white px-2 text-[10px]"
-                            onPointerDown={(e) => e.stopPropagation()}
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <SelectValue placeholder={isMine ? "Your response" : "Select score"} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((s) => (
-                              <SelectItem
-                                key={s}
-                                value={String(s)}
+                        {isMine ? (
+                          <p className="text-[10px] leading-snug text-muted-foreground">
+                            You can’t rate your own response — pick someone else’s tile to score it.
+                          </p>
+                        ) : (
+                          <>
+                            <p className="mb-0.5 text-[9px] font-medium uppercase tracking-wide text-muted-foreground">
+                              Rate out of 10
+                            </p>
+                            <Select
+                              value={ratingByResponseId[r.id] ?? (r.myScore != null ? String(r.myScore) : "")}
+                              onValueChange={(v) => {
+                                if (!v) return;
+                                setRatingByResponseId((prev) => ({ ...prev, [r.id]: v }));
+                                void rateResponse(r.id, v);
+                              }}
+                              disabled={savingRatingId === r.id}
+                            >
+                              <SelectTrigger
+                                className="h-6 bg-white px-2 text-[10px]"
                                 onPointerDown={(e) => e.stopPropagation()}
                                 onClick={(e) => e.stopPropagation()}
                               >
-                                {s}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                                <SelectValue placeholder="Select score" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((s) => (
+                                  <SelectItem
+                                    key={s}
+                                    value={String(s)}
+                                    onPointerDown={(e) => e.stopPropagation()}
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    {s}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </>
+                        )}
                       </div>
                     </div>
                   );
