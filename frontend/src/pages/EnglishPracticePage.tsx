@@ -687,47 +687,10 @@ export function EnglishPromptResponsesPage() {
                         </Badge>
                       </div>
 
-                      <div className="absolute inset-x-0 bottom-0 z-[2] border-t border-black/10 bg-white/92 p-1.5 backdrop-blur">
-                        {isMine ? (
-                          <p className="text-[10px] leading-snug text-muted-foreground">
-                            You can’t rate your own response — pick someone else’s tile to score it.
-                          </p>
-                        ) : (
-                          <>
-                            <p className="mb-0.5 text-[9px] font-medium uppercase tracking-wide text-muted-foreground">
-                              Rate out of 10
-                            </p>
-                            <Select
-                              value={ratingByResponseId[r.id] ?? (r.myScore != null ? String(r.myScore) : "")}
-                              onValueChange={(v) => {
-                                if (!v) return;
-                                setRatingByResponseId((prev) => ({ ...prev, [r.id]: v }));
-                                void rateResponse(r.id, v);
-                              }}
-                              disabled={savingRatingId === r.id}
-                            >
-                              <SelectTrigger
-                                className="h-6 bg-white px-2 text-[10px]"
-                                onPointerDown={(e) => e.stopPropagation()}
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <SelectValue placeholder="Select score" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((s) => (
-                                  <SelectItem
-                                    key={s}
-                                    value={String(s)}
-                                    onPointerDown={(e) => e.stopPropagation()}
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    {s}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </>
-                        )}
+                      <div className="absolute inset-x-0 bottom-0 z-[2] border-t border-black/10 bg-white/92 px-1.5 py-1.5 backdrop-blur">
+                        <p className="text-[10px] font-medium text-muted-foreground">
+                          {isMine ? "Your response" : "Tap to view & rate"}
+                        </p>
                       </div>
                     </div>
                   );
@@ -766,13 +729,45 @@ export function EnglishPromptResponsesPage() {
             >
               <X className="size-4" />
             </Button>
-            <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold text-[#0f172a]">@{openResponse.username}</p>
                 <p className="text-xs text-muted-foreground">
                   Avg: {openResponse.averageScore != null ? `${openResponse.averageScore}/10` : "No ratings yet"}
                 </p>
               </div>
+              {user?.id != null && Number(user.id) === Number(openResponse.userId) ? (
+                <p className="text-xs font-medium text-muted-foreground">You can’t rate your own response.</p>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Rate
+                  </p>
+                  <Select
+                    value={
+                      ratingByResponseId[openResponse.id] ??
+                      (openResponse.myScore != null ? String(openResponse.myScore) : "")
+                    }
+                    onValueChange={(v) => {
+                      if (!v) return;
+                      setRatingByResponseId((prev) => ({ ...prev, [openResponse.id]: v }));
+                      void rateResponse(openResponse.id, v);
+                    }}
+                    disabled={savingRatingId === openResponse.id}
+                  >
+                    <SelectTrigger className="h-8 w-[108px] bg-white px-2 text-xs">
+                      <SelectValue placeholder="Select" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((s) => (
+                        <SelectItem key={s} value={String(s)}>
+                          {s}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <Button type="button" variant="outline" size="icon" onClick={() => setOpenResponseId(null)}>
                 <X className="size-4" />
               </Button>

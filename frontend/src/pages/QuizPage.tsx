@@ -32,6 +32,7 @@ import { LongQuestion } from "@/components/quiz/LongQuestion";
 import { CommentThread } from "@/components/quiz/CommentThread";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { EnglishPracticePanel } from "@/pages/EnglishPracticePage";
 import {
@@ -695,14 +696,23 @@ export default function QuizPage() {
           </div>
 
           <div className="flex justify-end">
-            <Button
-              variant="outline"
-              onClick={() => navigate(`/study/${subjectId}`)}
-              className="gap-2 border-transparent bg-[#0b0f19] text-white hover:bg-[#0b0f19]/90"
-            >
-              <Clock className="size-4" />
-              Study Mode
-            </Button>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="outline"
+                    onClick={() => navigate(`/study/${subjectId}`)}
+                    className="gap-2 border-transparent bg-[#0b0f19] text-white hover:bg-[#0b0f19]/90"
+                  >
+                    <Clock className="size-4" />
+                    Study Mode
+                  </Button>
+                }
+              />
+              <TooltipContent side="bottom" align="end">
+                Timed focus mode: set a question goal and work through grouped stimuli.
+              </TooltipContent>
+            </Tooltip>
           </div>
         </div>
 

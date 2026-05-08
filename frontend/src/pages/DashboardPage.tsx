@@ -78,6 +78,28 @@ export default function DashboardPage() {
   );
   const [searchQuery, setSearchQuery] = useState("");
 
+  // Sync subjects from server so logins don't lose your dashboard selection.
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await apiFetch<{ subjectIds: string[] }>("/api/subjects/my");
+        if (cancelled) return;
+        const ids = new Set((data.subjectIds ?? []).map(String));
+        if (ids.size === 0) return;
+        const next = baseSubjects.filter((s) => ids.has(s.id));
+        setMySubjects(next);
+        saveMySubjects(userId, next);
+      } catch {
+        // non-critical
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, userId]);
+
   /* ------ subject management ------ */
 
   const addSubject = useCallback(
@@ -86,11 +108,17 @@ export default function DashboardPage() {
         if (prev.some((s) => s.id === subject.id)) return prev;
         const next = [...prev, subject];
         saveMySubjects(userId, next);
+        if (user) {
+          void apiFetch("/api/subjects/my", {
+            method: "PUT",
+            body: JSON.stringify({ subjectIds: next.map((s) => s.id) }),
+          }).catch(() => {});
+        }
         return next;
       });
       toast.success(`Added "${subject.name}" to your subjects`);
     },
-    [userId],
+    [userId, user],
   );
 
   const removeSubject = useCallback(
@@ -98,10 +126,16 @@ export default function DashboardPage() {
       setMySubjects((prev) => {
         const next = prev.filter((s) => s.id !== subjectId);
         saveMySubjects(userId, next);
+        if (user) {
+          void apiFetch("/api/subjects/my", {
+            method: "PUT",
+            body: JSON.stringify({ subjectIds: next.map((s) => s.id) }),
+          }).catch(() => {});
+        }
         return next;
       });
     },
-    [userId],
+    [userId, user],
   );
 
   const availableSubjects = useMemo(() => {

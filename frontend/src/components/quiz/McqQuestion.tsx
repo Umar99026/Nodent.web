@@ -102,7 +102,7 @@ export function McqQuestion({
             </Badge>
           )}
         </div>
-        {classFullyCorrectPercent != null && (
+        {submitted && classFullyCorrectPercent != null && (
           <p className="text-xs tabular-nums text-muted-foreground">
             Class fully correct: {classFullyCorrectPercent}%
           </p>

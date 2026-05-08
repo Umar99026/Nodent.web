@@ -44,9 +44,7 @@ import {
   TrendingUp,
   Loader2,
   ListX,
-  CheckCircle2,
   XCircle,
-  CircleDot,
   X,
 } from "lucide-react";
 
@@ -1044,8 +1042,8 @@ export default function SummaryPage() {
                     </CardTitle>
                     <CardDescription>
                       Class % fully correct per question (same period as leaderboard). Tap a row
-                      to practise that question (not scored). Questions you&apos;ve got wrong so
-                      far are highlighted; use the button to open your wrong-answer queue only.
+                      to practise that question (not scored). This list only shows questions you
+                      got wrong.
                     </CardDescription>
                   </div>
                   {wrongCount > 0 && (
@@ -1089,6 +1087,7 @@ export default function SummaryPage() {
                     );
                     const canonical = resolved?.canonicalKey ?? qs.questionKey;
                     const my = myAnswerByCanonicalKey.get(canonical);
+                    if (my !== false) return null;
                     const topicLabel =
                       resolved?.q?.topic?.trim() || qs.topic || "General";
                     const preview =
@@ -1110,9 +1109,7 @@ export default function SummaryPage() {
                           }
                           className={cn(
                             "w-full min-w-0 rounded-xl border p-3 text-left transition-colors",
-                            my === false
-                              ? "border-danger/30 bg-danger/5 hover:bg-danger/10"
-                              : "border-black/10 bg-white/40 hover:bg-muted/40",
+                            "border-danger/30 bg-danger/5 hover:bg-danger/10",
                           )}
                         >
                           <div className="flex items-start justify-between gap-3">
@@ -1121,25 +1118,12 @@ export default function SummaryPage() {
                                 <Badge variant="secondary" className="text-[10px]">
                                   {topicLabel}
                                 </Badge>
-                                {my === true && (
-                                  <CheckCircle2 className="size-4 shrink-0 text-success" />
-                                )}
-                                {my === false && (
-                                  <XCircle className="size-4 shrink-0 text-danger" />
-                                )}
-                                {my === null && practiceState && (
-                                  <CircleDot className="size-4 shrink-0 text-muted-foreground" />
-                                )}
+                                <XCircle className="size-4 shrink-0 text-danger" />
                               </div>
                               <p className="mt-1.5 break-words text-sm leading-snug text-foreground [overflow-wrap:anywhere]">
                                 <span className="font-semibold text-brand-dark">Q{idx + 1}. </span>
                                 {previewShort}
                               </p>
-                              {my === null && practiceState && (
-                                <p className="mt-0.5 text-xs text-muted-foreground">
-                                  Not auto-scored
-                                </p>
-                              )}
                             </div>
                             <span className="shrink-0 text-xs font-medium tabular-nums text-muted-foreground">
                               {hasClassStat ? `${pct}% class correct` : "Class: —"}

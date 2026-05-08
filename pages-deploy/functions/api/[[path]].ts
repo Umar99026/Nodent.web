@@ -589,6 +589,7 @@ const app = new Hono<{ Bindings: Env; Variables: Vars }>();
 let englishResponsesConstraintDropped = false;
 let usersTablePatched = false;
 let performanceIndexesPatched = false;
+let studyTablesPatched = false;
 let lastSessionCleanupAt = 0;
 
 // CORS
@@ -658,6 +659,43 @@ app.use("/api/*", async (c, next) => {
       // ignore
     } finally {
       performanceIndexesPatched = true;
+    }
+  }
+  if (!studyTablesPatched) {
+    try {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS study_days (
+          id serial PRIMARY KEY,
+          user_id integer NOT NULL,
+          date text NOT NULL,
+          daily_seconds integer NOT NULL DEFAULT 0,
+          daily_seconds_by_subject text,
+          goal_minutes integer,
+          updated_at text NOT NULL,
+          UNIQUE(user_id, date)
+        )
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS study_days_user_date_idx
+        ON study_days (user_id, date)
+      `);
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS user_subjects (
+          id serial PRIMARY KEY,
+          user_id integer NOT NULL,
+          subject_id text NOT NULL,
+          created_at text NOT NULL,
+          UNIQUE(user_id, subject_id)
+        )
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS user_subjects_user_idx
+        ON user_subjects (user_id)
+      `);
+    } catch {
+      // ignore
+    } finally {
+      studyTablesPatched = true;
     }
   }
   const nowMs = Date.now();
@@ -915,6 +953,12 @@ app.get("/api/bootstrap", authMiddleware, async (c: any) => {
       marks,
     });
   }
+  const subjRows = await db.execute(sql`
+    SELECT subject_id
+    FROM user_subjects
+    WHERE user_id = ${user.id}
+    ORDER BY subject_id ASC
+  `);
   return c.json({
     user: {
       id: user.id,
@@ -923,6 +967,277 @@ app.get("/api/bootstrap", authMiddleware, async (c: any) => {
       profilePhoto: user.profilePhoto ?? null,
     },
     customQuestions: grouped,
+    mySubjectIds: (subjRows.rows as any[]).map((r) => String(r.subject_id)),
+  });
+});
+
+// ---- Subjects (persist user dashboard selection) ----
+app.get("/api/subjects/my", authMiddleware, async (c: any) => {
+  const user = c.get("user");
+  const db = c.get("db");
+  const rows = await db.execute(sql`
+    SELECT subject_id
+    FROM user_subjects
+    WHERE user_id = ${user.id}
+    ORDER BY subject_id ASC
+  `);
+  return c.json({ subjectIds: (rows.rows as any[]).map((r) => String(r.subject_id)) });
+});
+
+app.put("/api/subjects/my", authMiddleware, async (c: any) => {
+  const user = c.get("user");
+  const db = c.get("db");
+  const body = await c.req.json().catch(() => ({} as any));
+  const subjectIdsRaw = Array.isArray(body?.subjectIds) ? body.subjectIds : [];
+  const subjectIds = Array.from(
+    new Set(
+      subjectIdsRaw
+        .map((x: any) => String(x ?? "").trim())
+        .filter((x: string) => x.length > 0 && x.length <= 80),
+    ),
+  );
+  await db.execute(sql`DELETE FROM user_subjects WHERE user_id = ${user.id}`);
+  for (const sid of subjectIds) {
+    await db.execute(sql`
+      INSERT INTO user_subjects (user_id, subject_id, created_at)
+      VALUES (${user.id}, ${sid}, ${nowIso()})
+      ON CONFLICT(user_id, subject_id) DO NOTHING
+    `);
+  }
+  return c.json({ ok: true, subjectIds });
+});
+
+// ---- Study (Track My Study cross-device persistence) ----
+function safeJsonObj(raw: unknown): Record<string, number> {
+  if (!raw || typeof raw !== "object") return {};
+  const out: Record<string, number> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    const key = String(k ?? "").trim();
+    if (!key) continue;
+    const n = Math.max(0, Math.floor(Number(v) || 0));
+    out[key] = n;
+  }
+  return out;
+}
+
+function mergeSecondsMaps(a: Record<string, number>, b: Record<string, number>) {
+  const out: Record<string, number> = { ...a };
+  for (const [k, v] of Object.entries(b)) {
+    out[k] = Math.max(out[k] ?? 0, Math.max(0, Math.floor(Number(v) || 0)));
+  }
+  return out;
+}
+
+app.get("/api/study/history", authMiddleware, async (c: any) => {
+  const user = c.get("user");
+  const db = c.get("db");
+  const from = String(c.req.query("from") ?? "").trim();
+  const to = String(c.req.query("to") ?? "").trim();
+  const fromIso = /^\d{4}-\d{2}-\d{2}$/.test(from) ? from : "0000-01-01";
+  const toIso = /^\d{4}-\d{2}-\d{2}$/.test(to) ? to : "9999-12-31";
+  const rows = await db.execute(sql`
+    SELECT date, daily_seconds, daily_seconds_by_subject
+    FROM study_days
+    WHERE user_id = ${user.id}
+      AND date >= ${fromIso}
+      AND date <= ${toIso}
+    ORDER BY date ASC
+  `);
+  return c.json({
+    days: (rows.rows as any[]).map((r) => ({
+      date: String(r.date),
+      dailySeconds: Number(r.daily_seconds ?? 0),
+      dailySecondsBySubject: (() => {
+        try {
+          return safeJsonObj(JSON.parse(String(r.daily_seconds_by_subject ?? "{}")));
+        } catch {
+          return {};
+        }
+      })(),
+    })),
+  });
+});
+
+app.post("/api/study/sync", authMiddleware, async (c: any) => {
+  const user = c.get("user");
+  const db = c.get("db");
+  const body = await c.req.json().catch(() => ({} as any));
+  const daysRaw = Array.isArray(body?.days) ? body.days : [];
+  for (const entry of daysRaw) {
+    const date = String(entry?.date ?? "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+    const incomingSeconds = Math.max(0, Math.floor(Number(entry?.dailySeconds) || 0));
+    const incomingBy = safeJsonObj(entry?.dailySecondsBySubject);
+    const incomingGoal = entry?.goalMinutes != null ? Math.max(0, Math.floor(Number(entry.goalMinutes) || 0)) : null;
+
+    const existing = await db.execute(sql`
+      SELECT daily_seconds, daily_seconds_by_subject, goal_minutes
+      FROM study_days
+      WHERE user_id = ${user.id} AND date = ${date}
+      LIMIT 1
+    `);
+    const row = (existing.rows as any[])[0];
+    let mergedSeconds = incomingSeconds;
+    let mergedBy = incomingBy;
+    let mergedGoal: number | null = incomingGoal;
+    if (row) {
+      const oldSeconds = Math.max(0, Math.floor(Number(row.daily_seconds) || 0));
+      mergedSeconds = Math.max(oldSeconds, incomingSeconds);
+      let oldBy: Record<string, number> = {};
+      try {
+        oldBy = safeJsonObj(JSON.parse(String(row.daily_seconds_by_subject ?? "{}")));
+      } catch {
+        oldBy = {};
+      }
+      mergedBy = mergeSecondsMaps(oldBy, incomingBy);
+      const oldGoal = row.goal_minutes == null ? null : Math.max(0, Math.floor(Number(row.goal_minutes) || 0));
+      mergedGoal = Math.max(oldGoal ?? 0, incomingGoal ?? 0) || null;
+    }
+
+    const byJson = JSON.stringify(mergedBy);
+    await db.execute(sql`
+      INSERT INTO study_days (user_id, date, daily_seconds, daily_seconds_by_subject, goal_minutes, updated_at)
+      VALUES (${user.id}, ${date}, ${mergedSeconds}, ${byJson}, ${mergedGoal}, ${nowIso()})
+      ON CONFLICT(user_id, date) DO UPDATE SET
+        daily_seconds = EXCLUDED.daily_seconds,
+        daily_seconds_by_subject = EXCLUDED.daily_seconds_by_subject,
+        goal_minutes = EXCLUDED.goal_minutes,
+        updated_at = EXCLUDED.updated_at
+    `);
+  }
+  return c.json({ ok: true });
+});
+
+app.put("/api/study/daily", authMiddleware, async (c: any) => {
+  const user = c.get("user");
+  const db = c.get("db");
+  const body = await c.req.json().catch(() => ({} as any));
+  const date = String(body?.date ?? "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return c.json({ error: "Invalid date" }, 400);
+  const incomingSeconds = Math.max(0, Math.floor(Number(body?.dailySeconds) || 0));
+  const incomingBy = safeJsonObj(body?.dailySecondsBySubject);
+  const incomingGoal = body?.goalMinutes != null ? Math.max(0, Math.floor(Number(body.goalMinutes) || 0)) : null;
+
+  const existing = await db.execute(sql`
+    SELECT daily_seconds, daily_seconds_by_subject, goal_minutes
+    FROM study_days
+    WHERE user_id = ${user.id} AND date = ${date}
+    LIMIT 1
+  `);
+  const row = (existing.rows as any[])[0];
+  let mergedSeconds = incomingSeconds;
+  let mergedBy = incomingBy;
+  let mergedGoal: number | null = incomingGoal;
+  if (row) {
+    const oldSeconds = Math.max(0, Math.floor(Number(row.daily_seconds) || 0));
+    mergedSeconds = Math.max(oldSeconds, incomingSeconds);
+    let oldBy: Record<string, number> = {};
+    try {
+      oldBy = safeJsonObj(JSON.parse(String(row.daily_seconds_by_subject ?? "{}")));
+    } catch {
+      oldBy = {};
+    }
+    mergedBy = mergeSecondsMaps(oldBy, incomingBy);
+    const oldGoal = row.goal_minutes == null ? null : Math.max(0, Math.floor(Number(row.goal_minutes) || 0));
+    mergedGoal = Math.max(oldGoal ?? 0, incomingGoal ?? 0) || null;
+  }
+  const byJson = JSON.stringify(mergedBy);
+  await db.execute(sql`
+    INSERT INTO study_days (user_id, date, daily_seconds, daily_seconds_by_subject, goal_minutes, updated_at)
+    VALUES (${user.id}, ${date}, ${mergedSeconds}, ${byJson}, ${mergedGoal}, ${nowIso()})
+    ON CONFLICT(user_id, date) DO UPDATE SET
+      daily_seconds = EXCLUDED.daily_seconds,
+      daily_seconds_by_subject = EXCLUDED.daily_seconds_by_subject,
+      goal_minutes = EXCLUDED.goal_minutes,
+      updated_at = EXCLUDED.updated_at
+  `);
+  return c.json({ ok: true });
+});
+
+// ---- Scorecard (Dashboard) ----
+app.get("/api/scorecard", authMiddleware, async (c: any) => {
+  const user = c.get("user");
+  const db = c.get("db");
+  const asOfDate = String(c.req.query("asOfDate") ?? "").trim();
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(asOfDate) ? asOfDate : null;
+
+  const totals = await db.execute(sql`
+    SELECT
+      COUNT(DISTINCT qa.user_id)::int AS total_students,
+      COALESCE(SUM(CASE WHEN qa.user_id = ${user.id} AND qa.is_correct = 1 THEN qa.marks ELSE 0 END), 0)::int AS my_points
+    FROM question_attempts qa
+  `);
+  const totalStudents = Number((totals.rows as any[])[0]?.total_students ?? 0);
+  const points = Number((totals.rows as any[])[0]?.my_points ?? 0);
+
+  // Rank by points (marks correct) across all subjects.
+  const rankRows = await db.execute(sql`
+    WITH by_user AS (
+      SELECT user_id,
+             COALESCE(SUM(CASE WHEN is_correct = 1 THEN marks ELSE 0 END), 0)::int AS points
+      FROM question_attempts
+      GROUP BY user_id
+    ),
+    ranked AS (
+      SELECT user_id, points,
+             DENSE_RANK() OVER (ORDER BY points DESC) AS rnk
+      FROM by_user
+    )
+    SELECT rnk
+    FROM ranked
+    WHERE user_id = ${user.id}
+    LIMIT 1
+  `);
+  const overallRank = rankRows.rows?.length ? Number((rankRows.rows as any[])[0]?.rnk ?? null) : null;
+
+  const bestWeak = await db.execute(sql`
+    SELECT subject_id,
+           SUM(CASE WHEN is_correct = 1 THEN marks ELSE 0 END)::int AS marks_correct,
+           SUM(marks)::int AS marks_attempted
+    FROM question_attempts
+    WHERE user_id = ${user.id}
+    GROUP BY subject_id
+  `);
+  const perSubject = (bestWeak.rows as any[]).map((r) => {
+    const attempted = Math.max(0, Number(r.marks_attempted ?? 0));
+    const correct = Math.max(0, Number(r.marks_correct ?? 0));
+    const pct = attempted > 0 ? Math.round((correct / attempted) * 100) : 0;
+    return { subjectId: String(r.subject_id), attempted, correct, pct };
+  }).filter((x) => x.attempted > 0);
+  perSubject.sort((a, b) => b.pct - a.pct);
+  const bestSubjectId = perSubject.length ? perSubject[0]!.subjectId : null;
+  const weakestSubjectId = perSubject.length ? perSubject[perSubject.length - 1]!.subjectId : null;
+
+  // Study streak up to asOfDate (or today if omitted).
+  const end = date ?? new Date().toISOString().slice(0, 10);
+  const streakRows = await db.execute(sql`
+    SELECT date, daily_seconds
+    FROM study_days
+    WHERE user_id = ${user.id}
+      AND date <= ${end}
+    ORDER BY date DESC
+    LIMIT 500
+  `);
+  let streak = 0;
+  let cursor = end;
+  const byDate = new Map<string, number>();
+  for (const r of streakRows.rows as any[]) byDate.set(String(r.date), Number(r.daily_seconds ?? 0));
+  for (;;) {
+    const secs = byDate.get(cursor) ?? 0;
+    if (secs <= 0) break;
+    streak += 1;
+    const d = new Date(cursor + "T00:00:00.000Z");
+    d.setUTCDate(d.getUTCDate() - 1);
+    cursor = d.toISOString().slice(0, 10);
+  }
+
+  return c.json({
+    totalStudents,
+    overallRank,
+    points,
+    bestSubjectId,
+    weakestSubjectId,
+    studyStreak: streak,
   });
 });
 

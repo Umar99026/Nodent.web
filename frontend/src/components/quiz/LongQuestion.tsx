@@ -401,7 +401,7 @@ export function LongQuestion({
             </Badge>
           )}
         </div>
-        {classFullyCorrectPercent != null && (
+        {(practiceOnly ? submitted : saved) && classFullyCorrectPercent != null && (
           <p className="text-xs tabular-nums text-muted-foreground">
             Class fully correct: {classFullyCorrectPercent}%
           </p>
