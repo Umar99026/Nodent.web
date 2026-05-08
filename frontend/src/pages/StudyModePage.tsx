@@ -46,6 +46,10 @@ interface StudyModeState {
   questionGoal: number | null;
   /** One entry per completed stimulus group (not per part). */
   completedGroupKeys: string[];
+  /** Per-part correctness for the session (keyed by stable questionKey). */
+  attemptsByQuestionKey: Record<string, boolean | null>;
+  /** Stable order for review UI. */
+  attemptOrder: string[];
   /** True when a finite question goal was reached; cleared by Reset goal or full Reset. */
   goalFinished: boolean;
 }
@@ -76,6 +80,13 @@ function normalizeStudyState(
         (k): k is string => typeof k === "string" && k.trim().length > 0,
       )
     : [];
+  const safeAttempts =
+    safeRaw && typeof (safeRaw as any).attemptsByQuestionKey === "object" && (safeRaw as any).attemptsByQuestionKey
+      ? ((safeRaw as any).attemptsByQuestionKey as Record<string, boolean | null>)
+      : {};
+  const safeAttemptOrder = Array.isArray((safeRaw as any).attemptOrder)
+    ? ((safeRaw as any).attemptOrder as unknown[]).map(String).filter((x) => x.trim().length > 0)
+    : [];
 
   return {
     index: safeIndex,
@@ -84,6 +95,8 @@ function normalizeStudyState(
     running: Boolean(safeRaw.running),
     questionGoal: safeGoal,
     completedGroupKeys: safeGroupKeys,
+    attemptsByQuestionKey: safeAttempts,
+    attemptOrder: safeAttemptOrder,
     goalFinished: Boolean((safeRaw as Partial<StudyModeState>).goalFinished),
   };
 }
@@ -305,6 +318,8 @@ export default function StudyModePage() {
       running: false,
       remainingSeconds: prev.durationMinutes * 60,
       completedGroupKeys: [],
+      attemptsByQuestionKey: {},
+      attemptOrder: [],
       goalFinished: false,
     }));
 
@@ -312,6 +327,8 @@ export default function StudyModePage() {
     setStudyState((prev) => ({
       ...prev,
       completedGroupKeys: [],
+      attemptsByQuestionKey: {},
+      attemptOrder: [],
       goalFinished: false,
     }));
 
@@ -372,6 +389,19 @@ export default function StudyModePage() {
     });
   }, []);
 
+  const recordAttempt = useCallback((questionKey: string, correct: boolean | null) => {
+    if (!questionKey.trim()) return;
+    setStudyState((prev) => {
+      const already = Object.prototype.hasOwnProperty.call(prev.attemptsByQuestionKey, questionKey);
+      const nextOrder = already ? prev.attemptOrder : [...prev.attemptOrder, questionKey];
+      return {
+        ...prev,
+        attemptsByQuestionKey: { ...prev.attemptsByQuestionKey, [questionKey]: correct },
+        attemptOrder: nextOrder,
+      };
+    });
+  }, []);
+
   const handleExit = () => {
     if (window.history.length > 1) navigate(-1);
     else navigate(subjectId ? `/quiz/${subjectId}` : "/dashboard");
@@ -406,7 +436,10 @@ export default function StudyModePage() {
               question={part}
               hidePassage={hidePassage}
               lockedCorrect={false}
-              onAnswer={() => markQuestionCompleted(groupKey)}
+              onAnswer={(correct) => {
+                recordAttempt(qk, correct);
+                markQuestionCompleted(groupKey);
+              }}
               disabled={partsDisabled}
               classFullyCorrectPercent={null}
             />
@@ -416,7 +449,10 @@ export default function StudyModePage() {
               question={part}
               hidePassage={hidePassage}
               lockedCorrect={false}
-              onAnswer={() => markQuestionCompleted(groupKey)}
+              onAnswer={(correct) => {
+                recordAttempt(qk, correct);
+                markQuestionCompleted(groupKey);
+              }}
               disabled={partsDisabled}
               classFullyCorrectPercent={null}
             />
@@ -428,7 +464,10 @@ export default function StudyModePage() {
               questionKey={qk}
               hidePassage={hidePassage}
               lockedCorrect={false}
-              onAnswer={() => markQuestionCompleted(groupKey)}
+              onAnswer={(correct) => {
+                recordAttempt(qk, correct);
+                markQuestionCompleted(groupKey);
+              }}
               disabled={partsDisabled}
               classFullyCorrectPercent={null}
               practiceOnly
@@ -437,7 +476,7 @@ export default function StudyModePage() {
         </div>
       );
     },
-    [subjectId, questions, hidePassageForParts, markQuestionCompleted],
+    [subjectId, questions, hidePassageForParts, markQuestionCompleted, recordAttempt],
   );
 
   return (
@@ -592,25 +631,84 @@ export default function StudyModePage() {
                 </div>
               </div>
             ) : goalFinished && studyState.questionGoal != null ? (
-              <div className="mt-8 flex min-h-0 flex-1 flex-col items-center justify-center gap-6 px-4 text-center">
-                <div className="max-w-md space-y-2">
+              <div className="mt-8 flex min-h-0 flex-1 flex-col gap-6 px-4">
+                <div className="text-center">
                   <p className="font-display text-xl font-semibold text-white">
-                    You’ve finished your question goal.
+                    Goal complete — summary
                   </p>
-                  <p className="text-sm text-white/60">
-                    Reset the goal to keep practicing with the same timer and duration, or use Reset
-                    above to also clear the clock.
+                  <p className="mt-1 text-sm text-white/60">
+                    Review what you got right and wrong, then reset the goal if you want to keep going.
                   </p>
                 </div>
-                <Button
-                  type="button"
-                  onClick={handleResetGoal}
-                  size="sm"
-                  className="gap-1.5 bg-brand text-white hover:bg-brand-dark"
-                >
-                  <RotateCcw className="size-4" />
-                  Reset goal
-                </Button>
+
+                <div className="mx-auto w-full max-w-2xl space-y-3 rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="text-sm text-white/70">
+                      Attempted: <span className="font-semibold text-white">{studyState.attemptOrder.length}</span>
+                    </div>
+                    <div className="text-sm text-white/70">
+                      Correct:{" "}
+                      <span className="font-semibold text-white">
+                        {studyState.attemptOrder.filter((k) => studyState.attemptsByQuestionKey[k] === true).length}
+                      </span>
+                      {" · "}
+                      Wrong:{" "}
+                      <span className="font-semibold text-white">
+                        {studyState.attemptOrder.filter((k) => studyState.attemptsByQuestionKey[k] === false).length}
+                      </span>
+                    </div>
+                  </div>
+
+                  {studyState.attemptOrder.length === 0 ? (
+                    <p className="text-center text-sm text-white/60">
+                      No attempts recorded yet.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {studyState.attemptOrder.map((qk) => {
+                        const res = studyState.attemptsByQuestionKey[qk];
+                        return (
+                          <div
+                            key={qk}
+                            className={`rounded-lg border px-3 py-2 text-sm ${
+                              res === true
+                                ? "border-success/30 bg-success/10 text-white"
+                                : res === false
+                                  ? "border-danger/30 bg-danger/10 text-white"
+                                  : "border-white/10 bg-white/5 text-white/80"
+                            }`}
+                          >
+                            <span className="font-semibold">
+                              {res === true ? "Correct" : res === false ? "Wrong" : "Saved"}
+                            </span>
+                            <span className="ml-2 break-all text-white/70">{qk}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <Button
+                    type="button"
+                    onClick={() => setStudyState((prev) => ({ ...prev, goalFinished: false }))}
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 border-white/20 bg-white/5 text-white hover:bg-white/10"
+                  >
+                    Review questions
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={handleResetGoal}
+                    size="sm"
+                    className="gap-1.5 bg-brand text-white hover:bg-brand-dark"
+                  >
+                    <RotateCcw className="size-4" />
+                    Reset goal
+                  </Button>
+                </div>
               </div>
             ) : currentGroup ? (
               <div className="mt-8 flex min-h-0 flex-1 flex-col space-y-8 overflow-auto">

@@ -709,7 +709,7 @@ export default function QuizPage() {
                   </Button>
                 }
               />
-              <TooltipContent side="bottom" align="end">
+              <TooltipContent side="bottom" align="end" className="text-background">
                 Timed focus mode: set a question goal and work through grouped stimuli.
               </TooltipContent>
             </Tooltip>

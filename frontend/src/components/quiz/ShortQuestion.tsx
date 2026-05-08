@@ -307,9 +307,10 @@ export function ShortQuestion({
             </Badge>
           )}
         </div>
-        {submitted && classFullyCorrectPercent != null && (
-          <p className="text-xs tabular-nums text-muted-foreground">
-            Class fully correct: {classFullyCorrectPercent}%
+        {classFullyCorrectPercent != null && (
+          <p className="inline-flex items-center gap-1.5 text-xs tabular-nums text-muted-foreground">
+            <CheckCircle2 className="size-3.5 shrink-0 text-success" />
+            {classFullyCorrectPercent}% got this correct
           </p>
         )}
       </div>
