@@ -697,19 +697,17 @@ export default function QuizPage() {
 
           <div className="flex justify-end">
             <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button
-                    variant="outline"
-                    onClick={() => navigate(`/study/${subjectId}`)}
-                    className="gap-2 border-transparent bg-[#0b0f19] text-white hover:bg-[#0b0f19]/90"
-                  >
-                    <Clock className="size-4" />
-                    Study Mode
-                  </Button>
-                }
-              />
-              <TooltipContent side="bottom" align="end" className="text-background">
+              <TooltipTrigger>
+                <Button
+                  variant="outline"
+                  onClick={() => navigate(`/study/${subjectId}`)}
+                  className="gap-2 border-transparent bg-[#0b0f19] text-white hover:bg-[#0b0f19]/90"
+                >
+                  <Clock className="size-4" />
+                  Study Mode
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" align="end">
                 Timed focus mode: set a question goal and work through grouped stimuli.
               </TooltipContent>
             </Tooltip>
