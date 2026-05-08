@@ -296,6 +296,19 @@ export default function StudyModePage() {
   const currentGroup = studyGroups[index] ?? null;
   const hidePassageForParts = Boolean(currentGroup?.passage?.trim());
 
+  const questionPreviewByKey = useMemo(() => {
+    if (!subjectId) return new Map<string, { topic: string; text: string }>();
+    const out = new Map<string, { topic: string; text: string }>();
+    for (const q of questions) {
+      const idx = Math.max(0, getStableQuestionIndex(questions, q));
+      const qk = questionKeyStable(subjectId, q, idx);
+      const text = String(q.question ?? "").trim();
+      const topic = String(q.topic ?? "General").trim() || "General";
+      if (qk && text) out.set(qk, { topic, text });
+    }
+    return out;
+  }, [questions, subjectId]);
+
   const goNext = () => {
     if (index < studyGroups.length - 1) {
       setStudyState((prev) => ({ ...prev, index: prev.index + 1 }));
@@ -667,6 +680,10 @@ export default function StudyModePage() {
                     <div className="space-y-2">
                       {studyState.attemptOrder.map((qk) => {
                         const res = studyState.attemptsByQuestionKey[qk];
+                        const preview = questionPreviewByKey.get(qk);
+                        const fullText = preview?.text ?? qk;
+                        const shortText =
+                          fullText.length > 140 ? `${fullText.slice(0, 140)}…` : fullText;
                         return (
                           <div
                             key={qk}
@@ -678,10 +695,21 @@ export default function StudyModePage() {
                                   : "border-white/10 bg-white/5 text-white/80"
                             }`}
                           >
-                            <span className="font-semibold">
-                              {res === true ? "Correct" : res === false ? "Wrong" : "Saved"}
-                            </span>
-                            <span className="ml-2 break-all text-white/70">{qk}</span>
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="font-semibold">
+                                  {res === true ? "Correct" : res === false ? "Wrong" : "Saved"}
+                                </span>
+                                {preview?.topic ? (
+                                  <span className="rounded bg-white/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white/80">
+                                    {preview.topic}
+                                  </span>
+                                ) : null}
+                              </div>
+                            </div>
+                            <p className="mt-1.5 break-words text-sm leading-snug text-white/90 [overflow-wrap:anywhere]">
+                              {shortText}
+                            </p>
                           </div>
                         );
                       })}

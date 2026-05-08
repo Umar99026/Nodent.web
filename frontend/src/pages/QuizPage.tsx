@@ -707,7 +707,7 @@ export default function QuizPage() {
                   Study Mode
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="bottom" align="end">
+              <TooltipContent side="bottom" align="end" className="bg-[#0b0f19] text-white">
                 Timed focus mode: set a question goal and work through grouped stimuli.
               </TooltipContent>
             </Tooltip>
