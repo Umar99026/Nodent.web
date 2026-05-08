@@ -562,7 +562,6 @@ export function EnglishPracticePanel() {
 
 export function EnglishPromptResponsesPage() {
   const { user } = useAuth();
-  const navigate = useNavigate();
   const { promptId } = useParams<{ promptId: string }>();
   const [searchParams] = useSearchParams();
   const section = ((searchParams.get("section") ?? "A").toUpperCase() as Section);
@@ -619,15 +618,22 @@ export function EnglishPromptResponsesPage() {
             : row,
         ),
       );
+      setRatingByResponseId((prev) => ({ ...prev, [responseId]: String(score) }));
       const suffix =
         section === "A"
           ? `?section=A&bookId=${encodeURIComponent(bookId)}`
           : `?section=${encodeURIComponent(section)}`;
       const refreshed = await apiFetch<{ responses: ResponseRow[] }>(`${API_PATHS.english.responses}${suffix}`);
-      setResponses(
+      const nextRows =
         (refreshed.responses ?? [])
           .map((x) => ({ ...x, prompt: cleanSectionBPromptText(x.prompt) }))
-          .filter((x) => x.promptId === numericPromptId),
+          .filter((x) => x.promptId === numericPromptId);
+      setResponses(nextRows);
+      setRatingByResponseId(() =>
+        nextRows.reduce<Record<number, string>>((acc, row) => {
+          if (row.myScore != null) acc[row.id] = String(row.myScore);
+          return acc;
+        }, {}),
       );
       toast.success("Rating saved.");
     } catch (e) {
@@ -729,7 +735,7 @@ export function EnglishPromptResponsesPage() {
             >
               <X className="size-4" />
             </Button>
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3 pr-10">
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold text-[#0f172a]">@{openResponse.username}</p>
                 <p className="text-xs text-muted-foreground">
@@ -768,26 +774,6 @@ export function EnglishPromptResponsesPage() {
                   </Select>
                 </div>
               )}
-              <Button type="button" variant="outline" size="icon" onClick={() => setOpenResponseId(null)}>
-                <X className="size-4" />
-              </Button>
-            </div>
-            <div className="mb-3 flex justify-end">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() =>
-                  navigate(
-                    `/quiz/english?section=${section}${
-                      section === "A" && Number.isFinite(bookId) && bookId > 0
-                        ? `&bookId=${bookId}`
-                        : ""
-                    }`,
-                  )
-                }
-              >
-                Exit page
-              </Button>
             </div>
             <div className="max-h-[70vh] overflow-y-auto rounded-lg border border-black/10 bg-slate-50 p-4">
               <p className="whitespace-pre-wrap text-sm leading-relaxed text-[#111827]">
