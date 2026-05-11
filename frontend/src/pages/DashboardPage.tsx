@@ -555,7 +555,7 @@ export default function DashboardPage() {
                     <Button
                       size="sm"
                       className="h-11 min-h-11 w-full min-w-0 shrink-0 bg-[#0b0f19] px-2 text-sm text-white hover:bg-[#0b0f19]/90 lg:flex-1 lg:px-3"
-                      onClick={() => navigate(`/quiz/${subject.id}`)}
+                      onClick={() => navigate(`/practice/${subject.id}`)}
                     >
                       Practice
                     </Button>

@@ -165,7 +165,8 @@ export default function QuizPage() {
   const [questionsLoading, setQuestionsLoading] = useState(true);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [questionUiState, setQuestionUiState] = useState<Record<string, QuestionUiState>>({});
-  const [topicFilter, setTopicFilter] = useState<string>("all");
+  const initialTopicParam = String(searchParams.get("topic") ?? "").trim();
+  const [topicFilter, setTopicFilter] = useState<string>(initialTopicParam || "all");
   const [pinnedGroupKey, setPinnedGroupKey] = useState<string | null>(null);
   const [answeredAtSessionStart, setAnsweredAtSessionStart] = useState<Set<string>>(new Set());
 
@@ -185,6 +186,13 @@ export default function QuizPage() {
     setQuestionUiState({});
     setAnsweredAtSessionStart(new Set());
   }, [subjectId, user?.id, isWrongReview]);
+
+  // If the setup page passes ?topic=..., keep the UI in sync.
+  useEffect(() => {
+    const t = String(searchParams.get("topic") ?? "").trim();
+    if (!t) return;
+    setTopicFilter(t);
+  }, [searchParams]);
 
   const schedulePracticeSave = useCallback(
     (next: PracticeState) => {

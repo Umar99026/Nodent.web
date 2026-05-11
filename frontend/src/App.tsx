@@ -20,6 +20,7 @@ const EnglishPromptResponsesPage = lazy(
 );
 const AdminPage = lazy(() => import("@/pages/AdminPage"));
 const UploadWrittenImagesPage = lazy(() => import("@/pages/UploadWrittenImagesPage"));
+const PracticeSetupPage = lazy(() => import("@/pages/PracticeSetupPage"));
 
 function LoadingFallback() {
   return (
@@ -114,6 +115,15 @@ function AppRoutes() {
           element={
             <ProtectedRoute>
               <DashboardPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/practice/:subjectId"
+          element={
+            <ProtectedRoute>
+              <PracticeSetupPage />
             </ProtectedRoute>
           }
         />
