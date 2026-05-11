@@ -1,0 +1,127 @@
+# Nodent — What I Fixed + What You Need to Do
+
+Yo! Ice had me go through your project and fix everything that could make it crash or lose user data. Here's the full breakdown.
+
+---
+
+## 🐛 Bugs I Fixed (Already Pushed)
+
+### 1. User info kept resetting when you logged in
+
+**The problem:** Every time `apiFetch()` got a 401 response (even from a slow network), it would immediately delete the stored token from localStorage and redirect you to `/login`. So if `/api/bootstrap` timed out for a second, boom — logged out, user data gone.
+
+**What I did:** Changed `apiFetch()` to throw a proper error instead of auto-destroying your session. The `AuthContext` already handles session expiry gracefully — it shows "Session expired" if the token is actually invalid, but now it won't nuke everything on a hiccup.
+
+→ **File:** `frontend/src/lib/api.ts`
+
+---
+
+### 2. "Remember me" checkbox did nothing
+
+**The problem:** The checkbox was there on the login page, saved to localStorage, but the backend always created 30-day sessions regardless. Unchecking it changed nothing.
+
+**What I did:**
+- Backend (`server.js` + Cloudflare Function) now reads `rememberMe` from the request body
+- 30 days when checked, 1 day when unchecked
+- Frontend `AuthContext` reads the value from localStorage before sending
+
+Now: ✅ Checked → stays logged in for a month. Unchecked → session expires in 1 day.
+
+→ **Files:** `server.js`, `frontend/src/context/AuthContext.tsx`, `pages-deploy/functions/api/[[path]].ts`
+
+---
+
+### 3. Study tracking wouldn't work if backend was changed
+
+**The problem:** The dev backend (`server.js`) called the study table `user_study_daily` with columns like `total_seconds` and `by_subject_json`. The production backend (Cloudflare/Neon) called it `study_days` with `daily_seconds` and `daily_seconds_by_subject`. If you switched from one backend to the other, study tracking would silently break.
+
+**What I did:** Standardized everything to `study_days` with the column names from the Neon schema. All the SQL queries and helper functions now use the same names across both backends.
+
+→ **File:** `server.js` (7 query locations updated)
+
+---
+
+### 4. Missing column in friend_assignments (SQLite)
+
+**The problem:** The Neon/Cloudflare schema had `marks INTEGER DEFAULT 1` on `friend_assignments`, but the SQLite backend never added that column. Any friend assignment in local dev would error.
+
+**What I did:** Added auto-migration to add `marks` and `is_correct` columns to the SQLite `friend_assignments` table.
+
+→ **File:** `server.js`
+
+---
+
+### 5. No health check on the production backend
+
+**The problem:** `server.js` had `GET /api/health` (returns user count, session count, etc.), but the Cloudflare Pages Function didn't. No way to monitor if production was alive.
+
+**What I did:** Added `GET /api/health` to the Cloudflare backend. Returns `{"ok": true, "users": N}` on success, or `{"ok": false, "error": "..."}` if the DB is down.
+
+→ **File:** `pages-deploy/functions/api/[[path]].ts`
+
+---
+
+## ✅ What I Tested (Everything Passed)
+
+| Test | Result |
+|---|---|
+| Signup → session created | ✅ |
+| Bootstrap → user data returned | ✅ |
+| Logout → session deleted | ✅ |
+| Re-login → same user id preserved | ✅ |
+| "Remember me" false → shorter expiry | ✅ |
+| Study tracking sync (study_days) | ✅ |
+| Study tracking history query | ✅ |
+| TypeScript compiles | ✅ |
+| Backend stays up through all tests | ✅ |
+
+---
+
+## 📋 What You Still Need to Do
+
+### Before launching to students:
+
+1. **Deploy to Cloudflare Pages**
+   ```bash
+   cd pages-deploy
+   # Push or use wrangler to deploy
+   npx wrangler pages deploy . --branch main
+   ```
+   The Cloudflare backend was also fixed, but you need to actually deploy it.
+
+2. **Test the live site end-to-end**
+   Once deployed, do this yourself before students touch it:
+   - Sign up as a new user
+   - Log out, close browser, log back in (check "remember me" works)
+   - Try a quiz, check the forum, try friends
+   - Check `/api/health` returns ok
+   
+   **This is the most important step.** Things that work on local SQLite might behave differently on Neon.
+
+3. **Run the Neon SQL migrations (if not done already)**
+   In the Neon SQL editor, make sure these tables exist:
+   - `sessions` (with `expires_at` column)
+   - `forum_posts` and `forum_replies`
+   - `friend_requests`, `friendships`, `friend_assignments`
+   - `study_days`, `user_subjects`
+
+   The SQL files are in your repo (`neon-forum-tables.sql`, `neon-friends-tables.sql`).
+
+4. **Seed real questions**
+   Empty subjects = students leave instantly. Use the Google Sheets sync pipeline (`/api/admin/questions/sync-from-sheet`) to load at least 50 questions per subject.
+
+5. **Soft launch with 5-10 friends first**
+   Don't blast it to a whole year level on day one. Watch the Cloudflare Functions logs for errors for a couple of days, then scale.
+
+6. **Rotate the admin password (when you're ready)**
+   It's in the repo currently — any contributor can see it. Set `ADMIN_PASSWORD` as a Cloudflare Pages environment variable (secret) instead.
+
+---
+
+## 🔧 Quick Tech Notes
+
+- **Two backends:** `server.js` (Express + SQLite) for local dev, `pages-deploy/functions/api/[[path]].ts` (Hono + Neon) for production. They now use the same table/column names.
+- **Auth flow:** scrypt hashing (dev) / PBKDF2 (production). Session tokens are 32-byte hex. 30-day expiry with "remember me", 1-day without.
+- **Health check:** `GET /api/health` on both backends.
+
+Any questions, ask Ice to ask me. Good luck with the launch! 🚀
