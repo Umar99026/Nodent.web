@@ -1,23 +1,16 @@
 {
   "name": "nodent",
-  "version": "1.0.0",
-  "main": "server.js",
+  "private": true,
   "scripts": {
-    "dev": "node server.js",
-    "start": "node server.js",
-    "sheets:sql": "node sheetsToNeonSql.js"
+    "dev": "cd frontend && npx vite",
+    "dev:api": "npx wrangler dev",
+    "dev:all": "npx concurrently \"npm run dev\" \"npm run dev:api\"",
+    "build": "cd frontend && npm run build && rsync -a --delete dist/ ../assets/ && cp dist/index.html ../index.html",
+    "deploy": "npm run build && npx wrangler pages deploy . --branch main"
   },
   "dependencies": {
-    "googleapis": "^144.0.0",
-    "cookie-parser": "^1.4.7",
-    "express": "^4.22.1",
-    "express-rate-limit": "^8.3.1",
-    "helmet": "^8.1.0",
-    "sqlite3": "^6.0.1"
-  },
-  "description": "",
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs"
+    "@neondatabase/serverless": "^1.0.2",
+    "drizzle-orm": "^0.45.1",
+    "hono": "^4.12.9"
+  }
 }

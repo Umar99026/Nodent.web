@@ -1,0 +1,21 @@
+name = "nodent"
+main = "functions/api/[[path]].ts"
+compatibility_date = "2025-05-01"
+
+[env.production]
+name = "nodent"
+
+[dev]
+port = 8787
+
+[build]
+command = ""
+
+[[build.upload]]
+format = "static"
+dir = "."
+
+[[build.upload.rules]]
+type = "assets"
+globs = ["**/*"]
+exclude = ["functions/**", "frontend/**", "node_modules/**", ".git/**", "*.sql", "*.md", ".env*"]

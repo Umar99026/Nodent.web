@@ -1,16 +1,14 @@
 node_modules
+frontend/node_modules
+frontend/dist
+.wrangler/
+.env
+.env.local
 resources-topic-overviews-temp/
 nodent.db
 .DS_Store
 *.db-shm
 *.db-wal
-backend/.wrangler/
-frontend/dist/
-pages-deploy/assets/
-pages-deploy/*.html
-pages-deploy/*.svg
-pages-deploy/*.png
-pages-deploy/package-lock.json
 
 # Google service account keys (local dev)
 nodent-*.json

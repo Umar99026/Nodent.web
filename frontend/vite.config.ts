@@ -13,8 +13,7 @@ export default defineConfig({
   server: {
     proxy: {
       "/api": {
-        // Local backend dev server (SQLite-backed server.js).
-        target: "http://127.0.0.1:3000",
+        target: "http://localhost:8787",
         changeOrigin: true,
       },
     },

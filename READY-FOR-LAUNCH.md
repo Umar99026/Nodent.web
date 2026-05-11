@@ -77,35 +77,41 @@ Now: ✅ Checked → stays logged in for a month. Unchecked → session expires 
 
 ---
 
-## 📋 What You Still Need to Do
+## 📋 What You Still Need to Do (UPDATED)
 
 ### Before launching to students:
 
-1. **Deploy to Cloudflare Pages**
+1. **Deploy to Cloudflare Pages** ⚠️ Requires your Cloudflare API token
    ```bash
-   cd pages-deploy
-   # Push or use wrangler to deploy
-   npx wrangler pages deploy . --branch main
-   ```
-   The Cloudflare backend was also fixed, but you need to actually deploy it.
+   # Set your API token (get it from https://dash.cloudflare.com/profile/api-tokens)
+   export CLOUDFLARE_API_TOKEN="your-token-here"
 
-2. **Test the live site end-to-end**
-   Once deployed, do this yourself before students touch it:
+   npm run deploy
+   ```
+   Or manually:
+   ```bash
+   npm run build
+   npx wrangler pages deploy . --branch main --project-name nodent
+   ```
+   If you haven't created the Pages project yet:
+   ```bash
+   npx wrangler pages project create nodent --production-branch main
+   ```
+   Then set these environment variables in the Cloudflare Dashboard (Pages → nodent → Settings → Environment variables):
+   - `DATABASE_URL` — your Neon connection string (mark as **Secret**)
+   - `ADMIN_KEY` — admin key for the admin panel (mark as **Secret**)
+   - `FRONTEND_URL` — your Pages URL, e.g. `https://nodent.pages.dev`
+   - `GOOGLE_SHEETS_SPREADSHEET_ID` — (optional, for sheet sync)
+   - `GOOGLE_SERVICE_ACCOUNT_JSON` — (optional, mark as **Secret**)
+
+2. **Done automatically now:** ✅ All 17 database tables are auto-created on the first API request. No manual Neon SQL editor needed.
+
+3. **Test the live site end-to-end**
+   Once deployed, do this before students touch it:
    - Sign up as a new user
    - Log out, close browser, log back in (check "remember me" works)
    - Try a quiz, check the forum, try friends
-   - Check `/api/health` returns ok
-   
-   **This is the most important step.** Things that work on local SQLite might behave differently on Neon.
-
-3. **Run the Neon SQL migrations (if not done already)**
-   In the Neon SQL editor, make sure these tables exist:
-   - `sessions` (with `expires_at` column)
-   - `forum_posts` and `forum_replies`
-   - `friend_requests`, `friendships`, `friend_assignments`
-   - `study_days`, `user_subjects`
-
-   The SQL files are in your repo (`neon-forum-tables.sql`, `neon-friends-tables.sql`).
+   - Check `/api/health` returns `{"ok": true, "users": N}`
 
 4. **Seed real questions**
    Empty subjects = students leave instantly. Use the Google Sheets sync pipeline (`/api/admin/questions/sync-from-sheet`) to load at least 50 questions per subject.
@@ -114,14 +120,15 @@ Now: ✅ Checked → stays logged in for a month. Unchecked → session expires 
    Don't blast it to a whole year level on day one. Watch the Cloudflare Functions logs for errors for a couple of days, then scale.
 
 6. **Rotate the admin password (when you're ready)**
-   It's in the repo currently — any contributor can see it. Set `ADMIN_PASSWORD` as a Cloudflare Pages environment variable (secret) instead.
+   It's in the repo currently. Set `ADMIN_PASSWORD` as a Cloudflare Pages environment variable (secret) instead.
 
 ---
 
 ## 🔧 Quick Tech Notes
 
-- **Two backends:** `server.js` (Express + SQLite) for local dev, `pages-deploy/functions/api/[[path]].ts` (Hono + Neon) for production. They now use the same table/column names.
-- **Auth flow:** scrypt hashing (dev) / PBKDF2 (production). Session tokens are 32-byte hex. 30-day expiry with "remember me", 1-day without.
-- **Health check:** `GET /api/health` on both backends.
+- **One backend:** Cloudflare Pages Functions (`functions/api/[[path]].ts`) with Hono + Drizzle ORM + Neon PostgreSQL. No more dual-backend drift.
+- **Auth flow:** PBKDF2 hashing with per-user random salt. Session tokens are 32-byte hex. 30-day expiry with "remember me", 1-day without.
+- **Health check:** `GET /api/health` 
+- **Local dev:** `npm run dev:all` (Vite on :5173 + Wrangler on :8787). Point Vite proxy at :8787 for API calls.
 
 Any questions, ask Ice to ask me. Good luck with the launch! 🚀
