@@ -620,8 +620,11 @@ function createToken(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
   return Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
 }
-function sessionExpiry(): string {
-  const d = new Date(); d.setDate(d.getDate() + 30); return d.toISOString();
+// Session duration: 30 days when "remember me" is checked, otherwise 1 day.
+function sessionExpiry(rememberMe = true): string {
+  const d = new Date();
+  d.setDate(d.getDate() + (rememberMe ? 30 : 1));
+  return d.toISOString();
 }
 function bytesToHex(bytes: Uint8Array): string {
   return Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
@@ -872,6 +875,18 @@ async function adminAccessMiddleware(c: any, next: any) {
   await next();
 }
 
+// ---- Health ----
+app.get("/api/health", async (c) => {
+  try {
+    const db = c.get("db");
+    const result = await db.execute(sql`SELECT COUNT(*) as count FROM users`);
+    const userCount = (result.rows?.[0] as any)?.count ?? 0;
+    return c.json({ ok: true, users: userCount });
+  } catch (err: any) {
+    return c.json({ ok: false, error: err?.message || "unknown" }, 500);
+  }
+});
+
 // ---- Auth routes ----
 app.post("/api/auth/signup", async (c) => {
   const body = await c.req.json();
@@ -888,8 +903,9 @@ app.post("/api/auth/signup", async (c) => {
   if (existingUsername.length > 0) return c.json({ error: "That username is already taken." }, 400);
   const { salt, hash } = await hashPassword(password);
   const result = await db.insert(users).values({ username, email, passwordHash: hash, passwordSalt: salt, hashAlgorithm: "pbkdf2", createdAt: nowIso() }).returning({ id: users.id });
+  const rememberMe = body.rememberMe !== false; // default true for signups
   const token = createToken();
-  await db.insert(sessions).values({ token, userId: result[0].id, createdAt: nowIso(), expiresAt: sessionExpiry() });
+  await db.insert(sessions).values({ token, userId: result[0].id, createdAt: nowIso(), expiresAt: sessionExpiry(rememberMe) });
   return c.json({ token, user: { id: result[0].id, username, email, profilePhoto: null } });
 });
 
@@ -905,8 +921,9 @@ app.post("/api/auth/login", async (c) => {
   if (user.hashAlgorithm === "scrypt") return c.json({ error: "Password reset required." }, 400);
   const valid = await verifyPassword(password, user.passwordSalt, user.passwordHash);
   if (!valid) return c.json({ error: "Invalid login details." }, 400);
+  const rememberMe = body.rememberMe !== false; // default true
   const token = createToken();
-  await db.insert(sessions).values({ token, userId: user.id, createdAt: nowIso(), expiresAt: sessionExpiry() });
+  await db.insert(sessions).values({ token, userId: user.id, createdAt: nowIso(), expiresAt: sessionExpiry(rememberMe) });
   return c.json({
     token,
     user: {

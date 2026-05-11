@@ -62,10 +62,14 @@ export async function apiFetch<T>(
   });
 
   if (response.status === 401) {
-    localStorage.removeItem(STORAGE_KEYS.authToken);
-    localStorage.removeItem(STORAGE_KEYS.currentUser);
-    window.location.href = "/login";
-    throw new ApiError(401, "Unauthorized");
+    // Don't auto-redirect — let the caller handle it.
+    // AuthContext bootstrap handles session expiry; other pages just show error.
+    const body = await response.json().catch(() => ({}));
+    const message =
+      (body as Record<string, unknown>).error ??
+      (body as Record<string, unknown>).message ??
+      "Session expired";
+    throw new ApiError(401, String(message));
   }
 
   if (!response.ok) {

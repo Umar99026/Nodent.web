@@ -158,9 +158,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(
     async (email: string, password: string) => {
+      const rememberMe = localStorage.getItem(STORAGE_KEYS.rememberLogin) === "true";
       const data = await apiFetch<AuthResponse>(API_PATHS.auth.login, {
         method: "POST",
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, rememberMe }),
       });
 
       const user = withProfilePhoto(data.user);

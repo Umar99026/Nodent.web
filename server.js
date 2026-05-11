@@ -715,22 +715,25 @@ async function initDb() {
       FOREIGN KEY (to_user_id) REFERENCES users(id) ON DELETE CASCADE
     )
   `);
+  await ensureColumn("friend_assignments", "marks", "INTEGER NOT NULL DEFAULT 1");
+  await ensureColumn("friend_assignments", "is_correct", "INTEGER");
   await run(`CREATE INDEX IF NOT EXISTS idx_friend_assignments_pair_created ON friend_assignments(from_user_id, to_user_id, created_at)`);
   await run(`CREATE INDEX IF NOT EXISTS idx_friend_assignments_to_created ON friend_assignments(to_user_id, created_at)`);
 
   await run(`
-    CREATE TABLE IF NOT EXISTS user_study_daily (
+    CREATE TABLE IF NOT EXISTS study_days (
       user_id INTEGER NOT NULL,
       date TEXT NOT NULL,
-      total_seconds INTEGER NOT NULL DEFAULT 0,
-      by_subject_json TEXT NOT NULL DEFAULT '{}',
+      daily_seconds INTEGER NOT NULL DEFAULT 0,
+      daily_seconds_by_subject TEXT,
+      goal_minutes INTEGER,
       updated_at TEXT NOT NULL,
       PRIMARY KEY (user_id, date),
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )
   `);
   await run(
-    `CREATE INDEX IF NOT EXISTS idx_user_study_daily_user_date ON user_study_daily(user_id, date)`,
+    `CREATE INDEX IF NOT EXISTS idx_study_days_user_date ON study_days(user_id, date)`,
   );
 
   await ensureColumn("users", "study_goal_minutes", "INTEGER NOT NULL DEFAULT 120");
@@ -845,10 +848,10 @@ function adminMiddleware(req, res, next) {
   next();
 }
 
-// 30 days from now
-function sessionExpiry() {
+// Session duration: 30 days when "remember me" is checked, otherwise 1 day.
+function sessionExpiry(rememberMe = true) {
   const d = new Date();
-  d.setDate(d.getDate() + 30);
+  d.setDate(d.getDate() + (rememberMe ? 30 : 1));
   return d.toISOString();
 }
 
@@ -937,7 +940,7 @@ function mergeStudyBySubject(existingObj, incomingObj) {
 function mergeStudyDayPayload(existingRow, incoming) {
   let exSub = {};
   try {
-    exSub = JSON.parse(existingRow?.by_subject_json || "{}");
+    exSub = JSON.parse(existingRow?.daily_seconds_by_subject || "{}");
     if (!exSub || typeof exSub !== "object") exSub = {};
   } catch {
     exSub = {};
@@ -951,10 +954,12 @@ function mergeStudyDayPayload(existingRow, incoming) {
     (a, n) => a + Math.max(0, Math.floor(Number(n) || 0)),
     0,
   );
-  const inTotal = Math.max(0, Math.floor(Number(incoming.dailySeconds) || 0));
-  const exTotal = Math.max(0, Math.floor(Number(existingRow?.total_seconds) || 0));
-  const total = Math.max(exTotal, inTotal, sumSub);
-  return { total, by_subject_json: JSON.stringify(mergedSub) };
+  const existingTotal = Math.max(0, Math.floor(Number(existingRow?.daily_seconds) || 0));
+  const incomingTotal = Math.max(0, Math.floor(Number(incoming.dailySeconds) || 0));
+  return {
+    total: Math.max(existingTotal, Math.max(incomingTotal, sumSub)),
+    by_subject_json: JSON.stringify(mergedSub),
+  };
 }
 
 async function upsertStudyDayForUser(userId, date, partial) {
@@ -968,7 +973,7 @@ async function upsertStudyDayForUser(userId, date, partial) {
     }
   }
   const existing = await get(
-    `SELECT total_seconds, by_subject_json FROM user_study_daily WHERE user_id = ? AND date = ?`,
+    `SELECT daily_seconds, daily_seconds_by_subject FROM study_days WHERE user_id = ? AND date = ?`,
     [userId, date],
   );
   const merged = mergeStudyDayPayload(existing, {
@@ -977,11 +982,11 @@ async function upsertStudyDayForUser(userId, date, partial) {
   });
   const ts = nowIso();
   await run(
-    `INSERT INTO user_study_daily (user_id, date, total_seconds, by_subject_json, updated_at)
+    `INSERT INTO study_days (user_id, date, daily_seconds, daily_seconds_by_subject, updated_at)
      VALUES (?, ?, ?, ?, ?)
      ON CONFLICT(user_id, date) DO UPDATE SET
-       total_seconds = excluded.total_seconds,
-       by_subject_json = excluded.by_subject_json,
+       daily_seconds = excluded.daily_seconds,
+       daily_seconds_by_subject = excluded.daily_seconds_by_subject,
        updated_at = excluded.updated_at`,
     [userId, date, merged.total, merged.by_subject_json, ts],
   );
@@ -1002,7 +1007,7 @@ function addDaysIso(isoDate, deltaDays) {
 function computeStudyStreakFromRows(rowsByDate, asOfDate, goalSeconds) {
   const map = {};
   for (const r of rowsByDate) {
-    map[r.date] = Math.max(0, Number(r.total_seconds) || 0);
+    map[r.date] = Math.max(0, Number(r.daily_seconds) || 0);
   }
   let d = asOfDate;
   let count = 0;
@@ -1024,7 +1029,7 @@ app.get("/api/study/daily", authMiddleware, async (req, res) => {
       return res.status(400).json({ error: "Invalid date (use YYYY-MM-DD)." });
     }
     const row = await get(
-      `SELECT date, total_seconds, by_subject_json, updated_at FROM user_study_daily WHERE user_id = ? AND date = ?`,
+      `SELECT date, daily_seconds, daily_seconds_by_subject, updated_at FROM study_days WHERE user_id = ? AND date = ?`,
       [req.user.id, date],
     );
     if (!row) {
@@ -1037,14 +1042,14 @@ app.get("/api/study/daily", authMiddleware, async (req, res) => {
     }
     let bySubject = {};
     try {
-      bySubject = JSON.parse(row.by_subject_json || "{}");
+      bySubject = JSON.parse(row.daily_seconds_by_subject || "{}");
       if (!bySubject || typeof bySubject !== "object") bySubject = {};
     } catch {
       bySubject = {};
     }
     res.json({
       date: row.date,
-      dailySeconds: Math.max(0, Number(row.total_seconds) || 0),
+      dailySeconds: Math.max(0, Number(row.daily_seconds) || 0),
       dailySecondsBySubject: bySubject,
       updatedAt: row.updated_at,
     });
@@ -1097,21 +1102,21 @@ app.get("/api/study/history", authMiddleware, async (req, res) => {
       return res.status(400).json({ error: "from must be on or before to." });
     }
     const rows = await all(
-      `SELECT date, total_seconds, by_subject_json FROM user_study_daily
+      `SELECT date, daily_seconds, daily_seconds_by_subject FROM study_days
        WHERE user_id = ? AND date >= ? AND date <= ? ORDER BY date ASC`,
       [req.user.id, from, to],
     );
     const days = rows.map((row) => {
       let bySubject = {};
       try {
-        bySubject = JSON.parse(row.by_subject_json || "{}");
+        bySubject = JSON.parse(row.daily_seconds_by_subject || "{}");
         if (!bySubject || typeof bySubject !== "object") bySubject = {};
       } catch {
         bySubject = {};
       }
       return {
         date: row.date,
-        dailySeconds: Math.max(0, Number(row.total_seconds) || 0),
+        dailySeconds: Math.max(0, Number(row.daily_seconds) || 0),
         dailySecondsBySubject: bySubject,
       };
     });
@@ -1183,14 +1188,15 @@ async function handleSignup(req, res) {
       [username, email, hash, salt, createdAt]
     );
 
+    const rememberMe = req.body.rememberMe !== false; // default true for signups
     const token = createToken();
-    const expiresAt = sessionExpiry();
+    const expiresAt = sessionExpiry(rememberMe);
     await run(
       `INSERT INTO sessions (token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)`,
       [token, result.lastID, createdAt, expiresAt]
     );
 
-    console.log(`[Signup] New user: ${username} <${email}> id=${result.lastID}`);
+    console.log(`[Signup] New user: ${username} <${email}> id=${result.lastID} rememberMe=${rememberMe}`);
 
     res.json({ token, user: { id: result.lastID, username, email, profilePhoto: null } });
   } catch (error) {
@@ -1233,8 +1239,9 @@ async function handleLogin(req, res) {
         user = await get(`SELECT * FROM users WHERE id = ?`, [result.lastID]);
       }
 
+      const rememberMe = req.body.rememberMe !== false;
       const token = createToken();
-      const expiresAt = sessionExpiry();
+      const expiresAt = sessionExpiry(rememberMe);
       await run(
         `INSERT INTO sessions (token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)`,
         [token, user.id, nowIso(), expiresAt]
@@ -1270,14 +1277,15 @@ async function handleLogin(req, res) {
       return res.status(400).json({ error: "Invalid login details." });
     }
 
+    const rememberMe = req.body.rememberMe !== false; // default true
     const token = createToken();
-    const expiresAt = sessionExpiry();
+    const expiresAt = sessionExpiry(rememberMe);
     await run(
       `INSERT INTO sessions (token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)`,
       [token, user.id, nowIso(), expiresAt]
     );
 
-    console.log(`[Login] User: ${user.username} <${user.email}> id=${user.id}`);
+    console.log(`[Login] User: ${user.username} <${user.email}> id=${user.id} rememberMe=${rememberMe}`);
 
     res.json({
       token,
@@ -3319,7 +3327,7 @@ app.get("/api/scorecard", authMiddleware, async (req, res) => {
     const goalSec = goalMin * 60;
 
     const streakRows = await all(
-      `SELECT date, total_seconds FROM user_study_daily WHERE user_id = ? ORDER BY date DESC LIMIT 500`,
+      `SELECT date, daily_seconds FROM study_days WHERE user_id = ? ORDER BY date DESC LIMIT 500`,
       [req.user.id],
     );
     const studyStreak = computeStudyStreakFromRows(streakRows, streakAnchor, goalSec);
