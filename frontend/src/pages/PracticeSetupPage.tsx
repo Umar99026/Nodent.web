@@ -175,23 +175,14 @@ export default function PracticeSetupPage() {
                 </div>
               )}
 
-              <div className="flex gap-2">
-                <Button
-                  onClick={() => navigate("/dashboard")}
-                  variant="outline"
-                  className="h-11"
-                >
-                  Back
-                </Button>
-                <Button
-                  onClick={handleStart}
-                  className="h-11 gap-2 bg-brand text-white hover:bg-brand-dark"
-                >
-                  <BookOpen className="size-4" />
-                  Questions
-                  <ArrowRight className="size-4" />
-                </Button>
-              </div>
+              <Button
+                onClick={handleStart}
+                className="h-11 gap-2 bg-brand text-white hover:bg-brand-dark"
+              >
+                <BookOpen className="size-4" />
+                Questions
+                <ArrowRight className="size-4" />
+              </Button>
             </div>
           </CardContent>
         </Card>
