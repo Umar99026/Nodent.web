@@ -14,10 +14,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
 import { Loader2, Sparkles, BookOpen, ArrowRight } from "lucide-react";
 import { RichQuestionContent } from "@/components/quiz/RichQuestionContent";
-import { getTopicOverview } from "@/lib/topicOverviews";
 
 type EnglishSection = "A" | "B" | "C";
 
@@ -93,14 +91,7 @@ export default function PracticeSetupPage() {
     }
   }, [availableTopics, topic, isEnglish]);
 
-  const overview = useMemo(() => {
-    return getTopicOverview({
-      subjectId: String(subjectId ?? ""),
-      subject,
-      topic,
-      englishSection,
-    });
-  }, [englishSection, subject, subjectId, topic]);
+  const overview = useMemo(() => "", []);
 
   const handleStart = () => {
     if (!subjectId) return;
@@ -115,97 +106,116 @@ export default function PracticeSetupPage() {
   return (
     <AppShell
       title={subject ? `${subject.name} Practice` : "Practice"}
-      subtitle="Choose your focus, skim the overview, then start questions."
+      subtitle="Choose your focus, then start questions."
       edgeToEdgeHeader
       edgeToEdgeMain
     >
-      <div className="mx-auto grid w-full max-w-6xl gap-6 lg:grid-cols-[420px_1fr]">
+      <div className="mx-auto w-full max-w-6xl space-y-6">
+        {/* Horizontal setup tile */}
         <Card className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm">
           <div className="h-1.5 bg-gradient-to-r from-brand via-brand-light to-amber" />
-          <CardHeader className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <CardTitle className="font-display text-xl text-[#0b0f19]">
-                Practice setup
-              </CardTitle>
-              <Badge variant="secondary" className="gap-1">
-                <Sparkles className="size-3.5" />
-                Focus mode
-              </Badge>
+          <CardContent className="flex flex-col gap-4 p-4 sm:p-5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="font-display text-xl font-semibold text-[#0b0f19]">
+                  Practice setup
+                </p>
+                <Badge variant="secondary" className="gap-1">
+                  <Sparkles className="size-3.5" />
+                  Focus mode
+                </Badge>
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Pick a topic / section, then start questions.
+              </p>
             </div>
-            <p className="text-sm text-muted-foreground">
-              Choose what you want to study, then jump into questions.
-            </p>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            {loading ? (
-              <div className="flex items-center gap-2 rounded-xl border border-black/10 bg-slate-50 p-4 text-sm text-muted-foreground">
-                <Loader2 className="size-4 animate-spin" />
-                Loading topics…
-              </div>
-            ) : isEnglish ? (
-              <div className="space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  English section
-                </p>
-                <Select value={englishSection} onValueChange={(v) => setEnglishSection((v as EnglishSection) ?? "A")}>
-                  <SelectTrigger className="h-11 border-black/10 bg-white text-[#0b0f19]">
-                    <SelectValue placeholder="Choose section" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="A">Section A — Text response</SelectItem>
-                    <SelectItem value="B">Section B — Creative</SelectItem>
-                    <SelectItem value="C">Section C — Writing</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Topic
-                </p>
-                <Select value={topic} onValueChange={(v) => setTopic(v ?? "all")}>
-                  <SelectTrigger className="h-11 border-black/10 bg-white text-[#0b0f19]">
-                    <SelectValue placeholder="Choose topic" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableTopics.map((t) => (
-                      <SelectItem key={t} value={t}>
-                        {t === "all" ? "All topics" : t}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
 
-            <Separator />
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between lg:justify-end">
+              {loading ? (
+                <div className="flex items-center gap-2 rounded-xl border border-black/10 bg-slate-50 px-4 py-3 text-sm text-muted-foreground">
+                  <Loader2 className="size-4 animate-spin" />
+                  Loading…
+                </div>
+              ) : isEnglish ? (
+                <div className="min-w-[260px] space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    English section
+                  </p>
+                  <Select
+                    value={englishSection}
+                    onValueChange={(v) => setEnglishSection((v as EnglishSection) ?? "A")}
+                  >
+                    <SelectTrigger className="h-11 border-black/10 bg-white text-[#0b0f19]">
+                      <SelectValue placeholder="Choose section" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="A">Section A — Text response</SelectItem>
+                      <SelectItem value="B">Section B — Creative</SelectItem>
+                      <SelectItem value="C">Section C — Writing</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : (
+                <div className="min-w-[260px] space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Topic
+                  </p>
+                  <Select value={topic} onValueChange={(v) => setTopic(v ?? "all")}>
+                    <SelectTrigger className="h-11 border-black/10 bg-white text-[#0b0f19]">
+                      <SelectValue placeholder="Choose topic" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableTopics.map((t) => (
+                        <SelectItem key={t} value={t}>
+                          {t === "all" ? "All topics" : t}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
-            <div className="flex flex-col gap-2">
-              <Button onClick={handleStart} className="h-11 gap-2 bg-brand text-white hover:bg-brand-dark">
-                <BookOpen className="size-4" />
-                Questions
-                <ArrowRight className="size-4" />
-              </Button>
-              <Button variant="outline" className="h-11" onClick={() => navigate("/dashboard")}>
-                Back to dashboard
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  onClick={() => navigate("/dashboard")}
+                  variant="outline"
+                  className="h-11"
+                >
+                  Back
+                </Button>
+                <Button
+                  onClick={handleStart}
+                  className="h-11 gap-2 bg-brand text-white hover:bg-brand-dark"
+                >
+                  <BookOpen className="size-4" />
+                  Questions
+                  <ArrowRight className="size-4" />
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
 
+        {/* Overview under setup */}
         <Card className="rounded-2xl border border-black/10 bg-white/80 shadow-sm backdrop-blur">
           <CardHeader className="space-y-2">
             <CardTitle className="font-display text-xl text-[#0b0f19]">
               Overview
             </CardTitle>
             <p className="text-sm text-muted-foreground">
-              A quick refresher before you start.
+              You’ll provide the formulas & theory for each topic next.
             </p>
           </CardHeader>
           <CardContent>
-            <div className="prose prose-slate max-w-none">
-              <RichQuestionContent text={overview} className="prose max-w-none" />
+            <div className="rounded-xl border border-dashed border-black/15 bg-slate-50 p-6 text-sm text-muted-foreground">
+              Overview is empty for now.
             </div>
+            {/* Keep renderer wired for when you paste resources */}
+            {overview ? (
+              <div className="prose prose-slate mt-4 max-w-none">
+                <RichQuestionContent text={overview} className="prose max-w-none" />
+              </div>
+            ) : null}
           </CardContent>
         </Card>
       </div>
