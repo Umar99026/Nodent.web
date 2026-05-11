@@ -17,6 +17,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Loader2, Sparkles, BookOpen, ArrowRight } from "lucide-react";
 import { RichQuestionContent } from "@/components/quiz/RichQuestionContent";
 import { getTopicOverview } from "@/lib/topicOverviews";
+import {
+  METHODS_STUDY_DESIGN_TOPICS,
+  topicExistsInQuestionBank,
+} from "@/lib/methodsCurriculumOverviews";
 
 type EnglishSection = "A" | "B" | "C";
 
@@ -79,11 +83,17 @@ export default function PracticeSetupPage() {
     };
   }, [subjectId, subject?.quiz, user]);
 
+  const isMethods = String(subjectId) === "methods";
+
   const availableTopics = useMemo(() => {
     if (isEnglish) return [];
-    const topics = uniqSorted(questions.map((q) => q.topic ?? "General"));
-    return ["all", ...topics];
-  }, [questions, isEnglish]);
+    const fromBank = uniqSorted(questions.map((q) => q.topic ?? "General"));
+    if (isMethods) {
+      const merged = uniqSorted([...METHODS_STUDY_DESIGN_TOPICS, ...fromBank]);
+      return ["all", ...merged];
+    }
+    return ["all", ...fromBank];
+  }, [questions, isEnglish, isMethods]);
 
   useEffect(() => {
     if (isEnglish) return;
@@ -106,6 +116,15 @@ export default function PracticeSetupPage() {
     if (!subjectId) return;
     if (isEnglish) {
       navigate(`/quiz/english?section=${encodeURIComponent(englishSection)}`);
+      return;
+    }
+    if (
+      isMethods &&
+      topic &&
+      topic !== "all" &&
+      !topicExistsInQuestionBank(topic, questions)
+    ) {
+      navigate(`/quiz/${subjectId}`);
       return;
     }
     const qp = topic && topic !== "all" ? `?topic=${encodeURIComponent(topic)}` : "";
@@ -204,7 +223,7 @@ export default function PracticeSetupPage() {
             </CardTitle>
             <p className="text-sm text-muted-foreground">
               {String(subjectId) === "methods"
-                ? "Key formulas and theory for the topic you pick (from your Methods lecture bundle)."
+                ? "VCAA-style Unit 1 & 2 outlines with KaTeX notation. If your question bank does not use these exact topic labels, Questions opens the full set."
                 : "Key formulas and theory for the topic you pick."}
             </p>
           </CardHeader>
@@ -214,8 +233,10 @@ export default function PracticeSetupPage() {
                 Choose a topic above to show an overview.
               </div>
             ) : (
-              <div className="prose prose-slate max-w-none">
-                <RichQuestionContent text={overview} className="prose max-w-none" />
+              <div className="max-h-[min(70vh,720px)] overflow-y-auto pr-1">
+                <div className="prose prose-slate max-w-none">
+                  <RichQuestionContent text={overview} className="prose max-w-none" />
+                </div>
               </div>
             )}
           </CardContent>
