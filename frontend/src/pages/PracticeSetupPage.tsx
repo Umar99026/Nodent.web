@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, Sparkles, BookOpen, ArrowRight } from "lucide-react";
 import { RichQuestionContent } from "@/components/quiz/RichQuestionContent";
+import { getTopicOverview } from "@/lib/topicOverviews";
 
 type EnglishSection = "A" | "B" | "C";
 
@@ -91,7 +92,15 @@ export default function PracticeSetupPage() {
     }
   }, [availableTopics, topic, isEnglish]);
 
-  const overview = useMemo(() => "", []);
+  const overview = useMemo(() => {
+    if (!isEnglish && topic === "all") return null;
+    return getTopicOverview({
+      subjectId: String(subjectId ?? ""),
+      subject,
+      topic: isEnglish ? undefined : topic,
+      englishSection,
+    });
+  }, [englishSection, isEnglish, subject, subjectId, topic]);
 
   const handleStart = () => {
     if (!subjectId) return;
@@ -194,19 +203,21 @@ export default function PracticeSetupPage() {
               Overview
             </CardTitle>
             <p className="text-sm text-muted-foreground">
-              You’ll provide the formulas & theory for each topic next.
+              {String(subjectId) === "methods"
+                ? "Key formulas and theory for the topic you pick (from your Methods lecture bundle)."
+                : "Key formulas and theory for the topic you pick."}
             </p>
           </CardHeader>
           <CardContent>
-            <div className="rounded-xl border border-dashed border-black/15 bg-slate-50 p-6 text-sm text-muted-foreground">
-              Overview is empty for now.
-            </div>
-            {/* Keep renderer wired for when you paste resources */}
-            {overview ? (
-              <div className="prose prose-slate mt-4 max-w-none">
+            {!overview ? (
+              <div className="rounded-xl border border-dashed border-black/15 bg-slate-50 p-6 text-sm text-muted-foreground">
+                Choose a topic above to show an overview.
+              </div>
+            ) : (
+              <div className="prose prose-slate max-w-none">
                 <RichQuestionContent text={overview} className="prose max-w-none" />
               </div>
-            ) : null}
+            )}
           </CardContent>
         </Card>
       </div>

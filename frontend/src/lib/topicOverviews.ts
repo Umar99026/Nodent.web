@@ -1,4 +1,5 @@
 import type { Subject } from "@/lib/subjects";
+import { getMethodsTopicOverviewMarkdown } from "@/lib/methodsTopicOverviews";
 
 type EnglishSection = "A" | "B" | "C";
 
@@ -141,6 +142,16 @@ export function getTopicOverview(args: {
 - Hit **Questions** to start.
 
 **Subject:** ${subjectName}`;
+  }
+
+  if (args.subjectId === "methods") {
+    const m = getMethodsTopicOverviewMarkdown(topic);
+    if (m) return m;
+    return `### ${topic}
+
+No bundled overview matched this topic string yet. If your sheet uses a different label, tell us the exact spelling and we’ll map it.
+
+**Subject:** Mathematical Methods`;
   }
 
   if (isMathish(subjectName)) return overviewMath(topic);

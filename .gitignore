@@ -1,4 +1,5 @@
 node_modules
+resources-topic-overviews-temp/
 nodent.db
 .DS_Store
 *.db-shm
