@@ -685,7 +685,235 @@ let englishResponsesConstraintDropped = false;
 let usersTablePatched = false;
 let performanceIndexesPatched = false;
 let studyTablesPatched = false;
+let coreTablesPatched = false;
 let lastSessionCleanupAt = 0;
+
+async function ensureCoreTables(db: any) {
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS users (
+      id serial PRIMARY KEY,
+      username text NOT NULL DEFAULT '',
+      email text NOT NULL UNIQUE,
+      password_hash text NOT NULL,
+      password_salt text NOT NULL,
+      hash_algorithm text NOT NULL DEFAULT 'pbkdf2',
+      profile_photo text,
+      study_goal_minutes integer NOT NULL DEFAULT 120,
+      created_at text NOT NULL
+    )
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS sessions (
+      token text PRIMARY KEY,
+      user_id integer NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+      created_at text NOT NULL,
+      expires_at text NOT NULL
+    )
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS quiz_attempts (
+      id serial PRIMARY KEY,
+      user_id integer NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+      subject_id text NOT NULL,
+      score integer NOT NULL,
+      total_questions integer NOT NULL,
+      percent integer NOT NULL,
+      created_at text NOT NULL
+    )
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS written_responses (
+      id serial PRIMARY KEY,
+      user_id integer NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+      subject_id text NOT NULL,
+      question_key text NOT NULL,
+      response_text text NOT NULL,
+      updated_at text NOT NULL,
+      UNIQUE(user_id, subject_id, question_key)
+    )
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS quiz_comments (
+      id serial PRIMARY KEY,
+      subject_id text NOT NULL,
+      question_key text NOT NULL,
+      user_id integer NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+      parent_comment_id integer REFERENCES quiz_comments (id) ON DELETE CASCADE,
+      text text NOT NULL,
+      image_urls text,
+      created_at text NOT NULL
+    )
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS custom_questions (
+      id serial PRIMARY KEY,
+      subject_id text NOT NULL,
+      type text NOT NULL,
+      topic text NOT NULL DEFAULT 'General',
+      question text NOT NULL,
+      image_urls text,
+      options text,
+      answer text,
+      accepted_answers text,
+      marks integer NOT NULL DEFAULT 1,
+      guidance text,
+      passage text,
+      created_at text NOT NULL
+    )
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS english_books (
+      id serial PRIMARY KEY,
+      title text NOT NULL UNIQUE,
+      created_at text NOT NULL
+    )
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS english_prompts (
+      id serial PRIMARY KEY,
+      book_id integer NOT NULL REFERENCES english_books (id) ON DELETE CASCADE,
+      prompt_text text NOT NULL,
+      section text NOT NULL DEFAULT 'A',
+      created_at text NOT NULL
+    )
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS english_responses (
+      id serial PRIMARY KEY,
+      prompt_id integer NOT NULL REFERENCES english_prompts (id) ON DELETE CASCADE,
+      user_id integer NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+      response_type text NOT NULL DEFAULT 'essay',
+      response_text text NOT NULL DEFAULT '',
+      image_urls text,
+      created_at text NOT NULL,
+      updated_at text NOT NULL
+    )
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS english_response_ratings (
+      id serial PRIMARY KEY,
+      response_id integer NOT NULL REFERENCES english_responses (id) ON DELETE CASCADE,
+      rater_user_id integer NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+      score integer NOT NULL,
+      created_at text NOT NULL,
+      UNIQUE(response_id, rater_user_id)
+    )
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS chat_messages (
+      id serial PRIMARY KEY,
+      subject_id text NOT NULL,
+      user_id integer NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+      username text NOT NULL,
+      text text NOT NULL,
+      created_at text NOT NULL
+    )
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS question_attempts (
+      id serial PRIMARY KEY,
+      user_id integer NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+      subject_id text NOT NULL,
+      question_key text NOT NULL,
+      topic text NOT NULL DEFAULT 'General',
+      marks integer NOT NULL DEFAULT 1,
+      is_correct integer NOT NULL,
+      answered_at text NOT NULL
+    )
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS forum_posts (
+      id serial PRIMARY KEY,
+      subject_id text NOT NULL,
+      user_id integer NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+      username text NOT NULL,
+      title text NOT NULL,
+      body text NOT NULL,
+      image_urls text,
+      created_at text NOT NULL,
+      updated_at text NOT NULL
+    )
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS forum_replies (
+      id serial PRIMARY KEY,
+      post_id integer NOT NULL REFERENCES forum_posts (id) ON DELETE CASCADE,
+      subject_id text NOT NULL,
+      user_id integer NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+      username text NOT NULL,
+      body text NOT NULL,
+      created_at text NOT NULL
+    )
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS dojo_challenges (
+      id serial PRIMARY KEY,
+      challenger_id integer NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+      opponent_id integer NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+      subject_id text NOT NULL,
+      topic text NOT NULL DEFAULT 'General',
+      question_set text NOT NULL,
+      status text NOT NULL DEFAULT 'pending',
+      opponent_read integer NOT NULL DEFAULT 0,
+      created_at text NOT NULL,
+      accepted_at text
+    )
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS dojo_battles (
+      id serial PRIMARY KEY,
+      challenge_id integer NOT NULL REFERENCES dojo_challenges (id) ON DELETE CASCADE,
+      subject_id text NOT NULL,
+      topic text NOT NULL DEFAULT 'General',
+      player1_id integer NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+      player2_id integer NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+      player1_score integer NOT NULL DEFAULT 0,
+      player2_score integer NOT NULL DEFAULT 0,
+      current_index integer NOT NULL DEFAULT 0,
+      question_started_at text NOT NULL,
+      status text NOT NULL DEFAULT 'active',
+      winner_id integer,
+      question_set text NOT NULL,
+      created_at text NOT NULL,
+      updated_at text NOT NULL
+    )
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS friend_requests (
+      id serial PRIMARY KEY,
+      from_user_id integer NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+      to_user_id integer NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+      status text NOT NULL DEFAULT 'pending',
+      created_at text NOT NULL,
+      responded_at text,
+      UNIQUE(from_user_id, to_user_id)
+    )
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS friendships (
+      id serial PRIMARY KEY,
+      user1_id integer NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+      user2_id integer NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+      created_at text NOT NULL,
+      UNIQUE(user1_id, user2_id)
+    )
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS friend_assignments (
+      id serial PRIMARY KEY,
+      from_user_id integer NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+      to_user_id integer NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+      subject_id text NOT NULL,
+      question_key text NOT NULL,
+      question_json text NOT NULL,
+      marks integer NOT NULL DEFAULT 1,
+      answer_json text,
+      is_correct integer,
+      created_at text NOT NULL,
+      answered_at text
+    )
+  `);
+}
 
 // CORS
 app.use("/api/*", cors({
@@ -704,6 +932,12 @@ app.use("/api/*", cors({
 // DB middleware
 app.use("/api/*", async (c, next) => {
   const db = createDb(c.env.DATABASE_URL);
+  if (!coreTablesPatched) {
+    try {
+      await ensureCoreTables(db);
+    } catch { /* ignore */ }
+    finally { coreTablesPatched = true; }
+  }
   if (!usersTablePatched) {
     try {
       await db.execute(sql`
