@@ -130,7 +130,7 @@ export default function PracticeSetupPage() {
               </p>
             </div>
 
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between lg:justify-end">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-2 lg:gap-3 lg:justify-end">
               {loading ? (
                 <div className="flex items-center gap-2 rounded-xl border border-black/10 bg-slate-50 px-4 py-3 text-sm text-muted-foreground">
                   <Loader2 className="size-4 animate-spin" />
