@@ -2456,6 +2456,31 @@ app.get("/api/admin/english/prompts", adminAccessMiddleware, async (c: any) => {
   }
 });
 
+app.post("/api/admin/english/prompts/delete-creative-writing", adminAccessMiddleware, async (c: any) => {
+  try {
+    const db = c.get("db");
+    const before = await db.execute(sql`
+      SELECT COUNT(*)::int AS n
+      FROM english_prompts
+      WHERE LOWER(TRIM(prompt_text)) = 'creative writing'
+         OR LOWER(TRIM(prompt_text)) LIKE 'title:%creative writing%'
+         OR LOWER(TRIM(prompt_text)) LIKE 'title: creative writing%'
+         OR LOWER(TRIM(prompt_text)) LIKE 'title:%creative writing.%'
+    `);
+    const total = Number((before.rows as any[])?.[0]?.n ?? 0);
+    await db.execute(sql`
+      DELETE FROM english_prompts
+      WHERE LOWER(TRIM(prompt_text)) = 'creative writing'
+         OR LOWER(TRIM(prompt_text)) LIKE 'title:%creative writing%'
+         OR LOWER(TRIM(prompt_text)) LIKE 'title: creative writing%'
+         OR LOWER(TRIM(prompt_text)) LIKE 'title:%creative writing.%'
+    `);
+    return c.json({ ok: true, deleted: total });
+  } catch (e) {
+    return c.json({ error: errorChain(e) }, 500);
+  }
+});
+
 app.get("/api/english/books", async (c: any) => {
   try {
     const db = c.get("db");
@@ -2555,15 +2580,24 @@ app.get("/api/english/prompts", async (c: any) => {
           `)
         : rows;
 
-    return c.json({
-      prompts: (effectiveRows.rows as any[]).map((r) => ({
+    const prompts = (effectiveRows.rows as any[])
+      .map((r) => ({
         id: Number(r.id),
         bookId: Number(r.book_id),
         bookTitle: String(r.book_title || ""),
         prompt: String(r.prompt_text || ""),
         section: normalizeEnglishSection(r.section),
-      })),
-    });
+      }))
+      .filter((p) => {
+        const t = String(p.prompt ?? "").trim().toLowerCase();
+        if (!t) return false;
+        // Hard-remove bad “Creative writing” placeholder prompts (Section B imports).
+        if (t === "creative writing") return false;
+        if (t.startsWith("title: creative writing")) return false;
+        if (t.startsWith("title:creative writing")) return false;
+        return true;
+      });
+    return c.json({ prompts });
   } catch (e) {
     return c.json({ error: errorChain(e) }, 500);
   }

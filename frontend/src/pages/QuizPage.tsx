@@ -446,7 +446,9 @@ export default function QuizPage() {
       if (JSON.stringify(norm) !== JSON.stringify(saved.answers)) {
         savePracticeState(user.id, subjectId, { ...saved, answers: norm });
       }
-      setCurrentIndex(Math.min(saved.currentIndex, maxIdx));
+      // Always start at the front of the remaining question list (even if a previous session ended later).
+      // This matches the requested UX: never spawn into the end of the bank.
+      setCurrentIndex(Math.min(0, maxIdx));
       setAnswers(norm);
       setAnsweredAtSessionStart(new Set(Object.keys(norm)));
     } else {

@@ -15,6 +15,7 @@ import { Check, Loader2, X } from "lucide-react";
 import { compressImageFileToDataUrl } from "@/lib/imageCompressor";
 import { toast } from "sonner";
 import { CommentThread } from "@/components/quiz/CommentThread";
+import { RichQuestionContent } from "@/components/quiz/RichQuestionContent";
 
 type Book = { id: number; title: string; promptCount: number };
 type Section = "A" | "B" | "C";
@@ -104,7 +105,6 @@ function cleanSectionBPromptText(promptText: string) {
     .replace(/â€”|—/g, "-")
     .replace(/(\w)\?(\w)/g, "$1'$2")
     .replace(/\?([^?\n]*[.!][^?\n]*)\?/g, '"$1"')
-    .replace(/\s+/g, " ")
     .replace(/\.\s*begin(?:ning)?\s+with\s*:\s*\.?\s*$/i, "")
     .replace(/\bbegin(?:ning)?\s+with\s*:\s*\.?\s*$/i, "")
     .trim();
@@ -114,6 +114,25 @@ function cleanSectionAPromptText(promptText: string) {
   return cleanSectionBPromptText(promptText)
     .replace(/^\s*\(?[ivxlcdm]+\)?[.)\-:\s]+/i, "")
     .trim();
+}
+
+function formatSectionBPromptDisplay(promptText: string) {
+  const cleaned = cleanSectionBPromptText(promptText)
+    .replace(/\r\n?/g, "\n")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  // Accept formats like:
+  // "title: Origins. Using at least one stimulus, write..."
+  // "Title: Origins\nUsing at least one stimulus, write..."
+  const m = cleaned.match(/^\s*title\s*:\s*([^.\n]+)\.?\s*(?:\n+)?([\s\S]*)$/i);
+  if (!m) return cleaned;
+  const title = String(m[1] ?? "").trim().replace(/[.,"']+$/g, "");
+  const rest = String(m[2] ?? "").trim();
+  if (!title && !rest) return cleaned;
+  if (!rest) return `Title: ${title}`;
+  return `Title: ${title}\n${rest}`;
 }
 
 function isMalformedSectionBPrompt(promptText: string) {
@@ -171,6 +190,7 @@ function sectionBPromptInstruction(promptText: string) {
 
 export function EnglishPracticePanel() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [books, setBooks] = useState<Book[]>([]);
   const [section, setSection] = useState<Section>("A");
   const [selectedBookId, setSelectedBookId] = useState<string>("");
@@ -188,6 +208,16 @@ export function EnglishPracticePanel() {
     Number.isFinite(numericBookId) && numericBookId > 0
       ? numericBookId
       : books[0]?.id ?? Number.NaN;
+
+  // Allow deep-linking from PracticeSetup: /quiz/english?section=B
+  useEffect(() => {
+    const s = String(searchParams.get("section") ?? "")
+      .trim()
+      .toUpperCase();
+    if (!s) return;
+    const next: Section = s === "B" ? "B" : s === "C" ? "C" : "A";
+    setSection(next);
+  }, [searchParams]);
 
   async function loadBooks(currentSection: Section) {
     const data = await apiFetch<{ books: Book[] }>(
@@ -251,7 +281,7 @@ export function EnglishPracticePanel() {
       const nextPrompt =
         section === "A"
           ? cleanSectionAPromptText(p.prompt)
-          : cleanSectionBPromptText(p.prompt);
+          : formatSectionBPromptDisplay(p.prompt);
       return { ...p, prompt: nextPrompt };
     });
     if (section === "B") {
@@ -602,6 +632,12 @@ export function EnglishPromptResponsesPage() {
 
   const promptTitle = responses[0]?.prompt ?? "Prompt responses";
   const openResponse = responses.find((r) => r.id === openResponseId) ?? null;
+  const promptDisplay = useMemo(() => {
+    if (!openResponse?.prompt) return "";
+    return section === "A"
+      ? cleanSectionAPromptText(openResponse.prompt)
+      : formatSectionBPromptDisplay(openResponse.prompt);
+  }, [openResponse?.prompt, section]);
   const rateResponse = async (responseId: number, scoreRaw: string) => {
     const score = Number(scoreRaw);
     if (!Number.isFinite(score) || score < 1 || score > 10) return;
@@ -776,6 +812,12 @@ export function EnglishPromptResponsesPage() {
               )}
             </div>
             <div className="max-h-[70vh] overflow-y-auto rounded-lg border border-black/10 bg-slate-50 p-4">
+              <div className="mb-4 rounded-lg border border-black/10 bg-white p-3">
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Prompt
+                </p>
+                <RichQuestionContent text={promptDisplay || promptTitle} className="prose max-w-none" />
+              </div>
               <p className="whitespace-pre-wrap text-sm leading-relaxed text-[#111827]">
                 {openResponse.responseText || "No typed response text."}
               </p>
