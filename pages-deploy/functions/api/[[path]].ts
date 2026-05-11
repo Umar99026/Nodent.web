@@ -260,6 +260,98 @@ function normalizeEnglishSection(raw: unknown): "A" | "B" | "C" {
   return s === "B" ? "B" : s === "C" ? "C" : "A";
 }
 
+/** Matches `frontend/src/lib/methodsAreaTopic.ts` (keep in sync when editing). */
+const METHODS_AREA_TITLES = [
+  "Functions, relations and graphs",
+  "Algebra, number and structure",
+  "Calculus",
+  "Data analysis, probability and statistics",
+] as const;
+
+function methodsRetagInfer(rawTopic: string, question: string, passage: string): string {
+  const set = new Set(METHODS_AREA_TITLES);
+  const stripUnit = (t: string) =>
+    t.replace(/^unit\s*[12]\s*[—–-]\s*/i, "").trim();
+  const t0 = String(rawTopic ?? "").trim();
+  const stripped = stripUnit(t0);
+  if (set.has(stripped)) return stripped;
+  if (set.has(t0)) return t0;
+  const norm = (x: string) => x.trim().toLowerCase().replace(/\s+/g, " ");
+  const aliases: Record<string, (typeof METHODS_AREA_TITLES)[number]> = {
+    calculus: "Calculus",
+    "functions & graphs": "Functions, relations and graphs",
+    trigonometry: "Functions, relations and graphs",
+    trigonometric: "Functions, relations and graphs",
+    algebra: "Algebra, number and structure",
+    probability: "Data analysis, probability and statistics",
+    statistics: "Data analysis, probability and statistics",
+    "data analysis": "Data analysis, probability and statistics",
+    functions: "Functions, relations and graphs",
+    graphs: "Functions, relations and graphs",
+    "section a": "Functions, relations and graphs",
+    "section b": "Algebra, number and structure",
+    "section c": "Calculus",
+    "section d": "Data analysis, probability and statistics",
+    general: "Algebra, number and structure",
+  };
+  const alias = aliases[norm(t0)];
+  if (alias) return alias;
+
+  const s = `${t0}\n${question}\n${passage}`.toLowerCase();
+  const w = (re: RegExp, n = 2) => (re.test(s) ? n : 0);
+  const fun =
+    w(/\basymptote\b/i) +
+    w(/\bperiodicity\b|\bperiod\b|\bamplitude\b/i) +
+    w(/\bsin\s*\(|\bcos\s*\(|\btan\s*\(/i, 3) +
+    w(/\bcomposite\b|\bf\s*∘\s*g/i) +
+    w(/\binverse function\b/i) +
+    w(/\blog_(?:e|a)?\s*\(|\bln\s*\(/i, 2) +
+    w(/\be\^|\bexp\b/i, 2) +
+    w(/\bunit circle\b|\bradian\b/i) +
+    w(/\bdomain\b|\brange\b|\bco-?domain\b/i) +
+    w(/\bgraph of\b|\btransform\b|\bdilation\b/i) +
+    w(/\bf\s*:\s*r\s*→\s*r\b/) +
+    w(/\bwhich.*graph\b/i, 2);
+  const alg =
+    w(/\bsimultaneous\b|\bsystem of equations\b/i, 3) +
+    w(/\bnewton'?s method\b|\bbisection\b/i, 3) +
+    w(/\bfactor theorem\b|\bremainder theorem\b/i, 2) +
+    w(/\bparameter\s+k\b|\bcontaining the parameter\b/i, 2) +
+    w(/\balgorithm\b|\bwhile\b.*\bprint\b/i, 2) +
+    w(/\bax\s*\+\s*by\b/i, 2);
+  const cal =
+    w(/\bderivative\b|\bdifferentiat\b/i, 3) +
+    w(/\btrapezium rule\b/i, 4) +
+    w(/\bintegral\b|\banti-?differentiat\b/i, 3) +
+    w(/\bgradient\b|\btangent\b/i, 2) +
+    w(/\brate of change\b|\binstantaneous\b/i, 2) +
+    w(/\bstationary\b|\binflection\b/i, 2) +
+    w(/\bcentral difference\b/i, 3);
+  const data =
+    w(/\bconfidence interval\b/i, 3) +
+    w(/\bPr\s*\(/i, 3) +
+    w(/\bprobability\b/i, 2) +
+    w(/\bvenn\b|\btree diagram\b/i, 2) +
+    w(/\bindependent event\b|\bmutually exclusive\b/i, 2) +
+    w(/\bwith(?:out)? replacement\b/i, 2);
+
+  const scores: Record<string, number> = {
+    "Functions, relations and graphs": fun,
+    "Algebra, number and structure": alg,
+    Calculus: cal,
+    "Data analysis, probability and statistics": data,
+  };
+  let best = "Functions, relations and graphs";
+  let v = -1;
+  for (const k of METHODS_AREA_TITLES) {
+    if (scores[k] > v) {
+      v = scores[k];
+      best = k;
+    }
+  }
+  return best;
+}
+
 function friendshipPair(a: number, b: number): { low: number; high: number } {
   const aa = Number(a);
   const bb = Number(b);
@@ -2449,6 +2541,9 @@ app.post("/api/admin/questions", adminAccessMiddleware, async (c: any) => {
 app.put("/api/admin/questions/:id", adminAccessMiddleware, async (c: any) => {
   const body = await c.req.json();
   const updates: Record<string, unknown> = {};
+  if (body.topic != null) {
+    updates.topic = cleanText(body.topic, 240) || "General";
+  }
   if (body.marks != null) {
     updates.marks = Math.max(1, Math.round(Number(body.marks ?? 1)));
   }
@@ -2467,6 +2562,26 @@ app.put("/api/admin/questions/:id", adminAccessMiddleware, async (c: any) => {
     .set(updates)
     .where(eq(customQuestions.id, Number(c.req.param("id"))));
   return c.json({ ok: true });
+});
+
+app.post("/api/admin/methods/retag-topics", adminAccessMiddleware, async (c: any) => {
+  const db = c.get("db");
+  const rows = await db
+    .select()
+    .from(customQuestions)
+    .where(eq(customQuestions.subjectId, "methods"));
+  let updated = 0;
+  for (const row of rows as any[]) {
+    const next = methodsRetagInfer(
+      String(row.topic ?? ""),
+      String(row.question ?? ""),
+      row.passage ? String(row.passage) : "",
+    );
+    if (String(row.topic ?? "") === next) continue;
+    await db.update(customQuestions).set({ topic: next }).where(eq(customQuestions.id, Number(row.id)));
+    updated++;
+  }
+  return c.json({ ok: true, updated, total: rows.length });
 });
 
 app.post("/api/admin/questions/autofill-answers", adminAccessMiddleware, async (c: any) => {

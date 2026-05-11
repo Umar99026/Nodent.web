@@ -1,4 +1,5 @@
 import type { AnswerPart, Question } from "@/lib/subjects";
+import { inferMethodsAreaOfStudy } from "@/lib/methodsAreaTopic";
 
 /**
  * Sheet / DB rows often use a human label; Practice URLs use baseSubjects `id`
@@ -282,11 +283,11 @@ export function getRawCustomQuestionsForSubject(
  * Maps bootstrap / localStorage custom question rows (admin uses short_answer, long_answer, letter MCQ answers)
  * into the shapes Practice / Quiz components expect (short, long, option text for MCQ).
  */
-export function normalizeCustomQuestion(raw: unknown): Question | null {
+export function normalizeCustomQuestion(raw: unknown, subjectIdHint?: string): Question | null {
   if (!raw || typeof raw !== "object") return null;
   const q = raw as Record<string, unknown>;
 
-  const topic = normalizeTopicLabel(q.topic);
+  const topicLabel = normalizeTopicLabel(q.topic);
   const questionText = cleanQuestionText(q.question);
   if (!questionText) return null;
 
@@ -324,6 +325,14 @@ export function normalizeCustomQuestion(raw: unknown): Question | null {
   const guidanceRaw = cleanQuestionText(q.guidance);
   const passage = passageRaw ? passageRaw : undefined;
   const guidance = guidanceRaw ? guidanceRaw : undefined;
+
+  const sid = canonicalSubjectId(
+    String(subjectIdHint ?? q.subject_id ?? q.subjectId ?? ""),
+  );
+  let topic = topicLabel;
+  if (sid === "methods") {
+    topic = inferMethodsAreaOfStudy(topicLabel, questionText, passage);
+  }
   const id =
     typeof q.id === "number"
       ? q.id
@@ -486,8 +495,11 @@ export function normalizeCustomQuestion(raw: unknown): Question | null {
   return null;
 }
 
-export function normalizeCustomQuestionsList(rawList: unknown[]): Question[] {
+export function normalizeCustomQuestionsList(
+  rawList: unknown[],
+  subjectId?: string,
+): Question[] {
   return (rawList ?? [])
-    .map(normalizeCustomQuestion)
+    .map((row) => normalizeCustomQuestion(row, subjectId))
     .filter((q): q is Question => q != null);
 }

@@ -220,6 +220,7 @@ export default function SummaryPage() {
       const parsed = JSON.parse(raw) as Record<string, unknown[]>;
       return normalizeCustomQuestionsList(
         getRawCustomQuestionsForSubject(parsed, subjectId),
+        subjectId,
       );
     } catch {
       return [];
@@ -250,7 +251,7 @@ export default function SummaryPage() {
           data?.customQuestions,
           subjectId,
         );
-        const custom = normalizeCustomQuestionsList(raw);
+        const custom = normalizeCustomQuestionsList(raw, subjectId);
         setQuestions(
           custom.length ? custom : (subject?.quiz ?? []),
         );

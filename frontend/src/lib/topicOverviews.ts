@@ -75,7 +75,7 @@ export function getTopicOverview(args: {
     if (m) return m;
     return `### ${topic}
 
-No overview is defined for this label yet. Use a **Unit / Area of study** topic from the list, or add a mapping when your question bank uses a different spelling.
+No overview is defined for this label yet. Use one of the four **Areas of study** (Functions…, Algebra…, Calculus, Data analysis…) or fix the spelling to match the list.
 
 **Subject:** Mathematical Methods`;
   }

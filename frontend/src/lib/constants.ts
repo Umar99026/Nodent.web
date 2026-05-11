@@ -76,6 +76,7 @@ export const API_PATHS = {
     googleSheetStatus: "/api/admin/google-sheet/status",
     googleSheetDiagnose: "/api/admin/google-sheet/diagnose",
     syncQuestionsFromSheet: "/api/admin/questions/sync-from-sheet",
+    methodsRetagTopics: "/api/admin/methods/retag-topics",
     pdfPreview: "/api/admin/pdf/preview",
     pdfGenerate: "/api/admin/pdf/generate",
     pdfPublish: "/api/admin/pdf/publish",

@@ -6,14 +6,10 @@
  */
 export const GOOGLE_SHEETS_TOPIC_LABELS: Record<string, readonly string[]> = {
   methods: [
-    "Unit 1 — Functions, relations and graphs",
-    "Unit 1 — Algebra, number and structure",
-    "Unit 1 — Calculus",
-    "Unit 1 — Data analysis, probability and statistics",
-    "Unit 2 — Functions, relations and graphs",
-    "Unit 2 — Algebra, number and structure",
-    "Unit 2 — Calculus",
-    "Unit 2 — Data analysis, probability and statistics",
+    "Functions, relations and graphs",
+    "Algebra, number and structure",
+    "Calculus",
+    "Data analysis, probability and statistics",
   ],
   "general-maths": [
     "Statistics",

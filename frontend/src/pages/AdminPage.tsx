@@ -170,6 +170,7 @@ export default function AdminPage() {
   const [acceptedAnswersEdits, setAcceptedAnswersEdits] = useState<Record<string, string>>({});
   const [acceptedAnswersSaving, setAcceptedAnswersSaving] = useState<string | null>(null);
   const [autoFillingExpected, setAutoFillingExpected] = useState(false);
+  const [retaggingMethodsTopics, setRetaggingMethodsTopics] = useState(false);
   const autoRepairExpectedRunRef = useRef(false);
 
   /* ------ Bulk import (paste table) ------ */
@@ -711,6 +712,27 @@ export default function AdminPage() {
     const current = acceptedAnswersEdits[questionId] ?? fallback;
     const next = current.trim() ? `${current}\n` : "";
     setAcceptedAnswersEdits((prev) => ({ ...prev, [questionId]: `${next}new answer` }));
+  };
+
+  const handleRetagMethodsTopics = async () => {
+    setRetaggingMethodsTopics(true);
+    try {
+      const result = await apiFetchAdmin<{ ok: boolean; updated?: number; total?: number }>(
+        API_PATHS.admin.methodsRetagTopics,
+        { method: "POST" },
+      );
+      const updated = Number(result?.updated ?? 0);
+      const total = Number(result?.total ?? 0);
+      toast.success(
+        `Updated topic for ${updated} of ${total} Mathematical Methods question${total === 1 ? "" : "s"}.`,
+      );
+      await fetchQuestions();
+    } catch (err) {
+      if (err instanceof ApiError) toast.error(err.message);
+      else toast.error("Failed to retag Methods topics.");
+    } finally {
+      setRetaggingMethodsTopics(false);
+    }
   };
 
   const handleAutoFillMissingExpectedAnswers = async () => {
@@ -2392,19 +2414,32 @@ methods\tThe total number of avocados sold in bags was\t["data:image/jpeg;base64
           </CardHeader>
           <CardContent>
             <div className="mb-4 space-y-1.5">
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <Label>Filter by Subject</Label>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  className="gap-2"
-                  disabled={autoFillingExpected}
-                  onClick={() => void handleAutoFillMissingExpectedAnswers()}
-                >
-                  {autoFillingExpected ? <Loader2 className="size-4 animate-spin" /> : null}
-                  Auto-fill missing expected answers
-                </Button>
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="gap-2"
+                    disabled={retaggingMethodsTopics}
+                    onClick={() => void handleRetagMethodsTopics()}
+                  >
+                    {retaggingMethodsTopics ? <Loader2 className="size-4 animate-spin" /> : null}
+                    Retag Methods (VCAA areas)
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="gap-2"
+                    disabled={autoFillingExpected}
+                    onClick={() => void handleAutoFillMissingExpectedAnswers()}
+                  >
+                    {autoFillingExpected ? <Loader2 className="size-4 animate-spin" /> : null}
+                    Auto-fill missing expected answers
+                  </Button>
+                </div>
               </div>
               <Select value={subjectFilter} onValueChange={(val: string | null) => val && setSubjectFilter(val)}>
                 <SelectTrigger className="w-full">

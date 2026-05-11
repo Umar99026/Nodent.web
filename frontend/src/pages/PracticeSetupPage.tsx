@@ -18,7 +18,7 @@ import { Loader2, Sparkles, BookOpen, ArrowRight } from "lucide-react";
 import { RichQuestionContent } from "@/components/quiz/RichQuestionContent";
 import { getTopicOverview } from "@/lib/topicOverviews";
 import {
-  METHODS_STUDY_DESIGN_TOPICS,
+  METHODS_AREA_OF_STUDY_TOPICS,
   topicExistsInQuestionBank,
 } from "@/lib/methodsCurriculumOverviews";
 
@@ -70,7 +70,7 @@ export default function PracticeSetupPage() {
           localStorage.setItem(STORAGE_KEYS.customQuestions, JSON.stringify(data.customQuestions));
         }
         const raw = getRawCustomQuestionsForSubject(data.customQuestions, subjectId);
-        const custom = normalizeCustomQuestionsList(raw);
+        const custom = normalizeCustomQuestionsList(raw, subjectId);
         setQuestions(custom.length ? custom : (subject?.quiz ?? []));
       } catch {
         setQuestions(subject?.quiz ?? []);
@@ -89,7 +89,7 @@ export default function PracticeSetupPage() {
     if (isEnglish) return [];
     const fromBank = uniqSorted(questions.map((q) => q.topic ?? "General"));
     if (isMethods) {
-      const merged = uniqSorted([...METHODS_STUDY_DESIGN_TOPICS, ...fromBank]);
+      const merged = uniqSorted([...METHODS_AREA_OF_STUDY_TOPICS, ...fromBank]);
       return ["all", ...merged];
     }
     return ["all", ...fromBank];
@@ -223,7 +223,7 @@ export default function PracticeSetupPage() {
             </CardTitle>
             <p className="text-sm text-muted-foreground">
               {String(subjectId) === "methods"
-                ? "VCAA-style Unit 1 & 2 outlines with KaTeX notation. If your question bank does not use these exact topic labels, Questions opens the full set."
+                ? "Four VCAA areas of study (Units 1–2 combined per topic), with KaTeX. Question topics are matched to these automatically for Methods."
                 : "Key formulas and theory for the topic you pick."}
             </p>
           </CardHeader>

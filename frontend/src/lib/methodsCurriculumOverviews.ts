@@ -1,442 +1,234 @@
 /**
- * VCE Mathematical Methods — Units 1 & 2 study design summaries for Practice Setup.
- * Uses the same Markdown + KaTeX conventions as questions (`$...$`, `$$...$$`).
+ * VCE Mathematical Methods — four Areas of Study (Units 1–2 combined per topic).
+ * Markdown + KaTeX matches `RichQuestionContent` (`$...$`, `$$...$$`).
  */
 
-export const METHODS_STUDY_DESIGN_TOPICS = [
-  "Unit 1 — Functions, relations and graphs",
-  "Unit 1 — Algebra, number and structure",
-  "Unit 1 — Calculus",
-  "Unit 1 — Data analysis, probability and statistics",
-  "Unit 2 — Functions, relations and graphs",
-  "Unit 2 — Algebra, number and structure",
-  "Unit 2 — Calculus",
-  "Unit 2 — Data analysis, probability and statistics",
-] as const;
+import {
+  METHODS_AREA_OF_STUDY_TOPICS,
+  type MethodsAreaOfStudyTopic,
+  stripMethodsUnitPrefix,
+} from "@/lib/methodsAreaTopic";
 
-export type MethodsStudyDesignTopic = (typeof METHODS_STUDY_DESIGN_TOPICS)[number];
+export { METHODS_AREA_OF_STUDY_TOPICS, type MethodsAreaOfStudyTopic };
+
+/** @deprecated Use METHODS_AREA_OF_STUDY_TOPICS */
+export const METHODS_STUDY_DESIGN_TOPICS = METHODS_AREA_OF_STUDY_TOPICS;
 
 const norm = (s: string) => String(s ?? "").trim().toLowerCase().replace(/\s+/g, " ");
 
-/** Legacy / sheet labels → canonical study-design topic (best-effort for existing banks). */
-const METHODS_TOPIC_ALIASES: Record<string, MethodsStudyDesignTopic> = {
-  calculus: "Unit 2 — Calculus",
-  "functions & graphs": "Unit 1 — Functions, relations and graphs",
-  trigonometry: "Unit 2 — Functions, relations and graphs",
-  algebra: "Unit 1 — Algebra, number and structure",
-  probability: "Unit 1 — Data analysis, probability and statistics",
-  functions: "Unit 1 — Functions, relations and graphs",
-  graphs: "Unit 1 — Functions, relations and graphs",
-  "functions, relations and graphs": "Unit 1 — Functions, relations and graphs",
-  statistics: "Unit 2 — Data analysis, probability and statistics",
-  "data analysis": "Unit 2 — Data analysis, probability and statistics",
+const METHODS_TOPIC_ALIASES: Record<string, MethodsAreaOfStudyTopic> = {
+  calculus: "Calculus",
+  "functions & graphs": "Functions, relations and graphs",
+  trigonometry: "Functions, relations and graphs",
+  algebra: "Algebra, number and structure",
+  probability: "Data analysis, probability and statistics",
+  functions: "Functions, relations and graphs",
+  graphs: "Functions, relations and graphs",
+  statistics: "Data analysis, probability and statistics",
+  "data analysis": "Data analysis, probability and statistics",
 };
 
-const MARKDOWN: Record<MethodsStudyDesignTopic, string> = {
-  "Unit 1 — Functions, relations and graphs": `## Unit 1 — Area of Study 1  
-### Functions, relations and graphs
-
-Students use graphs of **polynomial** and **power** functions of a single real variable. They interpret key features of graphs and functions in modelling and in theory.
+const MARKDOWN: Record<MethodsAreaOfStudyTopic, string> = {
+  "Functions, relations and graphs": `## Functions, relations and graphs
+### Area of Study 1 (Units 1–2 combined)
 
 ---
 
-### 1. Functions, domain and representation
+### Unit 1 — Polynomial and power functions
 
-- **Function notation** and a function as a mapping from a domain to a **co-domain**; **range** as the set of output values actually attained.
-- **Domain** including **maximal**, **natural** and **implied** domains for rules that arise from formulas.
-- A function may be given by a **rule**, a **graph**, or a **table**; move between these representations.
+Students use graphs of **polynomial** and **power** functions of a single real variable and interpret key features in modelling and theory.
 
----
+#### Functions, domain and representation
 
-### 2. Reading graphs (with and without a formula)
+- **Function notation**; **domain**, **co-domain**, **range** (including maximal / natural / implied domains).
+- Representations: **rule**, **graph**, **table**; move between them; **inverse** functions and graphs.
 
-Qualitative interpretation of **features** of graphs, including **real data** where no explicit rule is given:
+#### Reading graphs
 
-- approximate location of **axis intercepts**
-- **stationary** points (local max / min)
-- **points of inflection**
-- **asymptotic** behaviour (vertical / horizontal where relevant)
-- **symmetry** (e.g. even / odd structure where obvious from the graph)
+Qualitative interpretation of graphs with or without a formula: **intercepts**, **stationary** points, **inflection**, **asymptotes**, **symmetry**, and real **data** sets.
 
----
+#### Power functions and transformations
 
-### 3. Power functions and transformations
-
-Graphs of power functions for integer and simple rational exponents as required by the study design, and **transformations** to the form
+Graphs of power functions (integer / simple rational exponents as prescribed) and transformations to
 
 $$
 y = a(x+b)^n + c
 $$
 
-where $n$ is fixed by the family you are studying and $a$, $b$, $c$ control dilation, translation, and reflection structure.
+#### Low-degree polynomials
+
+Intercept / turning / end behaviour; links to factors (see **Algebra, number and structure**).
 
 ---
 
-### 4. Polynomials (low degree)
+### Unit 2 — Circular, exponential and logarithmic functions
 
-Graphs of **polynomial** functions of low degree; interpret:
+#### Circular (trigonometric)
 
-- **axis intercepts**
-- **turning points**
-- **end behaviour** as $x \to \pm\infty$
-- links between **factorised form** and **x-intercepts** (see Unit 1 Algebra for factor theorems).
-`,
-
-  "Unit 1 — Algebra, number and structure": `## Unit 1 — Area of Study 2  
-### Algebra, number and structure
-
-This area supports **Functions**, **Calculus** and **Data analysis**. In Unit 1 the focus is the algebra of **polynomial** functions of low degree and **transformations of the plane**.
-
----
-
-### 1. Symbolic skills
-
-- **Substitution** into expressions; **equivalent** forms; **simplifying** expressions.
-- **Distributive** and **exponent** laws applied to polynomial and power forms, moving between equivalent forms.
-
----
-
-### 2. Parameters and families
-
-Use **parameters** to describe **families** of functions and relations; determine a **rule** from suitable information (points, intercepts, shape class, etc.).
-
----
-
-### 3. Transformations of the plane
-
-Apply to **basic** functions and relations using **dilations** (including “parallel to an axis” and “from an axis” language), **reflections** in an axis, and **translations**. Matrix form is optional.
-
----
-
-### 4. Polynomials: roots, factors, intercepts
-
-Connect **roots** of a polynomial, **linear factors**, and **x-axis intercepts** of its graph.
-
-Use as required:
-
-- **Remainder theorem**
-- **Factor theorem**
-- **Rational root** theorem (where applicable)
-
-Solve **polynomial equations** of low degree **numerically**, **graphically**, and **algebraically**, including approximating a root by the **bisection method**.
-
----
-
-### 5. Equation types studied in Unit 1
-
-- **Simultaneous linear equations** (for two variables, connect algebraic solutions to **geometric** intersection of lines).
-
-- Equations that can be framed as
-
-$$
-f(x) = g(x)
-$$
-
-solve **numerically**, **graphically**, and **algebraically** where appropriate (including intersection interpretation on graphs).
-`,
-
-  "Unit 1 — Calculus": `## Unit 1 — Area of Study 3  
-### Calculus (introduction)
-
-This introduction focuses on **constant** and **average** rates of change and an informal approach to **instantaneous** rate in familiar contexts (including **numerical** and **graphical** estimation).
-
----
-
-### 1. Rates of change
-
-- **Average rate of change** over an interval; interpret as gradient of a **secant**.
-- **Instantaneous rate** introduced informally as the **limiting case** of average rate as the interval shrinks (conceptual, with numerical / graphical support).
-
----
-
-### 2. Graphs of empirical relationships
-
-Read **rate of change** from context graphs, e.g.:
-
-- temperature or pollution vs time  
-- **motion** graphs (position / velocity ideas approached informally)
-
-**Height of water** in tanks of different shape filled at a **constant** rate: relate filling graphs to rate of change of height.
-
-Informal language around **continuity** and **smoothness** as relevant to whether “gradient of tangent” is meaningful at a point.
-
----
-
-### 3. Gradient of the tangent
-
-Use the **gradient of the tangent** at a point on $y=f(x)$ to describe **instantaneous** rate of change:
-
-- where rate is **positive**, **negative**, or **zero**
-- how the sign and magnitude of this gradient relate to **features** of the graph of $f$ (increasing / decreasing / local extremes in qualitative terms).
-`,
-
-  "Unit 1 — Data analysis, probability and statistics": `## Unit 1 — Area of Study 4  
-### Data analysis, probability and statistics
-
-Introduces **finite** sample spaces and **basic** probability with **counting**.
-
----
-
-### 1. Language and representations
-
-- **Experiment (trial)**, **outcome**, **event**, **relative frequency** (informal probability from repetition).
-- Represent sample spaces and events using **lists**, **grids**, **Venn diagrams**, **tables**, and similar diagrams.
-
----
-
-### 2. Events and variables
-
-- **Elementary** and **compound** events.
-- Introduce **random variables** and the **distribution** of results from repeated experiments (informal, discrete settings).
-
----
-
-### 3. Simulation
-
-Simulation using physical generators (coins, dice, spinners) and **technology**-based pseudo-random generators; display and interpret repeated outcomes, including informal **proportions** in samples.
-
----
-
-### 4. Counting and probability
-
-- **Addition** and **multiplication** counting principles (careful tracking of ordered vs unordered settings only as required by your course prescription).
-- **Combinations** (selections) and values such as
-
-$$
-\binom{n}{r}
-$$
-
-with applications to computing probabilities in finite equally-likely models when appropriate.
-`,
-
-  "Unit 2 — Functions, relations and graphs": `## Unit 2 — Area of Study 1  
-### Functions, relations and graphs
-
-Students study **circular**, **exponential** and **logarithmic** functions of one variable: key features and modelling.
-
----
-
-### 1. Circular (trigonometric) functions
-
-- The **unit circle**, **radians**, **arc length**; sine, cosine and tangent as functions of a **real variable**.
-- For small $|x|$ (radians), interpret relationships such as $\sin x \approx x$ in suitable informal limits-based discussion.
-- **Exact values** at standard axes multiples (e.g. multiples of $\tfrac{\pi}{6}$, $\tfrac{\pi}{4}$).
-- **Symmetry**, **complementary** relationships, **periodicity** for $\sin$, $\cos$, $\tan$.
-- Functions of the form
-
-$$
-y = a\,\phi(bx+c)+d
-$$
-
-where $\phi$ is $\sin$, $\cos$ or $\tan$, identifying **period**, **amplitude** (where defined), **phase** shift, and **vertical** shift from parameters within modelling contexts.
-
----
-
-### 2. Exponential functions
+- **Unit circle**, **radians**, **arc length**; $\sin$, $\cos$, $\tan$ as functions on $\mathbb{R}$.
+- Small-angle ideas such as $\sin x \approx x$ (for $|x|$ small, radians).
+- **Exact values** at multiples of $\tfrac{\pi}{6}$, $\tfrac{\pi}{4}$.
+- **Symmetry**, **complementary** and **periodicity** properties.
 
 Functions
 
 $$
-y = a\,e^{kt} \quad \text{or equivalently} \quad y = a\,b^{t}
+y = a\,\phi(bx+c)+d,\quad \phi\in\{\sin,\cos,\tan\}
 $$
 
-(with parameters determined by context): graphs and simple modelling. Interpret **initial value**, **growth/decay rate**, **half-life**, **doubling time**, and **long-run** behaviour; relate to parameters in the chosen form.
+Interpret **period**, **amplitude**, **phase**, **vertical shift** in modelling.
 
----
-
-### 3. Logarithmic functions
-
-Logarithms as inverses of exponentials: for suitable bases $a>0$, $a\neq 1$,
+#### Exponential
 
 $$
-y = \log_a x \quad \leftrightarrow \quad x = a^y
+y = ae^{kt} \quad \text{or} \quad y = ab^{t}
 $$
 
-Graphs, domain/range, and identities such as
+**Initial value**, growth/decay, **half-life**, **doubling time**, long-run behaviour.
 
-$$
-\log_a(xy)=\log_a x + \log_a y,\qquad \log_a(x^r)=r\log_a x
-$$
+#### Logarithmic
 
-(develop fully in Unit 2 Algebra as laws for solving equations).
+$y=\log_a x \leftrightarrow x=a^y$; graphs; laws such as $\log_a(xy)=\log_ax+\log_ay$, $\log_a(x^r)=r\log_ax$.
 `,
 
-  "Unit 2 — Algebra, number and structure": `## Unit 2 — Area of Study 2  
-### Algebra, number and structure
-
-Focus: algebra of simple **transcendental** functions and **transformations**, consolidating Unit 1 skills.
+  "Algebra, number and structure": `## Algebra, number and structure
+### Area of Study 2 (Units 1–2 combined)
 
 ---
 
-### 1. Solving equations with inverses (restricted domains)
+### Unit 1 — Symbolic algebra and transformations
 
-Use **inverse functions** and **transformations** to solve equations
+Supports work in functions, calculus and statistics.
 
-$$
-f(x)=k
-$$
+- **Substitution**, **equivalence**, **simplification**; **distributive** and **exponent** laws on polynomial / power expressions.
+- **Parameters** and **families** of functions; determine rules from information.
+- **Transformations of the plane**: dilations (parallel to / from an axis), **reflections**, **translations** (matrix form optional).
 
-where $f$ is $\sin$, $\cos$, $\tan$ or an exponential $a^x$ (base $a>0$, $a\neq 1$) on a **given domain**, using **exact** values where possible and **approximate** values from a calculator otherwise.
+#### Polynomials: roots, factors, intercepts
 
----
+**Remainder**, **factor**, **rational root** theorems as applicable.
 
-### 2. Exponent and logarithm laws
+Solve **polynomial equations** numerically, graphically, algebraically; **bisection** for roots.
 
-**Exponent laws** and **logarithm laws** (including change-of-base where needed) applied to **solving** simple exponential and logarithmic **equations**.
+#### Other equation types
 
----
-
-### 3. Newton’s method
-
-Numerical approximation of a root of a **cubic** polynomial using the **Newton’s method** algorithm (as specified for Methods).
+- **Simultaneous linear** equations (two variables: link algebra to geometry of lines).
+- Equations $f(x)=g(x)$ numerically, graphically, algebraically.
 
 ---
 
-### Revision / consolidation
+### Unit 2 — Transcendental algebra
 
-Opportunity to revisit Unit 1 algebra (polynomials, transformations, systems) alongside the transcendental material above.
+- Solve $f(x)=k$ for $\sin/\cos/\tan$ and $a^x$ on a **given domain** (exact where dictated, otherwise CAS).
+- **Exponent** and **logarithm** laws; solving exponential / logarithmic equations.
+- **Newton’s method** for numerical roots of **cubic** polynomials (as prescribed).
 `,
 
-  "Unit 2 — Calculus": `## Unit 2 — Area of Study 3  
-### Calculus
-
-Differentiation and **anti-differentiation** of **polynomials** by rule, with applications including **graph analysis**.
+  Calculus: `## Calculus
+### Area of Study 3 (Units 1–2 combined)
 
 ---
 
-### 1. The derivative as a limit
+### Unit 1 — Introduction to rate of change
 
-Informal limit view of the gradient of the tangent; standard limit definitions such as
+- **Average** vs **instantaneous** rates; average as **secant** gradient; instantaneous as informal **limit** of average rate.
+- “Real world” graphs (temperature, pollution, **motion**, water height in tanks) — informal **continuity** / **smoothness**.
+- **Gradient of tangent** at a point: sign of rate; link to shape of $y=f(x)$ (increasing/decreasing, qualitative extremes).
+
+---
+
+### Unit 2 — Differentiation and anti-differentiation (polynomials)
+
+#### Derivative as limit
+
+Definitions such as
 
 $$
 f'(x)=\lim_{h\to 0}\frac{f(x+h)-f(x)}{h}
 $$
 
-and equivalent one-sided forms as used in your course.
-
-**Central difference** approximation:
+**Central difference**:
 
 $$
-f'(x)\approx \frac{f(x+h)-f(x-h)}{2h}
+f'(x)\approx\frac{f(x+h)-f(x-h)}{2h}
 $$
 
-and its **graphical** interpretation (secant slopes around $x$).
+and its graphical meaning.
 
----
+#### Meaning and rules
 
-### 2. Meaning of the derivative
+- $f'(x)$ as **gradient** and **instantaneous rate**.
+- Differentiate **polynomials** by rule (**power rule**, linearity).
 
-- $f'(x)$ as **gradient** of $y=f(x)$ at a point.
-- As **instantaneous rate of change** in applied contexts.
+#### Applications
 
----
+**Stationary** points, local **max/min**, **inflection**, **motion** graphs, **optimisation** with modelling domain and local vs global extrema.
 
-### 3. Differentiation
+#### Anti-differentiation
 
-Differentiate **polynomial** functions using **linearity** and the **power rule** (by prescription).
-
----
-
-### 4. Applications of differentiation
-
-Including:
-
-- **instantaneous** rates from a rule or graph  
-- **stationary** values; local **max / min**  
-- **points of inflection** (coordinate work as required)  
-- analysing graphs including **motion** graphs  
-- **optimisation** with explicit attention to **modelling domain** and local vs global extrema.
-
----
-
-### 5. Anti-differentiation
-
-- Anti-differentiation as the **inverse** of differentiation.
-- **Families** of curves sharing the same derivative; use a **boundary / initial condition** to pin down the **particular** anti-derivative.
+Families with the same derivative; **boundary / initial** condition for a particular antiderivative.
 `,
 
-  "Unit 2 — Data analysis, probability and statistics": `## Unit 2 — Area of Study 4  
-### Data analysis, probability and statistics
-
-Finite-sample probability with structure: complementary, mutually exclusive, **conditional**, **independent** events; **counting** representations; **simulation**.
+  "Data analysis, probability and statistics": `## Data analysis, probability and statistics
+### Area of Study 4 (Units 1–2 combined)
 
 ---
 
-### 1. Representing events
+### Unit 1 — Experiments, outcomes, counting
 
-Calculate and organise probabilities using **lists**, **tables**, **grids**, **Venn diagrams**, **tree diagrams**; **elementary** and **compound** events.
+- **Trial**, **outcome**, **event**, **frequency**, **probability**; finite **sample spaces**.
+- Represent events: **lists**, **grids**, **Venn diagrams**, **tables**.
+- **Elementary** vs **compound** events; **random variables** (introductory).
+- **Simulation** (physical + technology pseudo-random); interpret repeated outcomes / **proportions**.
+- **Addition** / **multiplication** counting principles; **combinations** $\displaystyle\binom{n}{r}$ and probability applications.
 
 ---
 
-### 2. Addition rule
+### Unit 2 — Structured probability
 
-For events $A$, $B$:
+Represent and compute using lists, grids, Venn, **tree diagrams**.
+
+**Addition rule**:
 
 $$
 P(A\cup B)=P(A)+P(B)-P(A\cap B)
 $$
 
-If $A$ and $B$ are **mutually exclusive**, $P(A\cap B)=0$ so
+Mutually exclusive case: $P(A\cap B)=0$.
+
+**Conditional** probability:
 
 $$
-P(A\cup B)=P(A)+P(B)
+P(A\mid B)=\frac{P(A\cap B)}{P(B)},\quad P(B)>0
 $$
 
----
+**Multiplication** rule, **law of total probability** (two-event case).
 
-### 3. Conditional probability
+**Independence** (pairwise): e.g. $P(A\cap B)=P(A)P(B)$ when appropriate.
 
-$$
-P(A\mid B)=\frac{P(A\cap B)}{P(B)}, \qquad P(B)>0
-$$
-
-Interpret via **reduced sample space**.
-
----
-
-### 4. Useful identities
-
-- **Multiplication** rule $P(A\cap B)=P(B)\,P(A\mid B)$.
-- **Law of total probability** for a partition (two-event case as prescribed).
-
----
-
-### 5. Independence
-
-For **pairwise independent** events (as prescribed), relations such as
-
-$$
-P(A\cap B)=P(A)\,P(B)
-$$
-
-and extensions to simple combinations of independent events.
-
----
-
-### 6. Simulation
-
-Use simulation to estimate probabilities in **with-replacement** and **without-replacement** selection models (as required in your course).
+**Simulation** with and without replacement.
 `,
 };
 
 export function getMethodsCurriculumOverview(topic: string): string | null {
-  const t = String(topic ?? "").trim();
-  if (!t) return null;
+  const t0 = String(topic ?? "").trim();
+  if (!t0) return null;
+  const t = stripMethodsUnitPrefix(t0);
+
   if (Object.prototype.hasOwnProperty.call(MARKDOWN, t)) {
-    return MARKDOWN[t as MethodsStudyDesignTopic];
+    return MARKDOWN[t as MethodsAreaOfStudyTopic];
   }
 
   const n = norm(t);
   const alias = METHODS_TOPIC_ALIASES[n];
   if (alias) return MARKDOWN[alias] ?? null;
 
-  for (const k of METHODS_STUDY_DESIGN_TOPICS) {
-    if (norm(k) === n) return MARKDOWN[k];
+  for (const k of METHODS_AREA_OF_STUDY_TOPICS) {
+    if (norm(k) === n || norm(k) === norm(t0)) return MARKDOWN[k];
   }
   return null;
 }
 
-/** If the bank does not use study-design labels, practising without a topic filter avoids an empty quiz. */
 export function topicExistsInQuestionBank(topic: string, questions: { topic?: string }[]): boolean {
   const t = String(topic ?? "").trim();
   if (!t || t === "all") return true;
