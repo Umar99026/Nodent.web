@@ -12,7 +12,8 @@
     "deploy": "npm run build && npx wrangler pages deploy . --branch main"
   },
   "devDependencies": {
-    "concurrently": "^9.2.1"
+    "concurrently": "^9.2.1",
+    "wrangler": "^4.94.0"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.2",

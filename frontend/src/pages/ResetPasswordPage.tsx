@@ -3,7 +3,8 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { apiFetch, ApiError } from "@/lib/api";
 import { API_PATHS } from "@/lib/constants";
 import { AuthLayout } from "@/components/layout/AuthLayout";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, AlertCircle, Eye, EyeOff, CheckCircle2 } from "lucide-react";
@@ -67,9 +68,15 @@ export default function ResetPasswordPage() {
           <p className="text-sm text-muted-foreground">
             This link is missing or has expired. Request a new reset email.
           </p>
-          <Button asChild className="h-11 w-full bg-brand text-white hover:bg-brand-dark">
-            <Link to="/forgot-password">Request reset link</Link>
-          </Button>
+          <Link
+            to="/forgot-password"
+            className={cn(
+              buttonVariants(),
+              "inline-flex h-11 w-full bg-brand text-white hover:bg-brand-dark",
+            )}
+          >
+            Request reset link
+          </Link>
         </div>
       </AuthLayout>
     );

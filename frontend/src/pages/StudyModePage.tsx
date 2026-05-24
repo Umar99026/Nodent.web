@@ -7,8 +7,7 @@ import {
   getRawCustomQuestionsForSubject,
   practiceQuestionsForSubject,
 } from "@/lib/practiceQuestions";
-import { baseSubjects } from "@/lib/subjects";
-import type { Question, Subject } from "@/lib/subjects";
+import type { Question } from "@/lib/subjects";
 import { questionKeyStable, getStableQuestionIndex } from "@/lib/practiceKeys";
 import { randomizedQuestionsForSubject } from "@/lib/quizShuffle";
 import { buildGroupsFromOrderedFlat } from "@/lib/questionGroups";
@@ -168,11 +167,6 @@ export default function StudyModePage() {
   const { subjectId } = useParams<{ subjectId: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
-
-  const subject: Subject | undefined = useMemo(
-    () => baseSubjects.find((s) => String(s.id) === subjectId),
-    [subjectId],
-  );
 
   const [questions, setQuestions] = useState<Question[]>([]);
   const [questionsLoading, setQuestionsLoading] = useState(true);

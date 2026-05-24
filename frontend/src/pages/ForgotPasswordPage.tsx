@@ -3,7 +3,8 @@ import { Link } from "react-router-dom";
 import { apiFetch, ApiError } from "@/lib/api";
 import { API_PATHS } from "@/lib/constants";
 import { AuthLayout } from "@/components/layout/AuthLayout";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, AlertCircle, CheckCircle2, ArrowLeft } from "lucide-react";
@@ -74,12 +75,16 @@ export default function ForgotPasswordPage() {
                 hour.
               </p>
             </div>
-            <Button asChild variant="outline" className="h-11 w-full">
-              <Link to="/login">
-                <ArrowLeft className="size-4" />
-                Back to sign in
-              </Link>
-            </Button>
+            <Link
+              to="/login"
+              className={cn(
+                buttonVariants({ variant: "outline" }),
+                "inline-flex h-11 w-full gap-2",
+              )}
+            >
+              <ArrowLeft className="size-4" />
+              Back to sign in
+            </Link>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-5">
@@ -99,7 +104,7 @@ export default function ForgotPasswordPage() {
             <Button
               type="submit"
               disabled={isSubmitting}
-              className="h-11 w-full bg-brand text-white hover:bg-brand-dark"
+              className="h-11 w-full gap-2 bg-brand text-white hover:bg-brand-dark"
             >
               {isSubmitting ? (
                 <>
@@ -111,12 +116,16 @@ export default function ForgotPasswordPage() {
               )}
             </Button>
 
-            <Button asChild variant="ghost" className="h-11 w-full">
-              <Link to="/login">
-                <ArrowLeft className="size-4" />
-                Back to sign in
-              </Link>
-            </Button>
+            <Link
+              to="/login"
+              className={cn(
+                buttonVariants({ variant: "ghost" }),
+                "inline-flex h-11 w-full gap-2",
+              )}
+            >
+              <ArrowLeft className="size-4" />
+              Back to sign in
+            </Link>
           </form>
         )}
       </div>
