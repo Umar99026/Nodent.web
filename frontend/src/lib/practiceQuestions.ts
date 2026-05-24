@@ -1,5 +1,8 @@
 import type { AnswerPart, Question } from "@/lib/subjects";
+import { inferGeneralMathsAreaOfStudy } from "@/lib/generalMathsAreaTopic";
 import { inferMethodsAreaOfStudy } from "@/lib/methodsAreaTopic";
+import { inferSpecialistMathsAreaOfStudy } from "@/lib/specialistMathsAreaTopic";
+import { normalizeQuestionMathText } from "@/lib/questionMathText";
 
 /**
  * Sheet / DB rows often use a human label; Practice URLs use baseSubjects `id`
@@ -36,44 +39,7 @@ function normalizeTopicLabel(raw: unknown): string {
 }
 
 function cleanQuestionText(raw: unknown): string {
-  const base = String(raw ?? "").replace(/\r\n?/g, "\n").trim();
-  if (!base) return "";
-
-  const lines = base
-    .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0);
-  if (!lines.length) return "";
-
-  const singleCharLines = lines.filter((l) => /^[A-Za-z0-9]$/.test(l)).length;
-  const shouldDechunk =
-    lines.length >= 6 &&
-    (singleCharLines / lines.length >= 0.35 ||
-      lines.some((l) => l === "," || l === "." || l === ":" || l === ";"));
-
-  if (shouldDechunk) {
-    const recombined = lines
-      .join("")
-      .replace(/\s+/g, " ")
-      .replace(/\s*([,.;:!?])\s*/g, "$1 ")
-      .replace(/\s+/g, " ")
-      .trim();
-    return recombined
-      .replace(/annualrate/gi, "annual rate")
-      .replace(/([a-z])([A-Z])/g, "$1 $2")
-      .replace(/([A-Za-z])(\d)/g, "$1 $2")
-      .replace(/(\d)([A-Za-z])/g, "$1 $2")
-      .replace(/\s+/g, " ")
-      .trim();
-  }
-
-  return lines
-    .join("\n")
-    .replace(/annualrate/gi, "annual rate")
-    .replace(/([a-z])([A-Z])/g, "$1 $2")
-    .replace(/([A-Za-z])(\d)/g, "$1 $2")
-    .replace(/(\d)([A-Za-z])/g, "$1 $2")
-    .trim();
+  return normalizeQuestionMathText(raw);
 }
 
 function parseJsonArrayFromString(s: string): unknown[] | undefined {
@@ -332,6 +298,10 @@ export function normalizeCustomQuestion(raw: unknown, subjectIdHint?: string): Q
   let topic = topicLabel;
   if (sid === "methods") {
     topic = inferMethodsAreaOfStudy(topicLabel, questionText, passage);
+  } else if (sid === "general-maths") {
+    topic = inferGeneralMathsAreaOfStudy(topicLabel, questionText, passage);
+  } else if (sid === "specialist-maths") {
+    topic = inferSpecialistMathsAreaOfStudy(topicLabel, questionText, passage);
   }
   const id =
     typeof q.id === "number"
@@ -495,11 +465,39 @@ export function normalizeCustomQuestion(raw: unknown, subjectIdHint?: string): Q
   return null;
 }
 
+function questionStemKey(q: Question): string {
+  return String(q.question ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+function dedupeQuestionsByStem(questions: Question[]): Question[] {
+  const seen = new Set<string>();
+  const out: Question[] = [];
+  for (const q of questions) {
+    const key = questionStemKey(q);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(q);
+  }
+  return out;
+}
+
 export function normalizeCustomQuestionsList(
   rawList: unknown[],
   subjectId?: string,
 ): Question[] {
-  return (rawList ?? [])
+  const normalized = (rawList ?? [])
     .map((row) => normalizeCustomQuestion(row, subjectId))
     .filter((q): q is Question => q != null);
+  return dedupeQuestionsByStem(normalized);
+}
+
+/** Practice / quiz bank: admin `custom_questions` rows only (bootstrap or localStorage cache). */
+export function practiceQuestionsForSubject(
+  rawList: unknown[],
+  subjectId: string,
+): Question[] {
+  return normalizeCustomQuestionsList(rawList ?? [], subjectId);
 }

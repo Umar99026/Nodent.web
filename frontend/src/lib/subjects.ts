@@ -61,7 +61,7 @@ export const baseSubjects: Subject[] = [
     name: "Mathematical Methods",
     category: "Mathematics",
     description:
-      "Functions, calculus, probability, algebra, graphs, and mathematical modelling.",
+      "Functions, calculus, probability, and exam-style reasoning — topic practice with instant feedback.",
     quiz: [],
   },
   {
@@ -69,7 +69,7 @@ export const baseSubjects: Subject[] = [
     name: "General Mathematics",
     category: "Mathematics",
     description:
-      "Statistics, finance, measurement, networks, and introductory algebra.",
+      "Data, finance, matrices, and networks — applied modelling and interpretation skills.",
     quiz: [],
   },
   {
@@ -77,7 +77,7 @@ export const baseSubjects: Subject[] = [
     name: "Specialist Mathematics",
     category: "Mathematics",
     description:
-      "Complex numbers, vectors, mechanics, advanced calculus, probability distributions, and proof.",
+      "Proof, complex numbers, vectors, and advanced calculus — built for high-band problem solving.",
     quiz: [],
   },
   {

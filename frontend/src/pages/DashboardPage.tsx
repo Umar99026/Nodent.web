@@ -527,7 +527,8 @@ export default function DashboardPage() {
                           {subject.name}
                         </CardTitle>
                         <CardDescription className="break-words text-sm leading-relaxed text-[#0b0f19]/70">
-                          {subject.description}
+                          {baseSubjects.find((s) => s.id === subject.id)?.description ??
+                            subject.description}
                         </CardDescription>
                       </div>
 

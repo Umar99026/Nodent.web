@@ -16,6 +16,15 @@ import { compressImageFileToDataUrl } from "@/lib/imageCompressor";
 import { toast } from "sonner";
 import { CommentThread } from "@/components/quiz/CommentThread";
 import { RichQuestionContent } from "@/components/quiz/RichQuestionContent";
+import {
+  cleanSectionAPromptText,
+  cleanSectionBPromptText,
+  formatSectionBPromptDisplay,
+  sectionBFramework,
+  sectionBPromptInstruction,
+  sectionBTitle,
+  shouldShowSectionBPrompt,
+} from "@/lib/sectionBPrompts";
 
 type Book = { id: number; title: string; promptCount: number };
 type Section = "A" | "B" | "C";
@@ -36,115 +45,8 @@ type ResponseRow = {
   section: Section;
 };
 
-const SECTION_B_FRAMEWORKS: Record<
-  string,
-  {
-    framework: string;
-    instructions: string[];
-    title: string;
-    promptLine: string;
-    stimuli: string[];
-  }
-> = {
-  Origins: {
-    framework: "Writing about country",
-    title: "Origins",
-    promptLine:
-      "Using at least one stimulus, write a crafted text exploring ideas about country and belonging.",
-    instructions: [
-      "Write a text that explores ideas about country.",
-      "Use the provided title.",
-      "Use at least one stimulus.",
-    ],
-    stimuli: [
-      "My body might go, but my heart can never leave.",
-      "... there is no separation between people, animals, plants, land, sea and sky. It is all Country. It is all family. And everyone is part of the story.",
-    ],
-  },
-  "Small Acts, Big Wins": {
-    framework: "Writing about protest",
-    title: "Small Acts, Big Wins",
-    promptLine:
-      "Using at least one stimulus, write a crafted text exploring ideas about protest and collective action.",
-    instructions: [
-      "Write a text that explores ideas about protest.",
-      "Use the provided title.",
-      "Use at least one stimulus.",
-    ],
-    stimuli: [
-      "\"I want to change the world,\" said Tiny Dragon. \"Start with the next person who needs your help,\" replied Big Panda.",
-      "And now my voice is louder than ever. Louder because people have joined me and together we make a chorus, standing up for what we believe.",
-    ],
-  },
-  "Changing Direction": {
-    framework: "Writing about personal journeys",
-    title: "Changing Direction",
-    promptLine:
-      "Using at least one stimulus, write a crafted text exploring ideas about personal journeys and transformation.",
-    instructions: [
-      "Write a text that explores ideas about personal journeys.",
-      "Use the provided title.",
-      "Use at least one stimulus.",
-    ],
-    stimuli: [
-      "You were looking for the key for years, but the door was always open!",
-      "In the midst of my journey through life I found myself in a dark forest, where the clear way forward was lost.",
-    ],
-  },
-};
-
 function promptForumKey(promptId: number) {
   return `english-prompt-${promptId}`;
-}
-
-function cleanSectionBPromptText(promptText: string) {
-  return String(promptText ?? "")
-    .replace(/â€™|’/g, "'")
-    .replace(/â€œ|â€|“|”/g, '"')
-    .replace(/â€“|–/g, "-")
-    .replace(/â€”|—/g, "-")
-    .replace(/(\w)\?(\w)/g, "$1'$2")
-    .replace(/\?([^?\n]*[.!][^?\n]*)\?/g, '"$1"')
-    .replace(/\.\s*begin(?:ning)?\s+with\s*:\s*\.?\s*$/i, "")
-    .replace(/\bbegin(?:ning)?\s+with\s*:\s*\.?\s*$/i, "")
-    .trim();
-}
-
-function cleanSectionAPromptText(promptText: string) {
-  return cleanSectionBPromptText(promptText)
-    .replace(/^\s*\(?[ivxlcdm]+\)?[.)\-:\s]+/i, "")
-    .trim();
-}
-
-function formatSectionBPromptDisplay(promptText: string) {
-  const cleaned = cleanSectionBPromptText(promptText)
-    .replace(/\r\n?/g, "\n")
-    .replace(/[ \t]+\n/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-
-  // Accept formats like:
-  // "title: Origins. Using at least one stimulus, write..."
-  // "Title: Origins\nUsing at least one stimulus, write..."
-  const m = cleaned.match(/^\s*title\s*:\s*([^.\n]+)\.?\s*(?:\n+)?([\s\S]*)$/i);
-  if (!m) return cleaned;
-  const title = String(m[1] ?? "").trim().replace(/[.,"']+$/g, "");
-  const rest = String(m[2] ?? "").trim();
-  if (!title && !rest) return cleaned;
-  if (!rest) return `Title: ${title}`;
-  return `Title: ${title}\n${rest}`;
-}
-
-function isMalformedSectionBPrompt(promptText: string) {
-  const t = String(promptText ?? "").trim();
-  if (!t) return true;
-  if (/\bbegin(?:ning)?\s+with\s*:\s*\.?\s*$/i.test(t)) return true;
-  if (/^\s*title\s*:\s*creative writing\b/i.test(t)) return true;
-  if (/^\s*creative writing\s*\.?\s*$/i.test(t)) return true;
-  if (/^\s*title\s*:\s*creative writing\s*\.?\s*$/i.test(t)) return true;
-  if (/^\s*title\s*:\s*[^.\n]{0,2}\s*$/i.test(t)) return true;
-  if (t.length < 48) return true;
-  return false;
 }
 
 function dedupePrompts(list: Prompt[]): Prompt[] {
@@ -162,30 +64,6 @@ function dedupePrompts(list: Prompt[]): Prompt[] {
     out.push(p);
   }
   return out;
-}
-
-function extractSectionBTitle(promptText: string) {
-  const cleaned = cleanSectionBPromptText(promptText);
-  const explicit = cleaned.match(/Title:\s*['"]?([^'"\n]+?)['"]?(?:\s*$)/i)?.[1];
-  const titled = cleaned.match(/titled\s+([A-Za-z][A-Za-z ,'-]{1,80})/i)?.[1];
-  return (explicit ?? titled ?? "").trim().replace(/[.,"']+$/g, "");
-}
-
-function sectionBFramework(promptText: string) {
-  const title = extractSectionBTitle(promptText);
-  if (!title) return null;
-  return SECTION_B_FRAMEWORKS[title] ?? null;
-}
-
-function sectionBTitle(promptText: string) {
-  const title = extractSectionBTitle(promptText);
-  return title || "Creative writing";
-}
-
-function sectionBPromptInstruction(promptText: string) {
-  const framework = sectionBFramework(promptText);
-  if (framework) return framework.promptLine;
-  return "";
 }
 
 export function EnglishPracticePanel() {
@@ -285,9 +163,7 @@ export function EnglishPracticePanel() {
       return { ...p, prompt: nextPrompt };
     });
     if (section === "B") {
-      return dedupePrompts(
-        cleaned.filter((p) => !isMalformedSectionBPrompt(p.prompt)),
-      );
+      return dedupePrompts(cleaned.filter((p) => shouldShowSectionBPrompt(p.prompt)));
     }
     return dedupePrompts(cleaned);
   }, [prompts, section]);
@@ -422,7 +298,7 @@ export function EnglishPracticePanel() {
             ) : (
               <div className="rounded-2xl border border-black/10 bg-gradient-to-b from-white to-slate-50 p-5 space-y-5">
                 <div className="flex items-center justify-between">
-                  {section !== "B" && section !== "C" ? (
+                  {section !== "C" ? (
                     <Badge variant="secondary" className="bg-black/[0.04] text-[#0b0f19]">
                       Prompt {activePromptIndex + 1} of {visiblePrompts.length}
                     </Badge>
@@ -487,12 +363,13 @@ export function EnglishPracticePanel() {
                                 <li key={ins}>{ins}</li>
                               ))}
                             </ul>
-                            <div className="grid gap-3 sm:grid-cols-2">
-                              {sectionBFramework(activePrompt.prompt)!.stimuli.map((s) => (
-                                <div key={s} className="rounded-lg border border-black/10 bg-white p-3 text-sm shadow-sm">
-                                  {s}
-                                </div>
-                              ))}
+                            <div className="rounded-lg border border-black/10 bg-white p-4 text-sm leading-relaxed shadow-sm">
+                              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                Stimulus
+                              </p>
+                              <p className="mt-2 text-[#243042]">
+                                {sectionBFramework(activePrompt.prompt)!.stimulus}
+                              </p>
                             </div>
                           </>
                         ) : null}
@@ -599,9 +476,35 @@ export function EnglishPromptResponsesPage() {
   const numericPromptId = Number(promptId);
   const [loading, setLoading] = useState(true);
   const [responses, setResponses] = useState<ResponseRow[]>([]);
+  const [catalogPromptRaw, setCatalogPromptRaw] = useState("");
   const [ratingByResponseId, setRatingByResponseId] = useState<Record<number, string>>({});
   const [savingRatingId, setSavingRatingId] = useState<number | null>(null);
   const [openResponseId, setOpenResponseId] = useState<number | null>(null);
+
+  const promptsQuerySuffix =
+    section === "A"
+      ? `?section=A&bookId=${encodeURIComponent(bookId)}`
+      : `?section=${encodeURIComponent(section)}`;
+
+  useEffect(() => {
+    if (!Number.isFinite(numericPromptId) || numericPromptId <= 0) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const p = await apiFetch<{ prompts: { id: number; prompt: string }[] }>(
+          `${API_PATHS.english.prompts}${promptsQuerySuffix}`,
+        );
+        if (cancelled) return;
+        const hit = (p.prompts ?? []).find((x) => Number(x.id) === numericPromptId);
+        setCatalogPromptRaw(String(hit?.prompt ?? ""));
+      } catch {
+        if (!cancelled) setCatalogPromptRaw("");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [numericPromptId, promptsQuerySuffix]);
 
   useEffect(() => {
     (async () => {
@@ -630,14 +533,24 @@ export function EnglishPromptResponsesPage() {
     })();
   }, [section, bookId, numericPromptId]);
 
-  const promptTitle = responses[0]?.prompt ?? "Prompt responses";
-  const openResponse = responses.find((r) => r.id === openResponseId) ?? null;
-  const promptDisplay = useMemo(() => {
-    if (!openResponse?.prompt) return "";
+  const resolvedPromptFormatted = useMemo(() => {
+    const fromRows = responses.map((row) => row.prompt).find((t) => String(t ?? "").trim()) ?? "";
+    const raw = String(catalogPromptRaw ?? "").trim() || fromRows;
+    const base = cleanSectionBPromptText(raw);
+    if (!base.trim()) return "";
     return section === "A"
-      ? cleanSectionAPromptText(openResponse.prompt)
-      : formatSectionBPromptDisplay(openResponse.prompt);
-  }, [openResponse?.prompt, section]);
+      ? cleanSectionAPromptText(base)
+      : formatSectionBPromptDisplay(base);
+  }, [catalogPromptRaw, responses, section]);
+
+  const promptTitleShort = useMemo(() => {
+    const t = resolvedPromptFormatted.trim();
+    if (!t) return "Prompt responses";
+    const oneLine = t.replace(/\s+/g, " ").trim();
+    return oneLine.length > 140 ? `${oneLine.slice(0, 137)}…` : oneLine;
+  }, [resolvedPromptFormatted]);
+
+  const openResponse = responses.find((r) => r.id === openResponseId) ?? null;
   const rateResponse = async (responseId: number, scoreRaw: string) => {
     const score = Number(scoreRaw);
     if (!Number.isFinite(score) || score < 1 || score > 10) return;
@@ -690,7 +603,7 @@ export function EnglishPromptResponsesPage() {
       <div className="space-y-6">
         <Card>
           <CardHeader>
-            <CardTitle className="font-display text-lg">{promptTitle}</CardTitle>
+            <CardTitle className="font-display text-lg">{promptTitleShort}</CardTitle>
             <CardDescription>
               {loading ? "Loading..." : `${responses.length} response(s)`}
             </CardDescription>
@@ -816,7 +729,14 @@ export function EnglishPromptResponsesPage() {
                 <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Prompt
                 </p>
-                <RichQuestionContent text={promptDisplay || promptTitle} className="prose max-w-none" />
+                <RichQuestionContent
+                  text={
+                    resolvedPromptFormatted.trim() ||
+                    "Prompt text is unavailable. Try refreshing the page."
+                  }
+                  preferMarkdown
+                  className="prose max-w-none"
+                />
               </div>
               <p className="whitespace-pre-wrap text-sm leading-relaxed text-[#111827]">
                 {openResponse.responseText || "No typed response text."}

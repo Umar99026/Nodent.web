@@ -7,6 +7,7 @@ import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import "katex/dist/katex.min.css";
 import { cn } from "@/lib/utils";
 import { RichMathText } from "@/components/quiz/QuestionStimulus";
+import { normalizeQuestionMathText } from "@/lib/questionMathText";
 
 const RICH_FORCE =
   /^(?:%%\s*rich|:::rich)\s*(?:\r?\n|\r)/i;
@@ -100,33 +101,53 @@ function looksLikeStructuredMarkdown(text: string): boolean {
 type RichQuestionContentProps = {
   text: string;
   className?: string;
+  /**
+   * For long humanities / English prose: always use Markdown rendering instead of the
+   * plain-math heuristic (which treats common phrases like `3/4` as math and can blank
+   * or mangle normal sentences via {@link RichMathText}).
+   */
+  preferMarkdown?: boolean;
+  /** Practice topic overviews — larger prose and tables (General / Specialist Maths). */
+  overviewMode?: boolean;
 };
 
 /**
  * Renders question/passage text with optional GitHub-flavoured Markdown, math ($$…$$ / blocks),
  * safe inline HTML (incl. `<img src="data:…">`), and embedded images via `![](…)`.
  */
-export function RichQuestionContent({ text, className }: RichQuestionContentProps) {
+export function RichQuestionContent({
+  text,
+  className,
+  preferMarkdown = false,
+  overviewMode = false,
+}: RichQuestionContentProps) {
   const { forced, body: afterForce } = stripRichForcePrefix(text);
-  const { usePlainFallback, body } = stripPlainOptOut(afterForce);
+  const { usePlainFallback, body: rawBody } = stripPlainOptOut(afterForce);
+  const body = normalizeQuestionMathText(rawBody);
+
+  // Never send structured Markdown (headings, lists, tables) through RichMathText — it blanks long notes.
+  const useRichMathBranch =
+    !preferMarkdown &&
+    !forced &&
+    !looksLikeStructuredMarkdown(body) &&
+    ((usePlainFallback && !forced) || looksLikePlainMathText(body));
 
   // For plain imported text (across all subjects), use RichMathText so
   // fractions/powers/matrices are consistently rendered in notation.
-  if (
-    (usePlainFallback && !forced) ||
-    (!forced && !looksLikeStructuredMarkdown(body)) ||
-    looksLikePlainMathText(body)
-  ) {
+  if (useRichMathBranch) {
     return <RichMathText text={body} className={className} />;
   }
 
   return (
     <div
       className={cn(
-        "prose prose-sm max-w-none text-foreground dark:prose-invert",
+        overviewMode
+          ? "prose max-w-none text-foreground dark:prose-invert"
+          : "prose prose-sm max-w-none text-foreground dark:prose-invert",
         "[&_.katex]:text-foreground [&_.katex-display]:my-3",
         "[&_img]:mx-auto [&_img]:block [&_img]:max-h-[min(70vh,560px)] [&_img]:w-auto [&_img]:max-w-full [&_img]:rounded-lg [&_img]:border [&_img]:border-black/10 [&_img]:bg-muted/20 [&_img]:object-contain",
-        "[&_table]:text-sm [&_th]:border [&_td]:border [&_th]:border-black/10 [&_td]:border-black/10",
+        !overviewMode &&
+          "[&_table]:text-sm [&_th]:border [&_td]:border [&_th]:border-black/10 [&_td]:border-black/10",
         className,
       )}
     >

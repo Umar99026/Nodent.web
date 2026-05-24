@@ -5,7 +5,7 @@ import { apiFetch } from "@/lib/api";
 import { API_PATHS, STORAGE_KEYS } from "@/lib/constants";
 import {
   getRawCustomQuestionsForSubject,
-  normalizeCustomQuestionsList,
+  practiceQuestionsForSubject,
 } from "@/lib/practiceQuestions";
 import { baseSubjects } from "@/lib/subjects";
 import type { Question, Subject } from "@/lib/subjects";
@@ -136,7 +136,7 @@ function getCustomQuestionsFromStorage(subjectId: string): Question[] {
     const raw = localStorage.getItem(STORAGE_KEYS.customQuestions);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as Record<string, unknown[]>;
-    return normalizeCustomQuestionsList(
+    return practiceQuestionsForSubject(
       getRawCustomQuestionsForSubject(parsed, subjectId),
       subjectId,
     );
@@ -189,8 +189,7 @@ export default function StudyModePage() {
 
     if (!user) {
       setQuestionsLoading(true);
-      const custom = getCustomQuestionsFromStorage(subjectId);
-      setQuestions(custom.length ? custom : (subject?.quiz ?? []));
+      setQuestions(getCustomQuestionsFromStorage(subjectId));
       setQuestionsLoading(false);
       return;
     }
@@ -212,12 +211,10 @@ export default function StudyModePage() {
           data?.customQuestions,
           subjectId,
         );
-        const custom = normalizeCustomQuestionsList(raw, subjectId);
-        setQuestions(custom.length ? custom : (subject?.quiz ?? []));
+        setQuestions(practiceQuestionsForSubject(raw, subjectId));
       } catch {
         if (!cancelled) {
-          const custom = getCustomQuestionsFromStorage(subjectId);
-          setQuestions(custom.length ? custom : (subject?.quiz ?? []));
+          setQuestions(getCustomQuestionsFromStorage(subjectId));
         }
       } finally {
         if (!cancelled) setQuestionsLoading(false);
@@ -226,7 +223,7 @@ export default function StudyModePage() {
     return () => {
       cancelled = true;
     };
-  }, [user, subjectId, subject?.quiz]);
+  }, [user, subjectId]);
 
   const randomizedQuestions = useMemo(() => {
     if (!subjectId) return questions;

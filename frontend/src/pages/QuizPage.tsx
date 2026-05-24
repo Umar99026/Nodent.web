@@ -6,6 +6,7 @@ import { API_PATHS, STORAGE_KEYS } from "@/lib/constants";
 import {
   getRawCustomQuestionsForSubject,
   normalizeCustomQuestionsList,
+  practiceQuestionsForSubject,
 } from "@/lib/practiceQuestions";
 import { baseSubjects } from "@/lib/subjects";
 import type { Question, Subject } from "@/lib/subjects";
@@ -13,12 +14,15 @@ import {
   getStableQuestionIndex,
   normalizeAnswerMap,
   questionKeyStable,
-  resolveAnswerKey,
+  resolveQuestionForPractice,
 } from "@/lib/practiceKeys";
 import {
   randomizedQuestionsForSubject,
   getQuestionGroupKey,
 } from "@/lib/quizShuffle";
+import { generalMathsPracticeTopicOptions } from "@/lib/generalMathsAreaTopic";
+import { methodsPracticeTopicOptions } from "@/lib/methodsAreaTopic";
+import { specialistMathsPracticeTopicOptions } from "@/lib/specialistMathsAreaTopic";
 import {
   buildGroupsFromOrderedFlat,
   getAllPartsInGroup,
@@ -64,6 +68,12 @@ import {
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
+
+function uniqSortedTopics(values: string[]) {
+  return Array.from(new Set(values.map((v) => v.trim()).filter(Boolean))).sort(
+    (a, b) => a.localeCompare(b),
+  );
+}
 
 /* ------------------------------------------------------------------ */
 /*  Practice state persistence                                         */
@@ -284,13 +294,17 @@ export default function QuizPage() {
           data?.customQuestions,
           subjectId,
         );
-        const custom = normalizeCustomQuestionsList(raw, subjectId);
-        // If Sheets/admin questions are empty, fall back to built-in subject quiz.
-        setQuestions(custom.length ? custom : (subject?.quiz ?? []));
+        setQuestions(
+          practiceQuestionsForSubject(raw, subjectId),
+        );
       } catch {
         if (!cancelled) {
-          const custom = getCustomQuestionsFromStorage(subjectId);
-          setQuestions(custom.length ? custom : (subject?.quiz ?? []));
+          const stored = getCustomQuestionsFromStorage(subjectId);
+          setQuestions(
+            stored.length
+              ? stored
+              : practiceQuestionsForSubject([], subjectId),
+          );
         }
       } finally {
         if (!cancelled) setQuestionsLoading(false);
@@ -299,13 +313,31 @@ export default function QuizPage() {
     return () => {
       cancelled = true;
     };
-  }, [user, subjectId, subject?.quiz]);
+  }, [user, subjectId]);
 
   const availableTopics = useMemo(() => {
-    const set = new Set<string>();
-    questions.forEach((q) => set.add((q.topic || "General").trim() || "General"));
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [questions]);
+    if (subjectId === "general-maths") {
+      return generalMathsPracticeTopicOptions().filter((t) => t !== "all");
+    }
+    if (subjectId === "specialist-maths") {
+      return specialistMathsPracticeTopicOptions().filter((t) => t !== "all");
+    }
+    if (subjectId === "methods") {
+      return methodsPracticeTopicOptions().filter((t) => t !== "all");
+    }
+    return uniqSortedTopics(
+      questions.map((q) => (q.topic || "General").trim() || "General"),
+    );
+  }, [questions, subjectId]);
+
+  useEffect(() => {
+    // While questions are loading, `availableTopics` is empty; resetting here would
+    // clear a valid ?topic= from the practice setup before the bank arrives.
+    if (questionsLoading) return;
+    if (topicFilter === "all") return;
+    if (availableTopics.includes(topicFilter)) return;
+    setTopicFilter("all");
+  }, [availableTopics, topicFilter, questionsLoading]);
 
   const randomizedQuestions = useMemo(() => {
     if (!subjectId || !user) return questions;
@@ -321,17 +353,31 @@ export default function QuizPage() {
 
     function buildWrongGroups(): QuestionStimulusGroup[] {
       if (!saved?.answers || Object.keys(saved.answers).length === 0) return [];
+      const extra = getCustomQuestionsFromStorage(subj);
       const norm = normalizeAnswerMap(
         subj,
         saved.answers,
         questions,
         randomizedQuestions,
+        extra,
       );
       const seenGk = new Set<string>();
       const out: QuestionStimulusGroup[] = [];
+      const falseKeys = new Set<string>();
       for (const [k, val] of Object.entries(norm)) {
-        if (val !== false) continue;
-        const r = resolveAnswerKey(subj, k, questions, randomizedQuestions);
+        if (val === false) falseKeys.add(k);
+      }
+      for (const [k, val] of Object.entries(saved.answers)) {
+        if (val === false) falseKeys.add(k);
+      }
+      for (const k of falseKeys) {
+        const r = resolveQuestionForPractice(
+          subj,
+          k,
+          questions,
+          randomizedQuestions,
+          extra,
+        );
         if (!r) continue;
         const gk = getQuestionGroupKey(r.q, questions);
         if (seenGk.has(gk)) continue;
@@ -353,11 +399,12 @@ export default function QuizPage() {
       try {
         const dec = decodeURIComponent(wrongOnlyKeyParam);
         const wrongs = buildWrongGroups();
-        const target = resolveAnswerKey(
+        const target = resolveQuestionForPractice(
           subj,
           dec,
           questions,
           randomizedQuestions,
+          getCustomQuestionsFromStorage(subj),
         );
         if (!target) return [];
         const gk = getQuestionGroupKey(target.q, questions);
@@ -383,8 +430,9 @@ export default function QuizPage() {
 
   const topicFilteredFlat = useMemo(() => {
     if (topicFilter === "all") return randomizedQuestions;
+    const want = topicFilter.trim();
     return randomizedQuestions.filter(
-      (q) => (q.topic || "General") === topicFilter,
+      (q) => (q.topic || "General").trim() === want,
     );
   }, [randomizedQuestions, topicFilter]);
 
@@ -442,6 +490,7 @@ export default function QuizPage() {
         saved.answers,
         questions,
         randomizedQuestions,
+        getCustomQuestionsFromStorage(subjectId),
       );
       if (JSON.stringify(norm) !== JSON.stringify(saved.answers)) {
         savePracticeState(user.id, subjectId, { ...saved, answers: norm });
@@ -509,10 +558,18 @@ export default function QuizPage() {
     }
   };
 
+  // New topic filter → start at the first question in that topic (not the old index / end of list).
   useEffect(() => {
-    setCurrentIndex((prev) =>
-      Math.max(0, Math.min(displayGroups.length - 1, prev)),
-    );
+    setCurrentIndex(0);
+    setPinnedGroupKey(null);
+  }, [topicFilter]);
+
+  useEffect(() => {
+    setCurrentIndex((prev) => {
+      if (displayGroups.length === 0) return 0;
+      if (prev >= displayGroups.length) return 0;
+      return prev;
+    });
   }, [displayGroups.length]);
 
   const currentGroup = displayGroups[currentIndex] ?? null;
@@ -693,7 +750,7 @@ export default function QuizPage() {
                   <SelectTrigger className="h-10 bg-white border-black/10 text-[#0b0f19]">
                     <SelectValue placeholder="Topic" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent alignItemWithTrigger={false} className="max-h-72">
                     <SelectItem value="all">All topics</SelectItem>
                     {availableTopics.map((t) => (
                       <SelectItem key={t} value={t}>

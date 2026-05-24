@@ -107,7 +107,15 @@ Nodent.web/
    For database access locally, create a `.dev.vars` file in the project root with your Neon connection string:
    ```
    DATABASE_URL=postgresql://neondb_owner:***@ep-empty-cherry-a7czm05z-pooler.ap-southeast-2.aws.neon.tech/neondb?sslmode=require
+   FRONTEND_URL=http://localhost:5173
    ```
+   
+   Optional — send password reset emails via [Resend](https://resend.com):
+   ```
+   RESEND_API_KEY=re_...
+   EMAIL_FROM=Nodent <onboarding@resend.dev>
+   ```
+   Without `RESEND_API_KEY`, local dev logs the reset link in the Wrangler terminal instead.
 
 4. **Run both frontend + API**
    ```bash
@@ -131,6 +139,8 @@ All endpoints under `/api/`. Authentication via Bearer token in `Authorization` 
 |--------|------|------|-------------|
 | POST | `/api/auth/signup` | None | Create account. Body: `{ username, email, password }` |
 | POST | `/api/auth/login` | None | Login. Body: `{ email, password, rememberMe? }`. Returns `{ token, user }` |
+| POST | `/api/auth/forgot-password` | None | Request reset email. Body: `{ email }` |
+| POST | `/api/auth/reset-password` | None | Set new password. Body: `{ token, password }` |
 | POST | `/api/auth/logout` | Bearer | Destroy session |
 
 ### Bootstrap

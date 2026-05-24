@@ -7,7 +7,7 @@ import { baseSubjects } from "@/lib/subjects";
 import type { Question, Subject } from "@/lib/subjects";
 import {
   getRawCustomQuestionsForSubject,
-  normalizeCustomQuestionsList,
+  practiceQuestionsForSubject,
 } from "@/lib/practiceQuestions";
 import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
@@ -15,12 +15,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, Sparkles, BookOpen, ArrowRight } from "lucide-react";
-import { RichQuestionContent } from "@/components/quiz/RichQuestionContent";
+import { generalMathsPracticeTopicOptions } from "@/lib/generalMathsAreaTopic";
+import { methodsPracticeTopicOptions } from "@/lib/methodsAreaTopic";
+import { specialistMathsPracticeTopicOptions } from "@/lib/specialistMathsAreaTopic";
+import { CurriculumOverview } from "@/components/study/CurriculumOverview";
+import { topicExistsInQuestionBank } from "@/lib/methodsCurriculumOverviews";
 import { getTopicOverview } from "@/lib/topicOverviews";
-import {
-  METHODS_AREA_OF_STUDY_TOPICS,
-  topicExistsInQuestionBank,
-} from "@/lib/methodsCurriculumOverviews";
 
 type EnglishSection = "A" | "B" | "C";
 
@@ -61,7 +61,7 @@ export default function PracticeSetupPage() {
       try {
         setLoading(true);
         if (!user) {
-          setQuestions(subject?.quiz ?? []);
+          setQuestions(practiceQuestionsForSubject([], subjectId));
           return;
         }
         const data = await apiFetch<{ customQuestions?: Record<string, unknown[]> }>(API_PATHS.bootstrap);
@@ -70,10 +70,21 @@ export default function PracticeSetupPage() {
           localStorage.setItem(STORAGE_KEYS.customQuestions, JSON.stringify(data.customQuestions));
         }
         const raw = getRawCustomQuestionsForSubject(data.customQuestions, subjectId);
-        const custom = normalizeCustomQuestionsList(raw, subjectId);
-        setQuestions(custom.length ? custom : (subject?.quiz ?? []));
+        setQuestions(practiceQuestionsForSubject(raw, subjectId));
       } catch {
-        setQuestions(subject?.quiz ?? []);
+        let fallback: Question[] = [];
+        try {
+          const parsed = JSON.parse(
+            localStorage.getItem(STORAGE_KEYS.customQuestions) || "{}",
+          ) as Record<string, unknown[]>;
+          fallback = practiceQuestionsForSubject(
+            getRawCustomQuestionsForSubject(parsed, subjectId),
+            subjectId,
+          );
+        } catch {
+          fallback = practiceQuestionsForSubject([], subjectId);
+        }
+        setQuestions(fallback);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -81,19 +92,39 @@ export default function PracticeSetupPage() {
     return () => {
       cancelled = true;
     };
-  }, [subjectId, subject?.quiz, user]);
+  }, [subjectId, user]);
 
   const isMethods = String(subjectId) === "methods";
+  const isGeneralMaths = String(subjectId) === "general-maths";
+  const isSpecialistMaths = String(subjectId) === "specialist-maths";
 
   const availableTopics = useMemo(() => {
     if (isEnglish) return [];
+    if (isMethods) return methodsPracticeTopicOptions();
+    if (isGeneralMaths) return generalMathsPracticeTopicOptions();
+    if (isSpecialistMaths) return specialistMathsPracticeTopicOptions();
     const fromBank = uniqSorted(questions.map((q) => q.topic ?? "General"));
-    if (isMethods) {
-      const merged = uniqSorted([...METHODS_AREA_OF_STUDY_TOPICS, ...fromBank]);
-      return ["all", ...merged];
-    }
     return ["all", ...fromBank];
-  }, [questions, isEnglish, isMethods]);
+  }, [questions, isEnglish, isMethods, isGeneralMaths, isSpecialistMaths]);
+
+  const overviewMarkdown = useMemo(() => {
+    if (!subjectId) return null;
+    if (isEnglish) {
+      return getTopicOverview({
+        subjectId,
+        subject,
+        topic,
+        englishSection,
+      });
+    }
+    if (!topic || topic === "all") return null;
+    return getTopicOverview({
+      subjectId,
+      subject,
+      topic,
+      englishSection,
+    });
+  }, [subjectId, subject, topic, englishSection, isEnglish]);
 
   useEffect(() => {
     if (isEnglish) return;
@@ -102,16 +133,6 @@ export default function PracticeSetupPage() {
     }
   }, [availableTopics, topic, isEnglish]);
 
-  const overview = useMemo(() => {
-    if (!isEnglish && topic === "all") return null;
-    return getTopicOverview({
-      subjectId: String(subjectId ?? ""),
-      subject,
-      topic: isEnglish ? undefined : topic,
-      englishSection,
-    });
-  }, [englishSection, isEnglish, subject, subjectId, topic]);
-
   const handleStart = () => {
     if (!subjectId) return;
     if (isEnglish) {
@@ -119,7 +140,7 @@ export default function PracticeSetupPage() {
       return;
     }
     if (
-      isMethods &&
+      (isMethods || isGeneralMaths || isSpecialistMaths) &&
       topic &&
       topic !== "all" &&
       !topicExistsInQuestionBank(topic, questions)
@@ -176,7 +197,7 @@ export default function PracticeSetupPage() {
                     <SelectTrigger className="h-11 border-black/10 bg-white text-[#0b0f19]">
                       <SelectValue placeholder="Choose section" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent alignItemWithTrigger={false}>
                       <SelectItem value="A">Section A — Text response</SelectItem>
                       <SelectItem value="B">Section B — Creative</SelectItem>
                       <SelectItem value="C">Section C — Writing</SelectItem>
@@ -192,7 +213,7 @@ export default function PracticeSetupPage() {
                     <SelectTrigger className="h-11 border-black/10 bg-white text-[#0b0f19]">
                       <SelectValue placeholder="Choose topic" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent alignItemWithTrigger={false} className="max-h-72">
                       {availableTopics.map((t) => (
                         <SelectItem key={t} value={t}>
                           {t === "all" ? "All topics" : t}
@@ -216,27 +237,26 @@ export default function PracticeSetupPage() {
         </Card>
 
         {/* Overview under setup */}
-        <Card className="rounded-2xl border border-black/10 bg-white/80 shadow-sm backdrop-blur">
-          <CardHeader className="space-y-2">
-            <CardTitle className="font-display text-xl text-[#0b0f19]">
-              Overview
+        <Card className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm">
+          <div className="h-1.5 bg-gradient-to-r from-brand via-brand-light to-amber" aria-hidden />
+          <CardHeader className="space-y-3 px-6 pb-2 pt-6 sm:px-8">
+            <CardTitle className="font-display text-2xl font-bold tracking-tight text-[#0b0f19] sm:text-3xl">
+              Study overview
             </CardTitle>
-            <p className="text-sm text-muted-foreground">
-              {String(subjectId) === "methods"
-                ? "Four VCAA areas of study (Units 1–2 combined per topic), with KaTeX. Question topics are matched to these automatically for Methods."
-                : "Key formulas and theory for the topic you pick."}
+            <p className="text-base font-medium text-muted-foreground sm:text-lg">
+              {isEnglish
+                ? "Section summary for English practice."
+                : "Large-type reference for the topic you select."}
             </p>
           </CardHeader>
-          <CardContent>
-            {!overview ? (
-              <div className="rounded-xl border border-dashed border-black/15 bg-slate-50 p-6 text-sm text-muted-foreground">
-                Choose a topic above to show an overview.
-              </div>
+          <CardContent className="px-4 pb-8 pt-2 sm:px-6 sm:pb-10">
+            {overviewMarkdown ? (
+              <CurriculumOverview markdown={overviewMarkdown} />
             ) : (
-              <div className="max-h-[min(70vh,720px)] overflow-y-auto pr-1">
-                <div className="prose prose-slate max-w-none">
-                  <RichQuestionContent text={overview} className="prose max-w-none" />
-                </div>
+              <div className="rounded-xl border border-dashed border-black/15 bg-slate-50 p-8 text-center">
+                <p className="text-sm font-medium text-muted-foreground">
+                  Select topic
+                </p>
               </div>
             )}
           </CardContent>

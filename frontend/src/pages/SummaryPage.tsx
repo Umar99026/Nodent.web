@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { apiFetch } from "@/lib/api";
@@ -6,15 +6,20 @@ import { API_PATHS, STORAGE_KEYS } from "@/lib/constants";
 import {
   getRawCustomQuestionsForSubject,
   normalizeCustomQuestionsList,
+  practiceQuestionsForSubject,
 } from "@/lib/practiceQuestions";
 import {
   getStableQuestionIndex,
   normalizeAnswerMap,
   questionKeyStable,
   resolveAnswerKey,
+  resolveQuestionForPractice,
 } from "@/lib/practiceKeys";
 import { cn } from "@/lib/utils";
-import { randomizedQuestionsForSubject } from "@/lib/quizShuffle";
+import {
+  getQuestionGroupKey,
+  randomizedQuestionsForSubject,
+} from "@/lib/quizShuffle";
 import { baseSubjects } from "@/lib/subjects";
 import type { Question, Subject } from "@/lib/subjects";
 import { AppShell } from "@/components/layout/AppShell";
@@ -136,6 +141,17 @@ function loadPracticeState(
   }
 }
 
+function savePracticeState(
+  userId: number | string,
+  subjectId: string,
+  state: PracticeState,
+) {
+  localStorage.setItem(
+    getPracticeStorageKey(userId, subjectId),
+    JSON.stringify(state),
+  );
+}
+
 function getPercentileBadge(percentile: number) {
   if (percentile >= 90)
     return { label: "Top 10%", className: "bg-success/15 text-success" };
@@ -192,23 +208,54 @@ export default function SummaryPage() {
       return { correct: 0, total: 0, percentage: 0, wrongCount: 0 };
     }
     let answers = practiceState.answers;
+    let wrong = 0;
     if (user && subjectId && questions.length > 0) {
       const rand = randomizedQuestionsForSubject(questions, user.id, subjectId);
+      const extra = getCustomQuestionsFromStorage(subjectId);
       answers = normalizeAnswerMap(
         subjectId,
         practiceState.answers,
         questions,
         rand,
+        extra,
       );
+      const falseKeys = new Set<string>();
+      for (const [k, v] of Object.entries(answers)) {
+        if (v === false) falseKeys.add(k);
+      }
+      for (const [k, v] of Object.entries(practiceState.answers)) {
+        if (v === false) falseKeys.add(k);
+      }
+      for (const key of falseKeys) {
+        if (
+          resolveQuestionForPractice(
+            subjectId,
+            key,
+            questions,
+            rand,
+            extra,
+          )
+        ) {
+          wrong += 1;
+        }
+      }
+    } else {
+      wrong = Object.values(answers).filter((v) => v === false).length;
     }
     const entries = Object.values(answers);
     const scorable = entries.filter((v) => v !== null);
     const correctCount = scorable.filter((v) => v === true).length;
     const totalCount = scorable.length;
-    const wrong = entries.filter((v) => v === false).length;
     const pct = totalCount > 0 ? Math.round((correctCount / totalCount) * 100) : 0;
     return { correct: correctCount, total: totalCount, percentage: pct, wrongCount: wrong };
   }, [practiceState, user, subjectId, questions]);
+
+  /** Raw false entries in localStorage (before bank matching). */
+  const savedWrongCount = useMemo(() => {
+    if (!practiceState?.answers) return 0;
+    return Object.values(practiceState.answers).filter((v) => v === false)
+      .length;
+  }, [practiceState]);
 
   const minRanked = stats?.minRankedAttempts ?? 10;
   const canCompareClass = (stats?.totalStudents ?? 0) >= 2;
@@ -251,14 +298,15 @@ export default function SummaryPage() {
           data?.customQuestions,
           subjectId,
         );
-        const custom = normalizeCustomQuestionsList(raw, subjectId);
-        setQuestions(
-          custom.length ? custom : (subject?.quiz ?? []),
-        );
+        setQuestions(practiceQuestionsForSubject(raw, subjectId));
       } catch {
         if (!cancelled) {
-          const custom = getCustomQuestionsFromStorage(subjectId);
-          setQuestions(custom.length ? custom : (subject?.quiz ?? []));
+          const stored = getCustomQuestionsFromStorage(subjectId);
+          setQuestions(
+            stored.length
+              ? stored
+              : practiceQuestionsForSubject([], subjectId),
+          );
         }
       } finally {
         if (!cancelled) setQuestionsLoading(false);
@@ -267,12 +315,45 @@ export default function SummaryPage() {
     return () => {
       cancelled = true;
     };
-  }, [user, subjectId, subject?.quiz]);
+  }, [user, subjectId]);
 
   const randForSummary = useMemo(() => {
     if (!user?.id || !subjectId || questions.length === 0) return [];
     return randomizedQuestionsForSubject(questions, user.id, subjectId);
   }, [user, subjectId, questions]);
+
+  /** Custom rows kept in localStorage (may include ids no longer in the active bank). */
+  const extraQuestionsForResolve = useMemo(() => {
+    if (!subjectId) return [];
+    return getCustomQuestionsFromStorage(subjectId);
+  }, [subjectId, questions]);
+
+  const practiceAnswersMigratedRef = useRef<string | null>(null);
+
+  // Re-save practice answers under canonical keys once the bank is loaded.
+  useEffect(() => {
+    if (!user || !subjectId || questions.length === 0 || !practiceState) return;
+    const sig = `${user.id}_${subjectId}_${questions.length}`;
+    if (practiceAnswersMigratedRef.current === sig) return;
+    const norm = normalizeAnswerMap(
+      subjectId,
+      practiceState.answers,
+      questions,
+      randForSummary,
+      extraQuestionsForResolve,
+    );
+    if (JSON.stringify(norm) !== JSON.stringify(practiceState.answers)) {
+      savePracticeState(user.id, subjectId, { ...practiceState, answers: norm });
+    }
+    practiceAnswersMigratedRef.current = sig;
+  }, [
+    user,
+    subjectId,
+    questions.length,
+    practiceState,
+    randForSummary,
+    extraQuestionsForResolve,
+  ]);
 
   const fetchEnglishResponses = useMemo(
     () => async () => {
@@ -315,31 +396,62 @@ export default function SummaryPage() {
     };
   }, [subjectId, user, fetchEnglishResponses]);
 
-  /** Your saved answers for this subject (canonical key → score; null = not auto-scored). */
-  const myAnswerByCanonicalKey = useMemo(() => {
+  /** Normalized saved answers (same bank + shuffle order as quiz). */
+  const normalizedPracticeAnswers = useMemo((): Record<
+    string,
+    boolean | null
+  > => {
     if (
       !subjectId ||
       !practiceState?.answers ||
       Object.keys(practiceState.answers).length === 0 ||
-      !user?.id ||
       questions.length === 0
     ) {
-      return new Map<string, boolean | null>();
+      return {};
     }
-    const subj = subjectId;
-    const norm = normalizeAnswerMap(
-      subj,
+    return normalizeAnswerMap(
+      subjectId,
       practiceState.answers,
       questions,
       randForSummary,
+      extraQuestionsForResolve,
     );
+  }, [
+    practiceState,
+    subjectId,
+    questions,
+    randForSummary,
+    extraQuestionsForResolve,
+  ]);
+
+  /** Your saved answers for this subject (canonical key → score; null = not auto-scored). */
+  const myAnswerByCanonicalKey = useMemo(() => {
+    if (!subjectId || Object.keys(normalizedPracticeAnswers).length === 0) {
+      return new Map<string, boolean | null>();
+    }
     const m = new Map<string, boolean | null>();
-    for (const [k, v] of Object.entries(norm)) {
-      const r = resolveAnswerKey(subj, k, questions, randForSummary);
-      if (r) m.set(r.canonicalKey, v);
+    for (const [k, v] of Object.entries(normalizedPracticeAnswers)) {
+      const r = resolveQuestionForPractice(
+        subjectId,
+        k,
+        questions,
+        randForSummary,
+        extraQuestionsForResolve,
+      );
+      const ck = r?.canonicalKey ?? k;
+      const prev = m.get(ck);
+      if (v === false || prev === false) m.set(ck, false);
+      else if (v === true || prev === true) m.set(ck, true);
+      else m.set(ck, v);
     }
     return m;
-  }, [practiceState, user, subjectId, questions, randForSummary]);
+  }, [
+    subjectId,
+    questions,
+    randForSummary,
+    normalizedPracticeAnswers,
+    extraQuestionsForResolve,
+  ]);
 
   /** Per-topic counts from your saved answers (fills gaps when the server has no row yet). */
   const localTopicRollup = useMemo(() => {
@@ -432,6 +544,76 @@ export default function SummaryPage() {
     });
     return list;
   }, [stats, subjectId, questions, randForSummary, myAnswerByCanonicalKey]);
+
+  /** Rows to show under Wrong answers — built from saved incorrect answers, not filtered API stats. */
+  const wrongQuestionRows = useMemo(() => {
+    if (!subjectId || questions.length === 0) return [];
+
+    const statByCanonical = new Map<string, QuestionStat>();
+    for (const qs of mergedQuestionStats) {
+      const resolved = resolveAnswerKey(
+        subjectId,
+        qs.questionKey,
+        questions,
+        randForSummary,
+      );
+      const ck = resolved?.canonicalKey ?? qs.questionKey;
+      statByCanonical.set(ck, qs);
+    }
+
+    const seenGroup = new Set<string>();
+    const rows: {
+      canonicalKey: string;
+      question: Question;
+      classStat: QuestionStat | null;
+    }[] = [];
+
+    const falseKeys = new Set<string>();
+    for (const [k, v] of Object.entries(normalizedPracticeAnswers)) {
+      if (v === false) falseKeys.add(k);
+    }
+    for (const [k, v] of Object.entries(practiceState?.answers ?? {})) {
+      if (v === false) falseKeys.add(k);
+    }
+
+    for (const key of falseKeys) {
+      const resolved = resolveQuestionForPractice(
+        subjectId,
+        key,
+        questions,
+        randForSummary,
+        extraQuestionsForResolve,
+      );
+      if (!resolved) continue;
+      const groupKey = getQuestionGroupKey(resolved.q, questions);
+      if (seenGroup.has(groupKey)) continue;
+      seenGroup.add(groupKey);
+
+      rows.push({
+        canonicalKey: resolved.canonicalKey,
+        question: resolved.q,
+        classStat:
+          statByCanonical.get(resolved.canonicalKey) ??
+          statByCanonical.get(key) ??
+          null,
+      });
+    }
+
+    rows.sort(
+      (a, b) =>
+        getStableQuestionIndex(questions, a.question) -
+        getStableQuestionIndex(questions, b.question),
+    );
+    return rows;
+  }, [
+    subjectId,
+    questions,
+    randForSummary,
+    normalizedPracticeAnswers,
+    mergedQuestionStats,
+    practiceState,
+    extraQuestionsForResolve,
+  ]);
 
   // Fetch competition stats
   useEffect(() => {
@@ -1033,18 +1215,26 @@ export default function SummaryPage() {
               </CardContent>
             </Card>
 
-            {/* ---- Per-question stats ---- */}
+            {/* ---- Wrong answers ---- */}
             <Card>
               <CardHeader className="space-y-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="space-y-1.5">
-                    <CardTitle className="font-display text-lg">
-                      Per-Question Class Stats
+                    <CardTitle className="flex items-center gap-2 font-display text-lg">
+                      <ListX className="size-5 text-danger" />
+                      Wrong answers
+                      {(wrongQuestionRows.length > 0 || wrongCount > 0) && (
+                        <Badge variant="secondary" className="font-normal">
+                          {wrongQuestionRows.length > 0
+                            ? wrongQuestionRows.length
+                            : wrongCount}
+                        </Badge>
+                      )}
                     </CardTitle>
                     <CardDescription>
-                      Class % fully correct per question (same period as leaderboard). Tap a row
-                      to practise that question (not scored). This list only shows questions you
-                      got wrong.
+                      Questions you answered incorrectly. Tap a row to open that question in
+                      practice-only mode (not scored). Class % shows how others did on the same
+                      question when available.
                     </CardDescription>
                   </div>
                   {wrongCount > 0 && (
@@ -1054,58 +1244,54 @@ export default function SummaryPage() {
                       onClick={() => navigate(`/quiz/${subjectId}/wrong`)}
                     >
                       <ListX className="size-4" />
-                      Wrong answers ({wrongCount}) — practice only
+                      Practice only
                     </Button>
                   )}
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                {mergedQuestionStats.length === 0 ? (
-                  <p className="py-6 text-center text-sm text-muted-foreground">
-                    No question attempts recorded yet. Complete questions in the quiz to see
-                    them here (including your own progress).
-                  </p>
-                ) : questionsLoading || questions.length === 0 ? (
+                {questionsLoading || questions.length === 0 ? (
                   <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
                     <Loader2 className="size-4 animate-spin" />
-                    Loading questions to match rows…
+                    Loading questions…
                   </div>
+                ) : wrongCount === 0 ? (
+                  <p className="py-6 text-center text-sm text-muted-foreground">
+                    No incorrect answers saved yet. When you get a question wrong in practice, it
+                    will appear here.
+                  </p>
+                ) : wrongQuestionRows.length === 0 && savedWrongCount > 0 ? (
+                  <p className="py-6 text-center text-sm text-muted-foreground">
+                    You have {savedWrongCount} saved incorrect{" "}
+                    {savedWrongCount === 1 ? "answer" : "answers"}, but{" "}
+                    {savedWrongCount === 1 ? "it could" : "they could"} not be matched to the
+                    current question bank. Open practice once for this subject, then return here
+                    — or clear old progress from your browser if those questions were removed.
+                  </p>
                 ) : (
-                  mergedQuestionStats.map((qs, idx) => {
+                  wrongQuestionRows.map((row, idx) => {
+                    const qs = row.classStat;
                     const hasClassStat =
-                      canCompareClass && qs.totalAnswered > 0;
+                      !!qs && canCompareClass && qs.totalAnswered > 0;
                     const pct =
-                      qs.fullyCorrectPercent != null
+                      qs?.fullyCorrectPercent != null
                         ? qs.fullyCorrectPercent
-                        : qs.totalAnswered > 0
+                        : qs && qs.totalAnswered > 0
                           ? Math.round((qs.correctCount / qs.totalAnswered) * 100)
                           : 0;
-                    const resolved = resolveAnswerKey(
-                      subjectId!,
-                      qs.questionKey,
-                      questions,
-                      randForSummary,
-                    );
-                    const canonical = resolved?.canonicalKey ?? qs.questionKey;
-                    const my = myAnswerByCanonicalKey.get(canonical);
-                    if (my !== false) return null;
                     const topicLabel =
-                      resolved?.q?.topic?.trim() || qs.topic || "General";
-                    const preview =
-                      resolved?.q?.question?.trim() ??
-                      qs.topic;
+                      row.question.topic?.trim() || qs?.topic || "General";
+                    const preview = row.question.question?.trim() || topicLabel;
                     const previewShort =
-                      preview.length > 140
-                        ? `${preview.slice(0, 140)}…`
-                        : preview;
+                      preview.length > 140 ? `${preview.slice(0, 140)}…` : preview;
 
                     return (
-                      <div key={qs.questionKey} className="space-y-2">
+                      <div key={row.canonicalKey} className="space-y-2">
                         <button
                           type="button"
                           onClick={() =>
                             navigate(
-                              `/quiz/${subjectId}/wrong?key=${encodeURIComponent(canonical)}`,
+                              `/quiz/${subjectId}/wrong?key=${encodeURIComponent(row.canonicalKey)}`,
                             )
                           }
                           className={cn(

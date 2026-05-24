@@ -52,7 +52,7 @@ export function NodentWordmark({
           Nodent
         </span>
 
-        {/* Slanted underline (matches header screenshot). */}
+        {/* Slanted underline with a slight upward bow. */}
         <svg
           className={cn(
             "pointer-events-none absolute left-[-2%] top-full w-[106%] max-w-none -translate-y-[0.02em] overflow-visible",
@@ -64,7 +64,7 @@ export function NodentWordmark({
           preserveAspectRatio="xMidYMin meet"
         >
           <path
-            d="M12 9 L 208 4.5"
+            d="M12 9 Q110 4.8 208 4.5"
             stroke="currentColor"
             strokeWidth="3.1"
             strokeLinecap="round"

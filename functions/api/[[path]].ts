@@ -256,8 +256,112 @@ function canonicalSubjectId(raw: unknown): string {
 }
 
 function normalizeEnglishSection(raw: unknown): "A" | "B" | "C" {
-  const s = String(raw ?? "").trim().toUpperCase();
-  return s === "B" ? "B" : s === "C" ? "C" : "A";
+  const s0 = String(raw ?? "").trim().toUpperCase();
+  const s = s0.replace(/^SECTION\s*/i, "").trim();
+  const first = s.slice(0, 1);
+  return first === "B" ? "B" : first === "C" ? "C" : "A";
+}
+
+/** Keep in sync with `frontend/src/lib/sectionBPrompts.ts` — one DB row per title + stimulus. */
+const SECTION_B_CURATED_BOOK = "Section B Curated Prompts";
+const SECTION_B_CURATED_PROMPT_TEXTS = [
+  `Title: Origins.
+Using at least one stimulus, write a crafted text exploring ideas about country and belonging.
+
+Write a text that explores ideas about country.
+Use the provided title.
+Use at least one stimulus.
+
+Stimulus
+My body might go, but my heart can never leave.`,
+  `Title: Origins.
+Using at least one stimulus, write a crafted text exploring ideas about country and belonging.
+
+Write a text that explores ideas about country.
+Use the provided title.
+Use at least one stimulus.
+
+Stimulus
+... there is no separation between people, animals, plants, land, sea and sky. It is all Country. It is all family. And everyone is part of the story.`,
+  `Title: Small Acts, Big Wins.
+Using at least one stimulus, write a crafted text exploring ideas about protest and collective action.
+
+Write a text that explores ideas about protest.
+Use the provided title.
+Use at least one stimulus.
+
+Stimulus
+"I want to change the world," said Tiny Dragon. "Start with the next person who needs your help," replied Big Panda.`,
+  `Title: Small Acts, Big Wins.
+Using at least one stimulus, write a crafted text exploring ideas about protest and collective action.
+
+Write a text that explores ideas about protest.
+Use the provided title.
+Use at least one stimulus.
+
+Stimulus
+And now my voice is louder than ever. Louder because people have joined me and together we make a chorus, standing up for what we believe.`,
+  `Title: Changing Direction.
+Using at least one stimulus, write a crafted text exploring ideas about personal journeys and transformation.
+
+Write a text that explores ideas about personal journeys.
+Use the provided title.
+Use at least one stimulus.
+
+Stimulus
+You were looking for the key for years, but the door was always open!`,
+  `Title: Changing Direction.
+Using at least one stimulus, write a crafted text exploring ideas about personal journeys and transformation.
+
+Write a text that explores ideas about personal journeys.
+Use the provided title.
+Use at least one stimulus.
+
+Stimulus
+In the midst of my journey through life I found myself in a dark forest, where the clear way forward was lost.`,
+];
+
+async function ensureSectionBCuratedPrompts(db: ReturnType<typeof drizzle>) {
+  const now = nowIso();
+  let bookId = Number(
+    (
+      await db.execute(sql`
+        SELECT id FROM english_books WHERE title = ${SECTION_B_CURATED_BOOK} LIMIT 1
+      `)
+    ).rows?.[0]?.id ?? 0,
+  );
+  if (!bookId) {
+    const created = await db.execute(sql`
+      INSERT INTO english_books (title, created_at)
+      VALUES (${SECTION_B_CURATED_BOOK}, ${now})
+      RETURNING id
+    `);
+    bookId = Number((created.rows as any[])?.[0]?.id ?? 0);
+  }
+  if (!bookId) return;
+
+  await db.execute(sql`
+    DELETE FROM english_prompts
+    WHERE
+      LEFT(UPPER(TRIM(REGEXP_REPLACE(COALESCE(section, ''), '^SECTION\\s*', '', 'i'))), 1) = 'B'
+      AND prompt_text ~* '^\\s*title\\s*:\\s*(origins|small\\s+acts|changing\\s+direction)'
+  `);
+
+  for (const promptText of SECTION_B_CURATED_PROMPT_TEXTS) {
+    const existing = await db.execute(sql`
+      SELECT id FROM english_prompts
+      WHERE
+        book_id = ${bookId}
+        AND section = 'B'
+        AND prompt_text = ${promptText}
+      LIMIT 1
+    `);
+    if (Number((existing.rows as any[])?.[0]?.id ?? 0) > 0) continue;
+    await db.execute(sql`
+      INSERT INTO english_prompts (book_id, prompt_text, section, created_at)
+      VALUES (${bookId}, ${promptText}, 'B', ${now})
+    `);
+  }
 }
 
 /** Matches `frontend/src/lib/methodsAreaTopic.ts` (keep in sync when editing). */
@@ -650,6 +754,58 @@ async function verifyPassword(password: string, salt: string, storedHash: string
   return result === 0;
 }
 
+async function hashResetToken(token: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
+  return bytesToHex(new Uint8Array(digest));
+}
+
+function passwordResetExpiry(): string {
+  const d = new Date();
+  d.setHours(d.getHours() + 1);
+  return d.toISOString();
+}
+
+function appOrigin(env: Env, requestUrl: string): string {
+  const configured = String(env.FRONTEND_URL || "").trim().replace(/\/$/, "");
+  if (configured) return configured;
+  try {
+    const u = new URL(requestUrl);
+    if (u.hostname === "localhost" || u.hostname === "127.0.0.1") {
+      return "http://localhost:5173";
+    }
+    return u.origin;
+  } catch {
+    return "http://localhost:5173";
+  }
+}
+
+async function sendPasswordResetEmail(env: Env, to: string, resetUrl: string): Promise<boolean> {
+  const apiKey = String(env.RESEND_API_KEY || "").trim();
+  const from = String(env.EMAIL_FROM || "Nodent <onboarding@resend.dev>").trim();
+  if (!apiKey) {
+    console.info("[password-reset] RESEND_API_KEY not set. Reset link:", resetUrl);
+    return false;
+  }
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from,
+      to: [to],
+      subject: "Reset your Nodent password",
+      html: `<p>Hi,</p><p>We received a request to reset your Nodent password. Click the link below — it expires in 1 hour.</p><p><a href="${resetUrl}">Reset password</a></p><p>If you did not request this, you can ignore this email.</p>`,
+    }),
+  });
+  if (!res.ok) {
+    console.error("[password-reset] Resend error:", await res.text());
+    return false;
+  }
+  return true;
+}
+
 // ---- DB ----
 function createDb(url: string) {
   return drizzle(neon(url), {
@@ -672,6 +828,9 @@ type Env = {
   DATABASE_URL: string;
   ADMIN_KEY: string;
   FRONTEND_URL: string;
+  /** Resend (optional) — password reset emails */
+  RESEND_API_KEY?: string;
+  EMAIL_FROM?: string;
   /** Google Sheets (optional) — use plain text var + encrypted secret for JSON */
   GOOGLE_SHEETS_SPREADSHEET_ID?: string;
   GOOGLE_SHEETS_TAB_NAME?: string;
@@ -681,6 +840,16 @@ type Env = {
 type Vars = { user: { id: number; email: string; username: string; token: string; profilePhoto?: string | null }; db: ReturnType<typeof createDb> };
 
 const app = new Hono<{ Bindings: Env; Variables: Vars }>();
+
+app.onError((err: unknown, c) => {
+  const msg = err instanceof Error ? err.stack || err.message : String(err);
+  console.error("[onError]", msg);
+  // Ensure we always return a response in local dev (Wrangler otherwise shows “No response!”)
+  return c.json({ ok: false, error: msg }, 500);
+});
+
+// Minimal endpoint for debugging local dev runtime (no DB required).
+app.get("/api/ping", (c) => c.json({ ok: true }));
 let englishResponsesConstraintDropped = false;
 let usersTablePatched = false;
 let performanceIndexesPatched = false;
@@ -709,6 +878,22 @@ async function ensureCoreTables(db: any) {
       created_at text NOT NULL,
       expires_at text NOT NULL
     )
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS password_reset_tokens (
+      token_hash text PRIMARY KEY,
+      user_id integer NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+      expires_at text NOT NULL,
+      created_at text NOT NULL
+    )
+  `);
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS password_reset_tokens_user_idx
+    ON password_reset_tokens (user_id)
+  `);
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS password_reset_tokens_expires_idx
+    ON password_reset_tokens (expires_at)
   `);
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS quiz_attempts (
@@ -1070,7 +1255,8 @@ async function authMiddleware(c: any, next: any) {
 /** Admin routes: `x-admin-key` matching `ADMIN_KEY`, or logged-in `ADMIN_EMAIL_LC`. */
 async function adminAccessMiddleware(c: any, next: any) {
   const headerKey = (c.req.header("x-admin-key") || c.req.header("X-Admin-Key") || "").trim();
-  if (headerKey && headerKey === c.env.ADMIN_KEY) {
+  const envKey = String((c.env as any)?.ADMIN_KEY ?? "").trim();
+  if (headerKey && envKey && headerKey === envKey) {
     await next();
     return;
   }
@@ -1173,6 +1359,95 @@ app.post("/api/auth/logout", authMiddleware, async (c: any) => {
   const user = c.get("user");
   await c.get("db").delete(sessions).where(eq(sessions.token, user.token));
   return c.json({ ok: true });
+});
+
+const FORGOT_PASSWORD_MESSAGE =
+  "If an account exists for that email, we've sent password reset instructions.";
+
+app.post("/api/auth/forgot-password", async (c) => {
+  try {
+    const body = await c.req.json();
+    const db = c.get("db");
+    const email = String(body?.email || "").trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return c.json({ error: "Please enter a valid email address." }, 400);
+    }
+
+    const found = await db
+      .select({ id: users.id, email: users.email })
+      .from(users)
+      .where(sql`LOWER(${users.email}) = ${email}`)
+      .limit(1);
+
+    if (found.length > 0) {
+      const userId = found[0].id;
+      const rawToken = createToken();
+      const tokenHash = await hashResetToken(rawToken);
+      const now = nowIso();
+      const expiresAt = passwordResetExpiry();
+
+      await db.execute(sql`
+        DELETE FROM password_reset_tokens WHERE user_id = ${userId}
+      `);
+      await db.execute(sql`
+        INSERT INTO password_reset_tokens (token_hash, user_id, expires_at, created_at)
+        VALUES (${tokenHash}, ${userId}, ${expiresAt}, ${now})
+      `);
+
+      const origin = appOrigin(c.env, c.req.url);
+      const resetUrl = `${origin}/reset-password?token=${encodeURIComponent(rawToken)}`;
+      await sendPasswordResetEmail(c.env, found[0].email, resetUrl);
+    }
+
+    return c.json({ ok: true, message: FORGOT_PASSWORD_MESSAGE });
+  } catch (e) {
+    return c.json({ error: errorChain(e) }, 500);
+  }
+});
+
+app.post("/api/auth/reset-password", async (c) => {
+  try {
+    const body = await c.req.json();
+    const db = c.get("db");
+    const rawToken = String(body?.token || "").trim();
+    const password = String(body?.password || "").trim();
+
+    if (!rawToken) return c.json({ error: "Reset link is invalid or expired." }, 400);
+    if (password.length < 4) {
+      return c.json({ error: "Password must be at least 4 characters." }, 400);
+    }
+
+    const tokenHash = await hashResetToken(rawToken);
+    const rows = await db.execute(sql`
+      SELECT user_id, expires_at
+      FROM password_reset_tokens
+      WHERE token_hash = ${tokenHash}
+      LIMIT 1
+    `);
+    const row = (rows.rows as any[])?.[0];
+    if (!row) return c.json({ error: "Reset link is invalid or expired." }, 400);
+
+    const userId = Number(row.user_id);
+    if (!Number.isFinite(userId) || userId <= 0) {
+      return c.json({ error: "Reset link is invalid or expired." }, 400);
+    }
+    if (String(row.expires_at) <= nowIso()) {
+      await db.execute(sql`DELETE FROM password_reset_tokens WHERE token_hash = ${tokenHash}`);
+      return c.json({ error: "Reset link is invalid or expired." }, 400);
+    }
+
+    const { salt, hash } = await hashPassword(password);
+    await db
+      .update(users)
+      .set({ passwordHash: hash, passwordSalt: salt, hashAlgorithm: "pbkdf2" })
+      .where(eq(users.id, userId));
+    await db.execute(sql`DELETE FROM password_reset_tokens WHERE user_id = ${userId}`);
+    await db.execute(sql`DELETE FROM sessions WHERE user_id = ${userId}`);
+
+    return c.json({ ok: true, message: "Password updated. You can sign in now." });
+  } catch (e) {
+    return c.json({ error: errorChain(e) }, 500);
+  }
 });
 
 app.patch("/api/auth/account", authMiddleware, async (c: any) => {
@@ -2456,24 +2731,133 @@ app.get("/api/admin/english/prompts", adminAccessMiddleware, async (c: any) => {
   }
 });
 
+app.post("/api/admin/english/prompts/bulk", adminAccessMiddleware, async (c: any) => {
+  try {
+    const db = c.get("db");
+    const body = await c.req.json();
+    const rows = Array.isArray(body?.rows) ? body.rows : [];
+    if (!rows.length) return c.json({ error: "rows is required." }, 400);
+
+    const now = nowIso();
+    const errors: Array<{ index: number; message: string }> = [];
+    const bookIdByTitle = new Map<string, number>();
+    let importedBooks = 0;
+    let importedPrompts = 0;
+
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i] ?? {};
+      const section = normalizeEnglishSection(r.section);
+      const prompt = cleanText(r.prompt, 10000);
+      const rawBook = cleanText(r.book, 200);
+      const bookTitle =
+        rawBook || (section === "A" ? "" : `Section ${section} Imported`);
+
+      if (!prompt) {
+        errors.push({ index: i, message: "Missing prompt." });
+        continue;
+      }
+      if (!bookTitle) {
+        errors.push({ index: i, message: "Missing book title." });
+        continue;
+      }
+
+      let bookId = bookIdByTitle.get(bookTitle);
+      if (!bookId) {
+        // Ensure book exists (unique on title).
+        const existing = await db.execute(sql`
+          SELECT id FROM english_books WHERE title = ${bookTitle} LIMIT 1
+        `);
+        const existingId = Number((existing.rows as any[])?.[0]?.id ?? 0);
+        if (existingId > 0) {
+          bookId = existingId;
+        } else {
+          const created = await db.execute(sql`
+            INSERT INTO english_books (title, created_at)
+            VALUES (${bookTitle}, ${now})
+            RETURNING id
+          `);
+          bookId = Number((created.rows as any[])?.[0]?.id ?? 0);
+          if (!bookId) {
+            errors.push({ index: i, message: "Failed to create book." });
+            continue;
+          }
+          importedBooks += 1;
+        }
+        bookIdByTitle.set(bookTitle, bookId);
+      }
+
+      await db.execute(sql`
+        INSERT INTO english_prompts (book_id, prompt_text, section, created_at)
+        VALUES (${bookId}, ${prompt}, ${section}, ${now})
+      `);
+      importedPrompts += 1;
+    }
+
+    return c.json({ importedBooks, importedPrompts, errors });
+  } catch (e) {
+    return c.json({ error: errorChain(e) }, 500);
+  }
+});
+
+app.post("/api/admin/english/prompts/bulk-delete", adminAccessMiddleware, async (c: any) => {
+  try {
+    const db = c.get("db");
+    const body = await c.req.json();
+    const idsRaw = Array.isArray(body?.ids) ? body.ids : [];
+    const ids = idsRaw
+      .map((x: unknown) => Number(x))
+      .filter((n: number) => Number.isFinite(n) && n > 0)
+      .slice(0, 2000);
+    if (!ids.length) return c.json({ error: "ids is required." }, 400);
+    await db.execute(sql`DELETE FROM english_prompts WHERE id = ANY(${ids}::int[])`);
+    // Clean up any empty books.
+    await db.execute(sql`
+      DELETE FROM english_books b
+      WHERE NOT EXISTS (SELECT 1 FROM english_prompts p WHERE p.book_id = b.id)
+    `);
+    return c.json({ ok: true, deleted: ids.length });
+  } catch (e) {
+    return c.json({ error: errorChain(e) }, 500);
+  }
+});
+
 app.post("/api/admin/english/prompts/delete-creative-writing", adminAccessMiddleware, async (c: any) => {
   try {
     const db = c.get("db");
+    const sectionBFilter = sql`
+      LEFT(UPPER(TRIM(REGEXP_REPLACE(COALESCE(section, ''), '^SECTION\\s*', '', 'i'))), 1) = 'B'
+      AND (
+        LOWER(TRIM(prompt_text)) = 'creative writing'
+        OR prompt_text ~* '^\\s*title\\s*:\\s*creative\\s*writing\\.?\\s*(\\n|$)'
+        OR prompt_text ~* '^\\s*title\\s*:\\s*last\\s+light\\s+on\\s+platform\\s+9'
+        OR prompt_text ~* '^\\s*title\\s*:\\s*borrowed\\s+silence'
+        OR prompt_text ~* '^\\s*title\\s*:\\s*small\\s+fires'
+        OR prompt_text ~* '^\\s*title\\s*:\\s*after\\s+the\\s+rain'
+        OR (
+          prompt_text ~* '^\\s*title\\s*:'
+          AND prompt_text !~* 'stimulus'
+          AND prompt_text !~* 'framework'
+          AND prompt_text !~* 'using at least one'
+          AND LENGTH(prompt_text) < 280
+          AND prompt_text !~* '^\\s*title\\s*:\\s*origins'
+          AND prompt_text !~* '^\\s*title\\s*:\\s*small\\s+acts'
+          AND prompt_text !~* '^\\s*title\\s*:\\s*changing\\s+direction'
+        )
+      )
+    `;
     const before = await db.execute(sql`
       SELECT COUNT(*)::int AS n
       FROM english_prompts
-      WHERE LOWER(TRIM(prompt_text)) = 'creative writing'
-         OR LOWER(TRIM(prompt_text)) LIKE 'title:%creative writing%'
-         OR LOWER(TRIM(prompt_text)) LIKE 'title: creative writing%'
-         OR LOWER(TRIM(prompt_text)) LIKE 'title:%creative writing.%'
+      WHERE ${sectionBFilter}
     `);
     const total = Number((before.rows as any[])?.[0]?.n ?? 0);
     await db.execute(sql`
       DELETE FROM english_prompts
-      WHERE LOWER(TRIM(prompt_text)) = 'creative writing'
-         OR LOWER(TRIM(prompt_text)) LIKE 'title:%creative writing%'
-         OR LOWER(TRIM(prompt_text)) LIKE 'title: creative writing%'
-         OR LOWER(TRIM(prompt_text)) LIKE 'title:%creative writing.%'
+      WHERE ${sectionBFilter}
+    `);
+    await db.execute(sql`
+      DELETE FROM english_books b
+      WHERE NOT EXISTS (SELECT 1 FROM english_prompts p WHERE p.book_id = b.id)
     `);
     return c.json({ ok: true, deleted: total });
   } catch (e) {
@@ -2544,6 +2928,9 @@ app.get("/api/english/prompts", async (c: any) => {
   try {
     const db = c.get("db");
     const section = normalizeEnglishSection(c.req.query("section"));
+    if (section === "B") {
+      await ensureSectionBCuratedPrompts(db);
+    }
     const bookId = Number(c.req.query("bookId"));
     const rows =
       section === "A"
@@ -2588,15 +2975,7 @@ app.get("/api/english/prompts", async (c: any) => {
         prompt: String(r.prompt_text || ""),
         section: normalizeEnglishSection(r.section),
       }))
-      .filter((p) => {
-        const t = String(p.prompt ?? "").trim().toLowerCase();
-        if (!t) return false;
-        // Hard-remove bad “Creative writing” placeholder prompts (Section B imports).
-        if (t === "creative writing") return false;
-        if (t.startsWith("title: creative writing")) return false;
-        if (t.startsWith("title:creative writing")) return false;
-        return true;
-      });
+      .filter((p) => String(p.prompt ?? "").trim().length > 0);
     return c.json({ prompts });
   } catch (e) {
     return c.json({ error: errorChain(e) }, 500);
@@ -2905,6 +3284,23 @@ app.delete("/api/admin/questions/:id", adminAccessMiddleware, async (c: any) => 
   return c.json({ ok: true });
 });
 
+app.post("/api/admin/questions/bulk-delete", adminAccessMiddleware, async (c: any) => {
+  try {
+    const db = c.get("db");
+    const body = await c.req.json();
+    const idsRaw = Array.isArray(body?.ids) ? body.ids : [];
+    const ids = idsRaw
+      .map((x: unknown) => Number(x))
+      .filter((n: number) => Number.isFinite(n) && n > 0)
+      .slice(0, 2000);
+    if (!ids.length) return c.json({ error: "ids is required." }, 400);
+    await db.execute(sql`DELETE FROM custom_questions WHERE id = ANY(${ids}::int[])`);
+    return c.json({ ok: true, deleted: ids.length });
+  } catch (e) {
+    return c.json({ error: errorChain(e) }, 500);
+  }
+});
+
 app.get("/api/admin/google-sheet/status", adminAccessMiddleware, async (c: any) => {
   const env = c.env as Env;
   const enabled = isSheetsConfigured(env);
@@ -3081,17 +3477,10 @@ app.post("/api/admin/questions/sync-from-sheet", adminAccessMiddleware, async (c
   }
 });
 
-// ---- Health ----
-app.get("/api/health", async (c) => {
-  const db = c.get("db");
-  const u = await db.execute(sql`SELECT COUNT(*) as c FROM users`);
-  const s = await db.execute(sql`SELECT COUNT(*) as c FROM sessions`);
-  const ch = await db.execute(sql`SELECT COUNT(*) as c FROM chat_messages`);
-  const co = await db.execute(sql`SELECT COUNT(*) as c FROM quiz_comments`);
-  return c.json({ ok: true, users: Number(u.rows[0].c), sessions: Number(s.rows[0].c), chats: Number(ch.rows[0].c), comments: Number(co.rows[0].c) });
-});
-
-// Export for Pages Functions
+// Pages Functions entry (used by `wrangler pages dev` / production deploy)
 export const onRequest: PagesFunction<Env> = async (context) => {
   return app.fetch(context.request, context.env);
 };
+
+// Module worker entry (used by `wrangler dev` when main points at this file)
+export default app;

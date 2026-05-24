@@ -5,7 +5,7 @@ import { API_PATHS, ADMIN_EMAIL } from "@/lib/constants";
 import { compressImageFileToDataUrl } from "@/lib/imageCompressor";
 import { RichQuestionContent } from "@/components/quiz/RichQuestionContent";
 import { AppShell } from "@/components/layout/AppShell";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Card,
   CardHeader,
@@ -46,6 +46,7 @@ import {
 
 import { baseSubjects } from "@/lib/subjects";
 import { useAuth } from "@/context/AuthContext";
+import { cn } from "@/lib/utils";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -186,9 +187,17 @@ export default function AdminPage() {
   const [englishBusy, setEnglishBusy] = useState(false);
   const [englishMsg, setEnglishMsg] = useState("");
   const [englishPreviewRows, setEnglishPreviewRows] = useState<
-    Array<{ section: "A" | "B"; book: string; prompt: string }>
+    Array<{ section: "A" | "B" | "C"; book: string; prompt: string }>
   >([]);
   const [englishPrompts, setEnglishPrompts] = useState<EnglishAdminPrompt[]>([]);
+
+  const [selectedQuestionIds, setSelectedQuestionIds] = useState<Set<string>>(
+    new Set(),
+  );
+  const [selectedEnglishPromptIds, setSelectedEnglishPromptIds] = useState<
+    Set<number>
+  >(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const bulkImagesRef = useRef<HTMLInputElement | null>(null);
   const [bulkImagesProcessing, setBulkImagesProcessing] = useState(false);
@@ -1575,42 +1584,33 @@ export default function AdminPage() {
       .filter(Boolean);
     if (lines.length < 2) {
       return {
-        rows: [] as Array<{ section: "A" | "B"; book: string; prompt: string }>,
+        rows: [] as Array<{ section: "A" | "B" | "C"; book: string; prompt: string }>,
         message: "Paste a header + at least one prompt row.",
       };
     }
 
     const isHeader = /^section\s*(?:\t|[ ,|]+)\s*book\s*(?:\t|[ ,|]+)\s*prompt$/i.test(lines[0]!);
     const dataLines = lines.slice(isHeader ? 1 : 0);
-    const rows: Array<{ section: "A" | "B"; book: string; prompt: string }> = [];
+    const rows: Array<{ section: "A" | "B" | "C"; book: string; prompt: string }> = [];
     const badRows: number[] = [];
 
     for (let i = 0; i < dataLines.length; i++) {
       const raw = dataLines[i]!;
 
-      // Exact requested behavior:
-      // A <book name> ## <prompt>
-      // B <prompt>
-      const aMatch = raw.match(/^\s*A\s+(.+?)\s*##\s*(.+)\s*$/i);
-      if (aMatch) {
-        const book = (aMatch[1] ?? "").trim();
-        const prompt = (aMatch[2] ?? "").trim();
+      // Format:
+      // A <book> ## <prompt>
+      // B <book> ## <prompt>
+      // C <book> ## <prompt>
+      const hashMatch = raw.match(/^\s*([ABC])\s+(.+?)\s*##\s*(.+)\s*$/i);
+      if (hashMatch) {
+        const section = String(hashMatch[1] ?? "").toUpperCase() as "A" | "B" | "C";
+        const book = (hashMatch[2] ?? "").trim();
+        const prompt = (hashMatch[3] ?? "").trim();
         if (!book || !prompt) {
           badRows.push((isHeader ? 2 : 1) + i);
           continue;
         }
-        rows.push({ section: "A", book, prompt });
-        continue;
-      }
-
-      const bMatch = raw.match(/^\s*B\s+(.+)\s*$/i);
-      if (bMatch) {
-        const prompt = (bMatch[1] ?? "").trim();
-        if (!prompt) {
-          badRows.push((isHeader ? 2 : 1) + i);
-          continue;
-        }
-        rows.push({ section: "B", book: "", prompt });
+        rows.push({ section, book, prompt });
         continue;
       }
 
@@ -1620,12 +1620,8 @@ export default function AdminPage() {
         const section = (parts[0] ?? "").trim().toUpperCase();
         const book = (parts[1] ?? "").replace(/\s*##\s*$/g, "").trim();
         const prompt = (parts[2] ?? "").trim();
-        if (section === "A" && book && prompt) {
-          rows.push({ section: "A", book, prompt });
-          continue;
-        }
-        if (section === "B" && prompt) {
-          rows.push({ section: "B", book: "", prompt });
+        if ((section === "A" || section === "B" || section === "C") && book && prompt) {
+          rows.push({ section: section as "A" | "B" | "C", book, prompt });
           continue;
         }
       }
@@ -1691,6 +1687,47 @@ export default function AdminPage() {
       toast.error(msg);
     } finally {
       setEnglishBusy(false);
+    }
+  };
+
+  const clearSelections = () => {
+    setSelectedQuestionIds(new Set());
+    setSelectedEnglishPromptIds(new Set());
+  };
+
+  const bulkDeleteSelected = async () => {
+    const qIds = Array.from(selectedQuestionIds)
+      .map((x) => Number(x))
+      .filter((n) => Number.isFinite(n) && n > 0);
+    const pIds = Array.from(selectedEnglishPromptIds)
+      .map((x) => Number(x))
+      .filter((n) => Number.isFinite(n) && n > 0);
+    if (!qIds.length && !pIds.length) {
+      toast.error("Select at least one question or prompt to delete.");
+      return;
+    }
+    setBulkDeleting(true);
+    try {
+      if (qIds.length) {
+        await apiFetchAdmin(API_PATHS.admin.questionsBulkDelete, {
+          method: "POST",
+          body: JSON.stringify({ ids: qIds }),
+        });
+      }
+      if (pIds.length) {
+        await apiFetchAdmin(API_PATHS.admin.englishPromptsBulkDelete, {
+          method: "POST",
+          body: JSON.stringify({ ids: pIds }),
+        });
+      }
+      toast.success(`Deleted ${qIds.length} question(s) and ${pIds.length} prompt(s).`);
+      clearSelections();
+      await Promise.all([fetchQuestions(), fetchEnglishPrompts()]);
+    } catch (e) {
+      const msg = e instanceof ApiError ? e.message : "Bulk delete failed.";
+      toast.error(msg);
+    } finally {
+      setBulkDeleting(false);
     }
   };
 
@@ -1771,7 +1808,8 @@ export default function AdminPage() {
               placeholder={`section\tbook\tprompt
 A\tThe Women of Troy\tHow does Euripides show power and helplessness in The Women of Troy?
 A\tRansom\tHow does Malouf explore grief and healing in Ransom?
-B\t\tWrite a creative piece that reimagines a moment of moral conflict from a modern perspective.`}
+B\tSection B Curated Prompts\tTitle: Origins.\nUsing at least one stimulus, write a crafted text exploring ideas about country and belonging.
+C\tSection C Argument Prompts\tWrite an argument on the value of patience in modern life.`}
             />
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <Button type="button" variant="secondary" onClick={previewEnglishPrompts} className="gap-2" disabled={englishBusy}>
@@ -1797,6 +1835,20 @@ B\t\tWrite a creative piece that reimagines a moment of moral conflict from a mo
                       className="border-b border-border/30 px-3 py-2 last:border-b-0"
                     >
                       <div className="mb-1 flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          className="mt-0.5 size-4 accent-brand"
+                          checked={selectedEnglishPromptIds.has(Number(r.id))}
+                          onChange={(e) => {
+                            const id = Number(r.id);
+                            setSelectedEnglishPromptIds((prev) => {
+                              const next = new Set(prev);
+                              if (e.target.checked) next.add(id);
+                              else next.delete(id);
+                              return next;
+                            });
+                          }}
+                        />
                         <Badge variant="outline" className="text-[10px] uppercase">
                           Section {r.section}
                         </Badge>
@@ -2417,6 +2469,55 @@ methods\tThe total number of avocados sold in bags was\t["data:image/jpeg;base64
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <Label>Filter by Subject</Label>
                 <div className="flex flex-wrap items-center justify-end gap-2">
+                  <AlertDialog>
+                    <AlertDialogTrigger
+                      type="button"
+                      disabled={
+                        bulkDeleting ||
+                        (!selectedQuestionIds.size && !selectedEnglishPromptIds.size)
+                      }
+                      className={cn(
+                        buttonVariants({ variant: "destructive", size: "sm" }),
+                        "gap-2",
+                      )}
+                    >
+                      {bulkDeleting ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="size-4" />
+                      )}
+                      Delete selected ({selectedQuestionIds.size + selectedEnglishPromptIds.size})
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Delete selected items?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This will permanently delete the selected questions/prompts. This cannot be undone.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                          onClick={() => void bulkDeleteSelected()}
+                        >
+                          Delete
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={
+                      bulkDeleting ||
+                      (!selectedQuestionIds.size && !selectedEnglishPromptIds.size)
+                    }
+                    onClick={clearSelections}
+                  >
+                    Clear selection
+                  </Button>
                   <Button
                     type="button"
                     variant="outline"
@@ -2520,7 +2621,45 @@ methods\tThe total number of avocados sold in bags was\t["data:image/jpeg;base64
                                   key={q.id}
                                   className="flex items-start justify-between gap-3 border-b border-border/30 px-4 py-3 last:border-b-0"
                                 >
-                                  <div className="min-w-0 flex-1">
+                                  <div className="flex min-w-0 flex-1 gap-3">
+                                    <input
+                                      type="checkbox"
+                                      className="mt-1 size-4 shrink-0 accent-brand"
+                                      checked={
+                                        String(q.id).startsWith("english-")
+                                          ? selectedEnglishPromptIds.has(
+                                              Number(
+                                                String(q.id).replace(
+                                                  /^english-/,
+                                                  "",
+                                                ),
+                                              ),
+                                            )
+                                          : selectedQuestionIds.has(String(q.id))
+                                      }
+                                      onChange={(e) => {
+                                        const idStr = String(q.id);
+                                        if (idStr.startsWith("english-")) {
+                                          const pid = Number(
+                                            idStr.replace(/^english-/, ""),
+                                          );
+                                          setSelectedEnglishPromptIds((prev) => {
+                                            const next = new Set(prev);
+                                            if (e.target.checked) next.add(pid);
+                                            else next.delete(pid);
+                                            return next;
+                                          });
+                                          return;
+                                        }
+                                        setSelectedQuestionIds((prev) => {
+                                          const next = new Set(prev);
+                                          if (e.target.checked) next.add(idStr);
+                                          else next.delete(idStr);
+                                          return next;
+                                        });
+                                      }}
+                                    />
+                                    <div className="min-w-0 flex-1">
                                     <div className="mb-1 flex items-center gap-2">
                                       <Badge
                                         variant="outline"
@@ -2609,6 +2748,7 @@ methods\tThe total number of avocados sold in bags was\t["data:image/jpeg;base64
                                         )}
                                       </div>
                                     ) : null}
+                                    </div>
                                   </div>
 
                                   {!q._english && q.type !== "mcq" && (
@@ -2650,13 +2790,11 @@ methods\tThe total number of avocados sold in bags was\t["data:image/jpeg;base64
                                   {!q._english ? (
                                     <AlertDialog>
                                     <AlertDialogTrigger
-                                      render={
-                                        <Button
-                                          variant="ghost"
-                                          size="icon-sm"
-                                          className="shrink-0 text-muted-foreground hover:text-danger"
-                                        />
-                                      }
+                                      type="button"
+                                      className={cn(
+                                        buttonVariants({ variant: "ghost", size: "icon-sm" }),
+                                        "shrink-0 text-muted-foreground hover:text-danger",
+                                      )}
                                     >
                                       <Trash2 className="size-4" />
                                     </AlertDialogTrigger>
@@ -2704,7 +2842,22 @@ methods\tThe total number of avocados sold in bags was\t["data:image/jpeg;base64
                           key={`english-${r.id}`}
                           className="flex items-start justify-between gap-3 border-b border-border/30 px-4 py-3 last:border-b-0"
                         >
-                          <div className="min-w-0 flex-1">
+                          <div className="flex min-w-0 flex-1 gap-3">
+                            <input
+                              type="checkbox"
+                              className="mt-1 size-4 shrink-0 accent-brand"
+                              checked={selectedEnglishPromptIds.has(Number(r.id))}
+                              onChange={(e) => {
+                                const id = Number(r.id);
+                                setSelectedEnglishPromptIds((prev) => {
+                                  const next = new Set(prev);
+                                  if (e.target.checked) next.add(id);
+                                  else next.delete(id);
+                                  return next;
+                                });
+                              }}
+                            />
+                            <div className="min-w-0 flex-1">
                             <div className="mb-2 flex items-center gap-2">
                               <Badge variant="outline" className="text-[10px] uppercase">
                                 Section {r.section}
@@ -2716,6 +2869,7 @@ methods\tThe total number of avocados sold in bags was\t["data:image/jpeg;base64
                             <p className="text-base font-semibold leading-relaxed text-foreground whitespace-pre-wrap">
                               {r.prompt}
                             </p>
+                            </div>
                           </div>
                         </div>
                       ))
@@ -2733,7 +2887,22 @@ methods\tThe total number of avocados sold in bags was\t["data:image/jpeg;base64
                           key={q.id}
                           className="flex items-start justify-between gap-3 border-b border-border/30 px-4 py-3 last:border-b-0"
                         >
-                          <div className="min-w-0 flex-1">
+                          <div className="flex min-w-0 flex-1 gap-3">
+                            <input
+                              type="checkbox"
+                              className="mt-1 size-4 shrink-0 accent-brand"
+                              checked={selectedQuestionIds.has(String(q.id))}
+                              onChange={(e) => {
+                                const idStr = String(q.id);
+                                setSelectedQuestionIds((prev) => {
+                                  const next = new Set(prev);
+                                  if (e.target.checked) next.add(idStr);
+                                  else next.delete(idStr);
+                                  return next;
+                                });
+                              }}
+                            />
+                            <div className="min-w-0 flex-1">
                             <div className="mb-1 flex items-center gap-2">
                               <Badge
                                 variant="outline"
@@ -2816,6 +2985,7 @@ methods\tThe total number of avocados sold in bags was\t["data:image/jpeg;base64
                                 )}
                               </div>
                             )}
+                            </div>
                           </div>
 
                           {q.type !== "mcq" && (
@@ -2856,13 +3026,11 @@ methods\tThe total number of avocados sold in bags was\t["data:image/jpeg;base64
 
                           <AlertDialog>
                             <AlertDialogTrigger
-                              render={
-                                <Button
-                                  variant="ghost"
-                                  size="icon-sm"
-                                  className="shrink-0 text-muted-foreground hover:text-danger"
-                                />
-                              }
+                              type="button"
+                              className={cn(
+                                buttonVariants({ variant: "ghost", size: "icon-sm" }),
+                                "shrink-0 text-muted-foreground hover:text-danger",
+                              )}
                             >
                               <Trash2 className="size-4" />
                             </AlertDialogTrigger>

@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { ApiError } from "@/lib/api";
 import { STORAGE_KEYS } from "@/lib/constants";
@@ -165,7 +165,15 @@ export default function LoginPage() {
               </div>
 
               <div className="grid gap-2">
-                <Label htmlFor="login-password">Password</Label>
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="login-password">Password</Label>
+                  <Link
+                    to="/forgot-password"
+                    className="text-xs font-medium text-brand hover:text-brand-dark hover:underline"
+                  >
+                    Forgot password?
+                  </Link>
+                </div>
                 <div className="relative">
                   <Input
                     id="login-password"

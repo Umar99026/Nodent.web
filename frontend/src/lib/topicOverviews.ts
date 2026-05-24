@@ -1,5 +1,7 @@
 import type { Subject } from "@/lib/subjects";
+import { getGeneralMathsCurriculumOverview } from "@/lib/generalMathsCurriculumOverviews";
 import { getMethodsCurriculumOverview } from "@/lib/methodsCurriculumOverviews";
+import { getSpecialistMathsCurriculumOverview } from "@/lib/specialistMathsCurriculumOverviews";
 
 type EnglishSection = "A" | "B" | "C";
 
@@ -75,9 +77,29 @@ export function getTopicOverview(args: {
     if (m) return m;
     return `### ${topic}
 
-No overview is defined for this label yet. Use one of the four **Areas of study** (Functions…, Algebra…, Calculus, Data analysis…) or fix the spelling to match the list.
+No overview is defined for this label yet. Use one of the fourteen **Units 3 & 4 topics** (Functions and transformations, Differential calculus, …) with the exact spelling.
 
 **Subject:** Mathematical Methods`;
+  }
+
+  if (args.subjectId === "general-maths") {
+    const g = getGeneralMathsCurriculumOverview(topic);
+    if (g) return g;
+    return `### ${topic}
+
+No overview is defined for this label yet. Use one of the four **Units 3 & 4 topics** (Data analysis; Recursion and financial modelling; Matrices; Networks and decision mathematics) with the exact spelling.
+
+**Subject:** General Mathematics`;
+  }
+
+  if (args.subjectId === "specialist-maths") {
+    const sp = getSpecialistMathsCurriculumOverview(topic);
+    if (sp) return sp;
+    return `### ${topic}
+
+No overview is defined for this label yet. Use one of the twelve **Units 3 & 4 topics** (Logic and proof, Complex numbers and algebra, Differential calculus, …) with the exact spelling.
+
+**Subject:** Specialist Mathematics`;
   }
 
   if (isMathish(subjectName)) {

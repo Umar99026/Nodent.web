@@ -2,6 +2,8 @@ import type { Question } from "@/lib/subjects";
 import { getStableQuestionIndex } from "@/lib/practiceKeys";
 import { getQuestionGroupKey } from "@/lib/quizShuffle";
 
+export { getQuestionGroupKey };
+
 export interface QuestionStimulusGroup {
   key: string;
   passage?: string;

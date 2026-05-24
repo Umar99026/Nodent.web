@@ -4,24 +4,30 @@
  *
  * Replace or extend lists when you paste your official topic breakdowns.
  */
+import { SPECIALIST_MATHS_TOPICS } from "@/lib/specialistMathsAreaTopic";
+
 export const GOOGLE_SHEETS_TOPIC_LABELS: Record<string, readonly string[]> = {
   methods: [
-    "Functions, relations and graphs",
-    "Algebra, number and structure",
-    "Calculus",
-    "Data analysis, probability and statistics",
+    "Functions and transformations",
+    "Polynomial, power and rational functions",
+    "Exponential and logarithmic functions",
+    "Circular functions",
+    "Algebra and equations",
+    "Differential calculus",
+    "Applications of differentiation",
+    "Integral calculus",
+    "Applications of integration",
+    "Discrete random variables",
+    "Continuous random variables",
+    "The normal distribution",
+    "Sampling and sample proportions",
+    "Confidence intervals for proportions",
   ],
   "general-maths": [
-    "Statistics",
-    "Measurement",
-    "Finance",
-    "Networks",
+    "Data analysis",
+    "Recursion and financial modelling",
     "Matrices",
+    "Networks and decision mathematics",
   ],
-  "specialist-maths": [
-    "Complex Numbers",
-    "Calculus",
-    "Vectors",
-    "Proof",
-  ],
+  "specialist-maths": [...SPECIALIST_MATHS_TOPICS],
 };
