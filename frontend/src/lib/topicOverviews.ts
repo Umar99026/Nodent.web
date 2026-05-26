@@ -13,40 +13,65 @@ function overviewEnglish(section: EnglishSection) {
   if (section === "A") {
     return `### Section A — Text response
 
+You write an analytical essay on **one** selected text (or pair) from the study design — themes, characters, ideas, and authorial views.
+
 **What markers want**
-- A clear contention / controlling idea
-- Evidence (quotes) + analysis (how it proves your point)
-- Tight paragraph structure (topic sentence → evidence → analysis → link)
+- A clear **contention** that answers the specific prompt (not a theme list)
+- **Evidence** (short, embedded quotes) + **analysis** (how language/structure proves your point)
+- **TEEL** paragraphs: topic sentence → evidence → analysis → link to contention
+
+**VCE task types**
+- Theme / idea prompts (“How does the text explore …?”)
+- Character prompts (“To what extent is …?”)
+- Viewpoint prompts (author’s perspective on an issue)
+
+**Time discipline:** plan 5–10 minutes; aim for 3–4 body paragraphs plus intro and conclusion.
 
 **Micro‑checklist**
-- Define key theme/author intention in the first paragraph
-- Embed quotes (don’t “quote dump”)
-- Explain *so what?* after each quote`;
+- Re-word the prompt in your introduction
+- Embed quotes; avoid long block quotes
+- Explain *so what?* — effect on reader and link to contention
+- Conclusion: synthesis, not new evidence`;
   }
   if (section === "B") {
     return `### Section B — Creative writing
 
+You produce a **narrative** or **persuasive** piece inspired by a stimulus (image, title, sentence, etc.).
+
 **What markers want**
-- Strong idea + consistent voice
-- Purposeful crafting choices (imagery, motif, structure)
-- A clear relationship to the stimulus (not just a copy)
+- Strong **voice** and **idea** sustained across the piece
+- Deliberate **craft**: imagery, motif, structure, pacing, point of view
+- Clear **connection** to the stimulus (adapt, don’t copy the wording)
+
+**VCE forms**
+- Short story / memoir-style narrative
+- Speech, opinion piece, or hybrid (read the task instructions)
 
 **Micro‑checklist**
-- Establish setting/character quickly
-- Use sensory detail with restraint
-- End with a deliberate shift or resolution`;
+- Hook in the opening; orient the reader quickly
+- Sensory detail with purpose (not a list of adjectives)
+- End with a shift, realisation, or resolution that fits the prompt
+- Proofread for sentence control — clarity is marked`;
   }
   return `### Section C — Writing / argument analysis
 
+You analyse **how** an author argues (language / argument analysis), not whether you agree.
+
 **What markers want**
-- Accurate identification of argument + audience
-- Clear explanation of techniques and intended effect
-- Control (don’t list devices—analyse impact)
+- **Contention** and **target audience** stated early
+- **Arguments** as a line of reasoning (not a list of devices)
+- **Technique → example → effect** on audience
+
+**High-value techniques (VCE)**
+- Tone shifts, inclusive language, appeals (logic, emotion, credibility)
+- Rhetorical questions, contrast, anecdote, statistics, expert opinion
+- Visuals in hybrid pieces — layout, gaze, symbolism
 
 **Micro‑checklist**
-- Start with argument map (contention + key points)
-- Analyse techniques in context (quote → technique → effect)
-- Track tone shifts and audience targeting`;
+- Argument map: contention + 2–3 supporting moves
+- Group by **argument**, not by technique alphabet
+- Quote briefly; analyse **intended effect** on the audience
+- Compare two pieces only if the task asks for comparison`;
 }
 
 export function getTopicOverview(args: {
@@ -120,4 +145,3 @@ Structured study-design notes for **${subjectName}** are not bundled yet. Use yo
 - Vague explanations (be specific, use examples)
 - Not linking evidence back to the question wording`;
 }
-

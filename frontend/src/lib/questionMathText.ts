@@ -175,9 +175,18 @@ function wrapMathSegments(text: string): string {
 /**
  * Full pipeline for question / passage / guidance text from sheets or DB.
  */
+function looksLikeStructuredMarkdown(text: string): boolean {
+  return /(^|\n)\s*[-*]\s+|(^|\n)\s*\d+\.\s+|(^|\n)\s*>|(^|\n)\s*#{1,6}\s|!\[[^\]]*\]\([^)]+\)|\[[^\]]+\]\([^)]+\)|```|(^|\n)\|.+\|/.test(
+    text,
+  );
+}
+
 export function normalizeQuestionMathText(raw: unknown): string {
   let out = String(raw ?? "").replace(/\r\n?/g, "\n").trim();
   if (!out) return "";
+
+  // Do not flatten newlines / tables in study overviews or other markdown notes.
+  if (looksLikeStructuredMarkdown(out)) return out;
 
   out = dechunkOcrLines(out);
   for (const [re, rep] of GLUED_WORDS) out = out.replace(re, rep);

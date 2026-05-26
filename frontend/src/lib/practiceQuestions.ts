@@ -1,7 +1,11 @@
 import type { AnswerPart, Question } from "@/lib/subjects";
+import { GENERAL_MATHS_BUILTIN_QUESTIONS } from "@/lib/generalMathsBuiltinQuestions";
+import { GENERAL_MATHS_BUILTIN_SHORT_TRICKY } from "@/lib/generalMathsBuiltinShortTricky";
 import { inferGeneralMathsAreaOfStudy } from "@/lib/generalMathsAreaTopic";
 import { inferMethodsAreaOfStudy } from "@/lib/methodsAreaTopic";
+import { METHODS_BUILTIN_QUESTIONS } from "@/lib/methodsBuiltinQuestions";
 import { inferSpecialistMathsAreaOfStudy } from "@/lib/specialistMathsAreaTopic";
+import { SPECIALIST_MATHS_BUILTIN_QUESTIONS } from "@/lib/specialistMathsBuiltinQuestions";
 import { normalizeQuestionMathText } from "@/lib/questionMathText";
 
 /**
@@ -494,10 +498,68 @@ export function normalizeCustomQuestionsList(
   return dedupeQuestionsByStem(normalized);
 }
 
-/** Practice / quiz bank: admin `custom_questions` rows only (bootstrap or localStorage cache). */
+/** Canonical VCE topic label used for practice filters (matches dropdown / overview). */
+export function canonicalPracticeTopic(
+  subjectId: string,
+  q: Pick<Question, "topic" | "question" | "passage">,
+): string {
+  const sid = canonicalSubjectId(subjectId);
+  const label = normalizeTopicLabel(q.topic);
+  const text = String(q.question ?? "");
+  const passage = q.passage;
+  if (sid === "methods") {
+    return inferMethodsAreaOfStudy(label, text, passage);
+  }
+  if (sid === "general-maths") {
+    return inferGeneralMathsAreaOfStudy(label, text, passage);
+  }
+  if (sid === "specialist-maths") {
+    return inferSpecialistMathsAreaOfStudy(label, text, passage);
+  }
+  return label;
+}
+
+export function questionMatchesPracticeTopic(
+  subjectId: string,
+  q: Question,
+  topicFilter: string,
+): boolean {
+  const want = String(topicFilter ?? "").trim();
+  if (!want || want === "all") return true;
+  return canonicalPracticeTopic(subjectId, q) === want;
+}
+
+export function topicHasQuestionsInBank(
+  topic: string,
+  subjectId: string,
+  questions: Question[],
+): boolean {
+  const t = String(topic ?? "").trim();
+  if (!t || t === "all") return true;
+  return questions.some((q) => questionMatchesPracticeTopic(subjectId, q, t));
+}
+
+function builtinQuestionsForSubject(subjectId: string): Question[] {
+  const sid = canonicalSubjectId(subjectId);
+  if (sid === "methods") return METHODS_BUILTIN_QUESTIONS;
+  if (sid === "general-maths") {
+    return dedupeQuestionsByStem([
+      ...GENERAL_MATHS_BUILTIN_SHORT_TRICKY,
+      ...GENERAL_MATHS_BUILTIN_QUESTIONS,
+    ]);
+  }
+  if (sid === "specialist-maths") return SPECIALIST_MATHS_BUILTIN_QUESTIONS;
+  return [];
+}
+
+/** Practice / quiz bank: built-in maths sets plus admin `custom_questions` (deduped by stem). */
 export function practiceQuestionsForSubject(
   rawList: unknown[],
   subjectId: string,
 ): Question[] {
-  return normalizeCustomQuestionsList(rawList ?? [], subjectId);
+  const sid = canonicalSubjectId(subjectId);
+  const custom = normalizeCustomQuestionsList(rawList ?? [], sid);
+  const builtIn = builtinQuestionsForSubject(sid);
+  if (!builtIn.length) return custom;
+  return dedupeQuestionsByStem([...builtIn, ...custom]);
 }

@@ -3,25 +3,6 @@
  * Composed per topic in generalMathsCurriculumOverviews.ts.
  */
 
-export const GENERAL_OVERVIEW_BIG_PICTURE = `General Maths is about using maths to model **real-life situations**:
-
-| Area | Focus |
-| --- | --- |
-| **DATA** | Analyse trends, relationships, predictions |
-| **FINANCE** | Loans, investments, depreciation, annuities |
-| **MATRICES** | Transitions, networks, systems, transformations |
-| **NETWORKS** | Paths, trees, scheduling, optimisation |
-
-The course is very **application-based** — the key skill is not just knowing formulas, but knowing **which method fits the question**.
-
-| Topic | Main idea |
-| --- | --- |
-| Data analysis | Interpret, summarise, model and predict from data |
-| Recursion and finance | Use recurrence relations for growth, loans and investments |
-| Matrices | Use tables of numbers to model changes, networks and transitions |
-| Networks | Use graphs to solve shortest path, spanning tree and scheduling problems |
-`;
-
 export const GENERAL_OVERVIEW_DATA = `### Types of data
 
 | Type | Meaning | Example |
@@ -223,6 +204,16 @@ $$\\bar{x} = \\frac{\\sum x}{n}, \\quad \\text{IQR} = Q_3 - Q_1$$
 $$\\text{residual} = y - \\hat{y}, \\quad \\hat{y} = a + bx$$
 
 $$\\text{Deseasonalised} = \\frac{\\text{Actual}}{\\text{Seasonal index}}, \\quad \\text{Forecast} = (\\text{Trend forecast}) \\times (\\text{Seasonal index})$$
+
+---
+
+### Histograms and two-way tables
+
+**Histograms** show frequency for numerical data in classes — describe centre, spread, shape, and outliers like other univariate graphs.
+
+**Two-way tables** compare two categorical variables. Use **row or column percentages** when the question says “of those who …”.
+
+**Tip:** On CAS, use one- and two-variable statistics; for regression, interpret $r$, $r^2$, and the line in context — not just the numbers.
 `;
 
 export const GENERAL_OVERVIEW_RECURSION = `### Recurrence relations
@@ -333,6 +324,27 @@ $$V_n = V_0(1-r)^n, \\quad V_n = V_0 - nd$$
 $$B_{n+1} = B_n(1+r) - R, \\quad A_{n+1} = A_n(1+r) + D$$
 
 $$FV = \\frac{R}{r}\\big[(1+r)^n - 1\\big], \\quad PV = \\frac{R}{r}\\big[1 - (1+r)^{-n}\\big]$$
+
+---
+
+### Effective vs nominal interest (VCE)
+
+**Nominal rate** is the advertised annual rate; **effective rate** accounts for compounding frequency.
+
+**Example:** 6% p.a. compounded monthly → per month $r = 0.06/12 = 0.005$; effective annual rate $(1.005)^{12} - 1 \\approx 6.17\\%$.
+
+---
+
+### Choosing a finance model
+
+| Situation | Model |
+| --- | --- |
+| Fixed amount added each period | $A_{n+1} = A_n(1+r) + D$ |
+| Loan with repayments | $B_{n+1} = B_n(1+r) - R$ |
+| Asset losing fixed % per period | $V_n = V_0(1-r)^n$ |
+| Regular deposits / annuities | $FV$, $PV$ formulas |
+
+**VCE tip:** Extended-response questions often want a **table** for the first few terms, then a **recurrence** or **formula**, then interpretation (total paid, interest component, break-even time).
 `;
 
 export const GENERAL_OVERVIEW_MATRICES = `### Matrix order
@@ -412,6 +424,20 @@ $1$ = connected, $0$ = not connected. Powers of the adjacency matrix can count w
 Matrix multiplication: $(m \\times n)(n \\times p) = m \\times p$
 
 $$S_{n+1} = T S_n, \\quad S_n = T^n S_0, \\quad S = TS \\text{ (steady state)}$$
+
+---
+
+### $2 \\times 2$ inverse (by hand)
+
+For $A = \\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix}$, $A^{-1} = \\frac{1}{ad-bc}\\begin{pmatrix} d & -b \\\\ -c & a \\end{pmatrix}$ when $ad - bc \\neq 0$.
+
+---
+
+### Dominant eigenvalue / long-term behaviour
+
+For a transition matrix $T$, the **dominant** eigenvalue is often $\\lambda = 1$ for a closed population model. Long-term distribution is proportional to the eigenvector for $\\lambda = 1$ (check column sums $= 1$).
+
+**VCE applications:** market share over time, species distribution, routing probabilities — always state what each entry represents.
 `;
 
 export const GENERAL_OVERVIEW_NETWORKS = `### Basic network terms

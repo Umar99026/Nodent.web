@@ -112,6 +112,22 @@ Induction proves statements for all positive integers $n$.
 $$1 + 2 + \\cdots + k + (k+1) = \\frac{k(k+1)}{2} + (k+1) = \\frac{k(k+1) + 2(k+1)}{2} = \\frac{(k+1)(k+2)}{2}$$
 
 **Tip:** Clearly label base case, assumption, and inductive step — examiners care about structure.
+
+---
+
+### Strong induction
+
+Sometimes the inductive step needs all $k \\leq n$, not just $n$. State clearly: “Assume true for all positive integers up to $k$.”
+
+---
+
+### VCE proof checklist
+
+- State what you are proving ($\\forall n \\in \\mathbb{Z}^+$, …).
+- Base case with explicit calculation.
+- Assume $P(k)$ (or all $j \\leq k$).
+- Show $P(k+1)$ using the assumption — do not skip algebra.
+- Conclude “by mathematical induction”.
 `;
 
 export const SPECIALIST_OVERVIEW_FUNCTIONS = `### Rational functions
@@ -267,6 +283,14 @@ $$z_k = r^{1/n}\\operatorname{cis}\\!\\left(\\frac{\\theta + 2k\\pi}{n}\\right),
 $$z_k = 2\\operatorname{cis}\\!\\left(\\frac{2k\\pi}{3}\\right), \\quad k = 0,1,2$$
 
 The three roots are equally spaced on a circle in the Argand plane.
+
+---
+
+### Conjugates and real polynomials
+
+$\\overline{z} = a - bi$. Key facts: $z + \\overline{z} = 2a$, $z\\overline{z} = |z|^2$.
+
+If a polynomial has **real coefficients**, non-real roots occur in **conjugate pairs** — useful for factorising cubics/quartics on Specialist exams.
 `;
 
 export const SPECIALIST_OVERVIEW_DIFF_CALC = `### Differentiation basics
@@ -347,6 +371,16 @@ Used for products such as $xe^x$, $x\\sin x$, $x\\ln x$.
 $$\\int xe^x\\,dx = xe^x - \\int e^x\\,dx = xe^x - e^x + C = e^x(x-1) + C$$
 
 **LIATE** (choose $u$): **L**og → **I**nverse trig → **A**lgebraic → **T**rig → **E**xponential.
+
+---
+
+### Definite integrals and area (VCE)
+
+$$\\int_a^b f(x)\\,dx = F(b) - F(a)$$
+
+Area between curves: $\\int_a^b |f(x) - g(x)|\\,dx$ on an interval where you know which function is above.
+
+**Tip:** Partial fractions (from the functions topic) often appear immediately before integrating a rational function.
 `;
 
 export const SPECIALIST_OVERVIEW_DE = `### Differential equations
@@ -366,6 +400,14 @@ Separate: $\\frac{1}{y}\\,dy = x\\,dx$. Integrate:
 $$\\ln|y| = \\frac{x^2}{2} + C \\quad \\Rightarrow \\quad y = Ae^{x^2/2}$$
 
 **Tip:** If all $y$'s go on one side and all $x$'s on the other, the equation is separable.
+
+---
+
+### Initial conditions
+
+A **particular solution** needs an initial condition, e.g. $y(0) = 5$, to find $A$ in $y = Ae^{kx}$.
+
+**Modelling (VCE):** exponential growth/decay (populations, cooling), logistic-style saturation may appear in worded problems — identify $\\frac{dy}{dt}$ proportional to $y$ or to “room left”.
 `;
 
 export const SPECIALIST_OVERVIEW_KINEMATICS = `### Kinematics with calculus
@@ -378,6 +420,20 @@ export const SPECIALIST_OVERVIEW_KINEMATICS = `### Kinematics with calculus
 | From acceleration | $x = \\int v\\,dt$, $v = \\int a\\,dt$ |
 
 **Example:** If $v = 3t^2$, then $a = \\frac{dv}{dt} = 6t$ and $x = \\int 3t^2\\,dt = t^3 + C$.
+
+---
+
+### Displacement, distance, speed
+
+| Quantity | Meaning |
+| --- | --- |
+| Displacement | net change in position $\\int_{t_1}^{t_2} v\\,dt$ |
+| Distance travelled | $\\int_{t_1}^{t_2} \\|v\\|\\,dt$ — split if $v$ changes sign |
+| Speed | $\\|v\\|$ (scalar) |
+
+**Projectile (2D):** often $x(t)$ linear in $t$, $y(t)$ quadratic; resolve into components or use vector $\\mathbf{r}(t)$.
+
+**VCE:** “When is the particle at rest?” → solve $v = 0$. “Greatest height” → $v = 0$ at apex (if moving vertically).
 `;
 
 export const SPECIALIST_OVERVIEW_VECTORS = `### Vectors
@@ -454,6 +510,18 @@ or $\\mathbf{n} \\cdot (\\mathbf{r} - \\mathbf{a}) = 0$ where $\\mathbf{n}$ is n
 Point $(x_1,y_1,z_1)$ to plane $ax + by + cz + d = 0$:
 
 $$D = \\frac{|ax_1 + by_1 + cz_1 + d|}{\\sqrt{a^2 + b^2 + c^2}}$$
+
+---
+
+### Angle between lines and planes
+
+Angle between direction vectors $\\mathbf{d}_1$, $\\mathbf{d}_2$:
+
+$$\\cos\\theta = \\frac{|\\mathbf{d}_1 \\cdot \\mathbf{d}_2|}{|\\mathbf{d}_1||\\mathbf{d}_2|}$$
+
+Angle between planes: use normals $\\mathbf{n}_1$, $\\mathbf{n}_2$ the same way.
+
+**VCE:** “Shortest distance” may mean point–line, point–plane, or skew lines — identify which formula applies.
 `;
 
 export const SPECIALIST_OVERVIEW_VECTOR_CALC = `### Vector functions and motion
@@ -469,6 +537,18 @@ Differentiate and integrate **component-wise**. Speed is $|\\mathbf{v}(t)|$.
 $$\\frac{dy}{dx} = \\frac{dy/dt}{dx/dt}$$
 
 Use for paths in the plane (circles, ellipses, projectiles) and 3D particle motion.
+
+---
+
+### Speed and arc length
+
+Speed: $|\\mathbf{v}(t)| = \\sqrt{\\left(\\frac{dx}{dt}\\right)^2 + \\left(\\frac{dy}{dt}\\right)^2}$.
+
+Arc length (from $t = a$ to $t = b$):
+
+$$L = \\int_a^b \\sqrt{\\left(\\frac{dx}{dt}\\right)^2 + \\left(\\frac{dy}{dt}\\right)^2}\\,dt$$
+
+**Tip:** Specialist motion questions may give $\\mathbf{r}(t)$ in 3D — differentiate each component; magnitude of velocity is speed.
 `;
 
 export const SPECIALIST_OVERVIEW_RANDOM = `### Random variables

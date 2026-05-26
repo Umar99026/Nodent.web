@@ -9,7 +9,6 @@ import {
   stripGeneralMathsUnitPrefix,
 } from "@/lib/generalMathsAreaTopic";
 import {
-  GENERAL_OVERVIEW_BIG_PICTURE,
   GENERAL_OVERVIEW_DATA,
   GENERAL_OVERVIEW_MATRICES,
   GENERAL_OVERVIEW_NETWORKS,
@@ -54,11 +53,7 @@ const MARKDOWN: Record<GeneralMathsAreaOfStudyTopic, string> = {
   "Data analysis": compose(
     "## Data analysis",
     "Data analysis",
-    `${GENERAL_OVERVIEW_BIG_PICTURE}
-
----
-
-${GENERAL_OVERVIEW_DATA}`,
+    GENERAL_OVERVIEW_DATA,
   ),
 
   "Recursion and financial modelling": compose(

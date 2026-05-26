@@ -3,8 +3,15 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 
 import { apiFetch, ApiError } from "@/lib/api";
-import { API_PATHS, STORAGE_KEYS } from "@/lib/constants";
-import { baseSubjects } from "@/lib/subjects";
+import { API_PATHS } from "@/lib/constants";
+import {
+  loadPracticeBank,
+  readCustomQuestionsCache,
+  refreshCustomQuestionsCache,
+  QUESTIONS_UPDATED_EVENT,
+} from "@/lib/questionBankCache";
+import { canonicalPracticeTopic } from "@/lib/practiceQuestions";
+import { baseSubjects, type Question } from "@/lib/subjects";
 
 import { AppShell } from "@/components/layout/AppShell";
 import { useAuth } from "@/context/AuthContext";
@@ -35,45 +42,37 @@ interface Challenge {
   createdAt: string;
 }
 
-function parsePracticeQuestions(
-  rawList: unknown[],
-): BattleQuestion[] {
-  try {
-    return (rawList ?? [])
-      .filter(
-        (q): q is any =>
-          Boolean(q) &&
-          ((q as any).type === "mcq" ||
-            (q as any).type === "short" ||
-            (q as any).type === "short_answer")
-      )
-      .map((q: any) => {
-        if (q.type === "mcq") {
-          return {
-            type: "mcq",
-            question: String(q.question ?? ""),
-            options: Array.isArray(q.options) ? q.options.map(String) : [],
-            answer: String(q.answer ?? ""),
-            topic: q.topic ? String(q.topic) : undefined,
-          } satisfies BattleQuestion;
-        }
-
-        const acceptedAnswers = Array.isArray(q.acceptedAnswers)
-          ? q.acceptedAnswers.map(String)
-          : Array.isArray(q.accepted_answers)
-            ? q.accepted_answers.map(String)
-            : [];
-
-        return {
-          type: q.type,
-          question: String(q.question ?? ""),
-          acceptedAnswers,
-          topic: q.topic ? String(q.topic) : undefined,
-        } satisfies BattleQuestion;
-      });
-  } catch {
-    return [];
+function toBattleQuestion(q: Question): BattleQuestion | null {
+  if (q.type === "mcq" && q.options?.length && q.answer) {
+    return {
+      type: "mcq",
+      question: q.question,
+      options: q.options,
+      answer: q.answer,
+      topic: q.topic,
+    };
   }
+  if (q.type === "short" && q.acceptedAnswers?.length) {
+    return {
+      type: "short",
+      question: q.question,
+      acceptedAnswers: q.acceptedAnswers,
+      topic: q.topic,
+    };
+  }
+  return null;
+}
+
+function filterByTopic(
+  subjectId: string,
+  questions: Question[],
+  topicMode: string,
+): Question[] {
+  const pool = questions.filter((q) => q.type === "mcq" || q.type === "short");
+  if (topicMode === "mix") return pool;
+  return pool.filter(
+    (q) => canonicalPracticeTopic(subjectId, q) === topicMode,
+  );
 }
 
 function pickRandomQuestions<T>(arr: T[], count: number): T[] {
@@ -95,17 +94,9 @@ export default function DojoPage() {
 
   const [isChallenging, setIsChallenging] = useState(false);
 
-  const [customQuestionsCache, setCustomQuestionsCache] = useState<
-    Record<string, unknown[]>
-  >(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEYS.customQuestions);
-      if (!raw) return {};
-      return JSON.parse(raw) as Record<string, unknown[]>;
-    } catch {
-      return {};
-    }
-  });
+  const [customQuestionsCache, setCustomQuestionsCache] = useState(
+    readCustomQuestionsCache,
+  );
 
   const [rangeMode, setRangeMode] = useState<"all" | "week" | "daily">("all");
   const [leaderboard, setLeaderboard] = useState<
@@ -127,35 +118,37 @@ export default function DojoPage() {
 
   const practiceQuestions = useMemo(() => {
     if (!subjectId) return [];
-    return parsePracticeQuestions(customQuestionsCache[subjectId] ?? []);
+    return loadPracticeBank(subjectId, customQuestionsCache);
   }, [subjectId, customQuestionsCache]);
 
   const availableTopics = useMemo(() => {
     const set = new Set<string>();
     for (const q of practiceQuestions) {
-      const t = q.topic?.trim() || "General";
-      set.add(t);
+      if (q.type !== "mcq" && q.type !== "short") continue;
+      set.add(canonicalPracticeTopic(subjectId, q));
     }
     return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [practiceQuestions]);
+  }, [practiceQuestions, subjectId]);
 
-  // Refresh customQuestions so topic dropdown stays accurate after admin edits.
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const data = await apiFetch<{ customQuestions?: Record<string, unknown[]> }>(API_PATHS.bootstrap);
-        if (cancelled) return;
-        if (data?.customQuestions) {
-          setCustomQuestionsCache(data.customQuestions);
-          localStorage.setItem(STORAGE_KEYS.customQuestions, JSON.stringify(data.customQuestions));
-        }
+        const map = await refreshCustomQuestionsCache();
+        if (!cancelled) setCustomQuestionsCache(map);
       } catch {
-        // If bootstrap fails, fall back to whatever is already in localStorage.
+        /* use localStorage cache */
       }
     })();
+    const onUpdated = (e: Event) => {
+      const detail = (e as CustomEvent<Record<string, unknown[]>>).detail;
+      if (detail) setCustomQuestionsCache(detail);
+      else setCustomQuestionsCache(readCustomQuestionsCache());
+    };
+    window.addEventListener(QUESTIONS_UPDATED_EVENT, onUpdated);
     return () => {
       cancelled = true;
+      window.removeEventListener(QUESTIONS_UPDATED_EVENT, onUpdated);
     };
   }, []);
 
@@ -203,32 +196,20 @@ export default function DojoPage() {
   }, []);
 
   const buildQuestionSetForChallenge = useMemo(() => {
-    // We build when user actually challenges (to keep random stable per click).
     return () => {
-      const pool = practiceQuestions.filter((q) => q.type === "mcq" || q.type === "short" || q.type === "short_answer");
-      if (!pool.length) return [];
-
-      const filtered =
-        topicMode === "mix"
-          ? pool
-          : pool.filter((q) => (q.topic?.trim() || "General") === topicMode);
-
-      if (filtered.length < 10) return [];
-      return pickRandomQuestions(filtered, 10);
+      const filtered = filterByTopic(subjectId, practiceQuestions, topicMode);
+      const battle = filtered
+        .map(toBattleQuestion)
+        .filter((q): q is BattleQuestion => q != null);
+      if (battle.length < 10) return [];
+      return pickRandomQuestions(battle, 10);
     };
-  }, [practiceQuestions, topicMode]);
+  }, [practiceQuestions, topicMode, subjectId]);
 
-  /** True when this subject has enough MCQ + short-answer questions for a 10-question battle (for current topic selection). */
   const canStartBattle = useMemo(() => {
-    const pool = practiceQuestions.filter(
-      (q) => q.type === "mcq" || q.type === "short" || q.type === "short_answer",
-    );
-    const filtered =
-      topicMode === "mix"
-        ? pool
-        : pool.filter((q) => (q.topic?.trim() || "General") === topicMode);
+    const filtered = filterByTopic(subjectId, practiceQuestions, topicMode);
     return filtered.length >= 10;
-  }, [practiceQuestions, topicMode]);
+  }, [practiceQuestions, topicMode, subjectId]);
 
   const handleChallenge = async (opponentUsername: string) => {
     if (!subjectId) return;

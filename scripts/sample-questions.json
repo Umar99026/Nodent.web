@@ -1,0 +1,34 @@
+{
+  "questions": [
+    {
+      "subjectId": "methods",
+      "type": "mcq",
+      "topic": "Differential calculus",
+      "question": "If \\(f(x) = x^2\\), what is \\(f'(2)\\)?",
+      "options": ["2", "4", "8", "0"],
+      "correctAnswer": "B",
+      "marks": 1
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Differential calculus",
+      "question": "Find \\(\\frac{dy}{dx}\\) if \\(y = 3x^2 - 5x\\).",
+      "acceptedAnswers": ["6x-5", "6x - 5"],
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "long_answer",
+      "topic": "Data analysis",
+      "question": "A dataset has mean 12 and standard deviation 3. Describe one limitation of using the mean alone.",
+      "acceptedAnswers": [
+        "outliers skew the mean",
+        "does not show spread",
+        "sensitive to extreme values"
+      ],
+      "guidance": "Award marks for any valid statistical limitation.",
+      "marks": 3
+    }
+  ]
+}

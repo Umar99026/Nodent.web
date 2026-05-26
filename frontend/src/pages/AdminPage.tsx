@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiFetch, apiFetchAdmin, ApiError } from "@/lib/api";
 import { API_PATHS, ADMIN_EMAIL } from "@/lib/constants";
+import { refreshCustomQuestionsCache } from "@/lib/questionBankCache";
 import { compressImageFileToDataUrl } from "@/lib/imageCompressor";
 import { RichQuestionContent } from "@/components/quiz/RichQuestionContent";
 import { AppShell } from "@/components/layout/AppShell";
@@ -435,6 +436,16 @@ export default function AdminPage() {
     }
   }, []);
 
+  /** After admin writes, sync global bank to DB-backed cache used by Practice / Quiz. */
+  const publishQuestionBank = useCallback(async () => {
+    await fetchQuestions();
+    try {
+      await refreshCustomQuestionsCache();
+    } catch {
+      /* admin session edge case — list still refreshed */
+    }
+  }, [fetchQuestions]);
+
   const fetchEnglishPrompts = useCallback(async () => {
     try {
       const booksResp = await apiFetch<{ books: Array<{ id: number; title: string }> }>(
@@ -641,7 +652,7 @@ export default function AdminPage() {
         return next;
       });
       resetForm();
-      fetchQuestions();
+      await publishQuestionBank();
     } catch (err) {
       const msg =
         err instanceof ApiError
@@ -663,6 +674,11 @@ export default function AdminPage() {
       });
       toast.success("Question deleted");
       setQuestions((prev) => prev.filter((q) => q.id !== questionId));
+      try {
+        await refreshCustomQuestionsCache();
+      } catch {
+        /* ignore */
+      }
     } catch (err) {
       if (err instanceof ApiError) toast.error(err.message);
       else toast.error("Failed to delete question");
@@ -735,7 +751,7 @@ export default function AdminPage() {
       toast.success(
         `Updated topic for ${updated} of ${total} Mathematical Methods question${total === 1 ? "" : "s"}.`,
       );
-      await fetchQuestions();
+      await publishQuestionBank();
     } catch (err) {
       if (err instanceof ApiError) toast.error(err.message);
       else toast.error("Failed to retag Methods topics.");
@@ -761,7 +777,7 @@ export default function AdminPage() {
       if (unresolved > 0) {
         toast.error(`${unresolved} question${unresolved === 1 ? "" : "s"} still need manual answers.`);
       }
-      await fetchQuestions();
+      await publishQuestionBank();
     } catch (err) {
       if (err instanceof ApiError) toast.error(err.message);
       else toast.error("Failed to auto-fill expected answers.");
@@ -1282,7 +1298,7 @@ export default function AdminPage() {
 
       setBulkText("");
       setBulkRows([]);
-      await fetchQuestions();
+      await publishQuestionBank();
     } catch (e) {
       const msg = e instanceof ApiError ? e.message : "Bulk import failed.";
       setBulkError(msg);
@@ -1562,7 +1578,7 @@ export default function AdminPage() {
 
       setImageMapText("");
       setImageMapRows([]);
-      await fetchQuestions();
+      await publishQuestionBank();
     } catch (e) {
       const msg = e instanceof ApiError ? e.message : "Image mapping import failed.";
       setImageMapError(msg);
@@ -1722,7 +1738,7 @@ export default function AdminPage() {
       }
       toast.success(`Deleted ${qIds.length} question(s) and ${pIds.length} prompt(s).`);
       clearSelections();
-      await Promise.all([fetchQuestions(), fetchEnglishPrompts()]);
+      await Promise.all([publishQuestionBank(), fetchEnglishPrompts()]);
     } catch (e) {
       const msg = e instanceof ApiError ? e.message : "Bulk delete failed.";
       toast.error(msg);

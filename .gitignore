@@ -4,6 +4,7 @@ frontend/dist
 .wrangler/
 .env
 .env.local
+.dev.vars
 resources-topic-overviews-temp/
 nodent.db
 .DS_Store

@@ -1,0 +1,46 @@
+import { apiFetch } from "@/lib/api";
+import { API_PATHS, STORAGE_KEYS } from "@/lib/constants";
+import {
+  getRawCustomQuestionsForSubject,
+  practiceQuestionsForSubject,
+} from "@/lib/practiceQuestions";
+import type { Question } from "@/lib/subjects";
+
+/** Fired after admin saves or bootstrap refreshes the global question bank. */
+export const QUESTIONS_UPDATED_EVENT = "nodent:questions-updated";
+
+export function readCustomQuestionsCache(): Record<string, unknown[]> {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.customQuestions);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, unknown[]>;
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+/** Pull latest `custom_questions` from the server and update localStorage + listeners. */
+export async function refreshCustomQuestionsCache(): Promise<
+  Record<string, unknown[]>
+> {
+  const data = await apiFetch<{ customQuestions?: Record<string, unknown[]> }>(
+    API_PATHS.bootstrap,
+  );
+  const map = data.customQuestions ?? {};
+  localStorage.setItem(STORAGE_KEYS.customQuestions, JSON.stringify(map));
+  window.dispatchEvent(
+    new CustomEvent(QUESTIONS_UPDATED_EVENT, { detail: map }),
+  );
+  return map;
+}
+
+/** Built-in maths + admin DB questions for practice, quiz, and dojo. */
+export function loadPracticeBank(
+  subjectId: string,
+  cache?: Record<string, unknown[]>,
+): Question[] {
+  const map = cache ?? readCustomQuestionsCache();
+  const raw = getRawCustomQuestionsForSubject(map, subjectId);
+  return practiceQuestionsForSubject(raw, subjectId);
+}

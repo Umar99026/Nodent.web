@@ -7,6 +7,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { passwordPolicyError } from "@/lib/passwordPolicy";
 import { Loader2, AlertCircle, Eye, EyeOff, CheckCircle2 } from "lucide-react";
 
 export default function ResetPasswordPage() {
@@ -33,8 +34,9 @@ export default function ResetPasswordPage() {
       setServerError("Password is required.");
       return;
     }
-    if (password.length < 4) {
-      setServerError("Password must be at least 4 characters.");
+    const pwErr = passwordPolicyError(password);
+    if (pwErr) {
+      setServerError(pwErr);
       return;
     }
     if (password !== confirmPassword) {

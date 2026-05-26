@@ -4,9 +4,14 @@ import { useAuth } from "@/context/AuthContext";
 import { apiFetch } from "@/lib/api";
 import { API_PATHS, STORAGE_KEYS } from "@/lib/constants";
 import {
+  loadPracticeBank,
+  QUESTIONS_UPDATED_EVENT,
+} from "@/lib/questionBankCache";
+import {
   getRawCustomQuestionsForSubject,
   normalizeCustomQuestionsList,
   practiceQuestionsForSubject,
+  questionMatchesPracticeTopic,
 } from "@/lib/practiceQuestions";
 import { baseSubjects } from "@/lib/subjects";
 import type { Question, Subject } from "@/lib/subjects";
@@ -157,7 +162,7 @@ function getCustomQuestionsFromStorage(subjectId: string): Question[] {
 export default function QuizPage() {
   const { subjectId } = useParams<{ subjectId: string }>();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
   const wrongPath = subjectId
     ? new RegExp(`^/quiz/${subjectId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/wrong/?$`)
@@ -315,6 +320,15 @@ export default function QuizPage() {
     };
   }, [user, subjectId]);
 
+  useEffect(() => {
+    if (!user || !subjectId) return;
+    const onBankUpdated = () => {
+      setQuestions(loadPracticeBank(subjectId));
+    };
+    window.addEventListener(QUESTIONS_UPDATED_EVENT, onBankUpdated);
+    return () => window.removeEventListener(QUESTIONS_UPDATED_EVENT, onBankUpdated);
+  }, [user, subjectId]);
+
   const availableTopics = useMemo(() => {
     if (subjectId === "general-maths") {
       return generalMathsPracticeTopicOptions().filter((t) => t !== "all");
@@ -429,12 +443,11 @@ export default function QuizPage() {
   ]);
 
   const topicFilteredFlat = useMemo(() => {
-    if (topicFilter === "all") return randomizedQuestions;
-    const want = topicFilter.trim();
-    return randomizedQuestions.filter(
-      (q) => (q.topic || "General").trim() === want,
+    if (!subjectId || topicFilter === "all") return randomizedQuestions;
+    return randomizedQuestions.filter((q) =>
+      questionMatchesPracticeTopic(subjectId, q, topicFilter),
     );
-  }, [randomizedQuestions, topicFilter]);
+  }, [randomizedQuestions, topicFilter, subjectId]);
 
   const allGroupsFlat = useMemo(
     () => buildGroupsFromOrderedFlat(topicFilteredFlat, questions),
@@ -702,6 +715,31 @@ export default function QuizPage() {
     );
   }
 
+  if (
+    !isWrongReview &&
+    topicFilter !== "all" &&
+    topicFilteredFlat.length === 0 &&
+    questions.length > 0
+  ) {
+    return (
+      <AppShell title={subject ? `${subject.name} Practice` : "Practice"}>
+        <div className="mx-auto max-w-lg space-y-4 py-16 text-center">
+          <h2 className="font-display text-xl text-foreground">No questions for this topic</h2>
+          <p className="text-sm text-muted-foreground">
+            There are no practice questions tagged to <strong>{topicFilter}</strong> yet. Choose
+            another topic or &quot;All topics&quot;, or add questions in Admin for this topic.
+          </p>
+          <div className="flex flex-wrap justify-center gap-2 pt-2">
+            <Button variant="outline" onClick={() => setTopicFilter("all")}>
+              All topics
+            </Button>
+            <Button onClick={() => navigate(`/practice/${subjectId}`)}>Practice setup</Button>
+          </div>
+        </div>
+      </AppShell>
+    );
+  }
+
   if (!isWrongReview && activeGroups.length === 0 && questions.length > 0) {
     return (
       <AppShell title={subject ? `${subject.name} Revision` : "Revision"}>
@@ -745,6 +783,15 @@ export default function QuizPage() {
                   onValueChange={(val) => {
                     if (!val) return;
                     setTopicFilter(val);
+                    setSearchParams(
+                      (prev) => {
+                        const next = new URLSearchParams(prev);
+                        if (val === "all") next.delete("topic");
+                        else next.set("topic", val);
+                        return next;
+                      },
+                      { replace: true },
+                    );
                   }}
                 >
                   <SelectTrigger className="h-10 bg-white border-black/10 text-[#0b0f19]">

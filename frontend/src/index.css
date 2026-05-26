@@ -262,3 +262,21 @@
 .stagger-children > *:nth-child(6) { animation-delay: 300ms; }
 .stagger-children > *:nth-child(7) { animation-delay: 360ms; }
 .stagger-children > *:nth-child(8) { animation-delay: 420ms; }
+
+/* Practice study overviews — display math between prose blocks */
+.curriculum-overview .katex-display {
+  margin: 2.5rem 0;
+  overflow-x: auto;
+  padding: 0.25rem 0;
+}
+.curriculum-overview .katex-display > .katex {
+  font-size: 1.2em;
+}
+@media (min-width: 640px) {
+  .curriculum-overview .katex-display {
+    margin: 3rem 0;
+  }
+  .curriculum-overview .katex-display > .katex {
+    font-size: 1.35em;
+  }
+}

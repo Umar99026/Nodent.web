@@ -11,9 +11,13 @@ export default defineConfig({
     },
   },
   server: {
+    // Bind IPv4 so http://localhost works on Windows (not only [::1]).
+    host: "127.0.0.1",
+    port: 5173,
+    strictPort: false,
     proxy: {
       "/api": {
-        target: "http://localhost:8787",
+        target: "http://127.0.0.1:8787",
         changeOrigin: true,
       },
     },

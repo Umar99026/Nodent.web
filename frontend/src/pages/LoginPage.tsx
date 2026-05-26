@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { passwordPolicyError } from "@/lib/passwordPolicy";
 import { Eye, EyeOff, Loader2, AlertCircle } from "lucide-react";
 
 interface FieldErrors {
@@ -24,8 +25,10 @@ function validateLogin(identity: string, password: string): FieldErrors {
   const errors: FieldErrors = {};
   if (!identity.trim()) errors.email = "Email or username is required";
   if (!password) errors.password = "Password is required";
-  else if (password.length < 4)
-    errors.password = "Password must be at least 4 characters";
+  else {
+    const pwErr = passwordPolicyError(password);
+    if (pwErr) errors.password = pwErr;
+  }
   return errors;
 }
 
@@ -41,8 +44,10 @@ function validateSignup(
   if (!email.trim()) errors.email = "Email is required";
   else if (!validateEmail(email)) errors.email = "Enter a valid email address";
   if (!password) errors.password = "Password is required";
-  else if (password.length < 4)
-    errors.password = "Password must be at least 4 characters";
+  else {
+    const pwErr = passwordPolicyError(password);
+    if (pwErr) errors.password = pwErr;
+  }
   return errors;
 }
 

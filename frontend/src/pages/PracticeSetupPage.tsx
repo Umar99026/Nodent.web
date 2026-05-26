@@ -19,7 +19,6 @@ import { generalMathsPracticeTopicOptions } from "@/lib/generalMathsAreaTopic";
 import { methodsPracticeTopicOptions } from "@/lib/methodsAreaTopic";
 import { specialistMathsPracticeTopicOptions } from "@/lib/specialistMathsAreaTopic";
 import { CurriculumOverview } from "@/components/study/CurriculumOverview";
-import { topicExistsInQuestionBank } from "@/lib/methodsCurriculumOverviews";
 import { getTopicOverview } from "@/lib/topicOverviews";
 
 type EnglishSection = "A" | "B" | "C";
@@ -137,15 +136,6 @@ export default function PracticeSetupPage() {
     if (!subjectId) return;
     if (isEnglish) {
       navigate(`/quiz/english?section=${encodeURIComponent(englishSection)}`);
-      return;
-    }
-    if (
-      (isMethods || isGeneralMaths || isSpecialistMaths) &&
-      topic &&
-      topic !== "all" &&
-      !topicExistsInQuestionBank(topic, questions)
-    ) {
-      navigate(`/quiz/${subjectId}`);
       return;
     }
     const qp = topic && topic !== "all" ? `?topic=${encodeURIComponent(topic)}` : "";

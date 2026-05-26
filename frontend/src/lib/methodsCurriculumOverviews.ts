@@ -8,11 +8,12 @@ import {
   type MethodsTopic,
   stripMethodsUnitPrefix,
 } from "@/lib/methodsAreaTopic";
+import type { Question } from "@/lib/subjects";
+import { topicHasQuestionsInBank } from "@/lib/practiceQuestions";
 import {
   METHODS_ALGEBRA,
   METHODS_APP_DIFF,
   METHODS_APP_INTEGRAL,
-  METHODS_BIG_PICTURE,
   METHODS_CI_AND_EXAM,
   METHODS_CIRCULAR,
   METHODS_CONTINUOUS,
@@ -63,11 +64,7 @@ const MARKDOWN: Record<MethodsTopic, string> = {
   "Functions and transformations": compose(
     "## Functions and transformations",
     "Functions, relations and graphs",
-    `${METHODS_BIG_PICTURE}
-
----
-
-${METHODS_FUNCTIONS_TRANSFORMATIONS}`,
+    METHODS_FUNCTIONS_TRANSFORMATIONS,
   ),
 
   "Polynomial, power and rational functions": compose(
@@ -170,9 +167,8 @@ export function getMethodsCurriculumOverview(topic: string): string | null {
 
 export function topicExistsInQuestionBank(
   topic: string,
-  questions: { topic?: string }[],
+  questions: Question[],
+  subjectId: string,
 ): boolean {
-  const t = String(topic ?? "").trim();
-  if (!t || t === "all") return true;
-  return questions.some((q) => String(q.topic ?? "").trim() === t);
+  return topicHasQuestionsInBank(topic, subjectId, questions);
 }

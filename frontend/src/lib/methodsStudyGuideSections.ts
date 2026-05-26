@@ -3,23 +3,6 @@
  * Composed per topic in methodsCurriculumOverviews.ts.
  */
 
-export const METHODS_BIG_PICTURE = `Methods is about using **functions** to model change and uncertainty.
-
-| Area | Focus |
-| --- | --- |
-| **FUNCTIONS** | Describe relationships |
-| **ALGEBRA** | Solve equations and manipulate expressions |
-| **CALCULUS** | Rates of change, gradients, areas |
-| **PROBABILITY** | Chance, distributions, expected values |
-
-| Topic area | Main idea |
-| --- | --- |
-| Functions and graphs | Understand, transform and analyse graphs |
-| Algebra | Solve equations, inequalities and simplify expressions |
-| Calculus | Differentiate and integrate functions |
-| Probability and statistics | Work with chance, distributions and random variables |
-`;
-
 export const METHODS_FUNCTIONS_TRANSFORMATIONS = `A function takes an input $x$ and gives exactly one output $y$: $y = f(x)$.
 
 **Example:** $f(x) = x^2 + 3$. If $x = 2$, then $f(2) = 7$.
@@ -65,6 +48,22 @@ For $y = f(x)$:
 **Memory:** outside $f(x)$ affects $y$; inside affects $x$ (inside changes feel backwards).
 
 **Example:** $y = (x-3)^2 + 5$ is $y = x^2$ shifted **right 3**, **up 5**.
+
+---
+
+### Hybrid (piecewise) functions
+
+Defined by different rules on different domains — e.g. a flat fee plus a per-km charge.
+
+**Tip:** On CAS, graph piecewise with $\\{ \\text{rule}_1, \\text{domain}_1; \\text{rule}_2, \\text{domain}_2 \\}$ and check continuity at boundaries if asked.
+
+---
+
+### What VCE Methods asks here
+
+- State **domain** and **range** from a graph or rule (watch $\\sqrt{\\ },$ fractions, logs).
+- Apply transformations and describe them in words (dilation, reflection, translation).
+- Read $f(a)$ vs solve $f(x) = a$ — common Exam 1 distinction.
 `;
 
 export const METHODS_POLYNOMIAL = `### Polynomial functions
@@ -79,6 +78,25 @@ export const METHODS_POLYNOMIAL = `### Polynomial functions
 **Quadratic:** $y = ax^2 + bx + c$ or vertex form $y = a(x-h)^2 + k$ with turning point $(h,k)$.
 
 **Example:** $y = 2(x-3)^2 + 1$ has turning point $(3,1)$; opens up since $a = 2 > 0$.
+
+---
+
+### Factor and remainder theorem
+
+If $(x - a)$ is a factor of $P(x)$, then $P(a) = 0$. If $P(x)$ is divided by $(x - a)$, remainder $= P(a)$.
+
+**Example:** Show $(x - 2)$ is a factor of $P(x) = x^3 - 5x + 2$. Since $P(2) = 8 - 10 + 2 = 0$, it factors.
+
+---
+
+### Sketching polynomials (VCE)
+
+1. Factor (or use CAS) to find **$x$-intercepts** and **multiplicity** (cross vs touch).
+2. **$y$-intercept:** $P(0)$.
+3. **End behaviour** from leading term sign and degree.
+4. Turning points from calculus or symmetry where applicable.
+
+**Tip:** A repeated factor $(x-a)^2$ touches the axis at $x=a$; $(x-a)^3$ crosses with a flat point.
 `;
 
 export const METHODS_EXP_LOG = `### Exponential functions
@@ -100,6 +118,26 @@ $\\log_a(x) = y$ means $a^y = x$.
 | Power | $\\log_a(x^n) = n\\log_a x$ |
 
 Domain: $x > 0$. Logs and exponentials are **inverse** functions.
+
+---
+
+### Natural base $e$
+
+$e \\approx 2.718\\ldots$ — used for continuous growth/decay: $y = e^{kx}$.
+
+$\\frac{d}{dx}(e^x) = e^x$, $\\int e^x\\,dx = e^x + C$.
+
+---
+
+### Solving exponential and log equations (VCE)
+
+| Type | Approach |
+| --- | --- |
+| Same base | $2^{x+1} = 8 \\Rightarrow 2^{x+1} = 2^3 \\Rightarrow x = 2$ |
+| Different bases | Take $\\ln$ of both sides: $3^x = 20 \\Rightarrow x = \\frac{\\ln 20}{\\ln 3}$ |
+| Log equations | Rewrite in index form; check arguments $> 0$ |
+
+**Example:** $\\ln(x-1) = 2 \\Rightarrow x - 1 = e^2 \\Rightarrow x = 1 + e^2$ (domain $x > 1$).
 `;
 
 export const METHODS_CIRCULAR = `### Circular functions
@@ -124,6 +162,16 @@ Main functions: $\\sin x$, $\\cos x$, $\\tan x$. In Methods, angles are usually 
 | $c$ | vertical shift |
 
 **Tip:** period of $\\tan$ is $\\frac{\\pi}{\\|n\\|}$.
+
+---
+
+### Solving circular equations (VCE)
+
+On $[0, 2\\pi)$ or a given domain: use symmetry and reference angles.
+
+**Example:** $\\sin x = \\frac{1}{2}$ on $[0, 2\\pi)$ → $x = \\frac{\\pi}{6}$ or $x = \\frac{5\\pi}{6}$.
+
+**Tip:** Calculator in **radians** for calculus; exact values from the table above are expected on Exam 1.
 `;
 
 export const METHODS_ALGEBRA = `### Composite functions
@@ -269,6 +317,17 @@ Where $f'(x) = 0$ — local max, local min, or stationary point of inflection.
 ### Exam focus — calculus applications
 
 Optimisation, rates of change, tangents/normals, stationary points, graph sketching with calculus.
+
+---
+
+### Optimisation procedure (VCE extended response)
+
+1. Define variables and write **constraint** / **objective** (area, cost, profit).
+2. Express quantity to maximise/minimise as $f(x)$ on a valid domain.
+3. Find stationary points; test with $f''$ or sign chart / endpoints.
+4. Answer **in context** with units.
+
+**Rates of change:** if $V$ depends on $r$ and $r$ depends on $t$, use $\\frac{dV}{dt} = \\frac{dV}{dr}\\cdot\\frac{dr}{dt}$.
 `;
 
 export const METHODS_INTEGRAL = `### Antidifferentiation
@@ -289,6 +348,24 @@ $$\\int x^n\\,dx = \\frac{x^{n+1}}{n+1} + C, \\quad n \\neq -1$$
 | $\\frac{1}{x}$ | $\\ln\\|x\\| + C$ |
 | $\\cos x$ | $\\sin x + C$ |
 | $\\sin x$ | $-\\cos x + C$ |
+
+---
+
+### Fundamental theorem of calculus
+
+If $F'(x) = f(x)$, then
+
+$$\\int_a^b f(x)\\,dx = F(b) - F(a)$$
+
+**Example:** $\\int_0^1 2x\\,dx = [x^2]_0^1 = 1$.
+
+---
+
+### Average value of a function
+
+$$\\text{Average of } f \\text{ on } [a,b] = \\frac{1}{b-a}\\int_a^b f(x)\\,dx$$
+
+**Tip:** Exam 2 may ask for area between two curves: $\\int_a^b \\big|f(x) - g(x)\\big|\\,dx$ after finding intersection points.
 `;
 
 export const METHODS_APP_INTEGRAL = `### Definite integrals and area
@@ -367,6 +444,16 @@ For continuous $X$: $P(X = a) = 0$.
 
 $$E(X) = \\int_{-\\infty}^{\\infty} x f(x)\\,dx$$
 $$E(X^2) = \\int_{-\\infty}^{\\infty} x^2 f(x)\\,dx, \\quad \\operatorname{Var}(X) = E(X^2) - [E(X)]^2$$
+
+---
+
+### Uniform distribution (common in Methods)
+
+On $[a,b]$: $f(x) = \\frac{1}{b-a}$ for $a \\leq x \\leq b$.
+
+$$E(X) = \\frac{a+b}{2}, \\quad \\operatorname{Var}(X) = \\frac{(b-a)^2}{12}$$
+
+**Example:** Waiting time 0–10 minutes → $E(X) = 5$, $\\operatorname{Var}(X) = \\frac{100}{12} \\approx 8.33$.
 `;
 
 export const METHODS_NORMAL = `### Normal distribution
@@ -376,6 +463,22 @@ $$X \\sim N(\\mu, \\sigma^2)$$
 Standardise: $Z = \\frac{X - \\mu}{\\sigma}$ where $Z \\sim N(0,1)$.
 
 **Example:** $X \\sim N(50, 5^2)$, find $P(X < 60)$: $Z = \\frac{60-50}{5} = 2$, so $P(X < 60) = P(Z < 2)$.
+
+---
+
+### Empirical rule (68–95–99.7)
+
+For $X \\sim N(\\mu, \\sigma^2)$:
+
+| Interval | Approx. probability |
+| --- | --- |
+| $\\mu \\pm \\sigma$ | 68% |
+| $\\mu \\pm 2\\sigma$ | 95% |
+| $\\mu \\pm 3\\sigma$ | 99.7% |
+
+**Inverse normal:** given $P(X < k) = 0.9$, standardise to find $Z$, then $k = \\mu + \\sigma Z$.
+
+**VCE wording:** “Scores above 60” → $P(X > 60)$; watch whether the question wants a probability, a boundary score, or a $z$-score.
 `;
 
 export const METHODS_SAMPLING = `### Sample proportions
@@ -385,11 +488,33 @@ $$\\hat{P} \\sim N\\!\\left(p, \\frac{p(1-p)}{n}\\right)$$
 $$E(\\hat{P}) = p, \\quad \\operatorname{sd}(\\hat{P}) = \\sqrt{\\frac{p(1-p)}{n}}$$
 
 Larger $n$ → smaller spread.
+
+---
+
+### When $\\hat{P}$ is approximately normal
+
+Use $ \\hat{P} \\sim N\\!\\left(p, \\frac{p(1-p)}{n}\\right) $ when:
+
+- random sample,
+- $n$ large enough (often $np \\geq 10$ and $n(1-p) \\geq 10$ as a rule of thumb),
+- sampling without replacement only if population is large relative to $n$.
+
+**Example:** 40% support in population, $n = 100$ → $\\operatorname{sd}(\\hat{P}) = \\sqrt{\\frac{0.4 \\times 0.6}{100}} = 0.049$.
 `;
 
 export const METHODS_CI_AND_EXAM = `### Confidence intervals for proportions
 
-Estimate an unknown population proportion from sample data (structure similar to Methods inference topics).
+An approximate **95% CI** for population proportion $p$:
+
+$$\\hat{p} \\pm 1.96\\sqrt{\\frac{\\hat{p}(1-\\hat{p})}{n}}$$
+
+**Example:** $\\hat{p} = 0.42$, $n = 200$:
+
+$$0.42 \\pm 1.96\\sqrt{\\frac{0.42 \\times 0.58}{200}} \\approx 0.42 \\pm 0.068 \\Rightarrow (0.352,\\, 0.488)$$
+
+**Interpretation (VCE):** We are 95% confident the true population proportion lies in this interval.
+
+**Tip:** Use $z = 2$ only if the question allows the approximation; otherwise use 1.96 for 95%.
 
 ---
 

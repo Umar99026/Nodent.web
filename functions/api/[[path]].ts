@@ -754,6 +754,48 @@ async function verifyPassword(password: string, salt: string, storedHash: string
   return result === 0;
 }
 
+const MIN_PASSWORD_LENGTH = 8;
+const AUTH_RATE_MAX = 25;
+const AUTH_RATE_WINDOW_MS = 15 * 60 * 1000;
+const rateBuckets = new Map<string, { n: number; reset: number }>();
+
+function passwordPolicyError(password: string): string | null {
+  const p = String(password ?? "").trim();
+  if (!p) return "Password is required.";
+  if (p.length < MIN_PASSWORD_LENGTH) {
+    return `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`;
+  }
+  return null;
+}
+
+function clientIp(c: any): string {
+  const cf = c.req.header("CF-Connecting-IP");
+  if (cf) return String(cf).trim();
+  const fwd = c.req.header("X-Forwarded-For");
+  if (fwd) return String(fwd).split(",")[0]?.trim() || "unknown";
+  return "unknown";
+}
+
+/** Best-effort per-edge rate limit; pair with Cloudflare WAF for production. */
+function rateLimitResponse(c: any, bucket: string, max = AUTH_RATE_MAX): Response | null {
+  const key = `${clientIp(c)}:${bucket}`;
+  const now = Date.now();
+  let entry = rateBuckets.get(key);
+  if (!entry || now > entry.reset) {
+    entry = { n: 1, reset: now + AUTH_RATE_WINDOW_MS };
+    rateBuckets.set(key, entry);
+    return null;
+  }
+  entry.n += 1;
+  if (entry.n > max) {
+    return c.json(
+      { error: "Too many attempts. Please wait a few minutes and try again." },
+      429,
+    ) as Response;
+  }
+  return null;
+}
+
 async function hashResetToken(token: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
   return bytesToHex(new Uint8Array(digest));
@@ -1103,11 +1145,17 @@ async function ensureCoreTables(db: any) {
 // CORS
 app.use("/api/*", cors({
   origin: (origin, c) => {
-    if (origin?.startsWith("http://localhost:")) return origin;
-    if (origin?.includes(".pages.dev")) return origin;
+    if (!origin) {
+      const fe = String(c.env.FRONTEND_URL || "").trim().replace(/\/$/, "");
+      return fe || undefined;
+    }
+    if (origin.startsWith("http://localhost:") || origin.startsWith("http://127.0.0.1:")) {
+      return origin;
+    }
+    if (origin.includes(".pages.dev")) return origin;
     const fe = String(c.env.FRONTEND_URL || "").trim().replace(/\/$/, "");
     if (fe && origin === fe) return origin;
-    return origin || "";
+    return undefined;
   },
   allowHeaders: ["Content-Type", "Authorization", "X-Admin-Key"],
   allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
@@ -1309,6 +1357,8 @@ app.get("/api/health", async (c) => {
 
 // ---- Auth routes ----
 app.post("/api/auth/signup", async (c) => {
+  const limited = rateLimitResponse(c, "signup");
+  if (limited) return limited;
   const body = await c.req.json();
   const db = c.get("db");
   const username = cleanText(body.username, 40);
@@ -1316,7 +1366,8 @@ app.post("/api/auth/signup", async (c) => {
   const password = String(body.password || "").trim();
   if (username.length < 2) return c.json({ error: "Username must be at least 2 characters." }, 400);
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return c.json({ error: "Please enter a valid email." }, 400);
-  if (password.length < 4) return c.json({ error: "Password must be at least 4 characters." }, 400);
+  const pwErr = passwordPolicyError(password);
+  if (pwErr) return c.json({ error: pwErr }, 400);
   const existingEmail = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1);
   if (existingEmail.length > 0) return c.json({ error: "An account with this email already exists." }, 400);
   const existingUsername = await db.select({ id: users.id }).from(users).where(sql`LOWER(${users.username}) = LOWER(${username})`).limit(1);
@@ -1330,6 +1381,8 @@ app.post("/api/auth/signup", async (c) => {
 });
 
 app.post("/api/auth/login", async (c) => {
+  const limited = rateLimitResponse(c, "login");
+  if (limited) return limited;
   const body = await c.req.json();
   const db = c.get("db");
   const loginValue = String(body.email || body.username || "").trim().toLowerCase();
@@ -1365,6 +1418,8 @@ const FORGOT_PASSWORD_MESSAGE =
   "If an account exists for that email, we've sent password reset instructions.";
 
 app.post("/api/auth/forgot-password", async (c) => {
+  const limited = rateLimitResponse(c, "forgot-password");
+  if (limited) return limited;
   try {
     const body = await c.req.json();
     const db = c.get("db");
@@ -1413,9 +1468,8 @@ app.post("/api/auth/reset-password", async (c) => {
     const password = String(body?.password || "").trim();
 
     if (!rawToken) return c.json({ error: "Reset link is invalid or expired." }, 400);
-    if (password.length < 4) {
-      return c.json({ error: "Password must be at least 4 characters." }, 400);
-    }
+    const pwErr = passwordPolicyError(password);
+    if (pwErr) return c.json({ error: pwErr }, 400);
 
     const tokenHash = await hashResetToken(rawToken);
     const rows = await db.execute(sql`
@@ -3128,6 +3182,95 @@ app.post("/api/english/responses/:id/rate", authMiddleware, async (c: any) => {
   }
 });
 
+function parseCustomQuestionPayload(body: Record<string, unknown>) {
+  const subjectId = canonicalSubjectId(
+    cleanText(String(body.subjectId ?? body.subject_id ?? ""), 80),
+  );
+  const type = cleanText(String(body.type ?? ""), 20);
+  const question = cleanText(String(body.question ?? ""), 1000);
+  const topic = cleanText(String(body.topic || "General"), 100);
+  const passage = body.passage ? cleanText(String(body.passage), 3000) : null;
+  const guidance = body.guidance ? cleanText(String(body.guidance), 500) : null;
+
+  let optionsJson: string | null = null;
+  if (Array.isArray(body.options)) {
+    optionsJson = JSON.stringify(body.options);
+  } else if (body.options_json != null) {
+    const opts = parseFlexibleStringArray(body.options_json);
+    if (opts?.length) optionsJson = JSON.stringify(opts);
+  }
+
+  let acceptedAnswersJson: string | null = null;
+  if (Array.isArray(body.acceptedAnswers)) {
+    acceptedAnswersJson = JSON.stringify(body.acceptedAnswers);
+  } else if (body.accepted_answers_json != null) {
+    const acc = parseFlexibleStringArray(body.accepted_answers_json);
+    if (acc?.length) acceptedAnswersJson = JSON.stringify(acc);
+  }
+
+  let imageUrlsJson: string | null = null;
+  if (Array.isArray(body.imageUrls)) {
+    const urls = body.imageUrls
+      .map((u: unknown) => String(u ?? "").trim())
+      .filter(Boolean)
+      .slice(0, 6);
+    if (urls.length) imageUrlsJson = JSON.stringify(urls);
+  } else if (body.image_urls_json != null) {
+    const imgs = parseFlexibleStringArray(body.image_urls_json);
+    if (imgs?.length) imageUrlsJson = JSON.stringify(imgs.slice(0, 6));
+  }
+
+  const answerRaw = body.correctAnswer ?? body.answer;
+  const answer = answerRaw ? cleanText(String(answerRaw), 500) : null;
+  const marksDefault = type === "mcq" ? 1 : 2;
+  const marksParsed = Math.round(Number(body.marks ?? marksDefault));
+  const marks = Number.isFinite(marksParsed)
+    ? Math.max(1, marksParsed)
+    : marksDefault;
+
+  return {
+    subjectId,
+    type,
+    question,
+    topic,
+    passage,
+    guidance,
+    optionsJson,
+    acceptedAnswersJson,
+    imageUrlsJson,
+    answer,
+    marks,
+  };
+}
+
+async function insertCustomQuestionRow(
+  db: any,
+  body: Record<string, unknown>,
+): Promise<number> {
+  const p = parseCustomQuestionPayload(body);
+  if (!p.subjectId || !p.type || !p.question) {
+    throw new Error("subjectId, type, and question are required.");
+  }
+  const result = await db
+    .insert(customQuestions)
+    .values({
+      subjectId: p.subjectId,
+      type: p.type,
+      topic: p.topic,
+      question: p.question,
+      imageUrls: p.imageUrlsJson,
+      options: p.optionsJson,
+      answer: p.answer,
+      acceptedAnswers: p.acceptedAnswersJson,
+      guidance: p.guidance,
+      passage: p.passage,
+      marks: p.marks,
+      createdAt: nowIso(),
+    })
+    .returning({ id: customQuestions.id });
+  return Number(result[0].id);
+}
+
 app.post("/api/admin/questions", adminAccessMiddleware, async (c: any) => {
   const db = c.get("db");
   let body: Record<string, unknown>;
@@ -3136,57 +3279,14 @@ app.post("/api/admin/questions", adminAccessMiddleware, async (c: any) => {
   } catch {
     return c.json({ error: "Invalid JSON body." }, 400);
   }
-  const subjectId = canonicalSubjectId(cleanText(body.subjectId, 80));
-  const type = cleanText(body.type, 20);
-  const question = cleanText(body.question, 1000);
-  const topic = cleanText(body.topic || "General", 100);
-  const imageUrlsRaw = Array.isArray(body.imageUrls) ? body.imageUrls : null;
-  const imageUrlsArr = imageUrlsRaw
-    ? imageUrlsRaw
-        .map((u: unknown) => String(u ?? "").trim())
-        .filter(Boolean)
-        .slice(0, 6)
-    : null;
-  const imageUrlsJson =
-    imageUrlsArr && imageUrlsArr.length ? JSON.stringify(imageUrlsArr) : null;
-  const optionsJson = body.options ? JSON.stringify(body.options) : null;
-  const answerRaw = body.correctAnswer ?? body.answer;
-  const answer = answerRaw ? cleanText(String(answerRaw), 500) : null;
-  const acceptedAnswersJson = body.acceptedAnswers
-    ? JSON.stringify(body.acceptedAnswers)
-    : null;
-  const guidance = body.guidance ? cleanText(body.guidance, 500) : null;
-  const passage = body.passage ? cleanText(body.passage, 3000) : null;
-  const marksDefault = type === "mcq" ? 1 : 2;
-  const marksParsed = Math.round(Number(body.marks ?? marksDefault));
-  const marks = Number.isFinite(marksParsed)
-    ? Math.max(1, marksParsed)
-    : marksDefault;
 
-  if (!subjectId || !type || !question) {
+  if (!body.subjectId && !body.subject_id) {
     return c.json({ error: "subjectId, type, and question are required." }, 400);
   }
 
   try {
-    const result = await db
-      .insert(customQuestions)
-      .values({
-        subjectId,
-        type,
-        topic,
-        question,
-        imageUrls: imageUrlsJson,
-        options: optionsJson,
-        answer,
-        acceptedAnswers: acceptedAnswersJson,
-        guidance,
-        passage,
-        marks,
-        createdAt: nowIso(),
-      })
-      .returning({ id: customQuestions.id });
-
-    return c.json({ ok: true, id: result[0].id });
+    const id = await insertCustomQuestionRow(db, body);
+    return c.json({ ok: true, id });
   } catch (e: unknown) {
     const msg = errorChain(e);
     console.error("[admin/questions POST]", msg);
@@ -3205,17 +3305,55 @@ app.post("/api/admin/questions", adminAccessMiddleware, async (c: any) => {
 app.put("/api/admin/questions/:id", adminAccessMiddleware, async (c: any) => {
   const body = await c.req.json();
   const updates: Record<string, unknown> = {};
+  if (body.subjectId != null || body.subject_id != null) {
+    updates.subjectId = canonicalSubjectId(
+      cleanText(String(body.subjectId ?? body.subject_id), 80),
+    );
+  }
+  if (body.type != null) updates.type = cleanText(body.type, 20);
+  if (body.question != null) updates.question = cleanText(body.question, 1000);
   if (body.topic != null) {
     updates.topic = cleanText(body.topic, 240) || "General";
   }
+  if (body.passage != null) {
+    updates.passage = body.passage ? cleanText(body.passage, 3000) : null;
+  }
+  if (body.guidance != null) {
+    updates.guidance = body.guidance ? cleanText(body.guidance, 500) : null;
+  }
   if (body.marks != null) {
     updates.marks = Math.max(1, Math.round(Number(body.marks ?? 1)));
+  }
+  if (body.options != null || body.options_json != null) {
+    if (Array.isArray(body.options)) {
+      updates.options = JSON.stringify(body.options);
+    } else {
+      const opts = parseFlexibleStringArray(body.options_json);
+      updates.options = opts?.length ? JSON.stringify(opts) : null;
+    }
+  }
+  const answerRaw = body.correctAnswer ?? body.answer;
+  if (answerRaw != null) {
+    updates.answer = answerRaw ? cleanText(String(answerRaw), 500) : null;
   }
   if (Array.isArray(body.acceptedAnswers)) {
     const accepted = body.acceptedAnswers
       .map((x: unknown) => String(x ?? "").trim())
       .filter(Boolean);
     updates.acceptedAnswers = JSON.stringify(accepted);
+  } else if (body.accepted_answers_json != null) {
+    const acc = parseFlexibleStringArray(body.accepted_answers_json);
+    updates.acceptedAnswers = acc?.length ? JSON.stringify(acc) : null;
+  }
+  if (Array.isArray(body.imageUrls)) {
+    const urls = body.imageUrls
+      .map((u: unknown) => String(u ?? "").trim())
+      .filter(Boolean)
+      .slice(0, 6);
+    updates.imageUrls = urls.length ? JSON.stringify(urls) : null;
+  } else if (body.image_urls_json != null) {
+    const imgs = parseFlexibleStringArray(body.image_urls_json);
+    updates.imageUrls = imgs?.length ? JSON.stringify(imgs.slice(0, 6)) : null;
   }
   if (!Object.keys(updates).length) {
     return c.json({ error: "No updatable fields provided." }, 400);
@@ -3227,6 +3365,103 @@ app.put("/api/admin/questions/:id", adminAccessMiddleware, async (c: any) => {
     .where(eq(customQuestions.id, Number(c.req.param("id"))));
   return c.json({ ok: true });
 });
+
+app.post("/api/admin/questions/bulk", adminAccessMiddleware, async (c: any) => {
+  const db = c.get("db");
+  const body = await c.req.json();
+  const rows = Array.isArray(body?.questions) ? body.questions : [];
+  if (!rows.length) return c.json({ error: "questions array is required." }, 400);
+  if (rows.length > 500) {
+    return c.json({ error: "Maximum 500 questions per bulk request." }, 400);
+  }
+
+  let imported = 0;
+  const errors: { index: number; message: string }[] = [];
+  for (let i = 0; i < rows.length; i++) {
+    try {
+      await insertCustomQuestionRow(db, rows[i] as Record<string, unknown>);
+      imported++;
+    } catch (e: unknown) {
+      errors.push({
+        index: i,
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+  return c.json({ ok: true, imported, errors });
+});
+
+app.post(
+  "/api/admin/questions/attach-images-bulk",
+  adminAccessMiddleware,
+  async (c: any) => {
+    const db = c.get("db");
+    const body = await c.req.json();
+    const mappings = Array.isArray(body?.mappings) ? body.mappings : [];
+    if (!mappings.length) {
+      return c.json({ error: "mappings array is required." }, 400);
+    }
+
+    let updated = 0;
+    const errors: { index: number; message: string }[] = [];
+
+    for (let i = 0; i < mappings.length; i++) {
+      const m = mappings[i] as Record<string, unknown>;
+      try {
+        const imgs = parseFlexibleStringArray(m.image_urls_json);
+        if (!imgs?.length) {
+          throw new Error("image_urls_json must contain at least one URL.");
+        }
+        const imageUrlsJson = JSON.stringify(imgs.slice(0, 6));
+        const questionId = Number(m.questionId);
+        if (Number.isFinite(questionId) && questionId > 0) {
+          const hit = await db
+            .update(customQuestions)
+            .set({ imageUrls: imageUrlsJson })
+            .where(eq(customQuestions.id, questionId))
+            .returning({ id: customQuestions.id });
+          if (!hit.length) throw new Error(`Question id ${questionId} not found.`);
+          updated++;
+          continue;
+        }
+
+        const subjectId = canonicalSubjectId(
+          cleanText(String(m.subjectId ?? m.subject_id ?? ""), 80),
+        );
+        const question = cleanText(String(m.question ?? ""), 1000);
+        if (!subjectId || !question) {
+          throw new Error("subjectId and question are required (or questionId).");
+        }
+
+        const found = await db
+          .select({ id: customQuestions.id })
+          .from(customQuestions)
+          .where(
+            and(
+              eq(customQuestions.subjectId, subjectId),
+              eq(customQuestions.question, question),
+            ),
+          )
+          .limit(1);
+        if (!found.length) {
+          throw new Error("No matching question found for subject + question text.");
+        }
+        await db
+          .update(customQuestions)
+          .set({ imageUrls: imageUrlsJson })
+          .where(eq(customQuestions.id, found[0].id));
+        updated++;
+      } catch (e: unknown) {
+        errors.push({
+          index: i,
+          message: e instanceof Error ? e.message : String(e),
+        });
+      }
+    }
+
+    return c.json({ ok: true, updated, errors });
+  },
+);
 
 app.post("/api/admin/methods/retag-topics", adminAccessMiddleware, async (c: any) => {
   const db = c.get("db");
