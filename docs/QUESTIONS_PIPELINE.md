@@ -1,17 +1,18 @@
 # Question bank pipeline
 
-All **maths practice / quiz** questions for students come from one global table: `custom_questions` in Neon Postgres.
+All **maths practice / quiz** questions use **one bank**: the `custom_questions` table in Neon Postgres. There is no separate “built-in” list at runtime.
+
+Legacy built-in TypeScript banks are only used to **seed** missing rows into the database the first time an admin opens the Admin panel (matched by question stem).
 
 ## Flow
 
 ```
-Admin UI (or scripts/admin-add-questions.mjs)
-    → POST /api/admin/questions  (single)
-    → POST /api/admin/questions/bulk  (many)
+Admin UI (add / edit / bulk)  —  or  built-in auto-sync on admin load
+    → POST/PUT /api/admin/questions[*]
     → Neon `custom_questions`
-    → GET /api/bootstrap  (any logged-in user)
+    → GET /api/bootstrap  (logged-in users)
     → localStorage `nodent_custom_questions`
-    → practiceQuestionsForSubject()  (built-ins + admin, deduped)
+    → practiceQuestionsForSubject()  (database rows only)
     → Practice setup / Quiz / Study / Dojo
 ```
 

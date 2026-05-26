@@ -128,6 +128,18 @@ Sometimes the inductive step needs all $k \\leq n$, not just $n$. State clearly:
 - Assume $P(k)$ (or all $j \\leq k$).
 - Show $P(k+1)$ using the assumption — do not skip algebra.
 - Conclude “by mathematical induction”.
+
+---
+
+### Theory: propositional logic and quantifiers
+
+**Truth tables** define connectives: $\\neg$, $\\land$, $\\lor$, $\\Rightarrow$, $\\Leftrightarrow$.
+
+$P \\Rightarrow Q$ is false only when $P$ true and $Q$ false. **Contrapositive** $\\neg Q \\Rightarrow \\neg P$ is logically equivalent to $P \\Rightarrow Q$.
+
+**Quantifiers:** $\\forall x\\,P(x)$ (“for all”) and $\\exists x\\,P(x)$ (“there exists”). Negation swaps quantifier and negates predicate.
+
+**Proof** = finite sequence of justified steps from axioms/assumptions to conclusion. **Induction** proves statements for all $n \\in \\mathbb{Z}^+$ via base + inductive step.
 `;
 
 export const SPECIALIST_OVERVIEW_FUNCTIONS = `### Rational functions
@@ -208,6 +220,22 @@ Use $(r, \\theta)$ instead of $(x,y)$.
 **Example:** $r = 4 \\Rightarrow r^2 = 16 = x^2 + y^2$ — a circle of radius $4$ centred at the origin.
 
 **Tip:** Sketch polar graphs using a small table of $\\theta$ values.
+
+---
+
+### Theory: asymptotes and end behaviour
+
+For $f(x)=\\frac{P(x)}{Q(x)}$:
+
+| Degrees | Horizontal asymptote |
+| --- | --- |
+| $\\deg P < \\deg Q$ | $y=0$ |
+| $\\deg P = \\deg Q$ | $y=\\frac{\\text{leading coeff of }P}{\\text{leading coeff of }Q}$ |
+| $\\deg P > \\deg Q$ | none (oblique possible if exactly one higher) |
+
+**Partial fractions** decompose rational integrands into sums of simpler fractions — linear denominators $(x-a)^{-1}$ or repeated, irreducible quadratics in denominator.
+
+**Parametric** curves: velocity vector $\\mathbf{v}=(\\frac{dx}{dt},\\frac{dy}{dt})$; speed $=|\\mathbf{v}|$.
 `;
 
 export const SPECIALIST_OVERVIEW_COMPLEX = `### Complex numbers
@@ -291,6 +319,18 @@ The three roots are equally spaced on a circle in the Argand plane.
 $\\overline{z} = a - bi$. Key facts: $z + \\overline{z} = 2a$, $z\\overline{z} = |z|^2$.
 
 If a polynomial has **real coefficients**, non-real roots occur in **conjugate pairs** — useful for factorising cubics/quartics on Specialist exams.
+
+---
+
+### Theory: Argand plane and polar form
+
+Complex number $z=a+bi$ is point $(a,b)$ in the plane. **Modulus** $|z|$ is distance from origin; **argument** $\\arg(z)$ is angle from positive real axis.
+
+**Polar multiplication:** multiply moduli, add arguments. **De Moivre:** powers rotate and scale:
+
+$$z^n = r^n\\operatorname{cis}(n\\theta)$$
+
+**$n$th roots** of $z=r\\operatorname{cis}\\theta$ are equally spaced on circle radius $r^{1/n}$ — vertices of regular $n$-gon.
 `;
 
 export const SPECIALIST_OVERVIEW_DIFF_CALC = `### Differentiation basics
@@ -336,6 +376,14 @@ $$\\frac{dy}{dx} = -\\frac{x}{y}$$
 $$\\frac{dA}{dt} = 2\\pi r\\,\\frac{dr}{dt}$$
 
 If $r = 5$ and $\\frac{dr}{dt} = 2$, then $\\frac{dA}{dt} = 2\\pi(5)(2) = 20\\pi$.
+
+---
+
+### Theory: implicit curves and related rates
+
+**Implicit differentiation** treats $y$ as $y(x)$ and applies chain rule to every $y$-term: differentiate $y^2$ → $2y\\frac{dy}{dx}$.
+
+**Related rates:** identify variables as functions of time; differentiate constraint equation w.r.t. $t$; substitute known rates/values at an instant.
 `;
 
 export const SPECIALIST_OVERVIEW_INTEGRAL = `### Integration
@@ -381,6 +429,16 @@ $$\\int_a^b f(x)\\,dx = F(b) - F(a)$$
 Area between curves: $\\int_a^b |f(x) - g(x)|\\,dx$ on an interval where you know which function is above.
 
 **Tip:** Partial fractions (from the functions topic) often appear immediately before integrating a rational function.
+
+---
+
+### Theory: integration techniques
+
+**Substitution:** reverse chain rule — choose $u$ so $du$ appears (up to constant) in integrand.
+
+**Parts:** $\\int u\\,dv = uv - \\int v\\,du$ — choose $u$ using LIATE priority for products.
+
+**Definite integrals** evaluate net signed area; split at zeros for total area; area between curves $=\\int |f-g|\\,dx$.
 `;
 
 export const SPECIALIST_OVERVIEW_DE = `### Differential equations
@@ -408,6 +466,18 @@ $$\\ln|y| = \\frac{x^2}{2} + C \\quad \\Rightarrow \\quad y = Ae^{x^2/2}$$
 A **particular solution** needs an initial condition, e.g. $y(0) = 5$, to find $A$ in $y = Ae^{kx}$.
 
 **Modelling (VCE):** exponential growth/decay (populations, cooling), logistic-style saturation may appear in worded problems — identify $\\frac{dy}{dt}$ proportional to $y$ or to “room left”.
+
+---
+
+### Theory: differential equations
+
+A **DE** relates a function and its derivatives. **Order** = highest derivative present.
+
+**Separable:** $\\frac{dy}{dx}=g(x)h(y)$ → $\\int\\frac{1}{h(y)}\\,dy=\\int g(x)\\,dx$.
+
+**Exponential model** $\\frac{dy}{dt}=ky$ has solution $y=Ae^{kt}$; sign of $k$ determines growth/decay.
+
+**Initial condition** $y(t_0)=y_0$ selects particular solution from family $y=\\cdots+C$.
 `;
 
 export const SPECIALIST_OVERVIEW_KINEMATICS = `### Kinematics with calculus
@@ -434,6 +504,16 @@ export const SPECIALIST_OVERVIEW_KINEMATICS = `### Kinematics with calculus
 **Projectile (2D):** often $x(t)$ linear in $t$, $y(t)$ quadratic; resolve into components or use vector $\\mathbf{r}(t)$.
 
 **VCE:** “When is the particle at rest?” → solve $v = 0$. “Greatest height” → $v = 0$ at apex (if moving vertically).
+
+---
+
+### Theory: motion along a line and in the plane
+
+Position $x(t)$, velocity $v(t)=\\frac{dx}{dt}$, acceleration $a(t)=\\frac{dv}{dt}=\\frac{d^2x}{dt^2}$.
+
+**Constant acceleration** (1D): $v=v_0+at$, $x=x_0+v_0 t+\\frac{1}{2}at^2$.
+
+**$a=v\\frac{dv}{dx}$** useful when acceleration given as function of position/speed rather than time.
 `;
 
 export const SPECIALIST_OVERVIEW_VECTORS = `### Vectors
@@ -474,6 +554,16 @@ $$|\\mathbf{a} \\times \\mathbf{b}| = |\\mathbf{a}||\\mathbf{b}|\\sin\\theta$$
 | --- | --- |
 | Parallelogram | $\\|\\mathbf{a} \\times \\mathbf{b}\\|$ |
 | Triangle | $\\frac{1}{2}\\,\\|\\mathbf{a} \\times \\mathbf{b}\\|$ |
+
+---
+
+### Theory: vector algebra in $\\mathbb{R}^2$ and $\\mathbb{R}^3$
+
+Vectors encode displacement: $\\overrightarrow{AB}=\\mathbf{b}-\\mathbf{a}$. **Scalar (dot) product** measures alignment:
+
+$$\\mathbf{a}\\cdot\\mathbf{b}=|\\mathbf{a}||\\mathbf{b}|\\cos\\theta$$
+
+**Vector (cross) product** in $\\mathbb{R}^3$ is perpendicular to both operands with magnitude $|\\mathbf{a}||\\mathbf{b}|\\sin\\theta$ — encodes area and orientation.
 `;
 
 export const SPECIALIST_OVERVIEW_LINES_PLANES = `### Vector equation of a line
@@ -522,6 +612,16 @@ $$\\cos\\theta = \\frac{|\\mathbf{d}_1 \\cdot \\mathbf{d}_2|}{|\\mathbf{d}_1||\\
 Angle between planes: use normals $\\mathbf{n}_1$, $\\mathbf{n}_2$ the same way.
 
 **VCE:** “Shortest distance” may mean point–line, point–plane, or skew lines — identify which formula applies.
+
+---
+
+### Theory: lines and planes in space
+
+**Line:** $\\mathbf{r}=\\mathbf{a}+\\lambda\\mathbf{d}$ — point + scalar multiple of direction.
+
+**Plane:** $\\mathbf{n}\\cdot(\\mathbf{r}-\\mathbf{a})=0$ or $ax+by+cz=d$ with normal $\\mathbf{n}=(a,b,c)$.
+
+**Distance** point to plane uses projection of vector onto normal. **Angle** between planes = angle between normals (acute angle often taken).
 `;
 
 export const SPECIALIST_OVERVIEW_VECTOR_CALC = `### Vector functions and motion
@@ -549,6 +649,16 @@ Arc length (from $t = a$ to $t = b$):
 $$L = \\int_a^b \\sqrt{\\left(\\frac{dx}{dt}\\right)^2 + \\left(\\frac{dy}{dt}\\right)^2}\\,dt$$
 
 **Tip:** Specialist motion questions may give $\\mathbf{r}(t)$ in 3D — differentiate each component; magnitude of velocity is speed.
+
+---
+
+### Theory: vector calculus on curves
+
+$\\mathbf{r}(t)=(x(t),y(t),z(t))$ describes a path. **Tangent** vector $\\mathbf{r}'(t)$; **unit tangent** $\\hat{\\mathbf{T}}=\\mathbf{r}'/|\\mathbf{r}'|$.
+
+**Arc length** accumulates speed: $L=\\int_a^b |\\mathbf{r}'(t)|\\,dt$.
+
+In 2D, $\\frac{dy}{dx}=\\frac{dy/dt}{dx/dt}$ links parametric motion to slope of trajectory.
 `;
 
 export const SPECIALIST_OVERVIEW_RANDOM = `### Random variables
@@ -612,6 +722,18 @@ If $X \\sim N(\\mu, \\sigma^2)$, then $\\bar{X}$ has
 $$E(\\bar{X}) = \\mu, \\quad \\operatorname{sd}(\\bar{X}) = \\frac{\\sigma}{\\sqrt{n}}, \\quad \\bar{X} \\sim N\\!\\left(\\mu, \\frac{\\sigma^2}{n}\\right)$$
 
 Larger samples → less spread in $\\bar{X}$.
+
+---
+
+### Theory: distributions and the CLT idea
+
+**PMF** (discrete) or **PDF** (continuous) encodes probabilities. **Expectation** is long-run average; **variance** measures spread.
+
+**Binomial:** sum of independent Bernoulli trials.
+
+**Normal:** symmetric bell curve; standardisation to $Z$.
+
+For large $n$, sample mean $\\bar{X}$ is approximately normal about $\\mu$ with SD $\\sigma/\\sqrt{n}$ — foundation for confidence intervals on means (Specialist level).
 `;
 
 export const SPECIALIST_OVERVIEW_CI = `### Confidence intervals
@@ -631,6 +753,18 @@ $$50 \\pm 1.96 \\cdot \\frac{8}{\\sqrt{64}} = 50 \\pm 1.96 = (48.04,\\, 51.96)$$
 **Interpretation:** We are 95% confident the true population mean lies in this interval.
 
 **Tip:** Do not say “there is a 95% probability the mean is in this interval” unless your course allows that wording — the parameter is fixed; the interval varies from sample to sample.
+
+---
+
+### Theory: confidence intervals for a mean
+
+When $\\sigma$ known (or large $n$ with $s$ substitute):
+
+$$\\bar{x} \\pm z^* \\frac{\\sigma}{\\sqrt{n}}$$
+
+Width $\\propto 1/\\sqrt{n}$. Higher confidence → larger $z^*$ → wider interval.
+
+Interpretation: plausible values for population mean $\\mu$ consistent with sample and model assumptions.
 
 ---
 

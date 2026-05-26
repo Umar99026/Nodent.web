@@ -214,6 +214,32 @@ $$\\text{Deseasonalised} = \\frac{\\text{Actual}}{\\text{Seasonal index}}, \\qua
 **Two-way tables** compare two categorical variables. Use **row or column percentages** when the question says “of those who …”.
 
 **Tip:** On CAS, use one- and two-variable statistics; for regression, interpret $r$, $r^2$, and the line in context — not just the numbers.
+
+---
+
+### Theory: describing distributions
+
+A distribution is described by **centre** (mean/median), **spread** (range/IQR/SD), **shape** (symmetry/skew/modality), and **outliers**.
+
+**Mean** is sensitive to outliers; **median** is resistant. **SD** uses all deviations from the mean:
+
+$$s = \\sqrt{\\frac{\\sum (x_i - \\bar{x})^2}{n-1}} \\quad \\text{(sample SD in Further/General)}$$
+
+**Correlation** measures **linear** association only — $r^2$ is fraction of variance in $y$ explained by linear model in $x$.
+
+**Least squares** chooses $b$ and $a$ to minimise $\\sum (y_i - \\hat{y}_i)^2$ — residuals should look random if model is appropriate.
+
+---
+
+### Theory: time series decomposition
+
+Observed value often modelled as
+
+$$Y = T \\times S \\times I \\quad \\text{(multiplicative)}$$
+
+or additive $Y = T + S + I$. **Trend** is long-run direction; **seasonal** repeats each year; **irregular** is noise.
+
+Seasonal indices average to 1 (multiplicative). Deseasonalising isolates trend for forecasting; reseasonalising applies seasonal pattern to trend forecast.
 `;
 
 export const GENERAL_OVERVIEW_RECURSION = `### Recurrence relations
@@ -345,6 +371,20 @@ $$FV = \\frac{R}{r}\\big[(1+r)^n - 1\\big], \\quad PV = \\frac{R}{r}\\big[1 - (1
 | Regular deposits / annuities | $FV$, $PV$ formulas |
 
 **VCE tip:** Extended-response questions often want a **table** for the first few terms, then a **recurrence** or **formula**, then interpretation (total paid, interest component, break-even time).
+
+---
+
+### Theory: sequences and recurrence
+
+A **sequence** $\\{u_n\\}$ can be defined explicitly $u_n=f(n)$ or recursively $u_{n+1}=g(u_n)$.
+
+**Arithmetic:** constant difference $d$ — linear growth. **Geometric:** constant ratio $r$ — exponential growth/decay.
+
+**Compound interest** is geometric on the balance: each period multiply by $(1+r)$ then adjust for deposits/repayments.
+
+**Annuities** are geometric series: future value sums regular payments each compounded — closed form avoids long tables.
+
+**Effective rate:** $r_{\\text{eff}} = (1+\\frac{r_{\\text{nom}}}{m})^m - 1$ for $m$ compounding periods per year.
 `;
 
 export const GENERAL_OVERVIEW_MATRICES = `### Matrix order
@@ -438,6 +478,18 @@ For $A = \\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix}$, $A^{-1} = \\frac{1}{
 For a transition matrix $T$, the **dominant** eigenvalue is often $\\lambda = 1$ for a closed population model. Long-term distribution is proportional to the eigenvector for $\\lambda = 1$ (check column sums $= 1$).
 
 **VCE applications:** market share over time, species distribution, routing probabilities — always state what each entry represents.
+
+---
+
+### Theory: linear transformations and matrix algebra
+
+Matrices represent **linear transformations** on vectors (rotation, scaling, shear in 2D when applied to $\\begin{pmatrix}x\\\\y\\end{pmatrix}$).
+
+**Matrix multiplication** composes transformations: apply $B$ then $A$ → matrix $AB$ (order matters).
+
+**Determinant** of $2\\times 2$ matrix $ad-bc$: zero $\\Leftrightarrow$ no inverse (transformation collapses area to 0).
+
+**Eigenvalues/eigenvectors** (General): $T\\mathbf{v}=\\lambda\\mathbf{v}$ — directions unchanged by transition matrix; $\\lambda=1$ often gives steady state when columns of $T$ are state proportions summing to 1.
 `;
 
 export const GENERAL_OVERVIEW_NETWORKS = `### Basic network terms
@@ -563,4 +615,16 @@ Minimum spanning tree: $n - 1$ edges for $n$ vertices.
 4. **Use sentences** for “interpret” / “explain” / “describe” questions.
 
 **Example:** $r^2 = 0.72$ → “72% of the variation in house price can be explained by the variation in house size.”
+
+---
+
+### Theory: graph theory foundations
+
+A **graph** $G=(V,E)$ has vertices $V$ and edges $E$. **Degree** of vertex = number of incident edges. **Eulerian** circuits use every edge once — degree condition on vertices. **Hamiltonian** cycles visit every vertex once — no simple degree test.
+
+**Shortest path** on weighted graphs: Dijkstra finds least total weight from a source when edge weights $\\geq 0$.
+
+**Minimum spanning tree** connects all vertices with minimum total weight without cycles — unique if weights distinct.
+
+**Critical path** on activity networks: longest path through weighted DAG of project activities sets minimum completion time; float measures slack.
 `;

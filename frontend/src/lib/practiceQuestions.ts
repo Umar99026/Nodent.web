@@ -1,11 +1,7 @@
 import type { AnswerPart, Question } from "@/lib/subjects";
-import { GENERAL_MATHS_BUILTIN_QUESTIONS } from "@/lib/generalMathsBuiltinQuestions";
-import { GENERAL_MATHS_BUILTIN_SHORT_TRICKY } from "@/lib/generalMathsBuiltinShortTricky";
 import { inferGeneralMathsAreaOfStudy } from "@/lib/generalMathsAreaTopic";
 import { inferMethodsAreaOfStudy } from "@/lib/methodsAreaTopic";
-import { METHODS_BUILTIN_QUESTIONS } from "@/lib/methodsBuiltinQuestions";
 import { inferSpecialistMathsAreaOfStudy } from "@/lib/specialistMathsAreaTopic";
-import { SPECIALIST_MATHS_BUILTIN_QUESTIONS } from "@/lib/specialistMathsBuiltinQuestions";
 import { normalizeQuestionMathText } from "@/lib/questionMathText";
 
 /**
@@ -539,27 +535,14 @@ export function topicHasQuestionsInBank(
   return questions.some((q) => questionMatchesPracticeTopic(subjectId, q, t));
 }
 
-function builtinQuestionsForSubject(subjectId: string): Question[] {
-  const sid = canonicalSubjectId(subjectId);
-  if (sid === "methods") return METHODS_BUILTIN_QUESTIONS;
-  if (sid === "general-maths") {
-    return dedupeQuestionsByStem([
-      ...GENERAL_MATHS_BUILTIN_SHORT_TRICKY,
-      ...GENERAL_MATHS_BUILTIN_QUESTIONS,
-    ]);
-  }
-  if (sid === "specialist-maths") return SPECIALIST_MATHS_BUILTIN_QUESTIONS;
-  return [];
-}
-
-/** Practice / quiz bank: built-in maths sets plus admin `custom_questions` (deduped by stem). */
+/**
+ * Practice / quiz bank — single source: admin `custom_questions` in the database.
+ * (Legacy built-ins are synced into that table from Admin on first load.)
+ */
 export function practiceQuestionsForSubject(
   rawList: unknown[],
   subjectId: string,
 ): Question[] {
   const sid = canonicalSubjectId(subjectId);
-  const custom = normalizeCustomQuestionsList(rawList ?? [], sid);
-  const builtIn = builtinQuestionsForSubject(sid);
-  if (!builtIn.length) return custom;
-  return dedupeQuestionsByStem([...builtIn, ...custom]);
+  return normalizeCustomQuestionsList(rawList ?? [], sid);
 }

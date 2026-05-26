@@ -59,11 +59,44 @@ Defined by different rules on different domains — e.g. a flat fee plus a per-k
 
 ---
 
+### Theory: relations, functions, and inverses
+
+A **relation** from set $A$ to set $B$ is any set of ordered pairs $(x,y)$ with $x \\in A$, $y \\in B$. A **function** $f: A \\to B$ is a relation where **each** $x \\in A$ is paired with **exactly one** $y \\in B$.
+
+| Property | Definition | Graph idea |
+| --- | --- | --- |
+| One-to-one (injective) | $f(x_1) = f(x_2) \\Rightarrow x_1 = x_2$ | passes vertical **and** horizontal line tests |
+| Onto (surjective) | every $y$ in codomain is hit | range = codomain |
+| Bijective | both | has an inverse function |
+
+**Inverse:** $f^{-1}$ exists on a restricted domain when $f$ is one-to-one. Algebraically: swap $x$ and $y$, solve for $y$. Graphically: reflection in $y = x$.
+
+**Composition:** $(f \\circ g)(x) = f(g(x))$ — order matters; in general $(f \\circ g) \\neq (g \\circ f)$.
+
+---
+
+### Theory: transformations as operators on graphs
+
+Write $y = f(x)$. Each transformation acts on the **input** (inside) or **output** (outside):
+
+| Form | Operator on $f$ |
+| --- | --- |
+| $y = f(x-h)+k$ | translate right $h$, up $k$ |
+| $y = af(x)$ | vertical stretch by $\\|a\\|$ about $x$-axis |
+| $y = f(ax)$ | horizontal stretch by $\\frac{1}{\\|a\\|}$ about $y$-axis |
+| $y = -f(x)$ | reflect in $x$-axis |
+| $y = f(-x)$ | reflect in $y$-axis |
+
+**Domain/range under transforms:** translations and dilations shift intervals; reflections swap signs in range; always re-check endpoints after transforming a restricted domain.
+
+---
+
 ### What VCE Methods asks here
 
 - State **domain** and **range** from a graph or rule (watch $\\sqrt{\\ },$ fractions, logs).
 - Apply transformations and describe them in words (dilation, reflection, translation).
 - Read $f(a)$ vs solve $f(x) = a$ — common Exam 1 distinction.
+- Justify whether an inverse exists on a given domain (one-to-one on that interval).
 `;
 
 export const METHODS_POLYNOMIAL = `### Polynomial functions
@@ -97,6 +130,40 @@ If $(x - a)$ is a factor of $P(x)$, then $P(a) = 0$. If $P(x)$ is divided by $(x
 4. Turning points from calculus or symmetry where applicable.
 
 **Tip:** A repeated factor $(x-a)^2$ touches the axis at $x=a$; $(x-a)^3$ crosses with a flat point.
+
+---
+
+### Theory: degree, zeros, and the factor theorem
+
+For a polynomial $P(x)$ of **degree** $n$ (highest power $x^n$):
+
+- At most **$n$** real zeros (counting multiplicity).
+- End behaviour: sign of leading coefficient $a_n$ and parity of $n$ determine whether $P(x) \\to \\pm\\infty$ as $x \\to \\pm\\infty$.
+
+**Factor theorem:** $(x-a)$ is a factor $\\Leftrightarrow P(a) = 0$. **Remainder theorem:** remainder on division by $(x-a)$ is $P(a)$.
+
+**Multiplicity at $x=a$:**
+
+| Multiplicity $m$ | Graph at $x=a$ |
+| --- | --- |
+| odd | crosses axis, sign changes |
+| even | touches axis, sign does not change |
+
+**Rational functions** $R(x) = \\frac{P(x)}{Q(x)}$: zeros from $P$, vertical asymptotes from zeros of $Q$ (unless cancelled), horizontal/oblique asymptotes from degree comparison.
+
+---
+
+### Theory: completing the square and the quadratic formula
+
+$ax^2+bx+c = 0$ has discriminant $\\Delta = b^2 - 4ac$:
+
+| $\\Delta$ | Nature of roots |
+| --- | --- |
+| $>0$ | two distinct real roots |
+| $=0$ | one repeated real root |
+| $<0$ | no real roots (complex conjugate pair in further study) |
+
+Vertex form $y = a(x-h)^2+k$ exposes the turning point directly — useful for sketching and optimisation without calculus.
 `;
 
 export const METHODS_EXP_LOG = `### Exponential functions
@@ -138,6 +205,20 @@ $\\frac{d}{dx}(e^x) = e^x$, $\\int e^x\\,dx = e^x + C$.
 | Log equations | Rewrite in index form; check arguments $> 0$ |
 
 **Example:** $\\ln(x-1) = 2 \\Rightarrow x - 1 = e^2 \\Rightarrow x = 1 + e^2$ (domain $x > 1$).
+
+---
+
+### Theory: exponential and logarithmic models
+
+**Exponential growth/decay:** $N(t) = N_0 e^{kt}$. If $k>0$, growth; if $k<0$, decay. Doubling time (growth) and half-life (decay) link to $k$ via $N(t+T) = 2N(t)$ or $\\frac{1}{2}N(t)$.
+
+**Logarithms** are inverses: $y = \\log_a x \\Leftrightarrow a^y = x$ for $a>0$, $a\\neq 1$. Laws follow from index laws:
+
+$$\\log_a(xy) = \\log_a x + \\log_a y \\quad \\text{(product becomes sum)}$$
+
+**Natural log $\\ln x$:** base $e$. Calculus identities: $\\frac{d}{dx}(e^x)=e^x$, $\\frac{d}{dx}(\\ln x)=\\frac{1}{x}$, $\\int \\frac{1}{x}\\,dx = \\ln|x|+C$.
+
+**Change of base:** $\\log_a b = \\frac{\\ln b}{\\ln a}$ — used when bases differ in equations.
 `;
 
 export const METHODS_CIRCULAR = `### Circular functions
@@ -172,6 +253,26 @@ On $[0, 2\\pi)$ or a given domain: use symmetry and reference angles.
 **Example:** $\\sin x = \\frac{1}{2}$ on $[0, 2\\pi)$ → $x = \\frac{\\pi}{6}$ or $x = \\frac{5\\pi}{6}$.
 
 **Tip:** Calculator in **radians** for calculus; exact values from the table above are expected on Exam 1.
+
+---
+
+### Theory: the unit circle and periodicity
+
+On the unit circle, point at angle $\\theta$ has coordinates $(\\cos\\theta, \\sin\\theta)$. This defines $\\sin$ and $\\cos$ for all real $\\theta$.
+
+**Pythagorean identity:** $\\sin^2\\theta + \\cos^2\\theta = 1$.
+
+**Period:** $\\sin$ and $\\cos$ have period $2\\pi$; $\\tan$ has period $\\pi$.
+
+**Symmetry identities (VCE):**
+
+| Identity | Use |
+| --- | --- |
+| $\\sin(-\\theta) = -\\sin\\theta$ | odd function |
+| $\\cos(-\\theta) = \\cos\\theta$ | even function |
+| $\\sin(\\pi - \\theta) = \\sin\\theta$ | supplementary angles |
+
+**General solution:** equations like $\\sin x = k$ have infinitely many solutions; on a restricted domain, list all solutions in that interval using reference angles and symmetry.
 `;
 
 export const METHODS_ALGEBRA = `### Composite functions
@@ -237,6 +338,22 @@ $2^x = 16 \\Rightarrow x = 4$. If bases do not match: $3^x = 20 \\Rightarrow x =
 ### Logarithmic equations
 
 $\\log_2(x) = 5 \\Rightarrow x = 32$. Always check **log arguments** stay positive in the original equation.
+
+---
+
+### Theory: equivalence and algebraic structure
+
+Solving equations means finding values that make two expressions **equal**. Operations must preserve equivalence:
+
+| Operation | Preserves equivalence when |
+| --- | --- |
+| Add/subtract same quantity to both sides | always |
+| Multiply/divide both sides | divisor $\\neq 0$ |
+| Square both sides | may introduce **extraneous** solutions — check in original |
+
+**Simultaneous equations:** geometrically intersection of curves; algebraically substitution or elimination.
+
+**Inequalities:** solution set is an interval (or union). Multiplying by a negative **reverses** the inequality direction.
 `;
 
 export const METHODS_DIFF_CALC = `Calculus studies **change** (differentiation) and **accumulation** (integration).
@@ -278,6 +395,34 @@ $\\frac{d}{dx}(uv) = u'v + uv'$
 ### Quotient rule
 
 $\\frac{d}{dx}\\!\\left(\\frac{u}{v}\\right) = \\frac{u'v - uv'}{v^2}$
+
+---
+
+### Theory: derivative as instantaneous rate of change
+
+The **average rate of change** of $f$ on $[a,a+h]$ is
+
+$$\\frac{f(a+h)-f(a)}{h}$$
+
+The **derivative** $f'(a)$ is the limit as $h \\to 0$ (when it exists):
+
+$$f'(a) = \\lim_{h \\to 0} \\frac{f(a+h)-f(a)}{h}$$
+
+Geometrically: $f'(a)$ is the **gradient of the tangent** at $x=a$.
+
+**Differentiability** implies continuity, but continuous functions can fail to be differentiable (e.g. $|x|$ at $0$).
+
+**Higher derivatives:** $f''(x)$ measures **concavity** and acceleration in motion problems; $f''(x)>0$ → concave up.
+
+---
+
+### Theory: chain rule (composition)
+
+If $y = f(u)$ and $u = g(x)$, then
+
+$$\\frac{dy}{dx} = \\frac{dy}{du}\\cdot\\frac{du}{dx}$$
+
+This is the calculus of **nested structure** — every layer contributes a factor. Product and quotient rules handle products/quotios of functions already differentiated in $x$.
 `;
 
 export const METHODS_APP_DIFF = `### Tangents and normals
@@ -328,6 +473,23 @@ Optimisation, rates of change, tangents/normals, stationary points, graph sketch
 4. Answer **in context** with units.
 
 **Rates of change:** if $V$ depends on $r$ and $r$ depends on $t$, use $\\frac{dV}{dt} = \\frac{dV}{dr}\\cdot\\frac{dr}{dt}$.
+
+---
+
+### Theory: optimisation and the derivative test
+
+On an open interval, **local extrema** occur at stationary points ($f'=0$) or endpoints (closed domain).
+
+| Test | Condition | Conclusion |
+| --- | --- | --- |
+| First derivative | $f'$ changes $+$ to $-$ | local maximum |
+| First derivative | $f'$ changes $-$ to $+$ | local minimum |
+| Second derivative | $f'(c)=0$, $f''(c)>0$ | local minimum |
+| Second derivative | $f'(c)=0$, $f''(c)<0$ | local maximum |
+
+**Global** extrema on $[a,b]$: compare all critical points **and** endpoints.
+
+**Related rates:** variables linked by an equation; differentiate with respect to time $t$ using the chain rule.
 `;
 
 export const METHODS_INTEGRAL = `### Antidifferentiation
@@ -366,6 +528,18 @@ $$\\int_a^b f(x)\\,dx = F(b) - F(a)$$
 $$\\text{Average of } f \\text{ on } [a,b] = \\frac{1}{b-a}\\int_a^b f(x)\\,dx$$
 
 **Tip:** Exam 2 may ask for area between two curves: $\\int_a^b \\big|f(x) - g(x)\\big|\\,dx$ after finding intersection points.
+
+---
+
+### Theory: antiderivative and the FTC
+
+$F(x)$ is an **antiderivative** of $f(x)$ if $F'(x)=f(x)$. The family of antiderivatives is $F(x)+C$.
+
+**Fundamental theorem of calculus (Part 1):** if $F'=f$, then $\\int_a^b f(x)\\,dx = F(b)-F(a)$.
+
+**Part 2 (accumulation):** define $A(x)=\\int_a^x f(t)\\,dt$. Then $A'(x)=f(x)$ — integration undoes differentiation.
+
+**Riemann sum idea:** $\\int_a^b f(x)\\,dx$ is the limit of signed rectangular areas; positive above the axis, negative below.
 `;
 
 export const METHODS_APP_INTEGRAL = `### Definite integrals and area
@@ -386,6 +560,19 @@ $$x(t) = \\int v(t)\\,dt, \\quad v(t) = \\int a(t)\\,dt$$
 **Example:** $x(t) = t^3 - 6t \\Rightarrow v(t) = 3t^2 - 6$, $a(t) = 6t$.
 
 **Tip:** $v = 0$ → momentarily at rest; **speed** $= |v|$; **distance travelled** $\\neq$ displacement.
+
+---
+
+### Theory: integral as signed area and accumulation
+
+$$\\int_a^b f(x)\\,dx$$
+
+- **Net signed area** between graph and $x$-axis.
+- **Total area** requires splitting where $f$ crosses zero and summing absolute contributions.
+
+Between curves $f$ and $g$: area $= \\int_a^b |f(x)-g(x)|\\,dx$ on intervals where you know which is above.
+
+**Kinematics link:** displacement $= \\int v\\,dt$; distance $= \\int |v|\\,dt$; velocity from acceleration is another accumulation.
 `;
 
 export const METHODS_DISCRETE = `### Basic probability
@@ -428,6 +615,24 @@ $$X \\sim \\operatorname{Bin}(n,p), \\quad P(X=x) = \\binom{n}{x} p^x (1-p)^{n-x
 $$E(X) = np, \\quad \\operatorname{Var}(X) = np(1-p)$$
 
 **Tip:** at least 3 → $X \\geq 3$; at most 3 → $X \\leq 3$.
+
+---
+
+### Theory: probability axioms and random variables
+
+**Kolmogorov axioms (Methods level):** $0 \\leq P(A) \\leq 1$, $P(\\Omega)=1$, countable additivity for disjoint events.
+
+**Conditional probability** reweights the sample space to $B$:
+
+$$P(A|B) = \\frac{P(A\\cap B)}{P(B)}, \\quad P(B)>0$$
+
+**Independence:** $P(A\\cap B)=P(A)P(B)$ — knowing $B$ does not change $P(A)$.
+
+A **discrete random variable** $X$ has PMF $p(x)=P(X=x)$ with $\\sum_x p(x)=1$.
+
+**Linearity of expectation:** $E(aX+b)=aE(X)+b$. For independent $X,Y$: $\\operatorname{Var}(X+Y)=\\operatorname{Var}(X)+\\operatorname{Var}(Y)$.
+
+**Binomial** counts successes in $n$ Bernoulli trials: $X=\\sum_{i=1}^n I_i$ with $P(I_i=1)=p$.
 `;
 
 export const METHODS_CONTINUOUS = `### Continuous random variables
@@ -454,6 +659,20 @@ On $[a,b]$: $f(x) = \\frac{1}{b-a}$ for $a \\leq x \\leq b$.
 $$E(X) = \\frac{a+b}{2}, \\quad \\operatorname{Var}(X) = \\frac{(b-a)^2}{12}$$
 
 **Example:** Waiting time 0–10 minutes → $E(X) = 5$, $\\operatorname{Var}(X) = \\frac{100}{12} \\approx 8.33$.
+
+---
+
+### Theory: PDF, CDF, and continuous probability
+
+For continuous $X$, **PDF** $f(x)$ satisfies $f(x)\\geq 0$ and $\\int_{-\\infty}^{\\infty} f(x)\\,dx=1$.
+
+**CDF** $F(x)=P(X\\leq x)=\\int_{-\\infty}^x f(t)\\,dt$. Then $f(x)=F'(x)$ where derivative exists.
+
+$$P(a\\leq X\\leq b)=\\int_a^b f(x)\\,dx, \\quad P(X=a)=0$$
+
+**Expected value** is the centre of mass: $E(X)=\\int x f(x)\\,dx$.
+
+**Uniform** on $[a,b]$: constant density — every subinterval of equal length has equal probability.
 `;
 
 export const METHODS_NORMAL = `### Normal distribution
@@ -479,6 +698,18 @@ For $X \\sim N(\\mu, \\sigma^2)$:
 **Inverse normal:** given $P(X < k) = 0.9$, standardise to find $Z$, then $k = \\mu + \\sigma Z$.
 
 **VCE wording:** “Scores above 60” → $P(X > 60)$; watch whether the question wants a probability, a boundary score, or a $z$-score.
+
+---
+
+### Theory: the normal distribution
+
+$X \\sim N(\\mu,\\sigma^2)$ has bell-shaped density centred at $\\mu$ with spread controlled by $\\sigma$.
+
+**Standardisation:** $Z=\\frac{X-\\mu}{\\sigma} \\sim N(0,1)$. Any normal probability reduces to a $Z$-table or CAS.
+
+**Properties:** sum of independent normals is normal (used in further study); linear transform: if $X\\sim N(\\mu,\\sigma^2)$ then $aX+b \\sim N(a\\mu+b, a^2\\sigma^2)$.
+
+**Empirical rule** comes from integrating the normal density over $\\mu\\pm k\\sigma$.
 `;
 
 export const METHODS_SAMPLING = `### Sample proportions
@@ -500,6 +731,18 @@ Use $ \\hat{P} \\sim N\\!\\left(p, \\frac{p(1-p)}{n}\\right) $ when:
 - sampling without replacement only if population is large relative to $n$.
 
 **Example:** 40% support in population, $n = 100$ → $\\operatorname{sd}(\\hat{P}) = \\sqrt{\\frac{0.4 \\times 0.6}{100}} = 0.049$.
+
+---
+
+### Theory: sampling distribution of $\\hat{P}$
+
+$\\hat{P}=\\frac{X}{n}$ where $X$ is count of successes. For large $n$,
+
+$$\\hat{P} \\approx N\\!\\left(p, \\frac{p(1-p)}{n}\\right)$$
+
+**Standard error** $\\operatorname{SE}(\\hat{P})=\\sqrt{\\frac{p(1-p)}{n}}$ shrinks as $n$ grows — larger samples give more precise estimates.
+
+**Conditions (approximate normality):** random sample; $np\\geq 10$ and $n(1-p)\\geq 10$ (rule of thumb); if sampling without replacement, population size much larger than $n$.
 `;
 
 export const METHODS_CI_AND_EXAM = `### Confidence intervals for proportions
@@ -515,6 +758,20 @@ $$0.42 \\pm 1.96\\sqrt{\\frac{0.42 \\times 0.58}{200}} \\approx 0.42 \\pm 0.068 
 **Interpretation (VCE):** We are 95% confident the true population proportion lies in this interval.
 
 **Tip:** Use $z = 2$ only if the question allows the approximation; otherwise use 1.96 for 95%.
+
+---
+
+### Theory: confidence intervals (proportions)
+
+A **95% confidence interval** is an interval estimate for unknown population proportion $p$:
+
+$$\\hat{p} \\pm z^* \\sqrt{\\frac{\\hat{p}(1-\\hat{p})}{n}}$$
+
+**Frequentist interpretation:** if we repeated sampling many times, about 95% of such intervals would contain the true $p$. The parameter $p$ is fixed; the interval is random.
+
+**Margin of error** $= z^* \\times \\operatorname{SE}(\\hat{p})$ — half-width of the CI.
+
+**Sample size** affects width: quadrupling $n$ halves the margin of error (approximately).
 
 ---
 
