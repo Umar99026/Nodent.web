@@ -1179,7 +1179,7 @@ export default function SummaryPage() {
                     const yourPct =
                       attempted
                         ? Math.round(
-                            (topic.myCorrect / topic.myTotal) * 100
+                            ((topic.myCorrect ?? 0) / topic.myTotal) * 100
                           )
                         : 0;
                     const hasClassData =
