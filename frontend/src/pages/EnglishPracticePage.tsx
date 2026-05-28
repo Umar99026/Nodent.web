@@ -674,55 +674,62 @@ export function EnglishPromptResponsesPage() {
             className="relative w-full max-w-3xl rounded-xl border border-black/10 bg-white p-4 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
+            {/* Always-visible close button on the tile (not hover-only). */}
             <Button
               type="button"
               variant="outline"
               size="icon"
-              className="absolute right-3 top-3 z-10 border-black/20 bg-white/95 hover:bg-white"
+              className="absolute right-3 top-3 z-50 border-black/25 bg-white text-[#0b0f19] opacity-100 shadow-sm ring-1 ring-black/5 hover:bg-white"
               onClick={() => setOpenResponseId(null)}
               aria-label="Close response"
             >
-              <X className="size-4" />
+              <X className="size-4.5" />
             </Button>
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-3 pr-10">
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-[#0f172a]">@{openResponse.username}</p>
-                <p className="text-xs text-muted-foreground">
-                  Avg: {openResponse.averageScore != null ? `${openResponse.averageScore}/10` : "No ratings yet"}
-                </p>
-              </div>
-              {user?.id != null && Number(user.id) === Number(openResponse.userId) ? (
-                <p className="text-xs font-medium text-muted-foreground">You can’t rate your own response.</p>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Rate
+            <div className="sticky top-0 z-20 -m-4 mb-3 border-b border-black/10 bg-white/95 p-4 backdrop-blur">
+              <div className="flex flex-wrap items-center justify-between gap-3 pr-12">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-[#0f172a]">@{openResponse.username}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Avg: {openResponse.averageScore != null ? `${openResponse.averageScore}/10` : "No ratings yet"}
                   </p>
-                  <Select
-                    value={
-                      ratingByResponseId[openResponse.id] ??
-                      (openResponse.myScore != null ? String(openResponse.myScore) : "")
-                    }
-                    onValueChange={(v) => {
-                      if (!v) return;
-                      setRatingByResponseId((prev) => ({ ...prev, [openResponse.id]: v }));
-                      void rateResponse(openResponse.id, v);
-                    }}
-                    disabled={savingRatingId === openResponse.id}
-                  >
-                    <SelectTrigger className="h-8 w-[108px] bg-white px-2 text-xs">
-                      <SelectValue placeholder="Select" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((s) => (
-                        <SelectItem key={s} value={String(s)}>
-                          {s}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
                 </div>
-              )}
+                {user?.id != null && Number(user.id) === Number(openResponse.userId) ? (
+                  <p className="text-xs font-medium text-muted-foreground">You can’t rate your own response.</p>
+                ) : (
+                  <div className="flex items-center">
+                    {(() => {
+                      const selectedRaw =
+                        ratingByResponseId[openResponse.id] ??
+                        (openResponse.myScore != null ? String(openResponse.myScore) : "");
+                      // Base-UI Select treats "" as "no value"; keep it undefined so the placeholder shows.
+                      const selected = selectedRaw ? selectedRaw : undefined;
+                      const triggerLabel = selected ? `${selected}/10` : "RATE";
+                      return (
+                        <Select
+                          value={selected}
+                          onValueChange={(v) => {
+                            if (!v) return;
+                            setRatingByResponseId((prev) => ({ ...prev, [openResponse.id]: v }));
+                            void rateResponse(openResponse.id, v);
+                          }}
+                          disabled={savingRatingId === openResponse.id}
+                        >
+                          <SelectTrigger className="h-8 w-[132px] bg-white px-2 text-xs">
+                            <SelectValue placeholder={triggerLabel} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((s) => (
+                              <SelectItem key={s} value={String(s)}>
+                                {s}/10
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      );
+                    })()}
+                  </div>
+                )}
+              </div>
             </div>
             <div className="max-h-[70vh] overflow-y-auto rounded-lg border border-black/10 bg-slate-50 p-4">
               <div className="mb-4 rounded-lg border border-black/10 bg-white p-3">

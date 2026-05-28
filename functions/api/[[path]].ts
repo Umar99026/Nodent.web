@@ -2292,14 +2292,27 @@ app.get("/api/competition/:subjectId/stats", authMiddleware, async (c: any) => {
   const totalStudents = Number((studentResult.rows[0] as any).count);
 
   const allScoresRows = await db.execute(sql`
-    SELECT qa.user_id, u.username,
-           SUM(CASE WHEN qa.is_correct = 1 THEN qa.marks ELSE 0 END) AS marks_correct,
-           SUM(qa.marks) AS marks_attempted,
-           COUNT(*)::int AS attempt_count
-    FROM question_attempts qa
-    JOIN users u ON u.id = qa.user_id
-    WHERE qa.subject_id = ${subjectId} ${timeFilter}
-    GROUP BY qa.user_id, u.username
+    WITH range_scores AS (
+      SELECT qa.user_id, u.username,
+             SUM(CASE WHEN qa.is_correct = 1 THEN qa.marks ELSE 0 END) AS marks_correct,
+             SUM(qa.marks) AS marks_attempted,
+             COUNT(*)::int AS attempt_count_range
+      FROM question_attempts qa
+      JOIN users u ON u.id = qa.user_id
+      WHERE qa.subject_id = ${subjectId} ${timeFilter}
+      GROUP BY qa.user_id, u.username
+    ),
+    all_time_attempts AS (
+      SELECT user_id, COUNT(*)::int AS attempt_count_all_time
+      FROM question_attempts
+      WHERE subject_id = ${subjectId}
+      GROUP BY user_id
+    )
+    SELECT r.user_id, r.username, r.marks_correct, r.marks_attempted,
+           r.attempt_count_range,
+           COALESCE(a.attempt_count_all_time, 0)::int AS attempt_count_all_time
+    FROM range_scores r
+    LEFT JOIN all_time_attempts a ON a.user_id = r.user_id
   `);
   const allScores = allScoresRows.rows as any[];
 
@@ -2308,7 +2321,8 @@ app.get("/api/competition/:subjectId/stats", authMiddleware, async (c: any) => {
     const mc = Number(r.marks_correct);
     return ma > 0 ? Math.round((mc / ma) * 100) : 0;
   };
-  const eligible = allScores.filter((r) => Number(r.attempt_count) >= MIN_RANKED_ATTEMPTS);
+  // Eligibility should be all-time: once you’ve done 10 questions ever, you’re ranked.
+  const eligible = allScores.filter((r) => Number(r.attempt_count_all_time) >= MIN_RANKED_ATTEMPTS);
   const sortedEligible = [...eligible].sort((a, b) => {
     const d = pctRounded(b) - pctRounded(a);
     if (d !== 0) return d;
@@ -2318,7 +2332,7 @@ app.get("/api/competition/:subjectId/stats", authMiddleware, async (c: any) => {
   });
 
   const myRow = allScores.find((r) => r.user_id === user.id);
-  const myAttempts = myRow ? Number(myRow.attempt_count) : 0;
+  const myAttempts = myRow ? Number(myRow.attempt_count_all_time) : 0;
   const myPct = myRow ? pctRounded(myRow) : 0;
 
   let rank: number | null = null;
@@ -2337,7 +2351,7 @@ app.get("/api/competition/:subjectId/stats", authMiddleware, async (c: any) => {
     username: r.username,
     correct: Number(r.marks_correct),
     total: Number(r.marks_attempted),
-    attemptCount: Number(r.attempt_count),
+    attemptCount: Number(r.attempt_count_all_time),
     percent: pctRounded(r),
   }));
 

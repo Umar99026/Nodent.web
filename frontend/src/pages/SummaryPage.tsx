@@ -179,7 +179,7 @@ export default function SummaryPage() {
   const { user } = useAuth();
 
   const [leaderboardRange, setLeaderboardRange] = useState<"week" | "all">(
-    "week",
+    "all",
   );
 
   const [stats, setStats] = useState<CompetitionStats | null>(null);
@@ -202,8 +202,37 @@ export default function SummaryPage() {
     return loadPracticeState(user.id, subjectId);
   }, [user, subjectId]);
 
-  // Compute score from practice state (normalized keys when question bank is loaded)
+  // Compute score hero from all-time competition stats (mark-weighted),
+  // falling back to local practice state when stats are unavailable.
   const { correct, total, percentage, wrongCount } = useMemo(() => {
+    // Prefer server stats (consistent with leaderboard units).
+    if (stats?.topicStats?.length) {
+      let myCorrectMarks = 0;
+      let myTotalMarks = 0;
+      for (const t of stats.topicStats) {
+        const c = t.myCorrect == null ? null : Number(t.myCorrect);
+        const tot = Number(t.myTotal ?? 0);
+        if (c == null || tot <= 0) continue;
+        myCorrectMarks += Math.max(0, c);
+        myTotalMarks += Math.max(0, tot);
+      }
+      const pct =
+        myTotalMarks > 0
+          ? Math.round((myCorrectMarks / myTotalMarks) * 100)
+          : 0;
+      // wrongCount is a separate “review list” concept — keep it sourced from local practice state.
+      const wrong =
+        practiceState?.answers
+          ? Object.values(practiceState.answers).filter((v) => v === false).length
+          : 0;
+      return {
+        correct: myCorrectMarks,
+        total: myTotalMarks,
+        percentage: pct,
+        wrongCount: wrong,
+      };
+    }
+
     if (!practiceState) {
       return { correct: 0, total: 0, percentage: 0, wrongCount: 0 };
     }
@@ -248,7 +277,7 @@ export default function SummaryPage() {
     const totalCount = scorable.length;
     const pct = totalCount > 0 ? Math.round((correctCount / totalCount) * 100) : 0;
     return { correct: correctCount, total: totalCount, percentage: pct, wrongCount: wrong };
-  }, [practiceState, user, subjectId, questions]);
+  }, [stats, practiceState, user, subjectId, questions]);
 
   /** Raw false entries in localStorage (before bank matching). */
   const savedWrongCount = useMemo(() => {
@@ -467,8 +496,10 @@ export default function SummaryPage() {
       if (v === undefined) continue;
       const t = (q.topic || "General").trim() || "General";
       const cur = m.get(t) ?? { myCorrect: 0, myTotal: 0 };
-      cur.myTotal += 1;
-      if (v === true) cur.myCorrect += 1;
+      // Stats are mark-based (not question-count based) to match the leaderboard/competition API.
+      const marks = Math.max(1, Math.round(Number((q as any).marks ?? 1)));
+      cur.myTotal += marks;
+      if (v === true) cur.myCorrect += marks;
       m.set(t, cur);
     }
     return m;
@@ -485,7 +516,13 @@ export default function SummaryPage() {
       .map((topic) => {
         const api = stats.topicStats.find((x) => x.topic === topic);
         const loc = local.get(topic);
-        const useLocal = loc && loc.myTotal > 0;
+        // Local answers are only a fallback (e.g. first session before the API has rows).
+        // They must never override all-time API stats, otherwise "wrong answers only"
+        // sessions can make the UI look like your percentage reset.
+        const useLocal =
+          loc &&
+          loc.myTotal > 0 &&
+          (!api || Number(api.myTotal ?? 0) <= 0 || api.myCorrect == null);
         return {
           topic,
           correctCount: api?.correctCount ?? 0,
@@ -1137,8 +1174,10 @@ export default function SummaryPage() {
                     </div>
                   )}
                   {displayTopicStats.map((topic) => {
+                    const attempted =
+                      topic.myTotal > 0 && topic.myCorrect !== null;
                     const yourPct =
-                      topic.myTotal > 0 && topic.myCorrect !== null
+                      attempted
                         ? Math.round(
                             (topic.myCorrect / topic.myTotal) * 100
                           )
@@ -1150,7 +1189,7 @@ export default function SummaryPage() {
                       : null;
                     const above =
                       hasClassData && classPct != null ? yourPct >= classPct : false;
-                    const isWeak = yourPct < 50;
+                    const isWeak = attempted && yourPct < 50;
                     const isStrong = yourPct >= 80;
                     const tp = topic.topicPercentile;
                     const tpBadge =

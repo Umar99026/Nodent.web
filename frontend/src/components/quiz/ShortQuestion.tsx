@@ -450,10 +450,10 @@ export function ShortQuestion({
                       : "Any valid format"}
                 </span>
               </div>
-              {submitted && !isCorrect && (
+              {submitted && !isCorrect && allowRetry && (
                 <p className="text-[11px] text-muted-foreground">
                   Correct answer:{" "}
-                  <span className="font-semibold text-foreground">
+                  <span className="text-[13px] font-semibold text-foreground">
                     {expectedAnswersForDisplay[0] ?? "—"}
                   </span>
                 </p>

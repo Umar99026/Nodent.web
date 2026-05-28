@@ -78,18 +78,21 @@ function studentDecimalPlaces(raw: string): number | null {
 }
 
 export function inferDpHintFromAccepted(acceptedAnswers: string[]): number | null {
+  // If accepted answers are numeric, decide whether this is a whole-number question.
+  const numericAccepted = acceptedAnswers
+    .map((a) => parseNumericAnswer(String(a)))
+    .filter((x): x is number => x != null && Number.isFinite(x));
+  if (numericAccepted.length) {
+    const allIntegers = numericAccepted.every((n) => Math.abs(n - Math.round(n)) < 1e-9);
+    return allIntegers ? 0 : 2;
+  }
+
   const dps = acceptedAnswers
     .map((a) => decimalPlacesFromLiteral(String(a)))
     .filter((x): x is number => typeof x === "number" && Number.isFinite(x));
-  if (dps.length) {
-    // If any accepted answer is decimal, standardize to 2 d.p.
-    return 2;
-  }
-  // Whole-number answers: 0 d.p. is valid.
-  const hasNumericAccepted = acceptedAnswers.some(
-    (a) => parseNumericAnswer(String(a)) != null,
-  );
-  return hasNumericAccepted ? 0 : null;
+  if (dps.length) return 2;
+
+  return null;
 }
 
 export function isAnswerCorrect(
@@ -112,7 +115,7 @@ export function isAnswerCorrect(
         if (Object.is(sn, an)) return { correct: true, dpHint };
         continue;
       }
-      if (dpHint === 0 && studentDp != null && studentDp > 0) continue;
+      if (dpHint === 0 && studentDp != null && studentDp > 0 && studentDp !== 2) continue;
       if (Math.abs(studentNum - accNum) < 1e-9) return { correct: true, dpHint };
     }
   }

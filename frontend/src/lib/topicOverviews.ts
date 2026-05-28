@@ -11,67 +11,243 @@ function isMathish(subjectName: string) {
 
 function overviewEnglish(section: EnglishSection) {
   if (section === "A") {
-    return `### Section A — Text response
+    return `### Section A — Analytical response to a text
 
-You write an analytical essay on **one** selected text (or pair) from the study design — themes, characters, ideas, and authorial views.
+#### What you need to do
 
-**What markers want**
-- A clear **contention** that answers the specific prompt (not a theme list)
-- **Evidence** (short, embedded quotes) + **analysis** (how language/structure proves your point)
-- **TEEL** paragraphs: topic sentence → evidence → analysis → link to contention
+Write an analytical response on **one** set text. Choose **one** prompt/topic for your selected text and engage with the **ideas, concerns and values** raised by the prompt, supported by **close reference** to the text.
 
-**VCE task types**
-- Theme / idea prompts (“How does the text explore …?”)
-- Character prompts (“To what extent is …?”)
-- Viewpoint prompts (author’s perspective on an issue)
+If your text is a **poetry** or **short story collection**, you may write on multiple pieces (or at least **two** in close detail).
 
-**Time discipline:** plan 5–10 minutes; aim for 3–4 body paragraphs plus intro and conclusion.
+---
 
-**Micro‑checklist**
-- Re-word the prompt in your introduction
-- Embed quotes; avoid long block quotes
-- Explain *so what?* — effect on reader and link to contention
-- Conclusion: synthesis, not new evidence`;
+#### Key content points to know
+
+| Area | What this means |
+| --- | --- |
+| Text knowledge | Characters, plot, setting, structure, symbols, motifs |
+| Themes / ideas | Big concepts like power, identity, freedom, justice, memory, family, belonging |
+| Authorial intent | What the writer/director suggests about human behaviour or society |
+| Values and concerns | What the text criticises, celebrates, questions or warns against |
+| Evidence | Short quotations, scenes, moments, structural choices, imagery |
+| Prompt unpacking | Understanding command terms like “discuss”, “to what extent”, “how does…” |
+
+---
+
+#### What a strong response does
+
+VCAA assesses Section A on **knowledge of the text**, its **structure**, **ideas/concerns/values**, **coherent analysis**, **evidence**, and **fluent expression**.
+
+A high-scoring response:
+- directly answers the **prompt** (not plot retell)
+- builds a clear **argument** across the essay
+- analyses the writer’s **choices** (how meaning is made)
+- uses evidence smoothly and selectively (short, embedded)
+- shows complexity: **“although…, ultimately…”**
+
+---
+
+#### Suggested structure
+
+**Introduction**
+- Direct answer to the prompt
+- 2–3 key ideas
+- Overall interpretation of the text
+
+**Body paragraph 1**
+- Main argument
+- Evidence
+- Analysis of meaning / authorial purpose
+
+**Body paragraph 2**
+- Second argument
+- Evidence
+- Analysis
+
+**Body paragraph 3**
+- More complex or contrasting idea
+- Evidence
+- Analysis
+
+**Conclusion**
+- Return to the prompt
+- Summarise the text’s broader message
+
+---
+
+#### Tips for this study platform
+
+**Useful practice modes**
+
+| Feature | Purpose |
+| --- | --- |
+| Prompt unpacking drills | Identify what the question is really asking |
+| Quote bank by theme | Memorisation and evidence selection |
+| Theme-to-evidence matching | Build analytical thinking |
+| Essay plan generator | Teach structure before full writing |
+| Paragraph feedback | Faster than marking whole essays |
+| “Plot summary vs analysis” detector | Avoid retelling |
+
+**Useful stats to show**
+- Text knowledge score
+- Prompt relevance score
+- Evidence quality score
+- Analysis depth score
+- Expression score`;
   }
   if (section === "B") {
-    return `### Section B — Creative writing
+    return `### Section B — Creating a text
 
-You produce a **narrative** or **persuasive** piece inspired by a stimulus (image, title, sentence, etc.).
+#### What you need to do
 
-**What markers want**
-- Strong **voice** and **idea** sustained across the piece
-- Deliberate **craft**: imagery, motif, structure, pacing, point of view
-- Clear **connection** to the stimulus (adapt, don’t copy the wording)
+Create one written text (excluding song, poetry or verse). Your response must connect meaningfully with:
+- one **Framework of Ideas**
+- the given **title**
+- at least **one stimulus**
 
-**VCE forms**
-- Short story / memoir-style narrative
-- Speech, opinion piece, or hybrid (read the task instructions)
+Your text must have a clear purpose using at least one of: **explain**, **express**, **reflect**, **argue** (or a combination).
 
-**Micro‑checklist**
-- Hook in the opening; orient the reader quickly
-- Sensory detail with purpose (not a list of adjectives)
-- End with a shift, realisation, or resolution that fits the prompt
-- Proofread for sentence control — clarity is marked`;
+---
+
+#### Frameworks of Ideas (example list)
+
+| Framework | Example focus |
+| --- | --- |
+| Writing about country | Place, land, identity, belonging, connection |
+| Writing about protest | Resistance, change, justice, voice |
+| Writing about personal journeys | Growth, change, struggle, discovery |
+| Writing about play | Rules, freedom, imagination, competition |
+
+---
+
+#### Key content points to know
+
+| Area | What this means |
+| --- | --- |
+| Framework of Ideas | The broad conceptual area you are writing within |
+| Title | Must shape the piece, not just be copied at the top |
+| Stimulus | Must be meaningfully used, not randomly inserted |
+| Purpose | Explain, express, reflect, argue — or a combination |
+| Audience | Who the piece is written for |
+| Form | Speech, opinion piece, memoir, personal reflection, essay, letter, feature article, etc. |
+| Voice | The personality, tone and perspective of the writing |
+| Cohesion | The piece should feel complete and controlled |
+
+---
+
+#### What a strong response does
+
+VCAA assesses Section B on relevant ideas from the **Framework/title/stimulus**, a cohesive text with clear **purpose** and appropriate **voice**, suitable structure and language features, and fluent expression.
+
+A high-scoring response:
+- clearly fits the chosen Framework
+- uses the title in a meaningful way
+- integrates stimulus naturally
+- has a clear form, voice and purpose
+- sounds polished, controlled and intentional
+- avoids vague/generic writing or forced melodrama
+
+---
+
+#### Suggested planning method
+
+Decide before you write:
+- Framework:
+- Title:
+- Stimulus chosen:
+- Form:
+- Audience:
+- Purpose:
+- Voice:
+- Main idea:
+- Ending:
+
+**Example**
+- Framework: Writing about protest
+- Title: Small Acts, Big Wins
+- Stimulus: quote about starting with the next person who needs help
+- Form: reflective speech
+- Purpose: to reflect and argue
+- Voice: thoughtful, sincere, hopeful
+- Main idea: protest does not always begin with grand gestures
+
+---
+
+#### Tips for this study platform
+
+**Useful practice modes**
+
+| Feature | Purpose |
+| --- | --- |
+| Framework idea bank | Generate deeper ideas |
+| Stimulus integration practice | Prevent forced/superficial use |
+| Form selector | Teach different writing structures |
+| Voice/tone drills | Write with control |
+| Purpose checker | Check whether the piece explains/reflects/argues/expresses |
+| Timed writing prompts | Build exam speed |
+
+**Useful stats to show**
+- Framework relevance score
+- Stimulus integration score
+- Purpose clarity score
+- Voice control score
+- Cohesion score
+- Language quality score`;
   }
-  return `### Section C — Writing / argument analysis
+  return `### Section C — Analysis of argument and language
 
-You analyse **how** an author argues (language / argument analysis), not whether you agree.
+#### What you need to do
 
-**What markers want**
-- **Contention** and **target audience** stated early
-- **Arguments** as a line of reasoning (not a list of devices)
-- **Technique → example → effect** on audience
+Analyse **how** arguments, written/spoken language and **visuals** are used to persuade an intended audience.
 
-**High-value techniques (VCE)**
-- Tone shifts, inclusive language, appeals (logic, emotion, credibility)
-- Rhetorical questions, contrast, anecdote, statistics, expert opinion
-- Visuals in hybrid pieces — layout, gaze, symbolism
+VCAA uses:
+- **language** = written and spoken language
+- **visuals** = images and graphics
 
-**Micro‑checklist**
-- Argument map: contention + 2–3 supporting moves
-- Group by **argument**, not by technique alphabet
-- Quote briefly; analyse **intended effect** on the audience
-- Compare two pieces only if the task asks for comparison`;
+You are given background information and persuasive material (written/spoken/visual) plus a task asking you to analyse persuasion.
+
+---
+
+#### Key content points to identify and analyse
+
+| Area | What this means |
+| --- | --- |
+| Contention | The writer/speaker’s overall point of view |
+| Arguments | The main reasons used to support the contention |
+| Audience | Who is being targeted |
+| Tone | Calm, urgent, frustrated, hopeful, inclusive, critical, etc. |
+| Language choices | Word choice, appeals, rhetorical questions, repetition, inclusive language |
+| Persuasive appeals | Logic, emotion, ethics, fear, responsibility, community values |
+| Visuals | Images, layout, captions, symbolism, contrast, framing |
+| Intended effect | How the audience is positioned to think, feel or act |
+
+---
+
+#### What a strong response does
+
+VCAA assesses Section C on understanding of **contention/arguments/point of view**, analysis of written/spoken language and visuals, **evidence**, and fluent expression.
+
+A high-scoring response:
+- identifies the overall contention early
+- follows the development of argument logically
+- analyses persuasion (not just labels techniques)
+- links language choices to intended audience response
+- discusses visuals meaningfully
+- avoids technique-spotting without explanation
+
+---
+
+#### Strong paragraph formula
+
+Argument being made  
+\(+\) evidence from the material  
+\(+\) language choice / visual feature  
+\(+\) intended effect on the audience  
+\(+\) link to contention
+
+**Example sentence style**
+
+By describing the proposal as a “smarter investment”, the writer positions the audience to view the change as practical and responsible, strengthening support for their overall contention.`;
 }
 
 export function getTopicOverview(args: {

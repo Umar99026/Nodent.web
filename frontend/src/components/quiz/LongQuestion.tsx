@@ -519,10 +519,10 @@ export function LongQuestion({
                         : "Any valid format"}
                   </span>
                 </div>
-                {(practiceOnly ? submitted : saved) && partResults[idx] === false && (
+                {practiceOnly && submitted && partResults[idx] === false && (
                   <p className="text-[11px] text-muted-foreground">
                     Correct answer:{" "}
-                    <span className="font-semibold text-foreground">
+                    <span className="text-[13px] font-semibold text-foreground">
                       {expectedAnswersForDisplay[idx] ?? "—"}
                     </span>
                   </p>
@@ -555,12 +555,13 @@ export function LongQuestion({
                     : "Any valid format"}
               </span>
             </div>
-            {(practiceOnly ? submitted : saved) &&
+            {practiceOnly &&
+              submitted &&
               autoMarkResult === false &&
               expectedAnswersForDisplay.length > 0 && (
                 <p className="text-[11px] text-muted-foreground">
                   Correct answer:{" "}
-                  <span className="font-semibold text-foreground">
+                  <span className="text-[13px] font-semibold text-foreground">
                     {expectedAnswersForDisplay[0]}
                   </span>
                 </p>

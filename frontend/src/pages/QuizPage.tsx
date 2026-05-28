@@ -454,9 +454,11 @@ export default function QuizPage() {
     [topicFilteredFlat, questions],
   );
 
-  /** Main quiz: hide only questions already answered before this session started. */
+  /** Main quiz: once you answer a question, you should not see it again (except in wrong-answer review). */
   const activeGroups = useMemo(() => {
     if (!subjectId) return allGroupsFlat;
+    const isAnswered = (qk: string) =>
+      answeredAtSessionStart.has(qk) || answers[qk] !== undefined;
     return allGroupsFlat.filter((g) =>
       g.key === pinnedGroupKey ||
       !g.parts.every((p) => {
@@ -465,10 +467,10 @@ export default function QuizPage() {
           p,
           Math.max(0, getStableQuestionIndex(questions, p)),
         );
-        return answeredAtSessionStart.has(qk);
+        return isAnswered(qk);
       }),
     );
-  }, [allGroupsFlat, subjectId, questions, pinnedGroupKey, answeredAtSessionStart]);
+  }, [allGroupsFlat, subjectId, questions, pinnedGroupKey, answeredAtSessionStart, answers]);
 
   const displayGroups: QuestionStimulusGroup[] = isWrongReview
     ? wrongReviewGroups ?? []
@@ -539,7 +541,10 @@ export default function QuizPage() {
     (qKey: string, isCorrect: boolean | null, marks: number, topic: string) => {
       setAnswers((prev) => {
         const next = { ...prev, [qKey]: isCorrect };
-        schedulePracticeSave({ currentIndex, answers: next });
+        // Wrong-answer review must never overwrite the user's long-term practice history.
+        if (!isWrongReview) {
+          schedulePracticeSave({ currentIndex, answers: next });
+        }
         return next;
       });
 
@@ -553,9 +558,14 @@ export default function QuizPage() {
             marks,
             topic,
           }),
-        }).catch(() => {
-          // non-critical
-        });
+        })
+          .then(() => {
+            // Let other pages (Dashboard scorecard) know points may have changed.
+            window.dispatchEvent(new CustomEvent("nodent:scorecard-updated"));
+          })
+          .catch(() => {
+            // non-critical
+          });
       }
     },
     [currentIndex, subjectId, isWrongReview, schedulePracticeSave]
@@ -566,7 +576,7 @@ export default function QuizPage() {
     const clamped = Math.max(0, Math.min(displayGroups.length - 1, index));
     setCurrentIndex(clamped);
     setPinnedGroupKey(displayGroups[clamped]?.key ?? null);
-    if (user && subjectId && displayGroups.length > 0) {
+    if (!isWrongReview && user && subjectId && displayGroups.length > 0) {
       schedulePracticeSave({ currentIndex: clamped, answers });
     }
   };

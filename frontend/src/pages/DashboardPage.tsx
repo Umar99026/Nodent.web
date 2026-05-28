@@ -205,6 +205,20 @@ export default function DashboardPage() {
     }
   }, [scoreCardOpen, scoreCard, user, fetchScorecard]);
 
+  // Refresh points immediately after a question is answered (Quiz/Practice).
+  useEffect(() => {
+    const onScorecardUpdated = () => {
+      if (!scoreCardOpen) {
+        // Ensure next open fetches fresh data.
+        setScoreCard(null);
+        return;
+      }
+      void fetchScorecard();
+    };
+    window.addEventListener("nodent:scorecard-updated", onScorecardUpdated);
+    return () => window.removeEventListener("nodent:scorecard-updated", onScorecardUpdated);
+  }, [scoreCardOpen, fetchScorecard]);
+
   // Live refresh while open
   useEffect(() => {
     if (!scoreCardOpen) return;
