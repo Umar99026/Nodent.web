@@ -715,7 +715,11 @@ export function EnglishPromptResponsesPage() {
                           disabled={savingRatingId === openResponse.id}
                         >
                           <SelectTrigger className="h-8 w-[132px] bg-white px-2 text-xs">
-                            <SelectValue placeholder={triggerLabel} />
+                            {/* Render our own label; Base-UI Value can appear blank in some layouts */}
+                            <span className="flex flex-1 items-center text-left font-semibold text-[#0b0f19]">
+                              {triggerLabel}
+                            </span>
+                            <SelectValue className="sr-only" placeholder="RATE" />
                           </SelectTrigger>
                           <SelectContent>
                             {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((s) => (

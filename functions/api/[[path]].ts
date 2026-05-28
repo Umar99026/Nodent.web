@@ -1832,6 +1832,7 @@ app.get("/api/scorecard", authMiddleware, async (c: any) => {
   const db = c.get("db");
   const asOfDate = String(c.req.query("asOfDate") ?? "").trim();
   const date = /^\d{4}-\d{2}-\d{2}$/.test(asOfDate) ? asOfDate : null;
+  const MIN_SUBJECT_ATTEMPTS = 10;
 
   const totals = await db.execute(sql`
     SELECT
@@ -1862,6 +1863,63 @@ app.get("/api/scorecard", authMiddleware, async (c: any) => {
   `);
   const overallRank = rankRows.rows?.length ? Number((rankRows.rows as any[])[0]?.rnk ?? null) : null;
 
+  // Subjects the student "does" (dashboard selection).
+  const subjectRows = await db.execute(sql`
+    SELECT subject_id
+    FROM user_subjects
+    WHERE user_id = ${user.id}
+    ORDER BY subject_id ASC
+  `);
+  const subjectIds = (subjectRows.rows as any[]).map((r) => String(r.subject_id));
+
+  // Average percentile across the student's selected subjects.
+  // Percentile per subject is based on mark-weighted % (marks_correct / marks_attempted).
+  let overallPercentile: number | null = null;
+  if (subjectIds.length > 0) {
+    let sum = 0;
+    let n = 0;
+    for (const sid of subjectIds) {
+      const rows = await db.execute(sql`
+        WITH by_user AS (
+          SELECT user_id,
+                 COALESCE(SUM(CASE WHEN is_correct = 1 THEN marks ELSE 0 END), 0)::int AS marks_correct,
+                 COALESCE(SUM(marks), 0)::int AS marks_attempted
+          FROM question_attempts
+          WHERE subject_id = ${sid}
+          GROUP BY user_id
+        ),
+        scored AS (
+          SELECT user_id,
+                 CASE WHEN marks_attempted > 0
+                   THEN (marks_correct::float / marks_attempted::float)
+                   ELSE NULL
+                 END AS pct
+          FROM by_user
+          WHERE marks_attempted > 0
+        ),
+        ranked AS (
+          SELECT user_id,
+                 pct,
+                 DENSE_RANK() OVER (ORDER BY pct DESC) AS rnk,
+                 COUNT(*) OVER () AS cnt
+          FROM scored
+        )
+        SELECT rnk, cnt
+        FROM ranked
+        WHERE user_id = ${user.id}
+        LIMIT 1
+      `);
+      if (!rows.rows?.length) continue;
+      const rnk = Number((rows.rows as any[])[0]?.rnk ?? 0);
+      const cnt = Number((rows.rows as any[])[0]?.cnt ?? 0);
+      if (!rnk || cnt <= 1) continue;
+      const pct = ((cnt - rnk) / Math.max(1, cnt - 1)) * 100;
+      sum += pct;
+      n += 1;
+    }
+    overallPercentile = n > 0 ? sum / n : null;
+  }
+
   const bestWeak = await db.execute(sql`
     SELECT subject_id,
            SUM(CASE WHEN is_correct = 1 THEN marks ELSE 0 END)::int AS marks_correct,
@@ -1879,6 +1937,108 @@ app.get("/api/scorecard", authMiddleware, async (c: any) => {
   perSubject.sort((a, b) => b.pct - a.pct);
   const bestSubjectId = perSubject.length ? perSubject[0]!.subjectId : null;
   const weakestSubjectId = perSubject.length ? perSubject[perSubject.length - 1]!.subjectId : null;
+
+  // Per-subject "report card" rows: subjects where this student has attempted >= 10 questions.
+  const reportSubjects: Array<{
+    subjectId: string;
+    attempts: number;
+    percentile: number | null;
+    weakestTopic: { topic: string; percent: number; marksCorrect: number; marksAttempted: number } | null;
+    strongestTopic: { topic: string; percent: number; marksCorrect: number; marksAttempted: number } | null;
+  }> = [];
+
+  const attemptedBySubjectRows = await db.execute(sql`
+    SELECT subject_id, COUNT(*)::int AS attempts
+    FROM question_attempts
+    WHERE user_id = ${user.id}
+    GROUP BY subject_id
+  `);
+  const attemptedBySubject = new Map<string, number>();
+  for (const r of attemptedBySubjectRows.rows as any[]) {
+    attemptedBySubject.set(String(r.subject_id), Number(r.attempts ?? 0));
+  }
+
+  const eligibleSubjectIds = Array.from(attemptedBySubject.entries())
+    .filter(([, attempts]) => attempts >= MIN_SUBJECT_ATTEMPTS)
+    .map(([sid]) => sid)
+    .sort((a, b) => a.localeCompare(b));
+
+  for (const sid of eligibleSubjectIds) {
+    // Rank within this subject by mark-weighted % (marks_correct / marks_attempted), all time.
+    const rankInSubject = await db.execute(sql`
+      WITH by_user AS (
+        SELECT user_id,
+               COALESCE(SUM(CASE WHEN is_correct = 1 THEN marks ELSE 0 END), 0)::int AS marks_correct,
+               COALESCE(SUM(marks), 0)::int AS marks_attempted
+        FROM question_attempts
+        WHERE subject_id = ${sid}
+        GROUP BY user_id
+      ),
+      scored AS (
+        SELECT user_id,
+               CASE WHEN marks_attempted > 0
+                 THEN (marks_correct::float / marks_attempted::float)
+                 ELSE NULL
+               END AS pct
+        FROM by_user
+        WHERE marks_attempted > 0
+      ),
+      ranked AS (
+        SELECT user_id,
+               DENSE_RANK() OVER (ORDER BY pct DESC) AS rnk,
+               COUNT(*) OVER () AS cnt
+        FROM scored
+      )
+      SELECT rnk, cnt
+      FROM ranked
+      WHERE user_id = ${user.id}
+      LIMIT 1
+    `);
+    const rank = rankInSubject.rows?.length ? Number((rankInSubject.rows as any[])[0]?.rnk ?? null) : null;
+    const total = rankInSubject.rows?.length ? Number((rankInSubject.rows as any[])[0]?.cnt ?? 0) : 0;
+    const percentile =
+      rank != null && total > 1
+        ? ((total - rank) / Math.max(1, total - 1)) * 100
+        : null;
+
+    // Weakest/strongest topic for this user in this subject (mark-weighted %).
+    const topicRows = await db.execute(sql`
+      SELECT topic,
+             SUM(CASE WHEN is_correct = 1 THEN marks ELSE 0 END)::int AS marks_correct,
+             SUM(marks)::int AS marks_attempted
+      FROM question_attempts
+      WHERE user_id = ${user.id} AND subject_id = ${sid}
+      GROUP BY topic
+    `);
+    const topics = (topicRows.rows as any[])
+      .map((r) => {
+        const attempted = Math.max(0, Number(r.marks_attempted ?? 0));
+        const correct = Math.max(0, Number(r.marks_correct ?? 0));
+        const percent = attempted > 0 ? Math.round((correct / attempted) * 100) : 0;
+        return {
+          topic: String(r.topic || "General"),
+          marksCorrect: correct,
+          marksAttempted: attempted,
+          percent,
+        };
+      })
+      .filter((t) => t.marksAttempted > 0);
+
+    let weakest: (typeof topics)[number] | null = null;
+    let strongest: (typeof topics)[number] | null = null;
+    for (const t of topics) {
+      if (!weakest || t.percent < weakest.percent) weakest = t;
+      if (!strongest || t.percent > strongest.percent) strongest = t;
+    }
+
+    reportSubjects.push({
+      subjectId: sid,
+      attempts: attemptedBySubject.get(sid) ?? 0,
+      percentile,
+      weakestTopic: weakest,
+      strongestTopic: strongest,
+    });
+  }
 
   // Study streak up to asOfDate (or today if omitted).
   const end = date ?? new Date().toISOString().slice(0, 10);
@@ -1906,10 +2066,12 @@ app.get("/api/scorecard", authMiddleware, async (c: any) => {
   return c.json({
     totalStudents,
     overallRank,
-    points,
+    marks: points,
+    overallPercentile,
     bestSubjectId,
     weakestSubjectId,
     studyStreak: streak,
+    reportSubjects,
   });
 });
 

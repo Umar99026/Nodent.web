@@ -24,6 +24,14 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
   BookOpen,
   Plus,
   Search,
@@ -150,10 +158,18 @@ export default function DashboardPage() {
   interface ScorecardData {
     totalStudents: number;
     overallRank: number | null;
-    points: number;
+    marks: number;
+    overallPercentile: number | null;
     bestSubjectId: string | null;
     weakestSubjectId: string | null;
     studyStreak: number;
+    reportSubjects?: Array<{
+      subjectId: string;
+      attempts: number;
+      percentile: number | null;
+      weakestTopic: { topic: string; percent: number } | null;
+      strongestTopic: { topic: string; percent: number } | null;
+    }>;
   }
 
   const [scoreCardOpen, setScoreCardOpen] = useState(false);
@@ -184,18 +200,18 @@ export default function DashboardPage() {
     return Math.round(total / 7);
   }, [user]);
 
-  const fetchScorecard = useCallback(async () => {
+  const fetchScorecard = useCallback(async (opts?: { silent?: boolean }) => {
     if (!user) return;
     try {
-      setScoreCardLoading(true);
+      if (!opts?.silent) setScoreCardLoading(true);
       const data = await apiFetch<ScorecardData>(
         `/api/scorecard?asOfDate=${encodeURIComponent(localDateISO())}`,
       );
       setScoreCard(data);
     } catch {
-      toast.error("Failed to load your scorecard.");
+      if (!opts?.silent) toast.error("Failed to load your report card.");
     } finally {
-      setScoreCardLoading(false);
+      if (!opts?.silent) setScoreCardLoading(false);
     }
   }, [user]);
 
@@ -213,20 +229,13 @@ export default function DashboardPage() {
         setScoreCard(null);
         return;
       }
-      void fetchScorecard();
+      void fetchScorecard({ silent: true });
     };
     window.addEventListener("nodent:scorecard-updated", onScorecardUpdated);
     return () => window.removeEventListener("nodent:scorecard-updated", onScorecardUpdated);
   }, [scoreCardOpen, fetchScorecard]);
 
-  // Live refresh while open
-  useEffect(() => {
-    if (!scoreCardOpen) return;
-    const t = setInterval(() => {
-      void fetchScorecard();
-    }, 8000);
-    return () => clearInterval(t);
-  }, [scoreCardOpen, fetchScorecard]);
+  // No polling — reduces flicker/glitching. Refresh happens on open + after answers.
 
   /* ------ render ------ */
 
@@ -280,11 +289,11 @@ export default function DashboardPage() {
                   <div className="flex items-center gap-2">
                     <Star className="size-5 text-white/90" />
                     <span className="font-display text-xl font-semibold">
-                      Scorecard
+                      Report Card
                     </span>
                   </div>
                   <p className="mt-1 text-sm text-white/70">
-                    Live rating based on your correct answers and marks.
+                    Live summary based on your marks and overall performance.
                   </p>
                 </div>
                 <button
@@ -297,137 +306,117 @@ export default function DashboardPage() {
                 </button>
               </div>
 
-              <Card className="paper-texture overflow-hidden">
-                <CardContent className="space-y-6 p-6">
-                  {/* Soccer-style rating card */}
-                  <div className="relative overflow-hidden rounded-3xl border border-black/10 bg-gradient-to-b from-[#f3fbff] to-white p-6 shadow-xl">
-                    <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_20%_10%,rgba(86,171,230,0.22),transparent_55%)]" />
-                    <div className="relative">
-                      <div className="flex items-center justify-between gap-4">
-                        <div className="flex items-center gap-3">
-                          <Avatar className="size-12 shrink-0">
-                            <AvatarImage
-                              src={user?.profilePhoto ?? undefined}
-                              alt={user?.username ?? "User"}
-                            />
-                            <AvatarFallback className="bg-[#0b0f19] text-sm font-bold text-white">
-                              {user?.profilePhoto ? initials : "S"}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <div className="rounded-full bg-[#0b0f19] px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-white">
-                              {user?.username ?? "Student"}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="text-[11px] font-semibold text-black/60">
-                          Live
-                        </div>
+              <Card className="overflow-hidden border border-black/10 bg-white shadow-2xl">
+                <CardContent className="space-y-6 p-6 sm:p-8">
+                  {/* Header */}
+                  <div className="flex items-center gap-4">
+                    <Avatar className="size-12 shrink-0">
+                      <AvatarImage
+                        src={user?.profilePhoto ?? undefined}
+                        alt={user?.username ?? "User"}
+                      />
+                      <AvatarFallback className="bg-[#0b0f19] text-sm font-bold text-white">
+                        {user?.profilePhoto ? initials : "S"}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0">
+                      <div className="font-display text-2xl font-bold tracking-tight text-[#0b0f19]">
+                        Report Card
                       </div>
-
-                      <div className="mt-5">
-                        {scoreCardLoading ? (
-                          <div className="text-sm text-black/60">Loading…</div>
-                        ) : scoreCard?.overallRank ? (
-                          (() => {
-                            const percentile = Math.max(
-                              0,
-                              Math.min(
-                                100,
-                                Math.round(
-                                  ((scoreCard.totalStudents - scoreCard.overallRank!) /
-                                    Math.max(1, scoreCard.totalStudents - 1)) *
-                                    100,
-                                ),
-                              ),
-                            );
-
-                            return (
-                              <>
-                                <div className="font-display text-6xl font-bold leading-none text-[#0b0f19] tabular-nums">
-                                  {scoreCard.points ?? 0}
-                                </div>
-                                <div className="mt-2 text-sm font-semibold text-black/60">
-                                  Total points
-                                </div>
-                                <div className="mt-1 text-sm font-semibold text-black/60">
-                                  Rank #{scoreCard.overallRank} of {scoreCard.totalStudents}
-                                </div>
-                                <div className="mt-1 text-sm font-semibold text-black/70">
-                                  Percentile: top {100 - percentile}%
-                                </div>
-                              </>
-                            );
-                          })()
-                        ) : (
-                          <div className="text-sm text-black/60">
-                            Not enough data yet.
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="mt-6 grid grid-cols-2 gap-3">
-                        <div className="rounded-2xl border border-black/10 bg-white p-4">
-                          <div className="text-[11px] font-semibold text-black/50">
-                            Points
-                          </div>
-                          <div className="mt-1 font-display text-2xl font-semibold tabular-nums text-[#0b0f19]">
-                            {scoreCard?.points ?? 0}
-                          </div>
-                        </div>
-                        <div className="rounded-2xl border border-black/10 bg-white p-4">
-                          <div className="text-[11px] font-semibold text-black/50">
-                            Avg daily study
-                          </div>
-                          <div className="mt-1 font-display text-2xl font-semibold tabular-nums text-[#0b0f19]">
-                            {avgDailyStudyMinutes}m
-                          </div>
-                        </div>
+                      <div className="text-sm font-medium text-black/60">
+                        {user?.username ?? "Student"}
                       </div>
                     </div>
                   </div>
 
-                  {/* Details */}
-                  <div className="grid gap-4">
-                    <div className="space-y-2 rounded-2xl border border-border/50 bg-card/40 p-5">
-                      <div className="text-xs text-muted-foreground">
-                        Best subject
+                  {/* Top stats */}
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-2xl border border-black/10 bg-white p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-wide text-black/50">
+                        Overall percentile
                       </div>
-                      <div className="font-display text-xl font-semibold">
-                        {scoreCard?.bestSubjectId
-                          ? baseSubjects.find((s) => s.id === scoreCard.bestSubjectId)?.name ??
-                            scoreCard.bestSubjectId
+                      <div className="mt-1 font-display text-2xl font-semibold tabular-nums text-[#0b0f19]">
+                        {scoreCard?.overallPercentile != null
+                          ? `${Math.round(scoreCard.overallPercentile)}%`
                           : "—"}
                       </div>
                     </div>
-
-                    <div className="space-y-2 rounded-2xl border border-border/50 bg-card/40 p-5">
-                      <div className="text-xs text-muted-foreground">
-                        Weakest subject
+                    <div className="rounded-2xl border border-black/10 bg-white p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-wide text-black/50">
+                        Avg daily study
                       </div>
-                      <div className="font-display text-xl font-semibold">
-                        {scoreCard?.weakestSubjectId
-                          ? baseSubjects.find((s) => s.id === scoreCard.weakestSubjectId)?.name ??
-                            scoreCard.weakestSubjectId
-                          : "—"}
+                      <div className="mt-1 font-display text-2xl font-semibold tabular-nums text-[#0b0f19]">
+                        {avgDailyStudyMinutes}m
                       </div>
                     </div>
-
-                    <div className="space-y-2 rounded-2xl border border-border/50 bg-card/40 p-5">
-                      <div className="text-xs text-muted-foreground">
+                    <div className="rounded-2xl border border-black/10 bg-white p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-wide text-black/50">
                         Study streak
                       </div>
-                      <div className="font-display text-xl font-semibold tabular-nums">
-                        {scoreCard?.studyStreak ?? 0}{" "}
-                        <span className="text-base font-medium text-muted-foreground">
-                          days
-                        </span>
-                      </div>
-                      <div className="text-sm text-muted-foreground">
-                        Consecutive days meeting your study goal (synced when you use
-                        Track My Study while signed in).
+                      <div className="mt-1 font-display text-2xl font-semibold tabular-nums text-[#0b0f19]">
+                        {scoreCard?.studyStreak ?? 0}d
                       </div>
                     </div>
+                  </div>
+
+                  {/* Subject rows */}
+                  <div className="space-y-3">
+                    {scoreCardLoading ? (
+                      <div className="text-sm text-black/60">Loading…</div>
+                    ) : (scoreCard?.reportSubjects?.length ?? 0) > 0 ? (
+                      <div className="rounded-2xl border border-black/10 bg-white p-3 sm:p-4">
+                        <Table className="text-[15px] sm:text-base">
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="h-12 px-4 text-sm font-semibold text-black/60">
+                                Subject
+                              </TableHead>
+                              <TableHead className="h-12 px-4 text-sm font-semibold text-black/60">
+                                Weakest topic
+                              </TableHead>
+                              <TableHead className="h-12 px-4 text-sm font-semibold text-black/60">
+                                Strongest topic
+                              </TableHead>
+                              <TableHead className="h-12 px-4 text-right text-sm font-semibold text-black/60">
+                                Percentile
+                              </TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {(scoreCard?.reportSubjects ?? []).map((s) => {
+                              const name =
+                                baseSubjects.find((x) => x.id === s.subjectId)?.name ?? s.subjectId;
+                              const weak = s.weakestTopic
+                                ? `${s.weakestTopic.topic} (${s.weakestTopic.percent}%)`
+                                : "—";
+                              const strong = s.strongestTopic
+                                ? `${s.strongestTopic.topic} (${s.strongestTopic.percent}%)`
+                                : "—";
+                              return (
+                                <TableRow key={s.subjectId} className="hover:bg-slate-50/70">
+                                  <TableCell className="px-4 py-4 font-semibold text-[#0b0f19]">
+                                    {name}
+                                  </TableCell>
+                                  <TableCell className="px-4 py-4 text-black/70">
+                                    {weak}
+                                  </TableCell>
+                                  <TableCell className="px-4 py-4 text-black/70">
+                                    {strong}
+                                  </TableCell>
+                                  <TableCell className="px-4 py-4 text-right tabular-nums font-semibold text-[#0b0f19]">
+                                    {s.percentile != null ? `${Math.round(s.percentile)}%` : "—"}
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    ) : (
+                      <div className="text-sm text-black/60">
+                        No subject report rows yet.
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>
