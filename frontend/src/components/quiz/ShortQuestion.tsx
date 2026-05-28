@@ -463,7 +463,7 @@ export function ShortQuestion({
           <Button
             onClick={handleSubmit}
             disabled={!canSubmit}
-            className="shrink-0 gap-2 bg-brand hover:bg-brand-dark disabled:opacity-100 disabled:bg-brand/45 disabled:text-white/90"
+            className="shrink-0 gap-2 bg-brand hover:bg-brand-dark"
           >
             <Send className="size-4" />
             {submitted && isCorrect ? "Correct" : "Submit"}
