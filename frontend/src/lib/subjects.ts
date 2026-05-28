@@ -65,6 +65,14 @@ export const baseSubjects: Subject[] = [
     quiz: [],
   },
   {
+    id: "demo",
+    name: "Demo",
+    category: "Mathematics",
+    description:
+      "A blank sandbox subject for testing formats (no questions by default).",
+    quiz: [],
+  },
+  {
     id: "general-maths",
     name: "General Mathematics",
     category: "Mathematics",

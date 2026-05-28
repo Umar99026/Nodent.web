@@ -39,6 +39,7 @@ import { McqQuestion } from "@/components/quiz/McqQuestion";
 import { ShortQuestion } from "@/components/quiz/ShortQuestion";
 import { LongQuestion } from "@/components/quiz/LongQuestion";
 import { CommentThread } from "@/components/quiz/CommentThread";
+import { RichQuestionContent } from "@/components/quiz/RichQuestionContent";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -848,8 +849,12 @@ export default function QuizPage() {
                 {currentGroup && subjectId && (
                   <div className="max-h-[min(78vh,920px)] space-y-5 overflow-y-auto pr-1">
                     {stripQuestionHeadingFromPassage(currentGroup.passage) && (
-                      <div className="rounded-xl border border-black/10 bg-white/60 p-4 text-sm leading-relaxed text-foreground shadow-sm">
-                        {stripQuestionHeadingFromPassage(currentGroup.passage)}
+                      <div className="rounded-xl border border-black/10 bg-white/70 p-5 sm:p-6 text-base leading-relaxed text-foreground shadow-sm">
+                        <RichQuestionContent
+                          text={stripQuestionHeadingFromPassage(currentGroup.passage) ?? ""}
+                          preferMarkdown
+                          className="prose prose-lg max-w-none text-foreground [&_img]:w-full [&_img]:max-h-[680px] [&_img]:object-contain [&_img]:rounded-md [&_img]:border [&_img]:border-black/10"
+                        />
                       </div>
                     )}
                     {currentGroup.parts.map((part) => {
