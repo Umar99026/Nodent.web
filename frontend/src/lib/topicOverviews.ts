@@ -71,29 +71,7 @@ A high-scoring response:
 
 **Conclusion**
 - Return to the prompt
-- Summarise the text’s broader message
-
----
-
-#### Tips for this study platform
-
-**Useful practice modes**
-
-| Feature | Purpose |
-| --- | --- |
-| Prompt unpacking drills | Identify what the question is really asking |
-| Quote bank by theme | Memorisation and evidence selection |
-| Theme-to-evidence matching | Build analytical thinking |
-| Essay plan generator | Teach structure before full writing |
-| Paragraph feedback | Faster than marking whole essays |
-| “Plot summary vs analysis” detector | Avoid retelling |
-
-**Useful stats to show**
-- Text knowledge score
-- Prompt relevance score
-- Evidence quality score
-- Analysis depth score
-- Expression score`;
+- Summarise the text’s broader message`;
   }
   if (section === "B") {
     return `### Section B — Creating a text
@@ -169,30 +147,7 @@ Decide before you write:
 - Form: reflective speech
 - Purpose: to reflect and argue
 - Voice: thoughtful, sincere, hopeful
-- Main idea: protest does not always begin with grand gestures
-
----
-
-#### Tips for this study platform
-
-**Useful practice modes**
-
-| Feature | Purpose |
-| --- | --- |
-| Framework idea bank | Generate deeper ideas |
-| Stimulus integration practice | Prevent forced/superficial use |
-| Form selector | Teach different writing structures |
-| Voice/tone drills | Write with control |
-| Purpose checker | Check whether the piece explains/reflects/argues/expresses |
-| Timed writing prompts | Build exam speed |
-
-**Useful stats to show**
-- Framework relevance score
-- Stimulus integration score
-- Purpose clarity score
-- Voice control score
-- Cohesion score
-- Language quality score`;
+- Main idea: protest does not always begin with grand gestures`;
   }
   return `### Section C — Analysis of argument and language
 
@@ -247,7 +202,19 @@ Argument being made
 
 **Example sentence style**
 
-By describing the proposal as a “smarter investment”, the writer positions the audience to view the change as practical and responsible, strengthening support for their overall contention.`;
+By describing the proposal as a “smarter investment”, the writer positions the audience to view the change as practical and responsible, strengthening support for their overall contention.
+
+---
+
+#### Where to find practice articles
+
+For extra Section C practice, look for recent **opinion and analysis** pieces from Australian outlets such as:
+
+- [The Guardian — Comment is free (Australia)](https://www.theguardian.com/au/commentisfree)
+- [ABC News — Analysis & Opinion](https://www.abc.net.au/news/analysis-and-opinion)
+- [The Australia Institute — Opinions](https://australiainstitute.org.au/news/category/opinions/)
+
+Choose an article, identify the **contention**, map the main **arguments**, and practise analysing **language** (and **visuals** if present) using the paragraph formula above.`;
 }
 
 export function getTopicOverview(args: {

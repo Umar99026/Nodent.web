@@ -702,6 +702,18 @@ function computeExpectedAnswersFromQuestionText(questionRaw: unknown): string[] 
 }
 function nowIso(): string { return new Date().toISOString(); }
 
+/** Round to the nearest 2 (e.g. 66.7 → 66). */
+function roundPercentileToNearest2(value: number): number {
+  return Math.round(value / 2) * 2;
+}
+
+/** “Top X%” band from rank (1 = best). Rank 2 of 10 → 20. Nearest 2%. */
+function cohortPercentileFromRank(rank: number, total: number): number {
+  if (total < 1 || rank < 1 || rank > total) return 0;
+  const raw = (rank / total) * 100;
+  return Math.max(2, Math.min(100, roundPercentileToNearest2(raw)));
+}
+
 /** Neon/Drizzle often wrap the real Postgres message in `cause`. */
 function errorChain(e: unknown): string {
   const parts: string[] = [];
@@ -1943,7 +1955,7 @@ app.get("/api/scorecard", authMiddleware, async (c: any) => {
       const rnk = Number((rows.rows as any[])[0]?.rnk ?? 0);
       const cnt = Number((rows.rows as any[])[0]?.cnt ?? 0);
       if (!rnk || cnt <= 1) continue;
-      const pct = ((cnt - rnk) / Math.max(1, cnt - 1)) * 100;
+      const pct = cohortPercentileFromRank(rnk, cnt);
       sum += pct;
       n += 1;
     }
@@ -2028,7 +2040,7 @@ app.get("/api/scorecard", authMiddleware, async (c: any) => {
     const total = rankInSubject.rows?.length ? Number((rankInSubject.rows as any[])[0]?.cnt ?? 0) : 0;
     const percentile =
       rank != null && total > 1
-        ? ((total - rank) / Math.max(1, total - 1)) * 100
+        ? cohortPercentileFromRank(rank, total)
         : null;
 
     // Weakest/strongest topic for this user in this subject (mark-weighted %).
@@ -2533,9 +2545,7 @@ app.get("/api/competition/:subjectId/stats", authMiddleware, async (c: any) => {
     const idx = sortedEligible.findIndex((r) => r.user_id === user.id);
     rank = idx >= 0 ? idx + 1 : null;
     if (rank != null) {
-      const below = sortedEligible.filter((r) => pctRounded(r) < myPct).length;
-      // Percentile rank (higher is better). Defined so last of 2 => 50th percentile.
-      percentile = Math.round(((below + 1) / sortedEligible.length) * 100);
+      percentile = cohortPercentileFromRank(rank, sortedEligible.length);
     }
   }
 
@@ -2615,11 +2625,13 @@ app.get("/api/competition/:subjectId/stats", authMiddleware, async (c: any) => {
   function topicPercentile(topic: string): number | null {
     const list = byTopicUsers.get(topic);
     if (!list || list.length < 2) return null;
-    const mine = list.find((x) => x.userId === user.id);
-    if (!mine) return null;
-    const below = list.filter((x) => x.pctRounded < mine.pctRounded).length;
-    // Percentile rank (higher is better). Defined so last of 2 => 50th percentile.
-    return Math.round(((below + 1) / list.length) * 100);
+    const sorted = [...list].sort((a, b) => {
+      if (b.pctRounded !== a.pctRounded) return b.pctRounded - a.pctRounded;
+      return a.userId - b.userId;
+    });
+    const idx = sorted.findIndex((x) => x.userId === user.id);
+    if (idx < 0) return null;
+    return cohortPercentileFromRank(idx + 1, sorted.length);
   }
 
   const topicStats = (topicClassRows.rows as any[]).map((r) => ({
@@ -2635,6 +2647,8 @@ app.get("/api/competition/:subjectId/stats", authMiddleware, async (c: any) => {
     totalStudents,
     percentile,
     rank,
+    rankedStudents:
+      rank != null && sortedEligible.length > 0 ? sortedEligible.length : null,
     leaderboard: leaderboardData,
     questionStats,
     topicStats,

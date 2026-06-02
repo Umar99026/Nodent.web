@@ -23,6 +23,7 @@ import {
 import { subjectsForUser } from "@/lib/subjects";
 import type { Question, Subject } from "@/lib/subjects";
 import { isAdminUser } from "@/lib/constants";
+import { formatPercentileBadge } from "@/lib/percentileDisplay";
 import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
 import {
@@ -93,6 +94,7 @@ interface QuestionStat {
 interface CompetitionStats {
   rank: number | null;
   percentile: number | null;
+  rankedStudents?: number;
   totalStudents: number;
   leaderboard: LeaderboardEntry[];
   topicStats: TopicStat[];
@@ -151,16 +153,6 @@ function savePracticeState(
     getPracticeStorageKey(userId, subjectId),
     JSON.stringify(state),
   );
-}
-
-function getPercentileBadge(percentile: number) {
-  if (percentile >= 90)
-    return { label: "Top 10%", className: "bg-success/15 text-success" };
-  if (percentile >= 75)
-    return { label: "Top 25%", className: "bg-brand/15 text-brand-dark" };
-  if (percentile >= 50)
-    return { label: "Top 50%", className: "bg-amber/15 text-amber" };
-  return { label: `Top ${100 - Math.floor(percentile)}%`, className: "bg-muted text-muted-foreground" };
 }
 
 function getRankMedal(rank: number): string {
@@ -988,6 +980,11 @@ export default function SummaryPage() {
                   <span className="font-display text-3xl font-bold text-brand-dark">
                     {stats.rank ? getRankMedal(stats.rank) : "—"}
                   </span>
+                  {stats.rank != null && (stats.rankedStudents ?? 0) > 0 ? (
+                    <p className="mt-0.5 text-xs font-medium tabular-nums text-muted-foreground">
+                      {stats.rank} of {stats.rankedStudents}
+                    </p>
+                  ) : null}
                   <p className="mt-1 text-sm text-muted-foreground">
                     Your Rank
                   </p>
@@ -997,9 +994,9 @@ export default function SummaryPage() {
                 <CardContent className="flex flex-col items-center py-6 text-center">
                   {stats.percentile != null ? (
                     <Badge
-                      className={`text-sm px-3 py-1 ${getPercentileBadge(stats.percentile).className}`}
+                      className={`text-sm px-3 py-1 ${formatPercentileBadge(stats.percentile).className}`}
                     >
-                      {getPercentileBadge(stats.percentile).label}
+                      {formatPercentileBadge(stats.percentile).label}
                     </Badge>
                   ) : (
                     <span className="font-display text-xl font-semibold text-muted-foreground">
@@ -1202,7 +1199,7 @@ export default function SummaryPage() {
                     const isStrong = yourPct >= 80;
                     const tp = topic.topicPercentile;
                     const tpBadge =
-                      tp != null ? getPercentileBadge(tp) : null;
+                      tp != null ? formatPercentileBadge(tp) : null;
 
                     return (
                       <div key={topic.topic} className="space-y-2">
