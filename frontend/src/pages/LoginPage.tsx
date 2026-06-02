@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { passwordPolicyError } from "@/lib/passwordPolicy";
-import { Eye, EyeOff, Loader2, AlertCircle } from "lucide-react";
+import { Eye, EyeOff, Loader2, AlertCircle, ArrowLeft } from "lucide-react";
 
 interface FieldErrors {
   username?: string;
@@ -116,6 +116,14 @@ export default function LoginPage() {
   return (
     <AuthLayout authMode={tab === "signup" ? "signup" : "login"}>
       <div className="space-y-6">
+        <Link
+          to="/#demo"
+          className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <ArrowLeft className="size-4" />
+          Back to demo page
+        </Link>
+
         <div className="text-center">
           <h2 className="font-display text-2xl tracking-tight text-foreground">
             Welcome back
