@@ -824,28 +824,58 @@ function appOrigin(env: Env, requestUrl: string): string {
 async function sendPasswordResetEmail(env: Env, to: string, resetUrl: string): Promise<boolean> {
   const apiKey = String(env.RESEND_API_KEY || "").trim();
   const from = String(env.EMAIL_FROM || "Nodent <onboarding@resend.dev>").trim();
-  if (!apiKey) {
-    console.info("[password-reset] RESEND_API_KEY not set. Reset link:", resetUrl);
-    return false;
-  }
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from,
-      to: [to],
-      subject: "Reset your Nodent password",
-      html: `<p>Hi,</p><p>We received a request to reset your Nodent password. Click the link below — it expires in 1 hour.</p><p><a href="${resetUrl}">Reset password</a></p><p>If you did not request this, you can ignore this email.</p>`,
-    }),
-  });
-  if (!res.ok) {
+  const subject = "Reset your Nodent password";
+  const html = `<p>Hi,</p><p>We received a request to reset your Nodent password. Click the link below — it expires in 1 hour.</p><p><a href="${resetUrl}">Reset password</a></p><p>If you did not request this, you can ignore this email.</p>`;
+
+  // Preferred: Resend (requires API key)
+  if (apiKey) {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from,
+        to: [to],
+        subject,
+        html,
+      }),
+    });
+    if (res.ok) return true;
     console.error("[password-reset] Resend error:", await res.text());
+  }
+
+  // Fallback: MailChannels (works on Cloudflare Workers without an API key).
+  // You should set EMAIL_FROM to a domain you control for best deliverability.
+  try {
+    const parsedFrom = (() => {
+      const m = from.match(/^(.*?)<([^>]+)>$/);
+      if (m) return { name: m[1].trim() || "Nodent", email: m[2].trim() };
+      return { name: "Nodent", email: from };
+    })();
+
+    const res2 = await fetch("https://api.mailchannels.net/tx/v1/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        personalizations: [{ to: [{ email: to }] }],
+        from: { email: parsedFrom.email, name: parsedFrom.name },
+        subject,
+        content: [{ type: "text/html", value: html }],
+      }),
+    });
+    if (!res2.ok) {
+      console.error("[password-reset] MailChannels error:", await res2.text());
+      console.info("[password-reset] Reset link (email failed):", resetUrl);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.error("[password-reset] MailChannels exception:", errorChain(e));
+    console.info("[password-reset] Reset link (email failed):", resetUrl);
     return false;
   }
-  return true;
 }
 
 // ---- DB ----

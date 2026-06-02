@@ -108,6 +108,17 @@ function readInitialAuthState(): AuthState {
   }
 
   const cachedUser = readCachedUser();
+  // If a token exists but we don't have the cached user payload, treat it as logged out.
+  // This prevents an infinite spinner on first load / partial storage clears.
+  if (!cachedUser) {
+    localStorage.removeItem(STORAGE_KEYS.authToken);
+    return {
+      user: null,
+      token: null,
+      isAuthenticated: false,
+      isLoading: false,
+    };
+  }
   return {
     user: cachedUser,
     token: storedToken,
@@ -237,12 +248,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const logout = useCallback(async () => {
-    try {
-      await apiFetch(API_PATHS.auth.logout, { method: "POST" });
-    } catch {
-      // Logout endpoint failure is non-critical — clear local state anyway
-    }
-
+    // Clear local state immediately so the UI can redirect reliably.
     localStorage.removeItem(STORAGE_KEYS.authToken);
     localStorage.removeItem(STORAGE_KEYS.currentUser);
 
@@ -252,6 +258,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAuthenticated: false,
       isLoading: false,
     });
+
+    // Best-effort server logout (don't block UI).
+    void apiFetch(API_PATHS.auth.logout, { method: "POST" }).catch(() => {});
   }, []);
 
   const updateAccount = useCallback(
