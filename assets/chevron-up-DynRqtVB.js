@@ -1,0 +1,1 @@
+import{s as e}from"./button-7PUQrEvM.js";var t=e(`check`,[[`path`,{d:`M20 6 9 17l-5-5`,key:`1gmf2c`}]]),n=e(`chevron-up`,[[`path`,{d:`m18 15-6-6-6 6`,key:`153udz`}]]);export{t as n,n as t};
