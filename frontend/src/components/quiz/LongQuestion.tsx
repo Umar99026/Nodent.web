@@ -9,7 +9,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { PassageBlock, QuestionImageGrid } from "@/components/quiz/QuestionStimulus";
 import { RichQuestionContent } from "@/components/quiz/RichQuestionContent";
 import { writtenApiPath } from "@/lib/writtenAnswerUpload";
-import { displayMarks, stripQuestionHeadingFromPassage, stripQuestionNumberPrefix } from "@/lib/questionDisplay";
+import {
+  collectStimulusFromQuestion,
+  displayMarks,
+  hasVisibleStimulus,
+  stripQuestionHeadingFromPassage,
+  stripQuestionNumberPrefix,
+} from "@/lib/questionDisplay";
 import { toast } from "sonner";
 import {
   Save,
@@ -409,7 +415,15 @@ export function LongQuestion({
         )}
       </div>
 
-      {!hidePassage && <PassageBlock passage={stripQuestionHeadingFromPassage(question.passage)} />}
+      {!hidePassage && (() => {
+        const stimulus = collectStimulusFromQuestion(question);
+        return hasVisibleStimulus(stimulus) ? (
+          <PassageBlock
+            passage={stripQuestionHeadingFromPassage(stimulus.passage)}
+            imageUrls={stimulus.imageUrls}
+          />
+        ) : null;
+      })()}
       <QuestionImageGrid urls={question.imageUrls} title="Question figures & images" />
 
       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">

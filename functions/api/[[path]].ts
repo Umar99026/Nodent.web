@@ -2504,7 +2504,8 @@ app.get("/api/competition/:subjectId/stats", authMiddleware, async (c: any) => {
     rank = idx >= 0 ? idx + 1 : null;
     if (rank != null) {
       const below = sortedEligible.filter((r) => pctRounded(r) < myPct).length;
-      percentile = sortedEligible.length > 1 ? Math.round((below / (sortedEligible.length - 1)) * 100) : 100;
+      // Percentile rank (higher is better). Defined so last of 2 => 50th percentile.
+      percentile = Math.round(((below + 1) / sortedEligible.length) * 100);
     }
   }
 
@@ -2587,7 +2588,8 @@ app.get("/api/competition/:subjectId/stats", authMiddleware, async (c: any) => {
     const mine = list.find((x) => x.userId === user.id);
     if (!mine) return null;
     const below = list.filter((x) => x.pctRounded < mine.pctRounded).length;
-    return Math.round((below / (list.length - 1)) * 100);
+    // Percentile rank (higher is better). Defined so last of 2 => 50th percentile.
+    return Math.round(((below + 1) / list.length) * 100);
   }
 
   const topicStats = (topicClassRows.rows as any[]).map((r) => ({

@@ -55,7 +55,16 @@ export interface Subject {
   quiz: Question[];
 }
 
-export const baseSubjects: Subject[] = [
+/** Local sandbox — admin-only subject. */
+export const demoSubject: Subject = {
+  id: "demo",
+  name: "Demo",
+  category: "Mathematics",
+  description: "Local-only sandbox subject (blank by default).",
+  quiz: [],
+};
+
+export const coreSubjects: Subject[] = [
   {
     id: "methods",
     name: "Mathematical Methods",
@@ -89,4 +98,14 @@ export const baseSubjects: Subject[] = [
     quiz: [],
   },
 ];
+
+/** Subjects shown in the app (excludes admin-only subjects). */
+export const baseSubjects: Subject[] = coreSubjects;
+
+export function subjectsForUser(opts: { isAdmin?: boolean }): Subject[] {
+  const isAdmin = !!opts.isAdmin;
+  if (!isAdmin) return coreSubjects;
+  if (coreSubjects.some((s) => s.id === demoSubject.id)) return coreSubjects;
+  return [...coreSubjects, demoSubject];
+}
 

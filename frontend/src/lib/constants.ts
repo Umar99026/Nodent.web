@@ -19,6 +19,11 @@ export const STORAGE_KEYS = {
 // Hardcoded admin credentials (requested).
 export const ADMIN_EMAIL = "nodent.app@gmail.com";
 
+export function isAdminUser(user: { email?: string | null } | null | undefined): boolean {
+  const email = String(user?.email ?? "").toLowerCase();
+  return !!email && email === ADMIN_EMAIL.toLowerCase();
+}
+
 export const API_PATHS = {
   auth: {
     login: "/api/auth/login",

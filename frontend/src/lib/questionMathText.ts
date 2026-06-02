@@ -1,3 +1,5 @@
+import { mathifyQuestionText } from "@/lib/mathifyQuestionText";
+
 /**
  * Normalise imported / dechunked question text so recurrence relations and finance
  * notation render with KaTeX ($A_{n+1}$, $L_0$, etc.) instead of broken letter-per-line OCR.
@@ -200,6 +202,7 @@ export function normalizeQuestionMathText(raw: unknown): string {
   out = rewriteFinanceTemplates(out);
   out = normalizeRecurrenceNotation(out);
   out = wrapMathSegments(out);
+  out = mathifyQuestionText(out);
 
   return out;
 }

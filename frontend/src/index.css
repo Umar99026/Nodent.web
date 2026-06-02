@@ -205,6 +205,218 @@
   background: rgba(15, 23, 42, 0.2);
 }
 
+/* ——— Marketing landing page ——— */
+.landing-root {
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(86, 171, 230, 0.18), transparent),
+    linear-gradient(180deg, #f8fbff 0%, #ffffff 42%, #f4f9fd 100%);
+  background-attachment: fixed;
+}
+
+.landing-section {
+  scroll-margin-top: 5.5rem;
+}
+
+.landing-hero-glow {
+  background:
+    radial-gradient(circle at 30% 20%, rgba(127, 199, 242, 0.35), transparent 45%),
+    radial-gradient(circle at 70% 10%, rgba(86, 171, 230, 0.2), transparent 40%);
+}
+
+.landing-gradient-text {
+  background: linear-gradient(135deg, #3f97d8 0%, #56abe6 50%, #2f7fbf 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.landing-logo-n-pop {
+  animation: landing-logo-n-enter 1.1s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.landing-scroll-cue {
+  animation: landing-scroll-bounce 2s ease-in-out infinite;
+}
+
+.landing-hero-badge {
+  animation: landing-fade-up 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes landing-logo-n-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.92) translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes landing-scroll-bounce {
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.5;
+  }
+  50% {
+    transform: translateY(6px);
+    opacity: 1;
+  }
+}
+
+.landing-hero-float {
+  animation: landing-float-in 1s cubic-bezier(0.22, 1, 0.36, 1) 0.15s both;
+}
+
+.landing-mockup-main {
+  animation: landing-float-gentle 8s ease-in-out infinite;
+}
+
+.landing-mockup-card {
+  animation: landing-float-gentle 7s ease-in-out infinite 0.5s;
+}
+
+.landing-mockup-card-alt {
+  animation: landing-float-gentle 9s ease-in-out infinite 1s;
+}
+
+.landing-progress-bar {
+  animation: landing-progress 1.4s cubic-bezier(0.22, 1, 0.36, 1) 0.6s both;
+  transform-origin: left;
+}
+
+.landing-reveal {
+  opacity: 0;
+  transform: translateY(2rem);
+  transition:
+    opacity 0.75s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.75s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.landing-reveal-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.landing-feature-card {
+  will-change: transform;
+}
+
+.landing-bento {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 251, 255, 0.9) 100%);
+}
+
+.landing-demo-frame {
+  animation: landing-float-gentle 10s ease-in-out infinite;
+}
+
+.landing-demo-step {
+  animation: landing-demo-step-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.landing-demo-cursor {
+  animation: landing-demo-blink 1s step-end infinite;
+}
+
+.landing-demo-bar {
+  animation: landing-demo-bar-grow 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+  transform-origin: bottom;
+}
+
+@keyframes landing-demo-step-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes landing-demo-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+@keyframes landing-demo-bar-grow {
+  from {
+    transform: scaleY(0.2);
+    opacity: 0.4;
+  }
+  to {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+
+@keyframes landing-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(1rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes landing-float-in {
+  from {
+    opacity: 0;
+    transform: translateY(2.5rem) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes landing-float-gentle {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes landing-progress {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-logo-n-pop,
+  .landing-scroll-cue,
+  .landing-hero-badge,
+  .landing-hero-float,
+  .landing-mockup-main,
+  .landing-mockup-card,
+  .landing-mockup-card-alt,
+  .landing-demo-frame,
+  .landing-reveal,
+  .landing-demo-step,
+  .landing-demo-bar,
+  .landing-demo-cursor {
+    animation: none !important;
+    transition: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
 /* Paper texture for legacy compat */
 .paper-texture {
   background: rgba(255, 255, 255, 0.72);

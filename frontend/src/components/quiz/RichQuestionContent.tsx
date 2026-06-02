@@ -8,6 +8,7 @@ import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import "katex/dist/katex.min.css";
 import { cn } from "@/lib/utils";
 import { RichMathText } from "@/components/quiz/QuestionStimulus";
+import { absolutizeMarkdownAssetUrls } from "@/lib/questionDisplay";
 import { normalizeQuestionMathText } from "@/lib/questionMathText";
 
 const RICH_FORCE =
@@ -87,7 +88,7 @@ function looksLikePlainMathText(text: string): boolean {
   // If the author already used markdown/math syntax, keep markdown renderer.
   if (/[`#>|]|!\[[^\]]*\]\([^)]+\)|\$\$?/.test(t)) return false;
   // Heuristic math patterns from imports/paste.
-  return /(\d+\s*\/\s*\d+)|(\b[a-zA-Z]\s*\^\s*\d+)|(\bsqrt\s*\()|([<>]=|!=)|([xX*]\s*\d)|(\d\s*[xX*]\s*\d)|(\[\[.+\],\s*\[.+\]\])|(\[[^\]]+;[^\]]+\])/.test(
+  return /(\d+\s*\/\s*\d+)|([0-9A-Za-z]\^[0-9({])|(\b[a-zA-Z]\s*\^\s*\d+)|(\bsqrt\s*\()|([<>]=|!=)|([xX*]\s*\d)|(\d\s*[xX*]\s*\d)|(\[\[.+\],\s*\[.+\]\])|(\[[^\]]+;[^\]]+\])|(\\int|∫)|(\\ln|\\log|\\sin|\\cos|\\tan)|(\bf'\s*\()|(\be\^\{)/.test(
     t,
   );
 }
@@ -170,7 +171,9 @@ export function RichQuestionContent({
     preferMarkdown ||
     overviewMode ||
     looksLikeStructuredMarkdown(rawBody);
-  const body = preserveMarkdownStructure ? rawBody : normalizeQuestionMathText(rawBody);
+  const body = preserveMarkdownStructure
+    ? absolutizeMarkdownAssetUrls(rawBody)
+    : normalizeQuestionMathText(rawBody);
 
   // Never send structured Markdown (headings, lists, tables) through RichMathText — it blanks long notes.
   const useRichMathBranch =

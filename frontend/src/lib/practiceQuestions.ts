@@ -2,6 +2,7 @@ import type { AnswerPart, Question } from "@/lib/subjects";
 import { inferGeneralMathsAreaOfStudy } from "@/lib/generalMathsAreaTopic";
 import { inferMethodsAreaOfStudy } from "@/lib/methodsAreaTopic";
 import { inferSpecialistMathsAreaOfStudy } from "@/lib/specialistMathsAreaTopic";
+import { extractMarkdownImageUrls } from "@/lib/questionDisplay";
 import { normalizeQuestionMathText } from "@/lib/questionMathText";
 
 /**
@@ -85,11 +86,25 @@ export function normalizeImageUrl(s: string): string {
     // Browsers can fail to render these, so normalize aggressively.
     return t.replace(/\s+/g, "");
   }
-  // Pasted host or host/path without scheme (e.g. sandbox CDN domains)
-  if (/^[a-z0-9][a-z0-9+.-]*\.[a-z]{2,}/i.test(t)) {
+  // Site-relative public assets (must not become https://questions/...)
+  if (t.startsWith("/")) return t;
+  if (t.startsWith("questions/")) return `/${t}`;
+
+  // Pasted host or host/path without scheme (e.g. cdn.example.com/img.png)
+  const slashIdx = t.indexOf("/");
+  const host = slashIdx === -1 ? t : t.slice(0, slashIdx);
+  if (/^[a-z0-9][a-z0-9+.-]*\.[a-z]{2,}$/i.test(host)) {
     return `https://${t.replace(/^\/+/, "")}`;
   }
-  return t;
+  return `/${t.replace(/^\/+/, "")}`;
+}
+
+/** Resolve image src for img tags — keeps /questions/... on the app origin. */
+export function resolveQuestionImageSrc(url: string): string {
+  const t = normalizeImageUrl(url);
+  if (!t) return "";
+  if (/^https?:\/\//i.test(t) || /^data:/i.test(t) || t.startsWith("//")) return t;
+  return t.startsWith("/") ? t : `/${t.replace(/^\/+/, "")}`;
 }
 
 export function normalizeImageUrls(
@@ -289,8 +304,14 @@ export function normalizeCustomQuestion(raw: unknown, subjectIdHint?: string): Q
   const marks = typeof q.marks === "number" ? q.marks : undefined;
   const passageRaw = cleanQuestionText(q.passage);
   const guidanceRaw = cleanQuestionText(q.guidance);
-  const passage = passageRaw ? passageRaw : undefined;
+  let passage = passageRaw ? passageRaw : undefined;
   const guidance = guidanceRaw ? guidanceRaw : undefined;
+  if (passage) {
+    const fromPassage = extractMarkdownImageUrls(passage);
+    if (fromPassage.length) {
+      imageUrls = normalizeImageUrls([...(imageUrls ?? []), ...fromPassage]);
+    }
+  }
 
   const sid = canonicalSubjectId(
     String(subjectIdHint ?? q.subject_id ?? q.subjectId ?? ""),

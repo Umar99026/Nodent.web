@@ -1,7 +1,13 @@
 import { useState, useEffect } from "react";
 import { cn, getQuestionTypeLabel } from "@/lib/utils";
 import type { McqQuestion as McqQuestionType } from "@/lib/subjects";
-import { displayMarks, stripQuestionHeadingFromPassage, stripQuestionNumberPrefix } from "@/lib/questionDisplay";
+import {
+  collectStimulusFromQuestion,
+  displayMarks,
+  hasVisibleStimulus,
+  stripQuestionHeadingFromPassage,
+  stripQuestionNumberPrefix,
+} from "@/lib/questionDisplay";
 import { Badge } from "@/components/ui/badge";
 import { PassageBlock, QuestionImageGrid } from "@/components/quiz/QuestionStimulus";
 import { RichQuestionContent } from "@/components/quiz/RichQuestionContent";
@@ -110,7 +116,15 @@ export function McqQuestion({
         )}
       </div>
 
-      {!hidePassage && <PassageBlock passage={stripQuestionHeadingFromPassage(question.passage)} />}
+      {!hidePassage && (() => {
+        const stimulus = collectStimulusFromQuestion(question);
+        return hasVisibleStimulus(stimulus) ? (
+          <PassageBlock
+            passage={stripQuestionHeadingFromPassage(stimulus.passage)}
+            imageUrls={stimulus.imageUrls}
+          />
+        ) : null;
+      })()}
       <QuestionImageGrid urls={question.imageUrls} title="Question figures & images" />
 
       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">

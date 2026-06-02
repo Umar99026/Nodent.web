@@ -1,7 +1,13 @@
 import { useState, useEffect } from "react";
 import { cn, getQuestionTypeLabel, inferDpHintFromAccepted, isAnswerCorrect } from "@/lib/utils";
 import type { ShortQuestion as ShortQuestionType } from "@/lib/subjects";
-import { displayMarks, stripQuestionHeadingFromPassage, stripQuestionNumberPrefix } from "@/lib/questionDisplay";
+import {
+  collectStimulusFromQuestion,
+  displayMarks,
+  hasVisibleStimulus,
+  stripQuestionHeadingFromPassage,
+  stripQuestionNumberPrefix,
+} from "@/lib/questionDisplay";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -315,7 +321,15 @@ export function ShortQuestion({
         )}
       </div>
 
-      {!hidePassage && <PassageBlock passage={stripQuestionHeadingFromPassage(question.passage)} />}
+      {!hidePassage && (() => {
+        const stimulus = collectStimulusFromQuestion(question);
+        return hasVisibleStimulus(stimulus) ? (
+          <PassageBlock
+            passage={stripQuestionHeadingFromPassage(stimulus.passage)}
+            imageUrls={stimulus.imageUrls}
+          />
+        ) : null;
+      })()}
       <QuestionImageGrid urls={question.imageUrls} title="Question figures & images" />
 
       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">

@@ -1,4 +1,5 @@
 import type { Question } from "@/lib/subjects";
+import { collectStimulusFromParts } from "@/lib/questionDisplay";
 import { getStableQuestionIndex } from "@/lib/practiceKeys";
 import { getQuestionGroupKey } from "@/lib/quizShuffle";
 
@@ -7,6 +8,7 @@ export { getQuestionGroupKey };
 export interface QuestionStimulusGroup {
   key: string;
   passage?: string;
+  imageUrls?: string[];
   parts: Question[];
 }
 
@@ -27,8 +29,17 @@ export function buildGroupsFromOrderedFlat(
     if (last && last.key === key) {
       last.parts.push(q);
       if (!last.passage && passage) last.passage = passage;
+      const merged = collectStimulusFromParts(last.parts);
+      last.passage = merged.passage ?? last.passage;
+      last.imageUrls = merged.imageUrls.length ? merged.imageUrls : last.imageUrls;
     } else {
-      out.push({ key, passage, parts: [q] });
+      const stimulus = collectStimulusFromParts([q]);
+      out.push({
+        key,
+        passage: stimulus.passage ?? passage,
+        imageUrls: stimulus.imageUrls.length ? stimulus.imageUrls : undefined,
+        parts: [q],
+      });
     }
   }
   return out;

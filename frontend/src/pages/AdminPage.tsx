@@ -50,7 +50,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 
-import { baseSubjects } from "@/lib/subjects";
+import { baseSubjects, subjectsForUser } from "@/lib/subjects";
 import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
 
@@ -118,6 +118,7 @@ export default function AdminPage() {
   const { user } = useAuth();
   const isAdminEmail = user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
   const isAdmin = isAdminEmail;
+  const visibleSubjects = useMemo(() => subjectsForUser({ isAdmin }), [isAdmin]);
 
   useEffect(() => {
     if (!isAdmin) {
@@ -239,7 +240,7 @@ export default function AdminPage() {
     return {
       id: String(q.id ?? ""),
       subjectId: String(q.subjectId ?? subjectIdFallback ?? ""),
-      subjectName: baseSubjects.find(
+      subjectName: visibleSubjects.find(
         (s) => s.id === canonicalSubjectId(String(q.subjectId ?? subjectIdFallback ?? "")),
       )?.name,
       type: (q.type as QuestionType) ?? "long_answer",
@@ -1015,7 +1016,7 @@ export default function AdminPage() {
     const normalizeSubjectId = (raw: unknown): string => {
       const v = String(raw ?? "").trim();
       if (!v || v === "<PUT_SUBJECT_ID_HERE>") {
-        return hintedSubjectId || subjectId || baseSubjects[0]?.id || "methods";
+        return hintedSubjectId || subjectId || visibleSubjects[0]?.id || baseSubjects[0]?.id || "methods";
       }
       return v;
     };
@@ -1599,11 +1600,14 @@ export default function AdminPage() {
   );
 
   const mathsBankStats = useMemo(() => {
-    return (["methods", "general-maths", "specialist-maths"] as const).map((sid) => {
+    const mathsIds = baseSubjects
+      .filter((s) => s.id !== "english")
+      .map((s) => s.id);
+    return mathsIds.map((sid) => {
       const count = questions.filter(
         (q) => canonicalSubjectId(String(q.subjectId ?? "")) === sid,
       ).length;
-      const name = baseSubjects.find((s) => s.id === sid)?.name ?? sid;
+      const name = visibleSubjects.find((s) => s.id === sid)?.name ?? sid;
       return { sid, name, count };
     });
   }, [questions]);
@@ -1777,6 +1781,26 @@ export default function AdminPage() {
       edgeToEdgeHeader
     >
       <div className="max-w-none space-y-8">
+        {import.meta.env.DEV ? (
+          <Card className="border-brand/30 bg-brand/5 paper-texture">
+            <CardHeader className="pb-2">
+              <CardTitle className="font-display text-lg">Demo subject (localhost only)</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm text-muted-foreground">
+              <p>
+                Choose <span className="font-medium text-foreground">Demo</span> in the{" "}
+                <span className="font-medium text-foreground">Subject</span> dropdown below, or set{" "}
+                <code className="rounded bg-black/10 px-1">subject_id</code> to{" "}
+                <code className="rounded bg-black/10 px-1">demo</code> in bulk import. Demo never
+                ships on the live site.
+              </p>
+              <p>
+                After import, add Demo on your dashboard under My Subjects to practice it.
+              </p>
+            </CardContent>
+          </Card>
+        ) : null}
+
         <Card className="paper-texture">
           <CardHeader>
             <CardTitle className="font-display text-lg">Bulk import (paste table)</CardTitle>
@@ -1910,12 +1934,12 @@ methods\tmcq\tAlgebra\t\t1. Simplify...\t["A","B","C","D"]\tA\t\t1\t\t["https://
                   <SelectValue placeholder="Select a subject" />
                 </SelectTrigger>
                 <SelectContent>
-                  {baseSubjects.map((s) => (
+                  {visibleSubjects.map((s) => (
                     <SelectItem key={s.id} value={s.id}>
                       {s.name}
                     </SelectItem>
                   ))}
-                  {baseSubjects.length === 0 && (
+                  {visibleSubjects.length === 0 && (
                     <SelectItem value="__none" disabled>
                       No subjects available
                     </SelectItem>
@@ -2360,7 +2384,7 @@ C\tSection C Argument Prompts\tWrite an argument on patience in modern life.`}
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All subjects</SelectItem>
-                  {baseSubjects.map((s) => (
+                  {visibleSubjects.map((s) => (
                     <SelectItem key={s.id} value={s.id}>
                       {s.name}
                     </SelectItem>
@@ -2376,6 +2400,16 @@ C\tSection C Argument Prompts\tWrite an argument on patience in modern life.`}
             ) : questions.length === 0 && !englishPrompts.length ? (
               <p className="py-8 text-center text-sm text-muted-foreground">
                 No questions or prompts yet. Add maths questions above or import English prompts here.
+              </p>
+            ) : subjectFilter !== "all" && filteredQuestions.length === 0 ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                No questions for{" "}
+                <span className="font-medium text-foreground">
+                  {visibleSubjects.find((s) => s.id === subjectFilter)?.name ?? subjectFilter}
+                </span>{" "}
+                yet. Use Add Question or bulk import with{" "}
+                <code className="rounded bg-black/10 px-1">subject_id</code>{" "}
+                <code className="rounded bg-black/10 px-1">{subjectFilter}</code>.
               </p>
             ) : (
               <div className="space-y-2">

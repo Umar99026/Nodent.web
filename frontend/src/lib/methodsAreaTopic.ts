@@ -44,6 +44,8 @@ const LEGACY_TOPIC_MAP: Record<string, MethodsTopic> = {
   "differential calculus": "Differential calculus",
   "integral calculus": "Integral calculus",
   integration: "Integral calculus",
+  "definite integrals": "Integral calculus",
+  "definite integral": "Integral calculus",
   differentiation: "Differential calculus",
   optimisation: "Applications of differentiation",
   optimization: "Applications of differentiation",
@@ -166,7 +168,8 @@ function scoreTopics(blob: string): Record<MethodsTopic, number> {
 
   const integral =
     n(/\banti-?deriv|\bdefinite\s+integral\b|\barea\s+under\b/i, 5) +
-    n(/\barea\s+between\s+curves\b/i, 4);
+    n(/\barea\s+between\s+curves\b/i, 4) +
+    n(/\\int|∫|\bdx\b/i, 3);
 
   const appInt =
     n(/\bprobability\s+density\b|\bpdf\b|\btotal\s+probability\b.*\bintegrat/i, 4) +

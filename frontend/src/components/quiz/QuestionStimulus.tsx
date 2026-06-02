@@ -1,7 +1,11 @@
 import { BookOpen } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { RichQuestionContent } from "@/components/quiz/RichQuestionContent";
-import { normalizeImageUrls } from "@/lib/practiceQuestions";
+import {
+  collectStimulusFromText,
+  hasVisibleStimulus,
+} from "@/lib/questionDisplay";
+import { normalizeImageUrls, resolveQuestionImageSrc } from "@/lib/practiceQuestions";
 import katex from "katex";
 import "katex/dist/katex.min.css";
 
@@ -45,6 +49,17 @@ function autoMathify(text: string): string {
     /\?\s*\(\s*([^\s)]+)\s*to\s*([^\s)]+)\s*\)/gi,
     "\\int_{$1}^{$2}",
   );
+  // Plain text: ∫(0 to 1) (e^(4x)-3x) dx
+  out = out.replace(
+    /∫\s*\(\s*([^)]+?)\s+to\s+([^)]+?)\s*\)\s*\(([^)]+)\)\s*dx/gi,
+    (_m, a, b, integrand) => {
+      const body = String(integrand)
+        .replace(/e\^\(([^)]+)\)/gi, "e^{$1}")
+        .replace(/e\^([0-9]+[a-z])/gi, "e^{$1}");
+      return `\\int_{${String(a).trim()}}^{${String(b).trim()}} (${body})\\,dx`;
+    },
+  );
+  out = out.replace(/e\^\(([^)]+)\)/gi, "e^{$1}");
   // Common OCR shorthand: "e 7x" -> "e^{7x}" (exponential term).
   out = out.replace(/\be\s+([+-]?\d+(?:\.\d+)?\s*[A-Za-z])\b/g, (_m, p1) => {
     const exp = String(p1).replace(/\s+/g, "");
@@ -198,8 +213,19 @@ export function RichMathText({ text, className }: { text: string; className?: st
 }
 
 /** Shared passage / stimulus block for MCQ, short, and long practice questions. */
-export function PassageBlock({ passage }: { passage?: string }) {
-  if (!passage?.trim()) return null;
+export function PassageBlock({
+  passage,
+  imageUrls,
+}: {
+  passage?: string;
+  imageUrls?: string[];
+}) {
+  const stimulus = collectStimulusFromText(passage, imageUrls);
+  if (!hasVisibleStimulus(stimulus)) return null;
+
+  const stimulusImages = normalizeImageUrls(stimulus.imageUrls);
+  const prose = stimulus.passage;
+
   return (
     <Card className="border-l-4 border-l-brand/40 bg-muted/60">
       <CardHeader className="pb-2">
@@ -208,13 +234,19 @@ export function PassageBlock({ passage }: { passage?: string }) {
           Stimulus / passage
         </CardTitle>
       </CardHeader>
-      <CardContent>
-        <blockquote className="text-lg leading-relaxed text-foreground/90 sm:text-xl">
-          <RichQuestionContent
-            text={passage.trim()}
-            className="max-w-none leading-relaxed"
-          />
-        </blockquote>
+      <CardContent className="space-y-4">
+        {stimulusImages?.length ? (
+          <QuestionImageGrid urls={stimulusImages} title="Source material" />
+        ) : null}
+        {prose ? (
+          <blockquote className="text-lg leading-relaxed text-foreground/90 sm:text-xl">
+            <RichQuestionContent
+              text={prose}
+              preferMarkdown
+              className="max-w-none leading-relaxed"
+            />
+          </blockquote>
+        ) : null}
       </CardContent>
     </Card>
   );
@@ -243,28 +275,31 @@ export function QuestionImageGrid({
       </p>
       <div className="max-h-[min(70vh,560px)] space-y-4 overflow-y-auto pr-1">
         <div className="grid gap-4 sm:grid-cols-2">
-          {list.map((src, i) => (
+          {list.map((src, i) => {
+            const resolved = resolveQuestionImageSrc(src);
+            return (
             <a
-              key={`fig-${i}-${src.slice(0, 48)}`}
-              href={src}
+              key={`fig-${i}-${resolved.slice(0, 48)}`}
+              href={resolved}
               target="_blank"
               rel="noopener noreferrer"
               className="block overflow-hidden rounded-xl border border-black/10 bg-white shadow-sm outline-none ring-brand/30 focus-visible:ring-2"
               title="Open image in new tab"
             >
               <img
-                src={src}
+                src={resolved}
                 alt="Question figure"
-                className="max-h-72 w-full bg-muted/20 object-contain object-center sm:max-h-80"
+                className="min-h-24 max-h-72 w-full bg-muted/20 object-contain object-center sm:max-h-80"
                 loading="lazy"
                 decoding="async"
                 onError={(e) => {
-                  e.currentTarget.alt = "Image failed to load (check data URL / length).";
-                  e.currentTarget.classList.add("opacity-50");
+                  e.currentTarget.alt = "Image failed to load";
+                  e.currentTarget.classList.add("opacity-70");
                 }}
               />
             </a>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>

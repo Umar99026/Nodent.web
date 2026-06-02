@@ -49,6 +49,11 @@ export function getQuestionGroupKey(q: Question, bank: Question[]): string {
   if (typeof anyQ.passage === "string" && anyQ.passage.trim()) {
     return `passage:${anyQ.passage.trim()}`;
   }
+  const imgList = (q as { imageUrls?: string[] }).imageUrls;
+  if (Array.isArray(imgList) && imgList.length) {
+    const first = String(imgList[0] ?? "").trim();
+    if (first) return `img:${first}`;
+  }
   const idx = getStableQuestionIndex(bank, q);
   const solo = idx >= 0 ? idx : 0;
   return `solo:${solo}_${anyQ.id != null ? String(anyQ.id) : "noid"}`;

@@ -39,9 +39,10 @@ import {
   Star,
 } from "lucide-react";
 
-import { baseSubjects } from "@/lib/subjects";
+import { baseSubjects, subjectsForUser } from "@/lib/subjects";
 import type { Subject } from "@/lib/subjects";
 import { localDateISO } from "@/lib/utils";
+import { isAdminUser } from "@/lib/constants";
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -64,6 +65,13 @@ function saveMySubjects(userId: string, subjects: Subject[]) {
   );
 }
 
+function withAdminDemoSubject(subjects: Subject[], isAdmin: boolean): Subject[] {
+  if (!isAdmin) return subjects.filter((s) => s.id !== "demo");
+  if (subjects.some((s) => s.id === "demo")) return subjects;
+  const demo = subjectsForUser({ isAdmin: true }).find((s) => s.id === "demo");
+  return demo ? [...subjects, demo] : subjects;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
@@ -71,6 +79,7 @@ function saveMySubjects(userId: string, subjects: Subject[]) {
 export default function DashboardPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const isAdmin = isAdminUser(user);
   const userId = String(user?.id ?? "anonymous");
   const initials = user?.username
     ? user.username
@@ -82,7 +91,7 @@ export default function DashboardPage() {
     : "?";
 
   const [mySubjects, setMySubjects] = useState<Subject[]>(() =>
-    getMySubjects(userId),
+    withAdminDemoSubject(getMySubjects(userId), isAdmin),
   );
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -96,7 +105,8 @@ export default function DashboardPage() {
         if (cancelled) return;
         const ids = new Set((data.subjectIds ?? []).map(String));
         if (ids.size === 0) return;
-        const next = baseSubjects.filter((s) => ids.has(s.id));
+        const visible = subjectsForUser({ isAdmin });
+        const next = withAdminDemoSubject(visible.filter((s) => ids.has(s.id)), isAdmin);
         setMySubjects(next);
         saveMySubjects(userId, next);
       } catch {
@@ -106,7 +116,7 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [user, userId]);
+  }, [user, userId, isAdmin]);
 
   /* ------ subject management ------ */
 
@@ -148,12 +158,13 @@ export default function DashboardPage() {
 
   const availableSubjects = useMemo(() => {
     const myIds = new Set(mySubjects.map((s) => s.id));
-    return baseSubjects.filter(
+    const visible = subjectsForUser({ isAdmin });
+    return visible.filter(
       (s) =>
         !myIds.has(s.id) &&
         s.name.toLowerCase().includes(searchQuery.toLowerCase()),
     );
-  }, [mySubjects, searchQuery]);
+  }, [mySubjects, searchQuery, isAdmin]);
 
   interface ScorecardData {
     totalStudents: number;

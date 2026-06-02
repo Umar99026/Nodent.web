@@ -3,7 +3,7 @@ import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { lazy, Suspense, type ReactNode } from "react";
 import { StudyTimerProvider } from "@/context/StudyTimerContext";
-import { ADMIN_EMAIL } from "@/lib/constants";
+import { ADMIN_EMAIL, STORAGE_KEYS } from "@/lib/constants";
 
 // Lazy-load page components — stubs will be replaced with real implementations
 const LoginPage = lazy(() => import("@/pages/LoginPage"));
@@ -23,6 +23,7 @@ const EnglishPromptResponsesPage = lazy(
 const AdminPage = lazy(() => import("@/pages/AdminPage"));
 const UploadWrittenImagesPage = lazy(() => import("@/pages/UploadWrittenImagesPage"));
 const PracticeSetupPage = lazy(() => import("@/pages/PracticeSetupPage"));
+const LandingPage = lazy(() => import("@/pages/LandingPage"));
 
 function LoadingFallback() {
   return (
@@ -40,10 +41,17 @@ function LoadingFallback() {
 /**
  * Protects a route — redirects unauthenticated users to /login.
  */
+function hasStoredAuthToken() {
+  return (
+    typeof window !== "undefined" &&
+    !!localStorage.getItem(STORAGE_KEYS.authToken)
+  );
+}
+
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
 
-  if (isLoading) {
+  if (isLoading && hasStoredAuthToken()) {
     return <LoadingFallback />;
   }
 
@@ -57,7 +65,7 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
 function AdminOnlyRoute({ children }: { children: ReactNode }) {
   const { user, isLoading } = useAuth();
 
-  if (isLoading) return <LoadingFallback />;
+  if (isLoading && hasStoredAuthToken()) return <LoadingFallback />;
 
   const isAdminEmail = user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
   const isAdmin = isAdminEmail;
@@ -72,7 +80,7 @@ function AdminOnlyRoute({ children }: { children: ReactNode }) {
 function GuestRoute({ children }: { children: ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
 
-  if (isLoading) {
+  if (isLoading && hasStoredAuthToken()) {
     return <LoadingFallback />;
   }
 
@@ -85,16 +93,15 @@ function GuestRoute({ children }: { children: ReactNode }) {
 
 function RootRedirect() {
   const { isAuthenticated, isLoading } = useAuth();
-
-  if (isLoading) {
+  if (isLoading && hasStoredAuthToken()) {
     return <LoadingFallback />;
   }
 
-  return isAuthenticated ? (
-    <Navigate to="/dashboard" replace />
-  ) : (
-    <Navigate to="/login" replace />
-  );
+  if (isAuthenticated) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return <LandingPage />;
 }
 
 function AppRoutes() {

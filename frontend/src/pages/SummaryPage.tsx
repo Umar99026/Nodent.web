@@ -20,8 +20,9 @@ import {
   getQuestionGroupKey,
   randomizedQuestionsForSubject,
 } from "@/lib/quizShuffle";
-import { baseSubjects } from "@/lib/subjects";
+import { subjectsForUser } from "@/lib/subjects";
 import type { Question, Subject } from "@/lib/subjects";
+import { isAdminUser } from "@/lib/constants";
 import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
 import {
@@ -177,6 +178,7 @@ export default function SummaryPage() {
   const { subjectId } = useParams<{ subjectId: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const isAdmin = isAdminUser(user);
 
   const [leaderboardRange, setLeaderboardRange] = useState<"week" | "all">(
     "all",
@@ -193,8 +195,15 @@ export default function SummaryPage() {
 
   // Find subject
   const subject: Subject | undefined = useMemo(() => {
-    return baseSubjects.find((s) => s.id === subjectId);
-  }, [subjectId]);
+    const visible = subjectsForUser({ isAdmin });
+    return visible.find((s) => s.id === subjectId);
+  }, [subjectId, isAdmin]);
+
+  useEffect(() => {
+    if (String(subjectId) === "demo" && !isAdmin) {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [subjectId, isAdmin, navigate]);
 
   // Load practice state
   const practiceState: PracticeState | null = useMemo(() => {

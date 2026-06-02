@@ -13,8 +13,9 @@ import {
   practiceQuestionsForSubject,
   questionMatchesPracticeTopic,
 } from "@/lib/practiceQuestions";
-import { baseSubjects } from "@/lib/subjects";
+import { subjectsForUser } from "@/lib/subjects";
 import type { Question, Subject } from "@/lib/subjects";
+import { isAdminUser } from "@/lib/constants";
 import {
   getStableQuestionIndex,
   normalizeAnswerMap,
@@ -33,7 +34,12 @@ import {
   getAllPartsInGroup,
   type QuestionStimulusGroup,
 } from "@/lib/questionGroups";
-import { stripQuestionHeadingFromPassage } from "@/lib/questionDisplay";
+import {
+  collectStimulusFromParts,
+  hasVisibleStimulus,
+  stripQuestionHeadingFromPassage,
+} from "@/lib/questionDisplay";
+import { PassageBlock } from "@/components/quiz/QuestionStimulus";
 import { AppShell } from "@/components/layout/AppShell";
 import { McqQuestion } from "@/components/quiz/McqQuestion";
 import { ShortQuestion } from "@/components/quiz/ShortQuestion";
@@ -172,6 +178,7 @@ export default function QuizPage() {
     searchParams.get("review") === "wrong";
   const wrongOnlyKeyParam = searchParams.get("key");
   const { user } = useAuth();
+  const isAdmin = isAdminUser(user);
   const { isInactive, resetInactivity } = useInactivity();
 
   const [showInactivityDialog, setShowInactivityDialog] = useState(false);
@@ -192,9 +199,17 @@ export default function QuizPage() {
 
   // Find subject (used for display metadata only)
   const subject: Subject | undefined = useMemo(() => {
-    return baseSubjects.find((s) => s.id === subjectId);
-  }, [subjectId]);
+    const visible = subjectsForUser({ isAdmin });
+    return visible.find((s) => s.id === subjectId);
+  }, [subjectId, isAdmin]);
   const isMathSubject = /math/i.test(subject?.name ?? "");
+
+  // Demo subject is admin-only (guard direct URL access).
+  useEffect(() => {
+    if (String(subjectId) === "demo" && !isAdmin) {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [subjectId, isAdmin, navigate]);
 
   useEffect(() => {
     setInitialized(false);
@@ -397,8 +412,13 @@ export default function QuizPage() {
         if (seenGk.has(gk)) continue;
         seenGk.add(gk);
         const parts = getAllPartsInGroup(gk, questions);
-        const passage = parts.find((p) => p.passage?.trim())?.passage?.trim();
-        out.push({ key: gk, passage, parts });
+        const stimulus = collectStimulusFromParts(parts);
+        out.push({
+          key: gk,
+          passage: stimulus.passage,
+          imageUrls: stimulus.imageUrls.length ? stimulus.imageUrls : undefined,
+          parts,
+        });
       }
       const order = new Map<string, number>();
       randomizedQuestions.forEach((q, i) => {
@@ -425,8 +445,15 @@ export default function QuizPage() {
         const match = wrongs.find((g) => g.key === gk);
         if (match) return [match];
         const parts = getAllPartsInGroup(gk, questions);
-        const passage = parts.find((p) => p.passage?.trim())?.passage?.trim();
-        return [{ key: gk, passage, parts }];
+        const stimulus = collectStimulusFromParts(parts);
+        return [
+          {
+            key: gk,
+            passage: stimulus.passage,
+            imageUrls: stimulus.imageUrls.length ? stimulus.imageUrls : undefined,
+            parts,
+          },
+        ];
       } catch {
         return [];
       }
@@ -596,6 +623,10 @@ export default function QuizPage() {
   }, [displayGroups.length]);
 
   const currentGroup = displayGroups[currentIndex] ?? null;
+  const currentGroupStimulus = useMemo(
+    () => (currentGroup ? collectStimulusFromParts(currentGroup.parts) : null),
+    [currentGroup],
+  );
 
   // Keep the currently visible group pinned so a correct answer
   // doesn't immediately remove it from the active list and "jump" UI.
@@ -847,10 +878,11 @@ export default function QuizPage() {
               <CardContent className="pt-2">
                 {currentGroup && subjectId && (
                   <div className="max-h-[min(78vh,920px)] space-y-5 overflow-y-auto pr-1">
-                    {stripQuestionHeadingFromPassage(currentGroup.passage) && (
-                      <div className="rounded-xl border border-black/10 bg-white/60 p-4 text-sm leading-relaxed text-foreground shadow-sm">
-                        {stripQuestionHeadingFromPassage(currentGroup.passage)}
-                      </div>
+                    {currentGroupStimulus && hasVisibleStimulus(currentGroupStimulus) && (
+                      <PassageBlock
+                        passage={stripQuestionHeadingFromPassage(currentGroupStimulus.passage)}
+                        imageUrls={currentGroupStimulus.imageUrls}
+                      />
                     )}
                     {currentGroup.parts.map((part) => {
                       const qk = questionKeyStable(
@@ -862,7 +894,9 @@ export default function QuizPage() {
                       const alreadySubmitted = ans !== undefined;
                       const markedCorrect = ans === true;
                       const lockAfterSubmit = !isWrongReview && alreadySubmitted;
-                      const hidePassage = Boolean(currentGroup.passage?.trim());
+                      const hidePassage = Boolean(
+                        currentGroupStimulus && hasVisibleStimulus(currentGroupStimulus),
+                      );
                       const partMarks =
                         typeof part.marks === "number"
                           ? part.marks

@@ -14,7 +14,14 @@ import { buildGroupsFromOrderedFlat } from "@/lib/questionGroups";
 import { McqQuestion } from "@/components/quiz/McqQuestion";
 import { ShortQuestion } from "@/components/quiz/ShortQuestion";
 import { LongQuestion } from "@/components/quiz/LongQuestion";
-import { stripQuestionHeadingFromPassage } from "@/lib/questionDisplay";
+import {
+  collectStimulusFromParts,
+  hasVisibleStimulus,
+  stripQuestionHeadingFromPassage,
+} from "@/lib/questionDisplay";
+import { RichQuestionContent } from "@/components/quiz/RichQuestionContent";
+import { QuestionImageGrid } from "@/components/quiz/QuestionStimulus";
+import { normalizeImageUrls } from "@/lib/practiceQuestions";
 import { formatSeconds, getQuestionTypeLabel } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -286,7 +293,13 @@ export default function StudyModePage() {
   }, [running]);
 
   const currentGroup = studyGroups[index] ?? null;
-  const hidePassageForParts = Boolean(currentGroup?.passage?.trim());
+  const currentGroupStimulus = useMemo(
+    () => (currentGroup ? collectStimulusFromParts(currentGroup.parts) : null),
+    [currentGroup],
+  );
+  const hidePassageForParts = Boolean(
+    currentGroupStimulus && hasVisibleStimulus(currentGroupStimulus),
+  );
 
   const questionPreviewByKey = useMemo(() => {
     if (!subjectId) return new Map<string, { topic: string; text: string }>();
@@ -751,14 +764,24 @@ export default function StudyModePage() {
                   )}
                 </div>
 
-                {stripQuestionHeadingFromPassage(currentGroup.passage) && (
-                  <div className="rounded-lg border border-white/10 bg-white/5 p-4">
-                    <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-white/40">
+                {currentGroupStimulus && hasVisibleStimulus(currentGroupStimulus) && (
+                  <div className="space-y-4 rounded-lg border border-white/10 bg-white/5 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-white/40">
                       Passage
                     </p>
-                    <p className="whitespace-pre-wrap text-base leading-relaxed text-white/85">
-                      {stripQuestionHeadingFromPassage(currentGroup.passage)}
-                    </p>
+                    {normalizeImageUrls(currentGroupStimulus.imageUrls)?.length ? (
+                      <QuestionImageGrid
+                        urls={currentGroupStimulus.imageUrls}
+                        title="Source material"
+                      />
+                    ) : null}
+                    {currentGroupStimulus.passage ? (
+                      <RichQuestionContent
+                        text={stripQuestionHeadingFromPassage(currentGroupStimulus.passage)!}
+                        preferMarkdown
+                        className="max-w-none text-base leading-relaxed text-white/85"
+                      />
+                    ) : null}
                   </div>
                 )}
 

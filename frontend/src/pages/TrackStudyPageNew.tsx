@@ -1,9 +1,9 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useStudyTimer } from "@/context/StudyTimerContext";
-import { STORAGE_KEYS } from "@/lib/constants";
+import { STORAGE_KEYS, isAdminUser } from "@/lib/constants";
 import { formatSeconds, localDateISO, mergeSecondsBySubject } from "@/lib/utils";
-import { baseSubjects } from "@/lib/subjects";
+import { baseSubjects, subjectsForUser } from "@/lib/subjects";
 import type { Subject } from "@/lib/subjects";
 import { AppShell } from "@/components/layout/AppShell";
 import { NodentWordmark } from "@/components/branding/NodentWordmark";
@@ -92,6 +92,7 @@ function loadAnsweredCount(userId: string, subjectId: string): number {
 
 export default function TrackStudyPageNew() {
   const { user } = useAuth();
+  const isAdmin = isAdminUser(user);
   const userId = user ? String(user.id) : null;
   const [studyMergeRev, setStudyMergeRev] = useState(0);
   useEffect(() => {
@@ -114,8 +115,9 @@ export default function TrackStudyPageNew() {
 
   const activeSubject: Subject | undefined = useMemo(() => {
     if (!state.activeSubjectId) return undefined;
-    return baseSubjects.find((s) => s.id === state.activeSubjectId);
-  }, [state.activeSubjectId]);
+    const visible = subjectsForUser({ isAdmin });
+    return visible.find((s) => s.id === state.activeSubjectId);
+  }, [state.activeSubjectId, isAdmin]);
 
   const phaseLabel = state.phase === "break" ? "Break" : "Study";
   const totalSeconds =
@@ -152,16 +154,20 @@ export default function TrackStudyPageNew() {
         subjectName:
           subjectId === "unassigned"
             ? "Other"
-            : (baseSubjects.find((s) => s.id === subjectId)?.name ?? subjectId),
+            : (subjectsForUser({ isAdmin }).find((s) => s.id === subjectId)?.name ?? subjectId),
         questionsAnswered: userId ? loadAnsweredCount(userId, subjectId) : 0,
         seconds: Math.max(0, Math.floor(Number(seconds) || 0)),
       }))
       .filter((r) => r.seconds > 0)
       .sort((a, b) => b.seconds - a.seconds);
     return rows;
-  }, [state.dailySecondsBySubject, userId]);
+  }, [state.dailySecondsBySubject, userId, isAdmin]);
 
-  const activeSubjectIdOrFirst = state.activeSubjectId ?? baseSubjects[0]?.id ?? "";
+  const activeSubjectIdOrFirst =
+    state.activeSubjectId ??
+    subjectsForUser({ isAdmin })[0]?.id ??
+    baseSubjects[0]?.id ??
+    "";
 
   const todayKey = localDateISO();
 
@@ -211,7 +217,7 @@ export default function TrackStudyPageNew() {
         subjectName:
           subjectId === "unassigned"
             ? "Other"
-            : (baseSubjects.find((s) => s.id === subjectId)?.name ?? subjectId),
+            : (subjectsForUser({ isAdmin }).find((s) => s.id === subjectId)?.name ?? subjectId),
         seconds: Math.max(0, Math.floor(seconds ?? 0)),
       }))
       .filter((r) => r.seconds > 0)
@@ -637,7 +643,7 @@ export default function TrackStudyPageNew() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {baseSubjects.map((s) => (
+                    {subjectsForUser({ isAdmin }).map((s) => (
                       <SelectItem key={s.id} value={s.id}>
                         {s.name}
                       </SelectItem>

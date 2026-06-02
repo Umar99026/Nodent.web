@@ -1,0 +1,1714 @@
+{
+  "questions": [
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Polynomial, power and rational functions",
+      "question": "Let $f(x)=x^3-3x^2+k$. The tangent at $x=2$ passes through $(0,4)$. Find $k$.",
+      "acceptedAnswers": [
+        "k=8"
+      ],
+      "answer": "k=8",
+      "marks": 2
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Exponential and logarithmic functions",
+      "question": "Solve $\\log_2(x-1)+\\log_2(x+3)=3$.",
+      "acceptedAnswers": [
+        "x=-1+2√3",
+        "x=-1+2*sqrt(3)",
+        "-1+2√3"
+      ],
+      "answer": "x=-1+2√3",
+      "marks": 2
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Functions and transformations",
+      "question": "If $f(x)=\\frac{2x-1}{x+3}$, find $f^{-1}(x)$.",
+      "acceptedAnswers": [
+        "f^{-1}(x)=(1+3x)/(2-x)",
+        "(1+3x)/(2-x)"
+      ],
+      "answer": "f^{-1}(x)=(1+3x)/(2-x)",
+      "marks": 2
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Exponential and logarithmic functions",
+      "question": "Find the range of $f(x)=3-2e^{-x^2}$.",
+      "acceptedAnswers": [
+        "[1,3)",
+        "1≤y<3"
+      ],
+      "answer": "[1,3)",
+      "marks": 2
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Exponential and logarithmic functions",
+      "question": "Solve $e^{2x}-5e^x+6=0$.",
+      "acceptedAnswers": [
+        "x=ln2",
+        "x=ln3",
+        "ln2",
+        "ln3"
+      ],
+      "answer": "x=ln2",
+      "marks": 2
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Algebra and equations",
+      "question": "Find all $a$ such that $y=x^2+ax+4$ has no real $x$-intercepts.",
+      "acceptedAnswers": [
+        "-4<a<4",
+        "-4 < a < 4"
+      ],
+      "answer": "-4<a<4",
+      "marks": 2
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Functions and transformations",
+      "question": "If $f(x)=\\sqrt{9-x^2}$, state its maximal domain and range.",
+      "acceptedAnswers": [
+        "Domain [-3,3], range [0,3]",
+        "domain [-3,3] range [0,3]"
+      ],
+      "answer": "Domain [-3,3], range [0,3]",
+      "marks": 2
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Circular functions",
+      "question": "Solve $\\sin(2x)=\\cos x$ for $0\\le x\\le 2\\pi$.",
+      "acceptedAnswers": [
+        "π/6",
+        "5π/6",
+        "2π/3",
+        "x=π/6,5π/6,2π/3"
+      ],
+      "answer": "π/6",
+      "marks": 2
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Functions and transformations",
+      "question": "Find the equation of $y=x^2$ after dilation by factor 3 from the $x$-axis, reflection in the $y$-axis, then translation 2 right and 5 down.",
+      "acceptedAnswers": [
+        "y=3(x-2)^2-5"
+      ],
+      "answer": "y=3(x-2)^2-5",
+      "marks": 2
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Applications of differentiation",
+      "question": "Find the values of $m$ for which $y=mx+1$ is tangent to $y=x^2-3x+4$.",
+      "acceptedAnswers": [
+        "m=1±2√3",
+        "m=1+2√3",
+        "m=1-2√3"
+      ],
+      "answer": "m=1±2√3",
+      "marks": 2
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Differential calculus",
+      "question": "Find $\\frac{d}{dx}(x^2 e^{-3x})$.",
+      "acceptedAnswers": [
+        "e^{-3x}(2x-3x^2)",
+        "e^(-3x)(2x-3x^2)"
+      ],
+      "answer": "e^{-3x}(2x-3x^2)",
+      "marks": 2
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Applications of differentiation",
+      "question": "Find the stationary points of $f(x)=x^3-6x^2+9x+1$.",
+      "acceptedAnswers": [
+        "(1,5) local maximum",
+        "(3,1) local minimum",
+        "(1,5)",
+        "(3,1)"
+      ],
+      "answer": "(1,5) local maximum",
+      "marks": 2
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Integral calculus",
+      "question": "Evaluate $\\int_0^2 (3x^2-4x+1)\\,dx$.",
+      "acceptedAnswers": [
+        "2"
+      ],
+      "answer": "2",
+      "marks": 2
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Integral calculus",
+      "question": "Find $\\int x e^{x^2}\\,dx$.",
+      "acceptedAnswers": [
+        "(1/2)e^{x^2}+C",
+        "e^{x^2}/2+C"
+      ],
+      "answer": "(1/2)e^{x^2}+C",
+      "marks": 2
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Integral calculus",
+      "question": "A curve has gradient $6x-4$ and passes through $(2,5)$. Find its equation.",
+      "acceptedAnswers": [
+        "y=3x^2-4x+1"
+      ],
+      "answer": "y=3x^2-4x+1",
+      "marks": 2
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Applications of integration",
+      "question": "Find the area between $y=x^2$ and $y=2x$.",
+      "acceptedAnswers": [
+        "4/3"
+      ],
+      "answer": "4/3",
+      "marks": 2
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Applications of differentiation",
+      "question": "For $f(x)=x^4-8x^2$, find the nature of the stationary point at $x=0$.",
+      "acceptedAnswers": [
+        "Local maximum"
+      ],
+      "answer": "Local maximum",
+      "marks": 2
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Integral calculus",
+      "question": "Find the exact value of $\\int_0^{\\pi/2}\\sin^3 x\\,dx$.",
+      "acceptedAnswers": [
+        "2/3"
+      ],
+      "answer": "2/3",
+      "marks": 2
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Applications of differentiation",
+      "question": "Find the maximum value of $f(x)=x\\sqrt{16-x^2}$, $0\\le x\\le 4$.",
+      "acceptedAnswers": [
+        "8 at x=2√2",
+        "8",
+        "x=2√2"
+      ],
+      "answer": "8 at x=2√2",
+      "marks": 2
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Differential calculus",
+      "question": "If $y=\\ln(3x^2+1)$, find $\\frac{dy}{dx}$.",
+      "acceptedAnswers": [
+        "6x/(3x^2+1)",
+        "6x/(3x^2+1)"
+      ],
+      "answer": "6x/(3x^2+1)",
+      "marks": 2
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Discrete random variables",
+      "question": "A biased coin has $P(H)=0.7$. Find the probability of exactly 3 heads in 5 tosses.",
+      "acceptedAnswers": [
+        "0.3087",
+        "0.30870"
+      ],
+      "answer": "0.3087",
+      "marks": 2
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Discrete random variables",
+      "question": "If $X\\sim\\text{Bin}(8,0.25)$, find $P(X\\ge 7)$.",
+      "acceptedAnswers": [
+        "25/65536",
+        "0.000381"
+      ],
+      "answer": "25/65536",
+      "marks": 2
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "The normal distribution",
+      "question": "If $X\\sim N(50,6^2)$, find $P(44<X<62)$.",
+      "acceptedAnswers": [
+        "≈0.8186",
+        "0.8186",
+        "P(-1<Z<2)≈0.8186"
+      ],
+      "answer": "≈0.8186",
+      "marks": 2
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Discrete random variables",
+      "question": "If $P(A)=0.6$, $P(B)=0.5$, $P(A\\cap B)=0.2$, find $P(A\\cup B)$.",
+      "acceptedAnswers": [
+        "0.9"
+      ],
+      "answer": "0.9",
+      "marks": 2
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Discrete random variables",
+      "question": "Events $A$ and $B$ are independent with $P(A)=0.4$, $P(A\\cup B)=0.7$. Find $P(B)$.",
+      "acceptedAnswers": [
+        "0.5"
+      ],
+      "answer": "0.5",
+      "marks": 2
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Continuous random variables",
+      "question": "A random variable has pdf $f(x)=kx^2$, $0\\le x\\le 3$. Find $k$.",
+      "acceptedAnswers": [
+        "k=1/9",
+        "1/9"
+      ],
+      "answer": "k=1/9",
+      "marks": 2
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Continuous random variables",
+      "question": "For the pdf in the previous style ($f(x)=kx^2$ on $[0,3]$ with $k=1/9$), find $P(X>2)$.",
+      "acceptedAnswers": [
+        "19/27",
+        "0.7037"
+      ],
+      "answer": "19/27",
+      "marks": 2
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "The normal distribution",
+      "question": "If $X\\sim N(20,4^2)$, find $a$ such that $P(X<a)=0.975$.",
+      "acceptedAnswers": [
+        "a≈27.84",
+        "27.84"
+      ],
+      "answer": "a≈27.84",
+      "marks": 2
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Discrete random variables",
+      "question": "A test has sensitivity 0.95, specificity 0.90, and disease prevalence 0.02. Find $P(\\text{disease}\\mid\\text{positive})$.",
+      "acceptedAnswers": [
+        "≈0.162",
+        "0.162",
+        "0.019/0.117"
+      ],
+      "answer": "≈0.162",
+      "marks": 2
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Discrete random variables",
+      "question": "If $X\\sim\\text{Bin}(20,0.4)$, find $E(X)$ and $\\text{Var}(X)$.",
+      "acceptedAnswers": [
+        "E(X)=8, Var(X)=4.8",
+        "E=8, Var=4.8"
+      ],
+      "answer": "E(X)=8, Var(X)=4.8",
+      "marks": 2
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Exponential and logarithmic functions",
+      "question": "A population follows $P(t)=500e^{0.08t}$. Find when it first exceeds 1000.",
+      "acceptedAnswers": [
+        "t=ln(2)/0.08",
+        "t≈8.66",
+        "8.66"
+      ],
+      "answer": "t=ln(2)/0.08",
+      "marks": 2
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Exponential and logarithmic functions",
+      "question": "The half-life of a substance is 12 hours. Find $k$ in $M(t)=M_0 e^{-kt}$.",
+      "acceptedAnswers": [
+        "k=ln(2)/12",
+        "ln2/12"
+      ],
+      "answer": "k=ln(2)/12",
+      "marks": 2
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Exponential and logarithmic functions",
+      "question": "Solve $2\\ln x=\\ln(3x+10)$.",
+      "acceptedAnswers": [
+        "x=5"
+      ],
+      "answer": "x=5",
+      "marks": 2
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Integral calculus",
+      "question": "Find the exact area under $y=\\frac{1}{x+1}$ from $x=0$ to $x=3$.",
+      "acceptedAnswers": [
+        "ln4"
+      ],
+      "answer": "ln4",
+      "marks": 2
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Applications of differentiation",
+      "question": "Find the equation of the normal to $y=e^{2x}$ at $x=0$.",
+      "acceptedAnswers": [
+        "y=-(1/2)x+1"
+      ],
+      "answer": "y=-(1/2)x+1",
+      "marks": 2
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Integral calculus",
+      "question": "Find $a>0$ such that $\\int_0^a 2x\\,dx=18$.",
+      "acceptedAnswers": [
+        "a=3√2",
+        "3√2",
+        "a=3*sqrt(2)"
+      ],
+      "answer": "a=3√2",
+      "marks": 2
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Applications of differentiation",
+      "question": "Find the turning point of $y=e^x(2-x)$.",
+      "acceptedAnswers": [
+        "(1,e) local maximum",
+        "(1,e)"
+      ],
+      "answer": "(1,e) local maximum",
+      "marks": 2
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Algebra and equations",
+      "question": "Solve $\\frac{x-1}{x+2}>2$.",
+      "acceptedAnswers": [
+        "-5<x<-2",
+        "-5 < x < -2"
+      ],
+      "answer": "-5<x<-2",
+      "marks": 2
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Exponential and logarithmic functions",
+      "question": "Find the exact solution of $3^{x+1}=7$.",
+      "acceptedAnswers": [
+        "x=log_3(7)-1",
+        "log_3(7)-1"
+      ],
+      "answer": "x=log_3(7)-1",
+      "marks": 2
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Differential calculus",
+      "question": "If $f'(x)=12x^2-12x$, find where $f$ is increasing.",
+      "acceptedAnswers": [
+        "x<0 or x>1",
+        "(-∞,0)∪(1,∞)"
+      ],
+      "answer": "x<0 or x>1",
+      "marks": 2
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Algebra and equations",
+      "question": "Find the coordinates where $y=x^3$ and $y=4x$ intersect.",
+      "acceptedAnswers": [
+        "(-2,-8),(0,0),(2,8)",
+        "(-2,-8)",
+        "(2,8)"
+      ],
+      "answer": "(-2,-8),(0,0),(2,8)",
+      "marks": 2
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Applications of integration",
+      "question": "Find the area enclosed by $y=4x$ and $y=x^3$.",
+      "acceptedAnswers": [
+        "8"
+      ],
+      "answer": "8",
+      "marks": 2
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Functions and transformations",
+      "question": "If $f(x)=\\frac{x}{x^2-1}$, $x\\ne 1$, state the removable discontinuity.",
+      "acceptedAnswers": [
+        "Hole at (1,1/2)"
+      ],
+      "answer": "Hole at (1,1/2)",
+      "marks": 2
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Polynomial, power and rational functions",
+      "question": "Find the asymptotes of $y=\\frac{3x+1}{x-2}$.",
+      "acceptedAnswers": [
+        "x=2, y=3",
+        "x=2 y=3"
+      ],
+      "answer": "x=2, y=3",
+      "marks": 2
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Applications of differentiation",
+      "question": "Find the minimum value of $x+\\frac{9}{x}$, $x>0$.",
+      "acceptedAnswers": [
+        "6"
+      ],
+      "answer": "6",
+      "marks": 2
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Circular functions",
+      "question": "Solve $\\cos x=\\frac{1}{2}$ for $0\\le x\\le 2\\pi$.",
+      "acceptedAnswers": [
+        "π/3",
+        "5π/3",
+        "π/3,5π/3"
+      ],
+      "answer": "π/3",
+      "marks": 2
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Differential calculus",
+      "question": "If $f(x)=\\sin^{-1}(x)$, find $f'(1/2)$.",
+      "acceptedAnswers": [
+        "√3/2",
+        "sqrt(3)/2"
+      ],
+      "answer": "√3/2",
+      "marks": 2
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Continuous random variables",
+      "question": "Find the median of a continuous distribution with pdf $f(x)=2x$, $0\\le x\\le 1$.",
+      "acceptedAnswers": [
+        "1/√2",
+        "√2/2",
+        "0.707"
+      ],
+      "answer": "1/√2",
+      "marks": 2
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Continuous random variables",
+      "question": "If $P(X\\le x)=1-e^{-0.4x}$, $x\\ge 0$, find $P(X>5)$.",
+      "acceptedAnswers": [
+        "e^{-2}",
+        "e^-2"
+      ],
+      "answer": "e^{-2}",
+      "marks": 2
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Exponential and logarithmic functions",
+      "question": "Find $x$ if $\\ln(x+4)-\\ln x=\\ln 3$.",
+      "acceptedAnswers": [
+        "x=2"
+      ],
+      "answer": "x=2",
+      "marks": 2
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Complex numbers and algebra",
+      "question": "Express $(1+i)^6$ in Cartesian form.",
+      "acceptedAnswers": [
+        "-8i"
+      ],
+      "answer": "-8i",
+      "marks": 2
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Complex numbers and algebra",
+      "question": "Solve $z^2+4z+13=0$.",
+      "acceptedAnswers": [
+        "z=-2±3i",
+        "-2+3i",
+        "-2-3i"
+      ],
+      "answer": "z=-2±3i",
+      "marks": 2
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Complex numbers and algebra",
+      "question": "Find the modulus and argument of $-3+3\\sqrt{3}\\,i$.",
+      "acceptedAnswers": [
+        "Modulus 6, argument 2π/3",
+        "6, 2π/3"
+      ],
+      "answer": "Modulus 6, argument 2π/3",
+      "marks": 2
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Complex numbers and algebra",
+      "question": "Find all cube roots of $8\\operatorname{cis}(\\pi/3)$.",
+      "acceptedAnswers": [
+        "2cis(π/9),2cis(7π/9),2cis(13π/9)"
+      ],
+      "answer": "2cis(π/9),2cis(7π/9),2cis(13π/9)",
+      "marks": 2
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Complex numbers and algebra",
+      "question": "If $z+\\bar{z}=6$ and $z\\bar{z}=13$, find $z$.",
+      "acceptedAnswers": [
+        "z=3±2i",
+        "3+2i",
+        "3-2i"
+      ],
+      "answer": "z=3±2i",
+      "marks": 2
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Complex numbers and algebra",
+      "question": "Find the locus of $z$ satisfying $|z-2i|=3$.",
+      "acceptedAnswers": [
+        "Circle centre (0,2), radius 3"
+      ],
+      "answer": "Circle centre (0,2), radius 3",
+      "marks": 2
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Complex numbers and algebra",
+      "question": "Find the locus of $z=x+iy$ satisfying $|z-1|=|z+3|$.",
+      "acceptedAnswers": [
+        "x=-1"
+      ],
+      "answer": "x=-1",
+      "marks": 2
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Complex numbers and algebra",
+      "question": "Evaluate $\\frac{3+4i}{1-2i}$.",
+      "acceptedAnswers": [
+        "-1+2i"
+      ],
+      "answer": "-1+2i",
+      "marks": 2
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Complex numbers and algebra",
+      "question": "Find $z$ if $iz=4-3i$.",
+      "acceptedAnswers": [
+        "-3-4i"
+      ],
+      "answer": "-3-4i",
+      "marks": 2
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Complex numbers and algebra",
+      "question": "Solve $z^4=16$.",
+      "acceptedAnswers": [
+        "2,-2,2i,-2i",
+        "±2",
+        "±2i"
+      ],
+      "answer": "2,-2,2i,-2i",
+      "marks": 2
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Vectors in two and three dimensions",
+      "question": "Find the angle between $\\mathbf{a}=(1,2,2)$ and $\\mathbf{b}=(3,0,4)$.",
+      "acceptedAnswers": [
+        "cos^{-1}(11/15)",
+        "arccos(11/15)"
+      ],
+      "answer": "cos^{-1}(11/15)",
+      "marks": 2
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Vectors in two and three dimensions",
+      "question": "Find $\\mathbf{a}\\times\\mathbf{b}$ for $\\mathbf{a}=(1,2,3)$, $\\mathbf{b}=(4,-1,2)$.",
+      "acceptedAnswers": [
+        "(7,10,-9)"
+      ],
+      "answer": "(7,10,-9)",
+      "marks": 2
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Lines and planes in 3D",
+      "question": "Find the equation of the plane through $(1,0,2)$ with normal $(3,-1,4)$.",
+      "acceptedAnswers": [
+        "3x-y+4z=11"
+      ],
+      "answer": "3x-y+4z=11",
+      "marks": 2
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Lines and planes in 3D",
+      "question": "Find the shortest distance from $(2,1,0)$ to the plane $x+2y-2z=5$.",
+      "acceptedAnswers": [
+        "1/3"
+      ],
+      "answer": "1/3",
+      "marks": 2
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Lines and planes in 3D",
+      "question": "Find the intersection of $\\mathbf{r}=(1,2,3)+\\lambda(2,-1,1)$ with $x+y+z=10$.",
+      "acceptedAnswers": [
+        "(5,0,5)"
+      ],
+      "answer": "(5,0,5)",
+      "marks": 2
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Vectors in two and three dimensions",
+      "question": "Find the projection of $(3,4,0)$ onto $(1,2,2)$.",
+      "acceptedAnswers": [
+        "(11/9)(1,2,2)"
+      ],
+      "answer": "(11/9)(1,2,2)",
+      "marks": 2
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Vectors in two and three dimensions",
+      "question": "Determine whether $(1,2,3)$, $(3,0,5)$, $(5,-2,7)$ are collinear.",
+      "acceptedAnswers": [
+        "Yes"
+      ],
+      "answer": "Yes",
+      "marks": 2
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Vectors in two and three dimensions",
+      "question": "Find the area of the triangle with vertices $A(0,0,0)$, $B(1,2,0)$, $C(3,1,4)$.",
+      "acceptedAnswers": [
+        "√89/2"
+      ],
+      "answer": "√89/2",
+      "marks": 2
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Vectors in two and three dimensions",
+      "question": "Find the scalar resolute of $(2,3,6)$ in the direction $(1,2,2)$.",
+      "acceptedAnswers": [
+        "20/3"
+      ],
+      "answer": "20/3",
+      "marks": 2
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Vectors in two and three dimensions",
+      "question": "Find $k$ if $(1,k,2)$ is perpendicular to $(3,-2,5)$.",
+      "acceptedAnswers": [
+        "k=13/2"
+      ],
+      "answer": "k=13/2",
+      "marks": 2
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Differential equations",
+      "question": "Solve $\\frac{dy}{dx}=3y$, $y(0)=4$.",
+      "acceptedAnswers": [
+        "y=4e^{3x}"
+      ],
+      "answer": "y=4e^{3x}",
+      "marks": 2
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Differential equations",
+      "question": "Solve $\\frac{dy}{dx}=xy^2$, $y(0)=1$.",
+      "acceptedAnswers": [
+        "y=1/(1-x^2/2)"
+      ],
+      "answer": "y=1/(1-x^2/2)",
+      "marks": 2
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Integral calculus",
+      "question": "Find $\\int x\\ln x\\,dx$.",
+      "acceptedAnswers": [
+        "(x^2/2)ln x - x^2/4 + C"
+      ],
+      "answer": "(x^2/2)ln x - x^2/4 + C",
+      "marks": 2
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Integral calculus",
+      "question": "Find $\\int \\frac{1}{x^2+4}\\,dx$.",
+      "acceptedAnswers": [
+        "(1/2)tan^{-1}(x/2)+C"
+      ],
+      "answer": "(1/2)tan^{-1}(x/2)+C",
+      "marks": 2
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Differential calculus",
+      "question": "Find $\\frac{d}{dx}(\\tan^{-1}(3x))$.",
+      "acceptedAnswers": [
+        "3/(1+9x^2)"
+      ],
+      "answer": "3/(1+9x^2)",
+      "marks": 2
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Integral calculus",
+      "question": "Evaluate $\\int_0^1 \\frac{2x}{x^2+1}\\,dx$.",
+      "acceptedAnswers": [
+        "ln2"
+      ],
+      "answer": "ln2",
+      "marks": 2
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Differential equations",
+      "question": "Find the general solution of $y''+4y=0$.",
+      "acceptedAnswers": [
+        "y=Acos2x+Bsin2x"
+      ],
+      "answer": "y=Acos2x+Bsin2x",
+      "marks": 2
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Differential equations",
+      "question": "Solve $y''-3y'+2y=0$.",
+      "acceptedAnswers": [
+        "y=Ae^x+Be^{2x}"
+      ],
+      "answer": "y=Ae^x+Be^{2x}",
+      "marks": 2
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Differential equations",
+      "question": "Find the particular solution of $y''+y=0$, $y(0)=2$, $y'(0)=3$.",
+      "acceptedAnswers": [
+        "y=2cos x+3sin x"
+      ],
+      "answer": "y=2cos x+3sin x",
+      "marks": 2
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Integral calculus",
+      "question": "Find $\\int e^{2x}\\cos x\\,dx$.",
+      "acceptedAnswers": [
+        "(e^{2x}/5)(2cos x+sin x)+C"
+      ],
+      "answer": "(e^{2x}/5)(2cos x+sin x)+C",
+      "marks": 2
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Kinematics",
+      "question": "A particle has position $x(t)=t^3-6t^2+9t$. Find when it is at rest.",
+      "acceptedAnswers": [
+        "t=1,3"
+      ],
+      "answer": "t=1,3",
+      "marks": 2
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Kinematics",
+      "question": "For $x(t)=t^3-6t^2+9t$, find acceleration at $t=3$.",
+      "acceptedAnswers": [
+        "6"
+      ],
+      "answer": "6",
+      "marks": 2
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Kinematics",
+      "question": "A particle has $a=6t-4$, $v=3$ at $t=0$. Find $v(t)$.",
+      "acceptedAnswers": [
+        "v=3t^2-4t+3"
+      ],
+      "answer": "v=3t^2-4t+3",
+      "marks": 2
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Kinematics",
+      "question": "If $v(t)=e^{-t}(2-t)$, find when the particle changes direction.",
+      "acceptedAnswers": [
+        "t=2"
+      ],
+      "answer": "t=2",
+      "marks": 2
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Kinematics",
+      "question": "A force $\\mathbf{F}=(3,4)$ moves an object through displacement $\\mathbf{s}=(5,-2)$. Find work done.",
+      "acceptedAnswers": [
+        "7"
+      ],
+      "answer": "7",
+      "marks": 2
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Kinematics",
+      "question": "A mass of 2 kg experiences force $(6,-8)$ N. Find acceleration.",
+      "acceptedAnswers": [
+        "(3,-4) m/s^2"
+      ],
+      "answer": "(3,-4) m/s^2",
+      "marks": 2
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Kinematics",
+      "question": "A projectile is launched with speed 20 m/s at $30^\\circ$. Find time of flight using $g=10$.",
+      "acceptedAnswers": [
+        "2 s"
+      ],
+      "answer": "2 s",
+      "marks": 2
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Kinematics",
+      "question": "For the projectile above ($u=20$, $\\theta=30^\\circ$, $g=10$), find maximum height.",
+      "acceptedAnswers": [
+        "5 m"
+      ],
+      "answer": "5 m",
+      "marks": 2
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Kinematics",
+      "question": "A particle moves in a circle of radius 4 with angular speed 3. Find speed and centripetal acceleration.",
+      "acceptedAnswers": [
+        "Speed 12, acceleration 36",
+        "12, 36"
+      ],
+      "answer": "Speed 12, acceleration 36",
+      "marks": 2
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Kinematics",
+      "question": "A particle has $\\mathbf{v}=(2t,3t^2)$. Find displacement from $t=0$ to $t=2$.",
+      "acceptedAnswers": [
+        "(4,8)"
+      ],
+      "answer": "(4,8)",
+      "marks": 2
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Integral calculus",
+      "question": "Find the exact value of $\\int_0^\\pi x\\sin x\\,dx$.",
+      "acceptedAnswers": [
+        "π"
+      ],
+      "answer": "π",
+      "marks": 2
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Functions, relations and graphs",
+      "question": "Write the Maclaurin polynomial for $e^x$ up to the $x^3$ term.",
+      "acceptedAnswers": [
+        "1+x+x^2/2+x^3/6"
+      ],
+      "answer": "1+x+x^2/2+x^3/6",
+      "marks": 2
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Functions, relations and graphs",
+      "question": "Find the first three non-zero terms of $\\sin(2x)$.",
+      "acceptedAnswers": [
+        "2x-4x^3/3+4x^5/15"
+      ],
+      "answer": "2x-4x^3/3+4x^5/15",
+      "marks": 2
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Functions, relations and graphs",
+      "question": "Convert $x^2+y^2-4x+6y=12$ to centre-radius form.",
+      "acceptedAnswers": [
+        "(x-2)^2+(y+3)^2=25"
+      ],
+      "answer": "(x-2)^2+(y+3)^2=25",
+      "marks": 2
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Functions, relations and graphs",
+      "question": "Find the equation of the tangent to $x^2+y^2=25$ at $(3,4)$.",
+      "acceptedAnswers": [
+        "3x+4y=25"
+      ],
+      "answer": "3x+4y=25",
+      "marks": 2
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Functions, relations and graphs",
+      "question": "Find the eccentricity of $\\frac{x^2}{25}+\\frac{y^2}{9}=1$.",
+      "acceptedAnswers": [
+        "4/5"
+      ],
+      "answer": "4/5",
+      "marks": 2
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Functions, relations and graphs",
+      "question": "Find the foci of $\\frac{x^2}{25}+\\frac{y^2}{9}=1$.",
+      "acceptedAnswers": [
+        "(±4,0)"
+      ],
+      "answer": "(±4,0)",
+      "marks": 2
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Functions, relations and graphs",
+      "question": "Find the asymptotes of $\\frac{x^2}{9}-\\frac{y^2}{16}=1$.",
+      "acceptedAnswers": [
+        "y=±(4/3)x"
+      ],
+      "answer": "y=±(4/3)x",
+      "marks": 2
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Differential equations",
+      "question": "Solve $\\frac{d^2y}{dx^2}=12x$, $y(0)=1$, $y'(0)=2$.",
+      "acceptedAnswers": [
+        "y=2x^3+2x+1"
+      ],
+      "answer": "y=2x^3+2x+1",
+      "marks": 2
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Lines and planes in 3D",
+      "question": "Find the distance between skew lines $\\mathbf{r}=(0,0,0)+s(1,1,0)$ and $\\mathbf{r}=(0,0,1)+t(1,0,1)$.",
+      "acceptedAnswers": [
+        "1/√3"
+      ],
+      "answer": "1/√3",
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Data analysis",
+      "question": "A dataset has mean 72 and standard deviation 8. Find the z-score for 90.",
+      "acceptedAnswers": [
+        "2.25"
+      ],
+      "answer": "2.25",
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Data analysis",
+      "question": "The least-squares line is $y=4.2x+15$. Predict $y$ when $x=12$.",
+      "acceptedAnswers": [
+        "65.4"
+      ],
+      "answer": "65.4",
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Data analysis",
+      "question": "If $r=-0.84$, describe the association.",
+      "acceptedAnswers": [
+        "Strong negative linear association"
+      ],
+      "answer": "Strong negative linear association",
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Data analysis",
+      "question": "A student's residual is $-6$. Interpret it.",
+      "acceptedAnswers": [
+        "Actual value is 6 below predicted value"
+      ],
+      "answer": "Actual value is 6 below predicted value",
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Data analysis",
+      "question": "If $Q_1=42$, $Q_3=68$, find the upper outlier fence.",
+      "acceptedAnswers": [
+        "107"
+      ],
+      "answer": "107",
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Data analysis",
+      "question": "For the same data ($Q_1=42$, $Q_3=68$), find the lower outlier fence.",
+      "acceptedAnswers": [
+        "3"
+      ],
+      "answer": "3",
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Data analysis",
+      "question": "A seasonal index is 1.18 and deseasonalised value is 240. Find actual value.",
+      "acceptedAnswers": [
+        "283.2"
+      ],
+      "answer": "283.2",
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Data analysis",
+      "question": "A time series has trend line $T=3.5t+80$. If seasonal index is 0.92, estimate value at $t=20$.",
+      "acceptedAnswers": [
+        "138"
+      ],
+      "answer": "138",
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Data analysis",
+      "question": "If $r=0.7$, find $r^2$ and interpret it.",
+      "acceptedAnswers": [
+        "0.49",
+        "49% of variation explained"
+      ],
+      "answer": "0.49",
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Data analysis",
+      "question": "A data point has actual 124, predicted 131. Find residual.",
+      "acceptedAnswers": [
+        "-7"
+      ],
+      "answer": "-7",
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Recursion and financial modelling",
+      "question": "A loan of \\$20\\,000 has monthly interest 0.5% and monthly repayment \\$450. Write the recurrence.",
+      "acceptedAnswers": [
+        "B_{n+1}=1.005B_n-450, B_0=20000"
+      ],
+      "answer": "B_{n+1}=1.005B_n-450, B_0=20000",
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Recursion and financial modelling",
+      "question": "For $B_{n+1}=1.005B_n-450$, $B_0=20000$, find $B_1$.",
+      "acceptedAnswers": [
+        "$19650"
+      ],
+      "answer": "$19650",
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Recursion and financial modelling",
+      "question": "An investment follows $A_{n+1}=1.04A_n+500$, $A_0=2000$. Find $A_2$.",
+      "acceptedAnswers": [
+        "$3123.20"
+      ],
+      "answer": "$3123.20",
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Recursion and financial modelling",
+      "question": "Find the future value of \\$6000 at 5% p.a. compound interest for 4 years.",
+      "acceptedAnswers": [
+        "$7293.04"
+      ],
+      "answer": "$7293.04",
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Recursion and financial modelling",
+      "question": "Find the effective annual interest rate for 1.5% per quarter.",
+      "acceptedAnswers": [
+        "6.14%"
+      ],
+      "answer": "6.14%",
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Recursion and financial modelling",
+      "question": "A perpetuity pays \\$1200 annually at 6%. Find present value.",
+      "acceptedAnswers": [
+        "$20000"
+      ],
+      "answer": "$20000",
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Recursion and financial modelling",
+      "question": "A reducing-balance loan has $B_{n+1}=1.01B_n-300$, $B_0=5000$. Find $B_3$.",
+      "acceptedAnswers": [
+        "$4212.98"
+      ],
+      "answer": "$4212.98",
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Recursion and financial modelling",
+      "question": "An annuity earns 0.4% monthly. Deposits of \\$250 monthly for 24 months. Find future value (approx.).",
+      "acceptedAnswers": [
+        "$6288.36"
+      ],
+      "answer": "$6288.36",
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Recursion and financial modelling",
+      "question": "A car depreciates 18% p.a. from \\$35\\,000. Find value after 5 years (approx.).",
+      "acceptedAnswers": [
+        "$12970.66"
+      ],
+      "answer": "$12970.66",
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Recursion and financial modelling",
+      "question": "An asset depreciates linearly from \\$48\\,000 to \\$9000 over 6 years. Find annual depreciation.",
+      "acceptedAnswers": [
+        "$6500 per year"
+      ],
+      "answer": "$6500 per year",
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Matrices",
+      "question": "If $A=\\begin{pmatrix}2&1\\\\3&4\\end{pmatrix}$, find $\\det A$.",
+      "acceptedAnswers": [
+        "5"
+      ],
+      "answer": "5",
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Matrices",
+      "question": "Find $A^{-1}$ for $A=\\begin{pmatrix}2&1\\\\3&4\\end{pmatrix}$.",
+      "acceptedAnswers": [
+        "(1/5)[[4,-1],[-3,2]]"
+      ],
+      "answer": "(1/5)[[4,-1],[-3,2]]",
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Matrices",
+      "question": "Solve $\\begin{pmatrix}2&1\\\\3&4\\end{pmatrix}\\begin{pmatrix}x\\\\y\\end{pmatrix}=\\begin{pmatrix}7\\\\18\\end{pmatrix}$.",
+      "acceptedAnswers": [
+        "x=2, y=3"
+      ],
+      "answer": "x=2, y=3",
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Matrices",
+      "question": "If $T=\\begin{pmatrix}0.8&0.2\\\\0.3&0.7\\end{pmatrix}$ and initial state $\\begin{pmatrix}100\\\\50\\end{pmatrix}$, find next state.",
+      "acceptedAnswers": [
+        "(95,55)"
+      ],
+      "answer": "(95,55)",
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Matrices",
+      "question": "A transition matrix has columns summing to 1. What type of matrix is it?",
+      "acceptedAnswers": [
+        "Stochastic matrix"
+      ],
+      "answer": "Stochastic matrix",
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Matrices",
+      "question": "Find the steady state for $T=\\begin{pmatrix}0.9&0.1\\\\0.2&0.8\\end{pmatrix}$.",
+      "acceptedAnswers": [
+        "(2/3,1/3)"
+      ],
+      "answer": "(2/3,1/3)",
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Matrices",
+      "question": "If $A$ is $3\\times 2$ and $B$ is $2\\times 4$, state the order of $AB$.",
+      "acceptedAnswers": [
+        "3×4"
+      ],
+      "answer": "3×4",
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Matrices",
+      "question": "Find $AB$ where $A=\\begin{pmatrix}1&2\\\\0&3\\end{pmatrix}$, $B=\\begin{pmatrix}4&2\\\\-1&5\\end{pmatrix}$.",
+      "acceptedAnswers": [
+        "[[8,12],[9,15]]"
+      ],
+      "answer": "[[8,12],[9,15]]",
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Matrices",
+      "question": "Find the image of $(3,4)$ under $\\begin{pmatrix}0&1\\\\-1&0\\end{pmatrix}$.",
+      "acceptedAnswers": [
+        "(-4,3)"
+      ],
+      "answer": "(-4,3)",
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Matrices",
+      "question": "A matrix transformation sends $(x,y)$ to $(2x+y,x-y)$. Give the matrix.",
+      "acceptedAnswers": [
+        "[[2,1],[1,-1]]"
+      ],
+      "answer": "[[2,1],[1,-1]]",
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Networks and decision mathematics",
+      "question": "A connected planar graph has 8 vertices and 12 edges. Find the number of faces.",
+      "acceptedAnswers": [
+        "6"
+      ],
+      "answer": "6",
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Networks and decision mathematics",
+      "question": "A tree has 15 vertices. How many edges?",
+      "acceptedAnswers": [
+        "14"
+      ],
+      "answer": "14",
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Networks and decision mathematics",
+      "question": "A connected graph has exactly two odd vertices. What does this imply?",
+      "acceptedAnswers": [
+        "Euler trail but not Euler circuit"
+      ],
+      "answer": "Euler trail but not Euler circuit",
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Networks and decision mathematics",
+      "question": "A connected graph has all vertices even. What does this imply?",
+      "acceptedAnswers": [
+        "Euler circuit"
+      ],
+      "answer": "Euler circuit",
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Networks and decision mathematics",
+      "question": "A minimum spanning tree connects 9 vertices. How many edges?",
+      "acceptedAnswers": [
+        "8"
+      ],
+      "answer": "8",
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Networks and decision mathematics",
+      "question": "Shortest path $A\\to F$ is $A$–$C$–$D$–$F$ with weights 5, 7, 4. Find total length.",
+      "acceptedAnswers": [
+        "16"
+      ],
+      "answer": "16",
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Networks and decision mathematics",
+      "question": "Critical path duration is 31 days. A non-critical activity has float 6 and is delayed 4 days. Effect on project duration?",
+      "acceptedAnswers": [
+        "No change"
+      ],
+      "answer": "No change",
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Networks and decision mathematics",
+      "question": "Earliest start is 8, latest start is 13. Find float.",
+      "acceptedAnswers": [
+        "5"
+      ],
+      "answer": "5",
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Networks and decision mathematics",
+      "question": "Seven applicants, seven jobs; matching assigns 6. Maximal or complete?",
+      "acceptedAnswers": [
+        "Maximal but not complete"
+      ],
+      "answer": "Maximal but not complete",
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Networks and decision mathematics",
+      "question": "A Hamiltonian cycle visits 10 vertices. How many edges in the cycle?",
+      "acceptedAnswers": [
+        "10"
+      ],
+      "answer": "10",
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Data analysis",
+      "question": "A boxplot has median 62, $Q_1=50$, $Q_3=74$. Find IQR.",
+      "acceptedAnswers": [
+        "24"
+      ],
+      "answer": "24",
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Data analysis",
+      "question": "A residual plot shows a curved pattern. What does this suggest?",
+      "acceptedAnswers": [
+        "Linear model may be inappropriate"
+      ],
+      "answer": "Linear model may be inappropriate",
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Data analysis",
+      "question": "If $\\log_{10}(y)$ vs $x$ is linear, what model may fit original data?",
+      "acceptedAnswers": [
+        "Exponential model"
+      ],
+      "answer": "Exponential model",
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Recursion and financial modelling",
+      "question": "An arithmetic sequence has $u_4=19$, $u_{10}=43$. Find $u_1$.",
+      "acceptedAnswers": [
+        "7"
+      ],
+      "answer": "7",
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Recursion and financial modelling",
+      "question": "A geometric sequence has $u_2=12$, $u_5=324$. Find common ratio.",
+      "acceptedAnswers": [
+        "3"
+      ],
+      "answer": "3",
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Networks and decision mathematics",
+      "question": "A network has vertex degrees 2,2,3,3,4,4. Can it have an Euler circuit?",
+      "acceptedAnswers": [
+        "No, two odd vertices"
+      ],
+      "answer": "No, two odd vertices",
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Networks and decision mathematics",
+      "question": "A flow network has cuts of capacities 18, 22, 15, 19. Maximum possible flow?",
+      "acceptedAnswers": [
+        "At most 15"
+      ],
+      "answer": "At most 15",
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Recursion and financial modelling",
+      "question": "A recurrence is $A_{n+1}=0.85A_n+120$. Find steady-state value.",
+      "acceptedAnswers": [
+        "800"
+      ],
+      "answer": "800",
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Recursion and financial modelling",
+      "question": "Loan: $B_{n+1}=1.006B_n-500$. Largest $B_0$ so balance does not increase after first payment?",
+      "acceptedAnswers": [
+        "$83333.33"
+      ],
+      "answer": "$83333.33",
+      "marks": 2
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Data analysis",
+      "question": "Seasonal index for Q4 is 1.32. Actual sales 924. Find deseasonalised sales.",
+      "acceptedAnswers": [
+        "700"
+      ],
+      "answer": "700",
+      "marks": 2
+    }
+  ]
+}

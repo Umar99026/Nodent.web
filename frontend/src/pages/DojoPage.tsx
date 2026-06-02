@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 
 import { apiFetch, ApiError } from "@/lib/api";
-import { API_PATHS } from "@/lib/constants";
+import { API_PATHS, isAdminUser } from "@/lib/constants";
 import {
   loadPracticeBank,
   readCustomQuestionsCache,
@@ -11,7 +11,7 @@ import {
   QUESTIONS_UPDATED_EVENT,
 } from "@/lib/questionBankCache";
 import { canonicalPracticeTopic } from "@/lib/practiceQuestions";
-import { baseSubjects, type Question } from "@/lib/subjects";
+import { baseSubjects, subjectsForUser, type Question } from "@/lib/subjects";
 
 import { AppShell } from "@/components/layout/AppShell";
 import { useAuth } from "@/context/AuthContext";
@@ -88,8 +88,10 @@ export default function DojoPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
+  const isAdmin = isAdminUser(user);
+  const visibleSubjects = useMemo(() => subjectsForUser({ isAdmin }), [isAdmin]);
 
-  const [subjectId, setSubjectId] = useState<string>(() => baseSubjects[0]?.id ?? "");
+  const [subjectId, setSubjectId] = useState<string>(() => visibleSubjects[0]?.id ?? baseSubjects[0]?.id ?? "");
   const [topicMode, setTopicMode] = useState<string>("mix"); // "mix" or a specific topic
 
   const [isChallenging, setIsChallenging] = useState(false);
@@ -287,7 +289,7 @@ export default function DojoPage() {
                       <SelectValue placeholder="Select subject" />
                     </SelectTrigger>
                     <SelectContent className="bg-white text-black border border-black/10">
-                      {baseSubjects.map((s) => (
+                      {visibleSubjects.map((s) => (
                         <SelectItem
                           key={s.id}
                           value={s.id}

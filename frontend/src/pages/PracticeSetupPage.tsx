@@ -2,8 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { apiFetch } from "@/lib/api";
-import { API_PATHS, STORAGE_KEYS } from "@/lib/constants";
-import { baseSubjects } from "@/lib/subjects";
+import { API_PATHS, STORAGE_KEYS, isAdminUser } from "@/lib/constants";
+import { baseSubjects, subjectsForUser } from "@/lib/subjects";
 import type { Question, Subject } from "@/lib/subjects";
 import {
   getRawCustomQuestionsForSubject,
@@ -33,11 +33,24 @@ export default function PracticeSetupPage() {
   const { subjectId } = useParams<{ subjectId: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const isAdmin = isAdminUser(user);
   const [searchParams] = useSearchParams();
 
+  // Demo subject is admin-only (guard direct URL access).
+  useEffect(() => {
+    if (String(subjectId) === "demo" && !isAdmin) {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [subjectId, isAdmin, navigate]);
+
+  const visibleSubjects = useMemo(
+    () => (isAdmin ? subjectsForUser({ isAdmin }) : baseSubjects),
+    [isAdmin],
+  );
+
   const subject: Subject | undefined = useMemo(
-    () => baseSubjects.find((s) => String(s.id) === String(subjectId)),
-    [subjectId],
+    () => visibleSubjects.find((s) => String(s.id) === String(subjectId)),
+    [visibleSubjects, subjectId],
   );
 
   const [loading, setLoading] = useState(true);

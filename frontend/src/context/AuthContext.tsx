@@ -74,46 +74,74 @@ function persistCurrentUser(user: User | null) {
   localStorage.setItem(STORAGE_KEYS.currentUser, JSON.stringify(user));
 }
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<AuthState>({
-    user: null,
-    token: null,
-    isAuthenticated: false,
-    isLoading: true,
-  });
+const BOOTSTRAP_TIMEOUT_MS = 12_000;
 
-  // Hydrate on mount — check localStorage for existing token, then validate
+function readCachedUser(): User | null {
+  try {
+    const storedUser = localStorage.getItem(STORAGE_KEYS.currentUser);
+    if (!storedUser) return null;
+    return JSON.parse(storedUser) as User;
+  } catch {
+    return null;
+  }
+}
+
+/** Guests should not block on a spinner while useEffect runs. */
+function readInitialAuthState(): AuthState {
+  if (typeof window === "undefined") {
+    return {
+      user: null,
+      token: null,
+      isAuthenticated: false,
+      isLoading: true,
+    };
+  }
+
+  const storedToken = localStorage.getItem(STORAGE_KEYS.authToken);
+  if (!storedToken) {
+    return {
+      user: null,
+      token: null,
+      isAuthenticated: false,
+      isLoading: false,
+    };
+  }
+
+  const cachedUser = readCachedUser();
+  return {
+    user: cachedUser,
+    token: storedToken,
+    isAuthenticated: !!cachedUser,
+    isLoading: true,
+  };
+}
+
+function isBootstrapTimeoutError(err: unknown): boolean {
+  return (
+    err instanceof DOMException && err.name === "AbortError"
+  ) || (err instanceof Error && err.name === "AbortError");
+}
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [state, setState] = useState<AuthState>(readInitialAuthState);
+
+  // Validate stored token (with timeout so a dead API cannot spin forever).
   useEffect(() => {
     const storedToken = localStorage.getItem(STORAGE_KEYS.authToken);
-    const storedUser = localStorage.getItem(STORAGE_KEYS.currentUser);
+    if (!storedToken) return;
 
-    if (!storedToken) {
-      setState({
-        user: null,
-        token: null,
-        isAuthenticated: false,
-        isLoading: false,
-      });
-      return;
-    }
+    const cachedUser = readCachedUser();
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(
+      () => controller.abort(),
+      BOOTSTRAP_TIMEOUT_MS,
+    );
 
-    // Optimistically set user from cache, then confirm with server
-    let cachedUser: User | null = null;
-    try {
-      if (storedUser) {
-        cachedUser = JSON.parse(storedUser) as User;
-      }
-    } catch {
-      // ignore
-    }
-
-    // Call bootstrap to confirm token validity and get fresh user data
-    apiFetch<BootstrapResponse>(API_PATHS.bootstrap)
+    apiFetch<BootstrapResponse>(API_PATHS.bootstrap, { signal: controller.signal })
       .then((data) => {
         const user = withProfilePhoto(data.user);
         persistCurrentUser(user);
         if (data.customQuestions) {
-          // Cache admin-added questions so practice pages can render them.
           localStorage.setItem(
             STORAGE_KEYS.customQuestions,
             JSON.stringify(data.customQuestions),
@@ -127,8 +155,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
       })
       .catch((err) => {
-        // If 401, apiFetch already cleared storage and redirected
         if (err instanceof ApiError && err.status === 401) {
+          localStorage.removeItem(STORAGE_KEYS.authToken);
+          localStorage.removeItem(STORAGE_KEYS.currentUser);
           setState({
             user: null,
             token: null,
@@ -137,22 +166,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           });
           return;
         }
-        // Network error — use cached user if available
+
         if (cachedUser) {
           setState({
-            user: cachedUser,
+            user: withProfilePhoto(cachedUser),
             token: storedToken,
             isAuthenticated: true,
             isLoading: false,
           });
-        } else {
-          setState({
-            user: null,
-            token: null,
-            isAuthenticated: false,
-            isLoading: false,
-          });
+          return;
         }
+
+        if (isBootstrapTimeoutError(err)) {
+          localStorage.removeItem(STORAGE_KEYS.authToken);
+        }
+
+        setState({
+          user: null,
+          token: null,
+          isAuthenticated: false,
+          isLoading: false,
+        });
+      })
+      .finally(() => {
+        window.clearTimeout(timeoutId);
       });
   }, []);
 

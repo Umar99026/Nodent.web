@@ -21,6 +21,83 @@ export function stripQuestionNumberPrefix(text: string): string {
     .trim();
 }
 
+const MARKDOWN_IMAGE_RE = /!\[([^\]]*)\]\(([^)\s]+)\)/g;
+
+/** Turn `/public/...` style paths into same-origin URLs for markdown sanitizers. */
+export function absolutizeAssetUrl(url: string): string {
+  const t = String(url ?? "").trim();
+  if (!t) return t;
+  if (/^https?:\/\//i.test(t) || /^data:/i.test(t)) return t;
+  if (t.startsWith("//")) return `https:${t}`;
+  if (t.startsWith("/") && typeof window !== "undefined" && window.location?.origin) {
+    return `${window.location.origin}${t}`;
+  }
+  return t;
+}
+
+/** Paths for `<img src>` — keep relative (e.g. `/questions/...`) so any dev port/host works. */
+export function extractMarkdownImageUrls(text: string): string[] {
+  const urls: string[] = [];
+  for (const m of String(text ?? "").matchAll(MARKDOWN_IMAGE_RE)) {
+    const raw = m[2]?.trim();
+    if (raw) urls.push(raw);
+  }
+  return urls;
+}
+
+export type StimulusContent = {
+  passage?: string;
+  imageUrls: string[];
+};
+
+export function collectStimulusFromText(
+  passage?: string,
+  existingUrls?: string[],
+): StimulusContent {
+  const rawPassage = passage?.trim() ?? "";
+  const merged = [...(existingUrls ?? []), ...extractMarkdownImageUrls(rawPassage)];
+  const prose = rawPassage ? stripMarkdownImages(rawPassage) : "";
+  return {
+    passage: prose || undefined,
+    imageUrls: merged.filter(Boolean),
+  };
+}
+
+export function collectStimulusFromQuestion(
+  q: { passage?: string; imageUrls?: string[] },
+): StimulusContent {
+  return collectStimulusFromText(q.passage, q.imageUrls);
+}
+
+export function collectStimulusFromParts(
+  parts: { passage?: string; imageUrls?: string[] }[],
+): StimulusContent {
+  const urls: string[] = [];
+  let passage: string | undefined;
+  for (const p of parts) {
+    if (!passage && p.passage?.trim()) passage = p.passage.trim();
+    if (p.imageUrls?.length) urls.push(...p.imageUrls);
+    urls.push(...extractMarkdownImageUrls(p.passage ?? ""));
+  }
+  return collectStimulusFromText(passage, urls);
+}
+
+export function hasVisibleStimulus(s: StimulusContent): boolean {
+  return Boolean(s.passage?.trim()) || s.imageUrls.length > 0;
+}
+
+export function stripMarkdownImages(text: string): string {
+  return String(text ?? "")
+    .replace(/!\[[^\]]*\]\([^)]+\)\s*/g, "")
+    .trim();
+}
+
+export function absolutizeMarkdownAssetUrls(text: string): string {
+  return String(text ?? "").replace(MARKDOWN_IMAGE_RE, (_, alt: string, url: string) => {
+    return `![${alt}](${absolutizeAssetUrl(url)})`;
+  });
+}
+
 export function stripQuestionHeadingFromPassage(passage?: string): string | undefined {
   if (!passage?.trim()) return undefined;
   const lines = passage.split(/\r?\n/);
