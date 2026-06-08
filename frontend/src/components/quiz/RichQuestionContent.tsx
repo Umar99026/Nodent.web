@@ -9,7 +9,10 @@ import "katex/dist/katex.min.css";
 import { cn } from "@/lib/utils";
 import { RichMathText } from "@/components/quiz/QuestionStimulus";
 import { absolutizeMarkdownAssetUrls } from "@/lib/questionDisplay";
-import { normalizeQuestionMathText } from "@/lib/questionMathText";
+import {
+  fixInlineMathDelimiters,
+  normalizeQuestionMathText,
+} from "@/lib/questionMathText";
 
 const RICH_FORCE =
   /^(?:%%\s*rich|:::rich)\s*(?:\r?\n|\r)/i;
@@ -187,9 +190,11 @@ export function RichQuestionContent({
     preferMarkdown ||
     overviewMode ||
     looksLikeStructuredMarkdown(rawBody);
-  const body = preserveMarkdownStructure
-    ? absolutizeMarkdownAssetUrls(rawBody)
-    : normalizeQuestionMathText(rawBody);
+  const body = fixInlineMathDelimiters(
+    preserveMarkdownStructure
+      ? absolutizeMarkdownAssetUrls(rawBody)
+      : normalizeQuestionMathText(rawBody),
+  );
 
   // Never send structured Markdown (headings, lists, tables) through RichMathText — it blanks long notes.
   const useRichMathBranch =

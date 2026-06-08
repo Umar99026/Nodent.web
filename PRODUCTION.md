@@ -7,8 +7,9 @@
 | `DATABASE_URL` | Yes | Neon **pooler** URL (`-pooler` host) |
 | `ADMIN_KEY` | Yes | Long random string; never commit |
 | `FRONTEND_URL` | No | e.g. `https://nodent.pages.dev` |
-| `RESEND_API_KEY` | Yes | Password reset emails |
+| `RESEND_API_KEY` | Yes | Password reset + signup alert emails |
 | `EMAIL_FROM` | No | Verified sender in Resend |
+| `SIGNUP_NOTIFY_EMAIL` | No | New signup alerts (default `ua99026@gmail.com`) |
 
 ## Before students use it
 

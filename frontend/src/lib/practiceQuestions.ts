@@ -3,7 +3,37 @@ import { inferGeneralMathsAreaOfStudy } from "@/lib/generalMathsAreaTopic";
 import { inferMethodsAreaOfStudy } from "@/lib/methodsAreaTopic";
 import { inferSpecialistMathsAreaOfStudy } from "@/lib/specialistMathsAreaTopic";
 import { extractMarkdownImageUrls } from "@/lib/questionDisplay";
+import { GOOGLE_SHEETS_TOPIC_LABELS } from "@/lib/mathSubjectTopics";
 import { normalizeQuestionMathText } from "@/lib/questionMathText";
+
+/** Trust admin-assigned topic labels that match the official subject taxonomy. */
+function isAdminCanonicalTopic(subjectId: string, topic: string): boolean {
+  const sid = canonicalSubjectId(subjectId);
+  const list = GOOGLE_SHEETS_TOPIC_LABELS[sid];
+  if (!list?.length) return false;
+  const norm = topic.trim().toLowerCase();
+  return list.some((t) => t.toLowerCase() === norm);
+}
+
+function inferPracticeTopic(
+  subjectId: string,
+  topicLabel: string,
+  questionText: string,
+  passage?: string,
+): string {
+  const sid = canonicalSubjectId(subjectId);
+  if (isAdminCanonicalTopic(sid, topicLabel)) return topicLabel.trim();
+  if (sid === "methods") {
+    return inferMethodsAreaOfStudy(topicLabel, questionText, passage);
+  }
+  if (sid === "general-maths") {
+    return inferGeneralMathsAreaOfStudy(topicLabel, questionText, passage);
+  }
+  if (sid === "specialist-maths") {
+    return inferSpecialistMathsAreaOfStudy(topicLabel, questionText, passage);
+  }
+  return topicLabel;
+}
 
 /**
  * Sheet / DB rows often use a human label; Practice URLs use baseSubjects `id`
@@ -316,14 +346,7 @@ export function normalizeCustomQuestion(raw: unknown, subjectIdHint?: string): Q
   const sid = canonicalSubjectId(
     String(subjectIdHint ?? q.subject_id ?? q.subjectId ?? ""),
   );
-  let topic = topicLabel;
-  if (sid === "methods") {
-    topic = inferMethodsAreaOfStudy(topicLabel, questionText, passage);
-  } else if (sid === "general-maths") {
-    topic = inferGeneralMathsAreaOfStudy(topicLabel, questionText, passage);
-  } else if (sid === "specialist-maths") {
-    topic = inferSpecialistMathsAreaOfStudy(topicLabel, questionText, passage);
-  }
+  const topic = inferPracticeTopic(sid, topicLabel, questionText, passage);
   const id =
     typeof q.id === "number"
       ? q.id
@@ -522,18 +545,7 @@ export function canonicalPracticeTopic(
 ): string {
   const sid = canonicalSubjectId(subjectId);
   const label = normalizeTopicLabel(q.topic);
-  const text = String(q.question ?? "");
-  const passage = q.passage;
-  if (sid === "methods") {
-    return inferMethodsAreaOfStudy(label, text, passage);
-  }
-  if (sid === "general-maths") {
-    return inferGeneralMathsAreaOfStudy(label, text, passage);
-  }
-  if (sid === "specialist-maths") {
-    return inferSpecialistMathsAreaOfStudy(label, text, passage);
-  }
-  return label;
+  return inferPracticeTopic(sid, label, String(q.question ?? ""), q.passage);
 }
 
 export function questionMatchesPracticeTopic(

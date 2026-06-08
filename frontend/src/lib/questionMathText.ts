@@ -1,4 +1,5 @@
 import { mathifyQuestionText } from "@/lib/mathifyQuestionText";
+import { stripScenarioLabelPrefix } from "@/lib/questionDisplay";
 
 /**
  * Normalise imported / dechunked question text so recurrence relations and finance
@@ -16,12 +17,34 @@ const GLUED_WORDS: [RegExp, string][] = [
   [/month1/gi, "month-1"],
 ];
 
+/**
+ * Fix inline math segments for remark-math + KaTeX.
+ * - Collapse OCR newlines inside $...$ (keep spaces so `\sin x` stays valid).
+ * - Escape `\pi)` / `\infty)` etc. — remark-math treats `\)` as a math end delimiter.
+ */
+export function fixInlineMathDelimiters(text: string): string {
+  return text.replace(/\$([^$]*)\$/g, (_, inner: string) => {
+    let fixed = inner.replace(/\s*[\r\n]+\s*/g, "");
+    fixed = fixed.replace(
+      /\\(pi|infty|theta|phi|alpha|beta|gamma|omega)\s*\)/gi,
+      "\\$1\\text{)}",
+    );
+    return `$${fixed}$`;
+  });
+}
+
 function dechunkOcrLines(text: string): string {
+  const collapsed = fixInlineMathDelimiters(text);
+  // Keep author-written LaTeX intact — OCR dechunking mangles $v(t)=3t^2-2$ etc.
+  if (/\$[^$\n]+\$/.test(collapsed) || /\$\$[\s\S]+?\$\$/.test(collapsed)) {
+    return collapsed;
+  }
+
   const lines = text
     .split("\n")
     .map((l) => l.trim())
     .filter((l) => l.length > 0);
-  if (!lines.length) return text;
+  if (!lines.length) return collapsed;
 
   const singleCharLines = lines.filter((l) => /^[A-Za-z0-9]$/.test(l)).length;
   const shouldDechunk =
@@ -29,19 +52,48 @@ function dechunkOcrLines(text: string): string {
     (singleCharLines / lines.length >= 0.35 ||
       lines.some((l) => l === "," || l === "." || l === ":" || l === ";"));
 
-  if (!shouldDechunk) return lines.join("\n");
+  const shortLines = lines.filter((l) => l.length > 0 && l.length <= 4).length;
+  const shouldDechunkShort =
+    lines.length >= 4 && shortLines / lines.length >= 0.5;
+  if (!shouldDechunk && !shouldDechunkShort) return collapsed;
 
   let out = lines.join("");
   for (const [re, rep] of GLUED_WORDS) out = out.replace(re, rep);
-  return out
-    .replace(/\s+/g, " ")
-    .replace(/\s*([,.;:!?])\s*/g, "$1 ")
-    .replace(/([a-z])([A-Z])/g, "$1 $2")
-    .replace(/(\d),([A-Za-z])/g, "$1, $2")
-    .replace(/([A-Za-z])(\d)/g, "$1 $2")
-    .replace(/(\d)([A-Za-z])/g, "$1 $2")
-    .replace(/\s+/g, " ")
-    .trim();
+  return fixInlineMathDelimiters(
+    out
+      .replace(/\s+/g, " ")
+      .replace(/\s*([,.;:!?])\s*/g, "$1 ")
+      .replace(/([a-z])([A-Z])/g, "$1 $2")
+      .replace(/(\d),([A-Za-z])/g, "$1, $2")
+      .replace(/([A-Za-z])(\d)/g, "$1 $2")
+      .replace(/(\d)([A-Za-z])/g, "$1 $2")
+      .replace(/\s+/g, " ")
+      .trim(),
+  );
+}
+
+/** Rewrite common mangled probability / stats stems into clean LaTeX. */
+function repairBareMathStems(text: string): string {
+  let out = text;
+
+  out = out.replace(
+    /\b(?:Binomial:\s*)?n\s*=\s*(\d+)\s*,?\s*p\s*=\s*([0-9.]+)\s*\.?\s*P\s*\(\s*X\s*=\s*(\d+)\s*\)\s*(?:as\s+fraction)?/gi,
+    "For $n=$1$, $p=$2$, find $P(X=$3)$ as a fraction.",
+  );
+  out = out.replace(
+    /\bSample:\s*(\d+)\s*success(?:es)?\s+in\s+(\d+)\s+trials\.?\s*(?:\\hat\{p\}|p-hat|p̂|\^?p)\s*=\s*\??/gi,
+    "In a sample, $1$ successes in $2$ trials. Find $\\hat{p}$",
+  );
+  out = out.replace(
+    /\bComposite:\s*f\s*\(\s*x\s*\)\s*=\s*([^,]+),\s*g\s*\(\s*x\s*\)\s*=\s*([^.]+\.?)\s*Find\s*\(f\\circ\s*g\)\s*\(\s*(\d+)\s*\)/gi,
+    "Given $f(x)=$1$ and $g(x)=$2$, find $(f\\circ g)($3)$.",
+  );
+  out = out.replace(
+    /Smallest positive solution to\s*\\?sin\s*x\s*=\s*(?:\\?dfrac\s*\{)?\\?sqrt\s*\{?\s*2\s*\}?\s*\}?\s*\{?\s*2\s*\}?\s*\.?\s*on\s*\[?\s*0\s*,\s*2\s*\\?pi\s*\)?[^.]*(?:\\?dfrac\s*\{)?\\?pi\s*\}?\s*\{?\s*k\s*\}?/gi,
+    "Find the smallest positive solution to $\\sin x = \\frac{\\sqrt{2}}{2}$ on $[0,2\\pi)$. The answer is $\\frac{\\pi}{k}$. Find $k$.",
+  );
+
+  return out;
 }
 
 function formatMoney(n: string): string {
@@ -184,17 +236,22 @@ function looksLikeStructuredMarkdown(text: string): boolean {
 }
 
 export function normalizeQuestionMathText(raw: unknown): string {
-  let out = String(raw ?? "").replace(/\r\n?/g, "\n").trim();
+  let out = stripScenarioLabelPrefix(String(raw ?? "").replace(/\r\n?/g, "\n").trim());
   if (!out) return "";
 
   // Do not flatten newlines / tables in study overviews or other markdown notes.
   if (looksLikeStructuredMarkdown(out)) return out;
 
+  out = fixInlineMathDelimiters(out);
   out = dechunkOcrLines(out);
+  out = repairBareMathStems(out);
   for (const [re, rep] of GLUED_WORDS) out = out.replace(re, rep);
 
+  const hasDollarMath = /\$[^$\n]+\$/.test(out);
+  if (!hasDollarMath) {
+    out = out.replace(/([a-z])([A-Z])/g, "$1 $2");
+  }
   out = out
-    .replace(/([a-z])([A-Z])/g, "$1 $2")
     .replace(/annual\s*rate\s*(\d)/gi, "annual rate $1")
     .replace(/\s+/g, " ")
     .trim();
@@ -203,6 +260,7 @@ export function normalizeQuestionMathText(raw: unknown): string {
   out = normalizeRecurrenceNotation(out);
   out = wrapMathSegments(out);
   out = mathifyQuestionText(out);
+  out = fixInlineMathDelimiters(out);
 
   return out;
 }

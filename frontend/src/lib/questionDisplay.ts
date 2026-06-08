@@ -5,8 +5,28 @@ export function displayMarks(marks: number | undefined, type: "mcq" | "short" | 
   return type === "mcq" ? 1 : 2;
 }
 
+/** Remove scenario/topic labels duplicated in the stem (topic already shows in the badge). */
+export function stripScenarioLabelPrefix(text: string): string {
+  let out = String(text ?? "").trim();
+  if (!out) return "";
+
+  out = out.replace(
+    /^(?:Particle|Game|Tank|Binomial|Sample|Composite|Perpetuity|Tasks|Implicit|Separable|Verify|Statement|Polar|Solid|Velocity|Constant velocity)\s*:\s*/i,
+    "",
+  );
+  out = out.replace(/^Particle at rest when\s+/i, "");
+  out = out.replace(/^(?:Velocity|Constant velocity)\s+(?=\$v\s*\()/i, "");
+  // Generic short label (≤3 words) before math or the question body.
+  out = out.replace(
+    /^[A-Z][a-z]+(?:\s+[a-z]+){0,2}\s*:\s*(?=\$|[A-Za-z(0-9])/,
+    "",
+  );
+
+  return out.trim();
+}
+
 export function stripQuestionNumberPrefix(text: string): string {
-  const src = String(text ?? "").trim();
+  const src = stripScenarioLabelPrefix(String(text ?? "").trim());
   if (!src) return "";
   return src
     // Remove placeholder test labels sometimes injected by imports.

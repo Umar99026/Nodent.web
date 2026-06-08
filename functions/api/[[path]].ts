@@ -231,6 +231,8 @@ const friendAssignments = pgTable(
 // ---- Helpers ----
 /** Hardcoded admin email must match `ADMIN_EMAIL` in frontend `constants.ts`. */
 const ADMIN_EMAIL_LC = "nodent.app@gmail.com";
+/** Notified when a new user signs up (override with SIGNUP_NOTIFY_EMAIL in production). */
+const SIGNUP_NOTIFY_EMAIL_DEFAULT = "ua99026@gmail.com";
 
 function cleanText(value: unknown, maxLength = 1000): string {
   if (typeof value !== "string") return "";
@@ -833,13 +835,16 @@ function appOrigin(env: Env, requestUrl: string): string {
   }
 }
 
-async function sendPasswordResetEmail(env: Env, to: string, resetUrl: string): Promise<boolean> {
+async function sendHtmlEmail(
+  env: Env,
+  to: string,
+  subject: string,
+  html: string,
+  logTag = "email",
+): Promise<boolean> {
   const apiKey = String(env.RESEND_API_KEY || "").trim();
   const from = String(env.EMAIL_FROM || "Nodent <onboarding@resend.dev>").trim();
-  const subject = "Reset your Nodent password";
-  const html = `<p>Hi,</p><p>We received a request to reset your Nodent password. Click the link below — it expires in 1 hour.</p><p><a href="${resetUrl}">Reset password</a></p><p>If you did not request this, you can ignore this email.</p>`;
 
-  // Preferred: Resend (requires API key)
   if (apiKey) {
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -847,19 +852,12 @@ async function sendPasswordResetEmail(env: Env, to: string, resetUrl: string): P
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        from,
-        to: [to],
-        subject,
-        html,
-      }),
+      body: JSON.stringify({ from, to: [to], subject, html }),
     });
     if (res.ok) return true;
-    console.error("[password-reset] Resend error:", await res.text());
+    console.error(`[${logTag}] Resend error:`, await res.text());
   }
 
-  // Fallback: MailChannels (works on Cloudflare Workers without an API key).
-  // You should set EMAIL_FROM to a domain you control for best deliverability.
   try {
     const parsedFrom = (() => {
       const m = from.match(/^(.*?)<([^>]+)>$/);
@@ -878,16 +876,58 @@ async function sendPasswordResetEmail(env: Env, to: string, resetUrl: string): P
       }),
     });
     if (!res2.ok) {
-      console.error("[password-reset] MailChannels error:", await res2.text());
-      console.info("[password-reset] Reset link (email failed):", resetUrl);
+      console.error(`[${logTag}] MailChannels error:`, await res2.text());
       return false;
     }
     return true;
   } catch (e) {
-    console.error("[password-reset] MailChannels exception:", errorChain(e));
-    console.info("[password-reset] Reset link (email failed):", resetUrl);
+    console.error(`[${logTag}] MailChannels exception:`, errorChain(e));
     return false;
   }
+}
+
+async function sendPasswordResetEmail(env: Env, to: string, resetUrl: string): Promise<boolean> {
+  const html = `<p>Hi,</p><p>We received a request to reset your Nodent password. Click the link below — it expires in 1 hour.</p><p><a href="${resetUrl}">Reset password</a></p><p>If you did not request this, you can ignore this email.</p>`;
+  const ok = await sendHtmlEmail(env, to, "Reset your Nodent password", html, "password-reset");
+  if (!ok) console.info("[password-reset] Reset link (email failed):", resetUrl);
+  return ok;
+}
+
+function signupNotifyEmail(env: Env): string {
+  return String(env.SIGNUP_NOTIFY_EMAIL || SIGNUP_NOTIFY_EMAIL_DEFAULT)
+    .trim()
+    .toLowerCase();
+}
+
+async function sendNewSignupNotificationEmail(
+  env: Env,
+  user: { id: number; username: string; email: string },
+): Promise<boolean> {
+  const notifyTo = signupNotifyEmail(env);
+  if (!notifyTo) return false;
+  const createdAt = new Date().toISOString();
+  const html = `<p>A new user signed up on Nodent.</p>
+<ul>
+  <li><strong>Username:</strong> ${escapeHtml(user.username)}</li>
+  <li><strong>Email:</strong> ${escapeHtml(user.email)}</li>
+  <li><strong>User ID:</strong> ${user.id}</li>
+  <li><strong>Signed up at (UTC):</strong> ${escapeHtml(createdAt)}</li>
+</ul>`;
+  return sendHtmlEmail(
+    env,
+    notifyTo,
+    `New Nodent signup: ${user.username}`,
+    html,
+    "signup-notify",
+  );
+}
+
+function escapeHtml(raw: string): string {
+  return String(raw ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 // ---- DB ----
@@ -915,6 +955,8 @@ type Env = {
   /** Resend (optional) — password reset emails */
   RESEND_API_KEY?: string;
   EMAIL_FROM?: string;
+  /** Inbox for new-signup alerts (defaults to ua99026@gmail.com). */
+  SIGNUP_NOTIFY_EMAIL?: string;
   /** Google Sheets (optional) — use plain text var + encrypted secret for JSON */
   GOOGLE_SHEETS_SPREADSHEET_ID?: string;
   GOOGLE_SHEETS_TAB_NAME?: string;
@@ -1467,10 +1509,16 @@ app.post("/api/auth/signup", async (c) => {
   if (existingUsername.length > 0) return c.json({ error: "That username is already taken." }, 400);
   const { salt, hash } = await hashPassword(password);
   const result = await db.insert(users).values({ username, email, passwordHash: hash, passwordSalt: salt, hashAlgorithm: "pbkdf2", createdAt: nowIso() }).returning({ id: users.id });
+  const userId = result[0].id;
   const rememberMe = body.rememberMe !== false; // default true for signups
   const token = createToken();
-  await db.insert(sessions).values({ token, userId: result[0].id, createdAt: nowIso(), expiresAt: sessionExpiry(rememberMe) });
-  return c.json({ token, user: { id: result[0].id, username, email, profilePhoto: null } });
+  await db.insert(sessions).values({ token, userId, createdAt: nowIso(), expiresAt: sessionExpiry(rememberMe) });
+  c.executionCtx.waitUntil(
+    sendNewSignupNotificationEmail(c.env, { id: userId, username, email }).catch((e) => {
+      console.error("[signup-notify] failed:", errorChain(e));
+    }),
+  );
+  return c.json({ token, user: { id: userId, username, email, profilePhoto: null } });
 });
 
 app.post("/api/auth/login", async (c) => {
@@ -3749,6 +3797,37 @@ app.post(
   },
 );
 
+app.post("/api/admin/questions/reassign-subject", adminAccessMiddleware, async (c: any) => {
+  const db = c.get("db");
+  const body = await c.req.json();
+  const subjectId = canonicalSubjectId(
+    cleanText(String(body.subjectId ?? body.subject_id ?? ""), 80),
+  );
+  if (!subjectId) {
+    return c.json({ error: "subjectId is required." }, 400);
+  }
+  const idsRaw = Array.isArray(body?.questionIds)
+    ? body.questionIds
+    : Array.isArray(body?.ids)
+      ? body.ids
+      : [];
+  const ids = idsRaw
+    .map((x: unknown) => Number(x))
+    .filter((n: number) => Number.isFinite(n) && n > 0);
+  if (!ids.length) {
+    return c.json({ error: "questionIds array is required." }, 400);
+  }
+  let updated = 0;
+  for (const id of ids) {
+    await db
+      .update(customQuestions)
+      .set({ subjectId })
+      .where(eq(customQuestions.id, id));
+    updated++;
+  }
+  return c.json({ ok: true, updated, subjectId });
+});
+
 app.post("/api/admin/methods/retag-topics", adminAccessMiddleware, async (c: any) => {
   const db = c.get("db");
   const rows = await db
@@ -4000,7 +4079,7 @@ app.post("/api/admin/questions/sync-from-sheet", adminAccessMiddleware, async (c
 
 // Pages Functions entry (used by `wrangler pages dev` / production deploy)
 export const onRequest: PagesFunction<Env> = async (context) => {
-  return app.fetch(context.request, context.env);
+  return app.fetch(context.request, context.env, context);
 };
 
 // Module worker entry (used by `wrangler dev` when main points at this file)

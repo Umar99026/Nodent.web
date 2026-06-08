@@ -78,8 +78,8 @@ function autoMathify(text: string): string {
     /(\b\d+(?:\.\d+)?|\([^()]+\))\s*\/\s*(\([^()]+\))/g,
     "\\frac{$1}{$2}",
   );
-  // Common sequence notation e.g. "L 0" / "L 52" => L_{0}, L_{52}
-  out = out.replace(/\b([A-Za-z])\s+(\d+)\b/g, "$1_{$2}");
+  // Recurrence notation only — not "t = 1" in kinematics (would break v(t) questions).
+  out = out.replace(/\b([ABLPablp])\s+(\d+)\b/g, "$1_{$2}");
   // sqrt(...)
   out = out.replace(/\bsqrt\s*\(\s*([^)]+?)\s*\)/gi, "\\sqrt{$1}");
   // Common fractions like 3/4 or x/y -> \frac{3}{4}

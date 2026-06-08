@@ -5,6 +5,11 @@ import { API_PATHS, ADMIN_EMAIL } from "@/lib/constants";
 import { refreshCustomQuestionsCache } from "@/lib/questionBankCache";
 import { canonicalSubjectId } from "@/lib/practiceQuestions";
 import {
+  bankCorrectionNeedsApply,
+  matchAdminBankCorrection,
+} from "@/lib/adminBankCorrections";
+import { repairAdminQuestionStem } from "@/lib/adminStemRepairs";
+import {
   getAllBuiltinSeedRows,
   questionStemKey,
 } from "@/lib/builtinQuestionsSeed";
@@ -48,9 +53,11 @@ import {
   Loader2,
   ChevronDown,
   ChevronRight,
+  ArrowRightLeft,
 } from "lucide-react";
 
 import { baseSubjects, subjectsForUser } from "@/lib/subjects";
+import { GOOGLE_SHEETS_TOPIC_LABELS } from "@/lib/mathSubjectTopics";
 import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
 
@@ -193,6 +200,8 @@ export default function AdminPage() {
     Set<number>
   >(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkMoveSubjectId, setBulkMoveSubjectId] = useState("");
+  const [bulkMoving, setBulkMoving] = useState(false);
   const [builtinSyncing, setBuiltinSyncing] = useState(false);
   const builtinSyncStartedRef = useRef(false);
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
@@ -404,7 +413,7 @@ export default function AdminPage() {
 
   /* ------ fetch existing questions ------ */
 
-  const fetchQuestions = useCallback(async () => {
+  const fetchQuestions = useCallback(async (): Promise<AdminQuestion[]> => {
     try {
       setQuestionsLoading(true);
       const data = await apiFetchAdmin<
@@ -414,22 +423,22 @@ export default function AdminPage() {
           }
       >(API_PATHS.admin.questions);
 
+      let flat: AdminQuestion[] = [];
       if (Array.isArray(data)) {
-        setQuestions((data ?? []).map((q) => normalizeAdminQuestion(q)));
+        flat = (data ?? []).map((q) => normalizeAdminQuestion(q));
       } else if (data && typeof data === "object" && (data as any).customQuestions) {
         const grouped = (data as any).customQuestions as Record<string, any[]>;
-        const flat: AdminQuestion[] = [];
         for (const [sid, arr] of Object.entries(grouped)) {
           for (const q of arr ?? []) {
             flat.push(normalizeAdminQuestion(q, sid));
           }
         }
-        setQuestions(flat);
-      } else {
-        setQuestions([]);
       }
+      setQuestions(flat);
+      return flat;
     } catch {
       setQuestions([]);
+      return [];
     } finally {
       setQuestionsLoading(false);
     }
@@ -444,6 +453,78 @@ export default function AdminPage() {
       /* admin session edge case — list still refreshed */
     }
   }, [fetchQuestions]);
+
+  /** Normalize mangled question stems in the DB (labels, OCR, broken LaTeX). */
+  const applyStemRepairs = useCallback(async (current: AdminQuestion[]) => {
+    let changed = 0;
+    for (const q of current) {
+      const repaired = repairAdminQuestionStem(q.question);
+      if (!repaired || repaired === String(q.question ?? "").trim()) continue;
+      const id = Number(q.id);
+      if (!Number.isFinite(id) || id <= 0) continue;
+
+      const body: Record<string, unknown> = {
+        subjectId: canonicalSubjectId(q.subjectId),
+        type: q.type,
+        topic: q.topic,
+        question: repaired,
+        passage: q.passage || null,
+        marks: q.marks,
+        guidance: q.guidance || null,
+        imageUrls: q.imageUrls,
+      };
+      if (q.type === "mcq") {
+        body.options = q.options;
+        body.correctAnswer = q.correctAnswer;
+      } else {
+        body.acceptedAnswers = q.acceptedAnswers;
+      }
+      await apiFetchAdmin(`${API_PATHS.admin.questions}/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(body),
+      });
+      changed++;
+    }
+    if (changed > 0) {
+      toast.success(`Repaired ${changed} question stem(s) in the bank.`);
+    }
+  }, []);
+
+  /** Reconcile known mis-assignments in the DB (admin-maintained correction list). */
+  const applyBankCorrections = useCallback(async (current: AdminQuestion[]) => {
+    let changed = 0;
+    for (const q of current) {
+      const fix = matchAdminBankCorrection(q.question);
+      if (!fix || !bankCorrectionNeedsApply(q, fix)) continue;
+      const id = Number(q.id);
+      if (!Number.isFinite(id) || id <= 0) continue;
+
+      const body: Record<string, unknown> = {
+        subjectId: canonicalSubjectId(fix.subjectId),
+        type: q.type,
+        topic: fix.topic ?? q.topic,
+        question: q.question,
+        passage: q.passage || null,
+        marks: q.marks,
+        guidance: q.guidance || null,
+        imageUrls: q.imageUrls,
+      };
+      if (q.type === "mcq") {
+        body.options = q.options;
+        body.correctAnswer = q.correctAnswer;
+      } else {
+        body.acceptedAnswers = q.acceptedAnswers;
+      }
+      await apiFetchAdmin(`${API_PATHS.admin.questions}/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(body),
+      });
+      changed++;
+    }
+    if (changed > 0) {
+      toast.success(`Reconciled ${changed} question assignment(s) in the bank.`);
+    }
+  }, []);
 
   /** One-time sync: legacy built-in TS banks → `custom_questions` so admin is the only source. */
   const syncBuiltinsToDatabase = useCallback(async () => {
@@ -466,15 +547,13 @@ export default function AdminPage() {
           }
         }
       }
+      // Dedupe by question stem globally so admin subject moves are not re-seeded elsewhere.
       const stemSet = new Set(
-        current.map(
-          (q) =>
-            `${canonicalSubjectId(q.subjectId)}::${questionStemKey(q.question)}`,
-        ),
+        current.map((q) => questionStemKey(q.question)).filter(Boolean),
       );
       const missing = seedRows.filter((r) => {
-        const key = `${canonicalSubjectId(String(r.subjectId))}::${questionStemKey(String(r.question ?? ""))}`;
-        return key && !stemSet.has(key);
+        const stem = questionStemKey(String(r.question ?? ""));
+        return stem && !stemSet.has(stem);
       });
       if (!missing.length) return;
 
@@ -553,7 +632,11 @@ export default function AdminPage() {
     if (!isAdmin) return;
     let cancelled = false;
     (async () => {
-      await Promise.all([fetchQuestions(), fetchEnglishPrompts()]);
+      const [current] = await Promise.all([fetchQuestions(), fetchEnglishPrompts()]);
+      if (cancelled) return;
+      await applyStemRepairs(current);
+      if (cancelled) return;
+      await applyBankCorrections(current);
       if (cancelled) return;
       await syncBuiltinsToDatabase();
       if (cancelled) return;
@@ -562,7 +645,15 @@ export default function AdminPage() {
     return () => {
       cancelled = true;
     };
-  }, [isAdmin, fetchQuestions, fetchEnglishPrompts, syncBuiltinsToDatabase, publishQuestionBank]);
+  }, [
+    isAdmin,
+    fetchQuestions,
+    fetchEnglishPrompts,
+    applyStemRepairs,
+    applyBankCorrections,
+    syncBuiltinsToDatabase,
+    publishQuestionBank,
+  ]);
 
   // “All subjects” uses collapsible groups that started fully collapsed, so new
   // questions looked like they never appeared. Expand every group once data
@@ -857,6 +948,45 @@ export default function AdminPage() {
     const current = acceptedAnswersEdits[questionId] ?? fallback;
     const next = current.trim() ? `${current}\n` : "";
     setAcceptedAnswersEdits((prev) => ({ ...prev, [questionId]: `${next}new answer` }));
+  };
+
+  const bulkMoveSelectedToSubject = async () => {
+    const ids = Array.from(selectedQuestionIds)
+      .map((id) => Number(id))
+      .filter((n) => Number.isFinite(n) && n > 0);
+    if (!ids.length) {
+      toast.error("Select at least one maths question to move.");
+      return;
+    }
+    const target = canonicalSubjectId(bulkMoveSubjectId);
+    if (!target) {
+      toast.error("Choose a destination subject.");
+      return;
+    }
+    setBulkMoving(true);
+    try {
+      const result = await apiFetchAdmin<{
+        ok: boolean;
+        updated?: number;
+        subjectId?: string;
+      }>(API_PATHS.admin.questionsReassignSubject, {
+        method: "POST",
+        body: JSON.stringify({ questionIds: ids, subjectId: target }),
+      });
+      const updated = Number(result?.updated ?? ids.length);
+      const destName =
+        visibleSubjects.find((s) => s.id === target)?.name ?? target;
+      toast.success(
+        `Moved ${updated} question${updated === 1 ? "" : "s"} to ${destName}.`,
+      );
+      setSelectedQuestionIds(new Set());
+      await publishQuestionBank();
+    } catch (err) {
+      if (err instanceof ApiError) toast.error(err.message);
+      else toast.error("Failed to move questions.");
+    } finally {
+      setBulkMoving(false);
+    }
   };
 
   const handleRetagMethodsTopics = async () => {
@@ -1650,18 +1780,73 @@ export default function AdminPage() {
     });
   };
 
+  const editTopicOptions = useMemo(() => {
+    const sid = canonicalSubjectId(String(editDraft.subjectId ?? ""));
+    return GOOGLE_SHEETS_TOPIC_LABELS[sid] ?? [];
+  }, [editDraft.subjectId]);
+
   const renderMathsQuestionEditForm = (q: AdminQuestion) => (
     <div className="mt-2 space-y-2 rounded-lg border border-brand/25 bg-white/80 p-3">
       <div className="grid gap-2 sm:grid-cols-2">
+        <div className="space-y-1 sm:col-span-2">
+          <Label className="text-xs">Subject</Label>
+          <Select
+            value={canonicalSubjectId(String(editDraft.subjectId ?? q.subjectId))}
+            onValueChange={(val: string | null) => {
+              if (!val) return;
+              setEditDraft((d) => ({ ...d, subjectId: val }));
+            }}
+          >
+            <SelectTrigger className="h-8 w-full">
+              <SelectValue placeholder="Select subject" />
+            </SelectTrigger>
+            <SelectContent>
+              {visibleSubjects
+                .filter((s) => s.id !== "english")
+                .map((s) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.name}
+                  </SelectItem>
+                ))}
+            </SelectContent>
+          </Select>
+          <p className="text-[11px] text-muted-foreground">
+            Which subject bank students see this question in.
+          </p>
+        </div>
         <div className="space-y-1">
           <Label className="text-xs">Topic</Label>
-          <Input
-            className="h-8"
-            value={editDraft.topic ?? ""}
-            onChange={(e) =>
-              setEditDraft((d) => ({ ...d, topic: e.target.value }))
-            }
-          />
+          {editTopicOptions.length > 0 ? (
+            <Select
+              value={editDraft.topic ?? q.topic ?? ""}
+              onValueChange={(val: string | null) => {
+                if (val) setEditDraft((d) => ({ ...d, topic: val }));
+              }}
+            >
+              <SelectTrigger className="h-8 w-full">
+                <SelectValue placeholder="Select topic" />
+              </SelectTrigger>
+              <SelectContent>
+                {editTopicOptions.map((t) => (
+                  <SelectItem key={t} value={t}>
+                    {t}
+                  </SelectItem>
+                ))}
+                {editDraft.topic &&
+                !editTopicOptions.includes(editDraft.topic) ? (
+                  <SelectItem value={editDraft.topic}>{editDraft.topic}</SelectItem>
+                ) : null}
+              </SelectContent>
+            </Select>
+          ) : (
+            <Input
+              className="h-8"
+              value={editDraft.topic ?? ""}
+              onChange={(e) =>
+                setEditDraft((d) => ({ ...d, topic: e.target.value }))
+              }
+            />
+          )}
         </div>
         <div className="space-y-1">
           <Label className="text-xs">Marks</Label>
@@ -2231,8 +2416,10 @@ methods\tmcq\tAlgebra\t\t1. Simplify...\t["A","B","C","D"]\tA\t\t1\t\t["https://
           <CardContent className="space-y-6">
             <div className="space-y-2">
               <p className="text-sm text-muted-foreground">
-                All maths questions live in one bank (database). Built-in sets sync here automatically on first
-                load; edit any row below and students see the update in Practice / Quiz.
+                The question bank in the database is the source of truth. Each row&apos;s{" "}
+                <span className="font-medium text-foreground">Subject</span> controls which course it
+                appears in; built-in sets only seed missing questions on first load. Edit a question or
+                use <span className="font-medium text-foreground">Move selected</span> to reassign subjects.
                 {builtinSyncing ? (
                   <span className="ml-1 inline-flex items-center gap-1 text-foreground">
                     <Loader2 className="size-3 animate-spin" /> Syncing…
@@ -2342,6 +2529,42 @@ C\tSection C Argument Prompts\tWrite an argument on patience in modern life.`}
                       </AlertDialogFooter>
                     </AlertDialogContent>
                   </AlertDialog>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Select
+                      value={bulkMoveSubjectId}
+                      onValueChange={(val: string | null) =>
+                        val && setBulkMoveSubjectId(val)
+                      }
+                    >
+                      <SelectTrigger className="h-8 w-[11.5rem]">
+                        <SelectValue placeholder="Move to subject…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {visibleSubjects
+                          .filter((s) => s.id !== "english")
+                          .map((s) => (
+                            <SelectItem key={s.id} value={s.id}>
+                              {s.name}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="gap-2"
+                      disabled={bulkMoving || !selectedQuestionIds.size || !bulkMoveSubjectId}
+                      onClick={() => void bulkMoveSelectedToSubject()}
+                    >
+                      {bulkMoving ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <ArrowRightLeft className="size-4" />
+                      )}
+                      Move selected ({selectedQuestionIds.size})
+                    </Button>
+                  </div>
                   <Button
                     type="button"
                     variant="outline"
@@ -2488,13 +2711,18 @@ C\tSection C Argument Prompts\tWrite an argument on patience in modern life.`}
                                       }}
                                     />
                                     <div className="min-w-0 flex-1">
-                                    <div className="mb-1 flex items-center gap-2">
+                                    <div className="mb-1 flex flex-wrap items-center gap-2">
                                       <Badge
                                         variant="outline"
                                         className="text-[10px] uppercase"
                                       >
                                         {q._english ? `Section ${q._section}` : q.type.replace("_", " ")}
                                       </Badge>
+                                      {!q._english && q.topic ? (
+                                        <Badge variant="secondary" className="text-[11px]">
+                                          {q.topic}
+                                        </Badge>
+                                      ) : null}
                                       {q._english ? (
                                         <Badge variant="secondary" className="text-[11px]">
                                           {q._book || "Section B Creative"}

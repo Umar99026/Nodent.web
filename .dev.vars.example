@@ -2,3 +2,7 @@
 DATABASE_URL=postgresql://USER:PASSWORD@HOST/neondb?sslmode=require
 FRONTEND_URL=http://127.0.0.1:5173
 ADMIN_KEY=localdev
+# Optional — new signup alerts (defaults to ua99026@gmail.com)
+# SIGNUP_NOTIFY_EMAIL=ua99026@gmail.com
+# RESEND_API_KEY=re_...
+# EMAIL_FROM=Nodent <onboarding@resend.dev>
