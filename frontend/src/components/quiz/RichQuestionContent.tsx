@@ -100,42 +100,58 @@ function looksLikeStructuredMarkdown(text: string): boolean {
   );
 }
 
-/** Large, airy body text for study overviews (tables use separate compact styles). */
+/** Study overview prose — compact, readable body; display font on headings only. */
 const overviewBodyMarkdownComponents = {
   h2: ({ children }: { children?: ReactNode }) => (
-    <h2 className="mb-6 mt-12 font-display text-3xl font-bold leading-tight tracking-tight text-[#0b0f19] first:mt-0 sm:mb-8 sm:mt-14 sm:text-4xl">
+    <h2 className="overview-heading mb-5 mt-10 font-display text-2xl font-semibold tracking-tight text-slate-900 first:mt-0 sm:mb-6 sm:mt-12 sm:text-[1.75rem]">
       {children}
     </h2>
   ),
   h3: ({ children }: { children?: ReactNode }) => (
-    <h3 className="mb-6 mt-14 border-b-2 border-brand/30 pb-3 font-display text-2xl font-bold leading-snug text-[#0b0f19] sm:mb-8 sm:mt-16 sm:text-3xl">
+    <h3 className="overview-heading mb-4 mt-9 border-b border-slate-200/90 pb-2.5 font-display text-lg font-semibold tracking-tight text-slate-900 sm:mb-5 sm:mt-11 sm:text-xl">
       {children}
     </h3>
   ),
   h4: ({ children }: { children?: ReactNode }) => (
-    <h4 className="mb-4 mt-10 text-xl font-bold text-[#0b0f19] sm:mb-5 sm:mt-12 sm:text-2xl">
+    <h4 className="overview-heading mb-3 mt-7 text-[0.8125rem] font-semibold uppercase tracking-[0.14em] text-slate-500 sm:mt-8 sm:text-sm">
       {children}
     </h4>
   ),
   p: ({ children }: { children?: ReactNode }) => (
-    <p className="my-8 text-xl font-normal leading-[2] text-[#0b0f19]/92 sm:my-10 sm:text-2xl sm:leading-[2.1]">
+    <p className="overview-body my-4 text-[0.9375rem] leading-[1.72] text-slate-700 sm:my-5 sm:text-base sm:leading-[1.75]">
       {children}
     </p>
   ),
   ul: ({ children }: { children?: ReactNode }) => (
-    <ul className="my-8 list-disc space-y-5 pl-8 sm:my-10 sm:space-y-6 sm:pl-10">{children}</ul>
+    <ul className="overview-body my-4 list-disc space-y-2.5 pl-5 marker:text-brand/80 sm:my-5 sm:pl-6">
+      {children}
+    </ul>
   ),
   ol: ({ children }: { children?: ReactNode }) => (
-    <ol className="my-8 list-decimal space-y-5 pl-8 sm:my-10 sm:space-y-6 sm:pl-10">{children}</ol>
+    <ol className="overview-body my-4 list-decimal space-y-2.5 pl-5 marker:font-medium marker:text-slate-400 sm:my-5 sm:pl-6">
+      {children}
+    </ol>
   ),
   li: ({ children }: { children?: ReactNode }) => (
-    <li className="text-xl leading-[2] text-[#0b0f19]/92 marker:text-brand sm:text-2xl sm:leading-[2.1]">
+    <li className="text-[0.9375rem] leading-[1.72] text-slate-700 sm:text-base sm:leading-[1.75]">
       {children}
     </li>
   ),
-  hr: () => <hr className="my-14 border-0 border-t-2 border-black/12 sm:my-20" />,
+  hr: () => (
+    <hr className="my-8 border-0 border-t border-slate-200/90 sm:my-10" aria-hidden />
+  ),
   strong: ({ children }: { children?: ReactNode }) => (
-    <strong className="font-bold text-[#0b0f19]">{children}</strong>
+    <strong className="font-semibold text-slate-900">{children}</strong>
+  ),
+  a: ({ children, href }: { children?: ReactNode; href?: string }) => (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="font-medium text-brand-deep underline decoration-brand/50 decoration-1 underline-offset-[3px] transition-colors hover:text-brand hover:decoration-brand"
+    >
+      {children}
+    </a>
   ),
 } as const;
 
@@ -193,7 +209,7 @@ export function RichQuestionContent({
     <div
       className={cn(
         overviewMode
-          ? "max-w-none text-foreground [&_.katex]:text-[1.05em] sm:[&_.katex]:text-[1.08em]"
+          ? "overview-markdown max-w-none text-foreground [&_.katex]:text-[1em] sm:[&_.katex]:text-[1.02em]"
           : "prose prose-sm max-w-none text-foreground dark:prose-invert",
         "[&_.katex]:text-foreground [&_.katex-display]:my-3",
         "[&_img]:mx-auto [&_img]:block [&_img]:max-h-[min(70vh,560px)] [&_img]:w-auto [&_img]:max-w-full [&_img]:rounded-lg [&_img]:border [&_img]:border-black/10 [&_img]:bg-muted/20 [&_img]:object-contain",
@@ -214,19 +230,19 @@ export function RichQuestionContent({
             ? {
                 ...overviewBodyMarkdownComponents,
                 table: ({ children }) => (
-                  <div className="my-8 overflow-x-auto rounded-xl border border-black/10 bg-white shadow-sm sm:my-10">
-                    <table className="w-full min-w-[min(100%,280px)] border-collapse text-sm sm:text-base [&_.katex]:text-[1.05em]">
+                  <div className="my-6 overflow-x-auto rounded-2xl border border-slate-200/80 bg-white/90 shadow-[0_1px_2px_rgba(15,23,42,0.04)] ring-1 ring-black/[0.03] sm:my-8">
+                    <table className="w-full min-w-[min(100%,280px)] border-collapse text-[0.8125rem] sm:text-sm [&_.katex]:text-[1em]">
                       {children}
                     </table>
                   </div>
                 ),
                 th: ({ children }) => (
-                  <th className="border-b border-black/12 bg-slate-100/90 px-3 py-2.5 text-left text-sm font-semibold sm:px-4 sm:text-base">
+                  <th className="border-b border-slate-200/90 bg-slate-50/95 px-3.5 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 sm:px-4 sm:text-[0.8125rem]">
                     {children}
                   </th>
                 ),
                 td: ({ children }) => (
-                  <td className="border-b border-black/8 px-3 py-2.5 align-top text-sm sm:px-4 sm:text-base [&_.katex]:whitespace-nowrap">
+                  <td className="border-b border-slate-100 px-3.5 py-2.5 align-top text-[0.8125rem] leading-snug text-slate-700 sm:px-4 sm:text-sm [&_.katex]:whitespace-nowrap">
                     {children}
                   </td>
                 ),

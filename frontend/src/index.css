@@ -475,20 +475,37 @@
 .stagger-children > *:nth-child(7) { animation-delay: 360ms; }
 .stagger-children > *:nth-child(8) { animation-delay: 420ms; }
 
-/* Practice study overviews — display math between prose blocks */
+/* Practice study overviews — sleek prose + display math */
+.curriculum-overview,
+.curriculum-overview .overview-markdown {
+  font-family: var(--font-sans);
+  font-variation-settings: "wght" 420;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.curriculum-overview .overview-heading {
+  font-variation-settings: "wght" 580;
+}
+
+.curriculum-overview .overview-body {
+  font-variation-settings: "wght" 420;
+  letter-spacing: -0.012em;
+}
+
 .curriculum-overview .katex-display {
-  margin: 2.5rem 0;
+  margin: 1.75rem 0;
   overflow-x: auto;
-  padding: 0.25rem 0;
+  padding: 0.15rem 0;
 }
 .curriculum-overview .katex-display > .katex {
-  font-size: 1.2em;
+  font-size: 1.08em;
 }
 @media (min-width: 640px) {
   .curriculum-overview .katex-display {
-    margin: 3rem 0;
+    margin: 2.25rem 0;
   }
   .curriculum-overview .katex-display > .katex {
-    font-size: 1.35em;
+    font-size: 1.12em;
   }
 }

@@ -940,6 +940,132 @@ let performanceIndexesPatched = false;
 let studyTablesPatched = false;
 let coreTablesPatched = false;
 let lastSessionCleanupAt = 0;
+/** One migration at a time — parallel requests must not each run ensureCoreTables. */
+let dbInitPromise: Promise<void> | null = null;
+
+async function runDbMigrations(db: ReturnType<typeof createDb>): Promise<void> {
+  if (!coreTablesPatched) {
+    try {
+      await ensureCoreTables(db);
+    } catch {
+      /* ignore */
+    } finally {
+      coreTablesPatched = true;
+    }
+  }
+  if (!usersTablePatched) {
+    try {
+      await db.execute(sql`
+        ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS profile_photo text
+      `);
+      await db.execute(sql`
+        ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS hash_algorithm text DEFAULT 'pbkdf2'
+      `);
+    } catch {
+      /* ignore */
+    } finally {
+      usersTablePatched = true;
+    }
+  }
+  if (!englishResponsesConstraintDropped) {
+    try {
+      await db.execute(sql`
+        ALTER TABLE english_responses
+        DROP CONSTRAINT IF EXISTS english_responses_prompt_user_unique
+      `);
+    } catch {
+      /* ignore */
+    } finally {
+      englishResponsesConstraintDropped = true;
+    }
+  }
+  if (!performanceIndexesPatched) {
+    try {
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS english_prompts_book_section_idx
+        ON english_prompts (book_id, section)
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS english_responses_prompt_updated_idx
+        ON english_responses (prompt_id, updated_at)
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS english_responses_user_updated_idx
+        ON english_responses (user_id, updated_at)
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS sessions_expires_at_idx
+        ON sessions (expires_at)
+      `);
+    } catch {
+      /* ignore */
+    } finally {
+      performanceIndexesPatched = true;
+    }
+  }
+  if (!studyTablesPatched) {
+    try {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS study_days (
+          id serial PRIMARY KEY,
+          user_id integer NOT NULL,
+          date text NOT NULL,
+          daily_seconds integer NOT NULL DEFAULT 0,
+          daily_seconds_by_subject text,
+          goal_minutes integer,
+          updated_at text NOT NULL,
+          UNIQUE(user_id, date)
+        )
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS study_days_user_date_idx
+        ON study_days (user_id, date)
+      `);
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS user_subjects (
+          id serial PRIMARY KEY,
+          user_id integer NOT NULL,
+          subject_id text NOT NULL,
+          created_at text NOT NULL,
+          UNIQUE(user_id, subject_id)
+        )
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS user_subjects_user_idx
+        ON user_subjects (user_id)
+      `);
+    } catch {
+      /* ignore */
+    } finally {
+      studyTablesPatched = true;
+    }
+  }
+  const nowMs = Date.now();
+  if (nowMs - lastSessionCleanupAt > 10 * 60 * 1000) {
+    try {
+      await db.execute(sql`
+        DELETE FROM sessions
+        WHERE expires_at < ${new Date().toISOString()}
+      `);
+    } catch {
+      /* ignore */
+    } finally {
+      lastSessionCleanupAt = nowMs;
+    }
+  }
+}
+
+function ensureDbReady(db: ReturnType<typeof createDb>): Promise<void> {
+  if (!dbInitPromise) {
+    dbInitPromise = runDbMigrations(db).catch((err) => {
+      dbInitPromise = null;
+      throw err;
+    });
+  }
+  return dbInitPromise;
+}
 
 async function ensureCoreTables(db: any) {
   await db.execute(sql`
@@ -1206,116 +1332,41 @@ app.use("/api/*", cors({
 
 // DB middleware
 app.use("/api/*", async (c, next) => {
-  const db = createDb(c.env.DATABASE_URL);
-  if (!coreTablesPatched) {
-    try {
-      await ensureCoreTables(db);
-    } catch { /* ignore */ }
-    finally { coreTablesPatched = true; }
+  const dbUrl = String(c.env.DATABASE_URL ?? "").trim();
+  if (!dbUrl) {
+    return c.json(
+      {
+        error:
+          "DATABASE_URL is not configured. Add it to .dev.vars in the project root, then restart the API.",
+      },
+      503,
+    );
   }
-  if (!usersTablePatched) {
-    try {
-      await db.execute(sql`
-        ALTER TABLE users
-        ADD COLUMN IF NOT EXISTS profile_photo text
-      `);
-      await db.execute(sql`
-        ALTER TABLE users
-        ADD COLUMN IF NOT EXISTS hash_algorithm text DEFAULT 'pbkdf2'
-      `);
-    } catch {
-      // ignore
-    } finally {
-      usersTablePatched = true;
-    }
-  }
-  if (!englishResponsesConstraintDropped) {
-    try {
-      await db.execute(sql`
-        ALTER TABLE english_responses
-        DROP CONSTRAINT IF EXISTS english_responses_prompt_user_unique
-      `);
-    } catch {
-      // ignore
-    } finally {
-      englishResponsesConstraintDropped = true;
-    }
-  }
-  if (!performanceIndexesPatched) {
-    try {
-      await db.execute(sql`
-        CREATE INDEX IF NOT EXISTS english_prompts_book_section_idx
-        ON english_prompts (book_id, section)
-      `);
-      await db.execute(sql`
-        CREATE INDEX IF NOT EXISTS english_responses_prompt_updated_idx
-        ON english_responses (prompt_id, updated_at)
-      `);
-      await db.execute(sql`
-        CREATE INDEX IF NOT EXISTS english_responses_user_updated_idx
-        ON english_responses (user_id, updated_at)
-      `);
-      await db.execute(sql`
-        CREATE INDEX IF NOT EXISTS sessions_expires_at_idx
-        ON sessions (expires_at)
-      `);
-    } catch {
-      // ignore
-    } finally {
-      performanceIndexesPatched = true;
-    }
-  }
-  if (!studyTablesPatched) {
-    try {
-      await db.execute(sql`
-        CREATE TABLE IF NOT EXISTS study_days (
-          id serial PRIMARY KEY,
-          user_id integer NOT NULL,
-          date text NOT NULL,
-          daily_seconds integer NOT NULL DEFAULT 0,
-          daily_seconds_by_subject text,
-          goal_minutes integer,
-          updated_at text NOT NULL,
-          UNIQUE(user_id, date)
-        )
-      `);
-      await db.execute(sql`
-        CREATE INDEX IF NOT EXISTS study_days_user_date_idx
-        ON study_days (user_id, date)
-      `);
-      await db.execute(sql`
-        CREATE TABLE IF NOT EXISTS user_subjects (
-          id serial PRIMARY KEY,
-          user_id integer NOT NULL,
-          subject_id text NOT NULL,
-          created_at text NOT NULL,
-          UNIQUE(user_id, subject_id)
-        )
-      `);
-      await db.execute(sql`
-        CREATE INDEX IF NOT EXISTS user_subjects_user_idx
-        ON user_subjects (user_id)
-      `);
-    } catch {
-      // ignore
-    } finally {
-      studyTablesPatched = true;
-    }
-  }
-  const nowMs = Date.now();
-  if (nowMs - lastSessionCleanupAt > 10 * 60 * 1000) {
-    try {
-      await db.execute(sql`
-        DELETE FROM sessions
-        WHERE expires_at < ${new Date().toISOString()}
-      `);
-    } catch {
-      // ignore
-    } finally {
-      lastSessionCleanupAt = nowMs;
-    }
-  }
+
+  const db = createDb(dbUrl);
   c.set("db", db);
+
+  try {
+    await Promise.race([
+      ensureDbReady(db),
+      new Promise<never>((_, reject) => {
+        setTimeout(
+          () =>
+            reject(
+              new Error(
+                "Database connection timed out. Check DATABASE_URL in .dev.vars and your network.",
+              ),
+            ),
+          25_000,
+        );
+      }),
+    ]);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[db middleware]", msg);
+    return c.json({ error: msg }, 503);
+  }
+
   await next();
 });
 
@@ -1454,6 +1505,19 @@ app.post("/api/auth/logout", authMiddleware, async (c: any) => {
   const user = c.get("user");
   await c.get("db").delete(sessions).where(eq(sessions.token, user.token));
   return c.json({ ok: true });
+});
+
+/** Lightweight session check (no question bank). Used on app load for fast auth. */
+app.get("/api/auth/session", authMiddleware, async (c: any) => {
+  const user = c.get("user");
+  return c.json({
+    user: {
+      id: user.id,
+      email: user.email,
+      username: user.username,
+      profilePhoto: user.profilePhoto ?? null,
+    },
+  });
 });
 
 const FORGOT_PASSWORD_MESSAGE =

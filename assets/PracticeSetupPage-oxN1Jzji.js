@@ -1,4 +1,4 @@
-import{et as e,it as t,n,nt as r,q as i,st as a,tt as ee}from"./utils-C29Np8Hj.js";import{G as te,X as o,Y as ne,Z as s}from"./useBaseUiId-D9ArovB0.js";import{n as c}from"./AuthContext-BziD4xOU.js";import{t as l}from"./AppShell-xHhmCoE-.js";import{C as u,S as d,T as f,_ as p,a as m,b as h,n as g,v as re,w as ie,x as ae,y as _}from"./practiceQuestions-Ds-wBJWt.js";import{t as v}from"./RichQuestionContent-D6vkReAt.js";import{t as y}from"./button-7PUQrEvM.js";import{n as b,t as oe}from"./sparkles-D7LNeLMD.js";import{t as se}from"./book-open-30igb48E.js";import{a as x,i as S,n as C,r as w,t as T}from"./select-CRquTpHR.js";import{t as E}from"./loader-circle-vyZfo8Nf.js";import{a as D,n as O,o as ce,t as k}from"./card-DNamqYaZ.js";import{t as le}from"./badge-CCAAJwzS.js";import{n as ue,t as de}from"./subjects-Cnb2j4u3.js";var A=a(t(),1),j=i();function fe({markdown:e,className:t}){return(0,j.jsx)(`div`,{className:n(`curriculum-overview rounded-2xl border border-black/10 bg-gradient-to-b from-white to-slate-50/80`,`px-6 py-9 shadow-sm sm:px-10 sm:py-12`,`text-[#0b0f19]`,`[&_.katex-error]:hidden`,t),children:(0,j.jsx)(v,{text:e,preferMarkdown:!0,overviewMode:!0})})}var M=`### Types of data
+import{et as e,it as t,n,nt as r,q as i,st as a,tt as ee}from"./utils-C29Np8Hj.js";import{K as te,Q as ne,X as re,Z as o}from"./useBaseUiId-Bz6LgcTN.js";import{n as s}from"./AuthContext-B5C0oBYW.js";import{t as c}from"./AppShell-hn4FFHD1.js";import{C as l,S as u,T as d,_ as f,a as p,b as m,n as h,v as g,w as ie,x as ae,y as _}from"./practiceQuestions-Ds-wBJWt.js";import{t as v}from"./RichQuestionContent-CAcldO_I.js";import{t as y}from"./button-7PUQrEvM.js";import{n as b,t as oe}from"./sparkles-D7LNeLMD.js";import{t as se}from"./book-open-30igb48E.js";import{a as x,i as S,n as C,r as w,t as T}from"./select-BV5Y4qlx.js";import{t as ce}from"./loader-circle-vyZfo8Nf.js";import{a as le,n as E,o as ue,t as D}from"./card-DNamqYaZ.js";import{t as de}from"./badge-CCAAJwzS.js";import{n as O,t as fe}from"./subjects-Cnb2j4u3.js";var k=a(t(),1),A=i();function pe({markdown:e,className:t}){return(0,A.jsxs)(`div`,{className:n(`curriculum-overview relative overflow-hidden rounded-2xl`,`border border-slate-200/80 bg-gradient-to-b from-white via-white to-slate-50/60`,`px-5 py-7 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_16px_48px_-20px_rgba(15,23,42,0.12)]`,`ring-1 ring-black/[0.04] sm:rounded-3xl sm:px-8 sm:py-9`,`text-slate-800 antialiased`,`[&_.katex-error]:hidden`,`[&_a]:font-medium [&_a]:text-brand-deep [&_a]:underline [&_a]:decoration-brand/45 [&_a]:decoration-1 [&_a]:underline-offset-[3px] [&_a]:transition-colors hover:[&_a]:text-brand hover:[&_a]:decoration-brand`,t),children:[(0,A.jsx)(`div`,{className:`pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-brand/35 to-transparent`,"aria-hidden":!0}),(0,A.jsx)(v,{text:e,preferMarkdown:!0,overviewMode:!0})]})}var j=`### Types of data
 
 | Type | Meaning | Example |
 | --- | --- | --- |
@@ -235,7 +235,7 @@ $$Y = T \\times S \\times I \\quad \\text{(multiplicative)}$$
 or additive $Y = T + S + I$. **Trend** is long-run direction; **seasonal** repeats each year; **irregular** is noise.
 
 Seasonal indices average to 1 (multiplicative). Deseasonalising isolates trend for forecasting; reseasonalising applies seasonal pattern to trend forecast.
-`,N=`### Recurrence relations
+`,M=`### Recurrence relations
 
 $$u_{n+1} = f(u_n)$$
 
@@ -378,7 +378,7 @@ A **sequence** $\\{u_n\\}$ can be defined explicitly $u_n=f(n)$ or recursively $
 **Annuities** are geometric series: future value sums regular payments each compounded — closed form avoids long tables.
 
 **Effective rate:** $r_{\\text{eff}} = (1+\\frac{r_{\\text{nom}}}{m})^m - 1$ for $m$ compounding periods per year.
-`,P=`### Matrix order
+`,N=`### Matrix order
 
 An $m \\times n$ matrix has $m$ rows and $n$ columns.
 
@@ -481,7 +481,7 @@ Matrices represent **linear transformations** on vectors (rotation, scaling, she
 **Determinant** of $2\\times 2$ matrix $ad-bc$: zero $\\Leftrightarrow$ no inverse (transformation collapses area to 0).
 
 **Eigenvalues/eigenvectors** (General): $T\\mathbf{v}=\\lambda\\mathbf{v}$ — directions unchanged by transition matrix; $\\lambda=1$ often gives steady state when columns of $T$ are state proportions summing to 1.
-`,F=`### Basic network terms
+`,P=`### Basic network terms
 
 | Term | Meaning |
 | --- | --- |
@@ -616,19 +616,19 @@ A **graph** $G=(V,E)$ has vertices $V$ and edges $E$. **Degree** of vertex = num
 **Minimum spanning tree** connects all vertices with minimum total weight without cycles — unique if weights distinct.
 
 **Critical path** on activity networks: longest path through weighted DAG of project activities sets minimum completion time; float measures slack.
-`,I=e=>String(e??``).trim().toLowerCase().replace(/\s+/g,` `),L={statistics:`Data analysis`,"data analysis, probability and statistics":`Data analysis`,finance:`Recursion and financial modelling`,sequences:`Recursion and financial modelling`,recursion:`Recursion and financial modelling`,matrices:`Matrices`,matrix:`Matrices`,networks:`Networks and decision mathematics`,graphs:`Networks and decision mathematics`,"discrete mathematics":`Matrices`,"algebra, number and structure":`Recursion and financial modelling`,"functions, relations and graphs":`Data analysis`,"space and measurement":`Data analysis`};function R(e,t,n){return`${e}
+`,F=e=>String(e??``).trim().toLowerCase().replace(/\s+/g,` `),I={statistics:`Data analysis`,"data analysis, probability and statistics":`Data analysis`,finance:`Recursion and financial modelling`,sequences:`Recursion and financial modelling`,recursion:`Recursion and financial modelling`,matrices:`Matrices`,matrix:`Matrices`,networks:`Networks and decision mathematics`,graphs:`Networks and decision mathematics`,"discrete mathematics":`Matrices`,"algebra, number and structure":`Recursion and financial modelling`,"functions, relations and graphs":`Data analysis`,"space and measurement":`Data analysis`};function L(e,t,n){return`${e}
 
 **Area:** ${t}
 
 ---
 
-${n}`}var z={"Data analysis":R(`## Data analysis`,`Data analysis`,M),"Recursion and financial modelling":R(`## Recursion and financial modelling`,`Recursion and financial modelling`,`**Sequences** where each term depends on the previous term — used heavily in **finance**, loans, and investments.
+${n}`}var R={"Data analysis":L(`## Data analysis`,`Data analysis`,j),"Recursion and financial modelling":L(`## Recursion and financial modelling`,`Recursion and financial modelling`,`**Sequences** where each term depends on the previous term — used heavily in **finance**, loans, and investments.
 
-${N}`),Matrices:R(`## Matrices`,`Matrices`,`Organising numbers in **arrays** to model transitions, networks, and systems.
+${M}`),Matrices:L(`## Matrices`,`Matrices`,`Organising numbers in **arrays** to model transitions, networks, and systems.
 
-${P}`),"Networks and decision mathematics":R(`## Networks and decision mathematics`,`Networks and decision mathematics`,`**Graphs**, **paths**, **optimisation**, and **scheduling**.
+${N}`),"Networks and decision mathematics":L(`## Networks and decision mathematics`,`Networks and decision mathematics`,`**Graphs**, **paths**, **optimisation**, and **scheduling**.
 
-${F}`)};function B(e){let t=String(e??``).trim();if(!t)return null;let n=f(t);if(Object.prototype.hasOwnProperty.call(z,n))return z[n];let r=I(n),i=L[r]??L[I(t)];if(i)return z[i]??null;for(let e of u)if(I(e)===r||I(e)===I(t))return z[e];return null}var V=`A function takes an input $x$ and gives exactly one output $y$: $y = f(x)$.
+${P}`)};function z(e){let t=String(e??``).trim();if(!t)return null;let n=d(t);if(Object.prototype.hasOwnProperty.call(R,n))return R[n];let r=F(n),i=I[r]??I[F(t)];if(i)return R[i]??null;for(let e of l)if(F(e)===r||F(e)===F(t))return R[e];return null}var B=`A function takes an input $x$ and gives exactly one output $y$: $y = f(x)$.
 
 **Example:** $f(x) = x^2 + 3$. If $x = 2$, then $f(2) = 7$.
 
@@ -722,7 +722,7 @@ Write $y = f(x)$. Each transformation acts on the **input** (inside) or **output
 - Apply transformations and describe them in words (dilation, reflection, translation).
 - Read $f(a)$ vs solve $f(x) = a$ — common Exam 1 distinction.
 - Justify whether an inverse exists on a given domain (one-to-one on that interval).
-`,H=`### Polynomial functions
+`,V=`### Polynomial functions
 
 | Function | Shape |
 | --- | --- |
@@ -787,7 +787,7 @@ $ax^2+bx+c = 0$ has discriminant $\\Delta = b^2 - 4ac$:
 | $<0$ | no real roots (complex conjugate pair in further study) |
 
 Vertex form $y = a(x-h)^2+k$ exposes the turning point directly — useful for sketching and optimisation without calculus.
-`,U=`### Exponential functions
+`,H=`### Exponential functions
 
 $y = a^x$ where $a > 0$, $a \\neq 1$. If $a > 1$, growth; if $0 < a < 1$, decay.
 
@@ -840,7 +840,7 @@ $$\\log_a(xy) = \\log_a x + \\log_a y \\quad \\text{(product becomes sum)}$$
 **Natural log $\\ln x$:** base $e$. Calculus identities: $\\frac{d}{dx}(e^x)=e^x$, $\\frac{d}{dx}(\\ln x)=\\frac{1}{x}$, $\\int \\frac{1}{x}\\,dx = \\ln|x|+C$.
 
 **Change of base:** $\\log_a b = \\frac{\\ln b}{\\ln a}$ — used when bases differ in equations.
-`,pe=`### Circular functions
+`,U=`### Circular functions
 
 Main functions: $\\sin x$, $\\cos x$, $\\tan x$. In Methods, angles are usually in **radians**.
 
@@ -1151,7 +1151,7 @@ $F(x)$ is an **antiderivative** of $f(x)$ if $F'(x)=f(x)$. The family of antider
 **Part 2 (accumulation):** define $A(x)=\\int_a^x f(t)\\,dt$. Then $A'(x)=f(x)$ — integration undoes differentiation.
 
 **Riemann sum idea:** $\\int_a^b f(x)\\,dx$ is the limit of signed rectangular areas; positive above the axis, negative below.
-`,ve=`### Definite integrals and area
+`,W=`### Definite integrals and area
 
 $$\\int_a^b f(x)\\,dx$$
 
@@ -1182,7 +1182,7 @@ $$\\int_a^b f(x)\\,dx$$
 Between curves $f$ and $g$: area $= \\int_a^b |f(x)-g(x)|\\,dx$ on intervals where you know which is above.
 
 **Kinematics link:** displacement $= \\int v\\,dt$; distance $= \\int |v|\\,dt$; velocity from acceleration is another accumulation.
-`,ye=`### Basic probability
+`,ve=`### Basic probability
 
 $$0 \\leq P(A) \\leq 1, \\quad P(A') = 1 - P(A)$$
 $$P(A \\cup B) = P(A) + P(B) - P(A \\cap B)$$
@@ -1240,7 +1240,7 @@ A **discrete random variable** $X$ has PMF $p(x)=P(X=x)$ with $\\sum_x p(x)=1$.
 **Linearity of expectation:** $E(aX+b)=aE(X)+b$. For independent $X,Y$: $\\operatorname{Var}(X+Y)=\\operatorname{Var}(X)+\\operatorname{Var}(Y)$.
 
 **Binomial** counts successes in $n$ Bernoulli trials: $X=\\sum_{i=1}^n I_i$ with $P(I_i=1)=p$.
-`,be=`### Continuous random variables
+`,ye=`### Continuous random variables
 
 PDF $f(x)$ with $f(x) \\geq 0$ and $\\int_{-\\infty}^{\\infty} f(x)\\,dx = 1$.
 
@@ -1278,7 +1278,7 @@ $$P(a\\leq X\\leq b)=\\int_a^b f(x)\\,dx, \\quad P(X=a)=0$$
 **Expected value** is the centre of mass: $E(X)=\\int x f(x)\\,dx$.
 
 **Uniform** on $[a,b]$: constant density — every subinterval of equal length has equal probability.
-`,xe=`### Normal distribution
+`,be=`### Normal distribution
 
 $$X \\sim N(\\mu, \\sigma^2)$$
 
@@ -1313,7 +1313,7 @@ $X \\sim N(\\mu,\\sigma^2)$ has bell-shaped density centred at $\\mu$ with sprea
 **Properties:** sum of independent normals is normal (used in further study); linear transform: if $X\\sim N(\\mu,\\sigma^2)$ then $aX+b \\sim N(a\\mu+b, a^2\\sigma^2)$.
 
 **Empirical rule** comes from integrating the normal density over $\\mu\\pm k\\sigma$.
-`,Se=`### Sample proportions
+`,xe=`### Sample proportions
 
 $$\\hat{P} \\sim N\\!\\left(p, \\frac{p(1-p)}{n}\\right)$$
 
@@ -1344,7 +1344,7 @@ $$\\hat{P} \\approx N\\!\\left(p, \\frac{p(1-p)}{n}\\right)$$
 **Standard error** $\\operatorname{SE}(\\hat{P})=\\sqrt{\\frac{p(1-p)}{n}}$ shrinks as $n$ grows — larger samples give more precise estimates.
 
 **Conditions (approximate normality):** random sample; $np\\geq 10$ and $n(1-p)\\geq 10$ (rule of thumb); if sampling without replacement, population size much larger than $n$.
-`,Ce=`### Confidence intervals for proportions
+`,Se=`### Confidence intervals for proportions
 
 An approximate **95% CI** for population proportion $p$:
 
@@ -1403,13 +1403,13 @@ Exam 1 tests clean algebra and calculus; Exam 2 tests interpretation, modelling,
 **Calculus:** chain, product, quotient rules; $\\int x^n\\,dx$; $v = x'$, $a = v'$
 
 **Probability:** $P(A|B) = \\frac{P(A \\cap B)}{P(B)}$; $\\operatorname{Bin}(n,p)$; $Z = \\frac{X-\\mu}{\\sigma}$; $\\hat{P} \\sim N\\!\\left(p, \\frac{p(1-p)}{n}\\right)$
-`,W=e=>String(e??``).trim().toLowerCase().replace(/\s+/g,` `),G={"functions, relations and graphs":`Functions and transformations`,calculus:`Differential calculus`,"algebra, number and structure":`Algebra and equations`,probability:`Discrete random variables`,statistics:`Sampling and sample proportions`,trigonometry:`Circular functions`};function K(e,t,n){return`${e}
+`,G=e=>String(e??``).trim().toLowerCase().replace(/\s+/g,` `),K={"functions, relations and graphs":`Functions and transformations`,calculus:`Differential calculus`,"algebra, number and structure":`Algebra and equations`,probability:`Discrete random variables`,statistics:`Sampling and sample proportions`,trigonometry:`Circular functions`};function q(e,t,n){return`${e}
 
 **Area:** ${t}
 
 ---
 
-${n}`}var q={"Functions and transformations":K(`## Functions and transformations`,`Functions, relations and graphs`,V),"Polynomial, power and rational functions":K(`## Polynomial, power and rational functions`,`Functions, relations and graphs`,H),"Exponential and logarithmic functions":K(`## Exponential and logarithmic functions`,`Functions, relations and graphs`,U),"Circular functions":K(`## Circular functions`,`Functions, relations and graphs`,pe),"Algebra and equations":K(`## Algebra and equations`,`Algebra`,me),"Differential calculus":K(`## Differential calculus`,`Calculus`,he),"Applications of differentiation":K(`## Applications of differentiation`,`Calculus`,ge),"Integral calculus":K(`## Integral calculus`,`Calculus`,_e),"Applications of integration":K(`## Applications of integration`,`Calculus`,ve),"Discrete random variables":K(`## Discrete random variables`,`Probability and statistics`,ye),"Continuous random variables":K(`## Continuous random variables`,`Probability and statistics`,be),"The normal distribution":K(`## The normal distribution`,`Probability and statistics`,xe),"Sampling and sample proportions":K(`## Sampling and sample proportions`,`Probability and statistics`,Se),"Confidence intervals for proportions":K(`## Confidence intervals for proportions`,`Probability and statistics`,Ce)};function we(e){let t=String(e??``).trim();if(!t)return null;let n=d(t);if(Object.prototype.hasOwnProperty.call(q,n))return q[n];let r=W(n),i=G[r]??G[W(t)];if(i)return q[i]??null;for(let e of h)if(W(e)===r||W(e)===W(t))return q[e];return null}var Te=`### Logic and statements
+${n}`}var J={"Functions and transformations":q(`## Functions and transformations`,`Functions, relations and graphs`,B),"Polynomial, power and rational functions":q(`## Polynomial, power and rational functions`,`Functions, relations and graphs`,V),"Exponential and logarithmic functions":q(`## Exponential and logarithmic functions`,`Functions, relations and graphs`,H),"Circular functions":q(`## Circular functions`,`Functions, relations and graphs`,U),"Algebra and equations":q(`## Algebra and equations`,`Algebra`,me),"Differential calculus":q(`## Differential calculus`,`Calculus`,he),"Applications of differentiation":q(`## Applications of differentiation`,`Calculus`,ge),"Integral calculus":q(`## Integral calculus`,`Calculus`,_e),"Applications of integration":q(`## Applications of integration`,`Calculus`,W),"Discrete random variables":q(`## Discrete random variables`,`Probability and statistics`,ve),"Continuous random variables":q(`## Continuous random variables`,`Probability and statistics`,ye),"The normal distribution":q(`## The normal distribution`,`Probability and statistics`,be),"Sampling and sample proportions":q(`## Sampling and sample proportions`,`Probability and statistics`,xe),"Confidence intervals for proportions":q(`## Confidence intervals for proportions`,`Probability and statistics`,Se)};function Ce(e){let t=String(e??``).trim();if(!t)return null;let n=u(t);if(Object.prototype.hasOwnProperty.call(J,n))return J[n];let r=G(n),i=K[r]??K[G(t)];if(i)return J[i]??null;for(let e of m)if(G(e)===r||G(e)===G(t))return J[e];return null}var we=`### Logic and statements
 
 This topic is about making mathematical arguments **precise**.
 
@@ -1546,7 +1546,7 @@ $P \\Rightarrow Q$ is false only when $P$ true and $Q$ false. **Contrapositive**
 **Quantifiers:** $\\forall x\\,P(x)$ (“for all”) and $\\exists x\\,P(x)$ (“there exists”). Negation swaps quantifier and negates predicate.
 
 **Proof** = finite sequence of justified steps from axioms/assumptions to conclusion. **Induction** proves statements for all $n \\in \\mathbb{Z}^+$ via base + inductive step.
-`,Ee=`### Rational functions
+`,Te=`### Rational functions
 
 A rational function has the form
 
@@ -1640,7 +1640,7 @@ For $f(x)=\\frac{P(x)}{Q(x)}$:
 **Partial fractions** decompose rational integrands into sums of simpler fractions — linear denominators $(x-a)^{-1}$ or repeated, irreducible quadratics in denominator.
 
 **Parametric** curves: velocity vector $\\mathbf{v}=(\\frac{dx}{dt},\\frac{dy}{dt})$; speed $=|\\mathbf{v}|$.
-`,De=`### Complex numbers
+`,Ee=`### Complex numbers
 
 $$z = a + bi, \\quad i^2 = -1$$
 
@@ -1733,7 +1733,7 @@ Complex number $z=a+bi$ is point $(a,b)$ in the plane. **Modulus** $|z|$ is dist
 $$z^n = r^n\\operatorname{cis}(n\\theta)$$
 
 **$n$th roots** of $z=r\\operatorname{cis}\\theta$ are equally spaced on circle radius $r^{1/n}$ — vertices of regular $n$-gon.
-`,Oe=`### Differentiation basics
+`,De=`### Differentiation basics
 
 $\\frac{dy}{dx}$ is the rate of change of $y$ with respect to $x$.
 
@@ -1784,7 +1784,7 @@ If $r = 5$ and $\\frac{dr}{dt} = 2$, then $\\frac{dA}{dt} = 2\\pi(5)(2) = 20\\pi
 **Implicit differentiation** treats $y$ as $y(x)$ and applies chain rule to every $y$-term: differentiate $y^2$ → $2y\\frac{dy}{dx}$.
 
 **Related rates:** identify variables as functions of time; differentiate constraint equation w.r.t. $t$; substitute known rates/values at an instant.
-`,ke=`### Integration
+`,Oe=`### Integration
 
 Integration can represent area under a curve, accumulated change, or reverse differentiation.
 
@@ -1837,7 +1837,7 @@ Area between curves: $\\int_a^b |f(x) - g(x)|\\,dx$ on an interval where you kno
 **Parts:** $\\int u\\,dv = uv - \\int v\\,du$ — choose $u$ using LIATE priority for products.
 
 **Definite integrals** evaluate net signed area; split at zeros for total area; area between curves $=\\int |f-g|\\,dx$.
-`,Ae=`### Differential equations
+`,ke=`### Differential equations
 
 A differential equation contains a derivative.
 
@@ -1874,7 +1874,7 @@ A **DE** relates a function and its derivatives. **Order** = highest derivative 
 **Exponential model** $\\frac{dy}{dt}=ky$ has solution $y=Ae^{kt}$; sign of $k$ determines growth/decay.
 
 **Initial condition** $y(t_0)=y_0$ selects particular solution from family $y=\\cdots+C$.
-`,je=`### Kinematics with calculus
+`,Ae=`### Kinematics with calculus
 
 | Quantity | Relation |
 | --- | --- |
@@ -1908,7 +1908,7 @@ Position $x(t)$, velocity $v(t)=\\frac{dx}{dt}$, acceleration $a(t)=\\frac{dv}{d
 **Constant acceleration** (1D): $v=v_0+at$, $x=x_0+v_0 t+\\frac{1}{2}at^2$.
 
 **$a=v\\frac{dv}{dx}$** useful when acceleration given as function of position/speed rather than time.
-`,Me=`### Vectors
+`,je=`### Vectors
 
 A vector has **magnitude** and **direction**.
 
@@ -1956,7 +1956,7 @@ Vectors encode displacement: $\\overrightarrow{AB}=\\mathbf{b}-\\mathbf{a}$. **S
 $$\\mathbf{a}\\cdot\\mathbf{b}=|\\mathbf{a}||\\mathbf{b}|\\cos\\theta$$
 
 **Vector (cross) product** in $\\mathbb{R}^3$ is perpendicular to both operands with magnitude $|\\mathbf{a}||\\mathbf{b}|\\sin\\theta$ — encodes area and orientation.
-`,Ne=`### Vector equation of a line
+`,Me=`### Vector equation of a line
 
 $$\\mathbf{r} = \\mathbf{a} + \\lambda\\mathbf{d}$$
 
@@ -2012,7 +2012,7 @@ Angle between planes: use normals $\\mathbf{n}_1$, $\\mathbf{n}_2$ the same way.
 **Plane:** $\\mathbf{n}\\cdot(\\mathbf{r}-\\mathbf{a})=0$ or $ax+by+cz=d$ with normal $\\mathbf{n}=(a,b,c)$.
 
 **Distance** point to plane uses projection of vector onto normal. **Angle** between planes = angle between normals (acute angle often taken).
-`,Pe=`### Vector functions and motion
+`,Ne=`### Vector functions and motion
 
 Position, velocity and acceleration as vector functions of time:
 
@@ -2047,7 +2047,7 @@ $\\mathbf{r}(t)=(x(t),y(t),z(t))$ describes a path. **Tangent** vector $\\mathbf
 **Arc length** accumulates speed: $L=\\int_a^b |\\mathbf{r}'(t)|\\,dt$.
 
 In 2D, $\\frac{dy}{dx}=\\frac{dy/dt}{dx/dt}$ links parametric motion to slope of trajectory.
-`,Fe=`### Random variables
+`,Pe=`### Random variables
 
 A random variable assigns numbers to outcomes.
 
@@ -2120,7 +2120,7 @@ Larger samples → less spread in $\\bar{X}$.
 **Normal:** symmetric bell curve; standardisation to $Z$.
 
 For large $n$, sample mean $\\bar{X}$ is approximately normal about $\\mu$ with SD $\\sigma/\\sqrt{n}$ — foundation for confidence intervals on means (Specialist level).
-`,J=`### Confidence intervals
+`,Fe=`### Confidence intervals
 
 $$\\bar{x} \\pm z\\,\\frac{\\sigma}{\\sqrt{n}}$$
 
@@ -2188,29 +2188,29 @@ Interpretation: plausible values for population mean $\\mu$ consistent with samp
 
 ${n}`}var Q={"Logic and proof":Z(`## Logic and proof`,`Discrete mathematics`,`Making mathematical arguments precise — statements, proof styles, and induction.
 
-${Te}`),"Complex numbers and algebra":Z(`## Complex numbers and algebra`,`Algebra, number and structure`,`Complex arithmetic, polar form, De Moivre’s theorem, and roots.
+${we}`),"Complex numbers and algebra":Z(`## Complex numbers and algebra`,`Algebra, number and structure`,`Complex arithmetic, polar form, De Moivre’s theorem, and roots.
 
-${De}`),"Functions, relations and graphs":Z(`## Functions, relations and graphs`,`Functions, relations and graphs`,`Rational functions, partial fractions, parametric and polar graphs.
+${Ee}`),"Functions, relations and graphs":Z(`## Functions, relations and graphs`,`Functions, relations and graphs`,`Rational functions, partial fractions, parametric and polar graphs.
 
-${Ee}`),"Differential calculus":Z(`## Differential calculus`,`Calculus`,`Advanced differentiation — rules, implicit differentiation, and related rates.
+${Te}`),"Differential calculus":Z(`## Differential calculus`,`Calculus`,`Advanced differentiation — rules, implicit differentiation, and related rates.
 
-${Oe}`),"Integral calculus":Z(`## Integral calculus`,`Calculus`,`Integration techniques and when to use them.
+${De}`),"Integral calculus":Z(`## Integral calculus`,`Calculus`,`Integration techniques and when to use them.
 
-${ke}`),"Differential equations":Z(`## Differential equations`,`Calculus`,`Equations involving derivatives — modelling and separable solutions.
+${Oe}`),"Differential equations":Z(`## Differential equations`,`Calculus`,`Equations involving derivatives — modelling and separable solutions.
 
-${Ae}`),Kinematics:Z(`## Kinematics`,`Calculus / mechanics`,`Position, velocity and acceleration linked by calculus.
+${ke}`),Kinematics:Z(`## Kinematics`,`Calculus / mechanics`,`Position, velocity and acceleration linked by calculus.
 
-${je}`),"Vectors in two and three dimensions":Z(`## Vectors in two and three dimensions`,`Space and measurement`,`Vector operations, dot product, projection, and cross product.
+${Ae}`),"Vectors in two and three dimensions":Z(`## Vectors in two and three dimensions`,`Space and measurement`,`Vector operations, dot product, projection, and cross product.
 
-${Me}`),"Lines and planes in 3D":Z(`## Lines and planes in 3D`,`Space and measurement`,`Lines and planes in 3D, normals, and distances.
+${je}`),"Lines and planes in 3D":Z(`## Lines and planes in 3D`,`Space and measurement`,`Lines and planes in 3D, normals, and distances.
 
-${Ne}`),"Vector calculus":Z(`## Vector calculus`,`Space and measurement`,`Vector functions of time and parametric motion.
+${Me}`),"Vector calculus":Z(`## Vector calculus`,`Space and measurement`,`Vector functions of time and parametric motion.
 
-${Pe}`),"Random variables and sampling":Z(`## Random variables and sampling`,`Data analysis, probability and statistics`,`Random variables, binomial and normal models, and sample means.
+${Ne}`),"Random variables and sampling":Z(`## Random variables and sampling`,`Data analysis, probability and statistics`,`Random variables, binomial and normal models, and sample means.
 
-${Fe}`),"Confidence intervals":Z(`## Confidence intervals`,`Data analysis, probability and statistics`,`Estimate a population mean — plus exam strategy and key formulas.
+${Pe}`),"Confidence intervals":Z(`## Confidence intervals`,`Data analysis, probability and statistics`,`Estimate a population mean — plus exam strategy and key formulas.
 
-${J}`)};function Ie(e){let t=String(e??``).trim();if(!t)return null;let n=_(t);if(Object.prototype.hasOwnProperty.call(Q,n))return Q[n];let r=Y(n),i=X[r]??X[Y(t)];if(i)return Q[i]??null;for(let e of p)if(Y(e)===r||Y(e)===Y(t))return Q[e];return null}function Le(e){return/math|methods|specialist|further/i.test(e)}function Re(e){return e===`A`?`### Section A — Analytical response to a text
+${Fe}`)};function Ie(e){let t=String(e??``).trim();if(!t)return null;let n=_(t);if(Object.prototype.hasOwnProperty.call(Q,n))return Q[n];let r=Y(n),i=X[r]??X[Y(t)];if(i)return Q[i]??null;for(let e of f)if(Y(e)===r||Y(e)===Y(t))return Q[e];return null}function Le(e){return/math|methods|specialist|further/i.test(e)}function Re(e){return e===`A`?`### Section A — Analytical response to a text
 
 #### What you need to do
 
@@ -2345,6 +2345,18 @@ Decide before you write:
 - Voice: thoughtful, sincere, hopeful
 - Main idea: protest does not always begin with grand gestures`:`### Section C — Analysis of argument and language
 
+#### Where to find practice articles
+
+For extra Section C practice, browse recent **opinion and analysis** pieces from:
+
+- [The Guardian — Comment is free (Australia)](https://www.theguardian.com/au/commentisfree)
+- [ABC News — Analysis & Opinion](https://www.abc.net.au/news/analysis-and-opinion)
+- [The Australia Institute — Opinions](https://australiainstitute.org.au/news/category/opinions/)
+
+Choose an article, identify the **contention**, map the main **arguments**, and practise analysing **language** (and **visuals** if present).
+
+---
+
 #### What you need to do
 
 Analyse **how** arguments, written/spoken language and **visuals** are used to persuade an intended audience.
@@ -2396,28 +2408,16 @@ Argument being made
 
 **Example sentence style**
 
-By describing the proposal as a “smarter investment”, the writer positions the audience to view the change as practical and responsible, strengthening support for their overall contention.
-
----
-
-#### Where to find practice articles
-
-For extra Section C practice, look for recent **opinion and analysis** pieces from Australian outlets such as:
-
-- [The Guardian — Comment is free (Australia)](https://www.theguardian.com/au/commentisfree)
-- [ABC News — Analysis & Opinion](https://www.abc.net.au/news/analysis-and-opinion)
-- [The Australia Institute — Opinions](https://australiainstitute.org.au/news/category/opinions/)
-
-Choose an article, identify the **contention**, map the main **arguments**, and practise analysing **language** (and **visuals** if present) using the paragraph formula above.`}function $(e){let t=e.subject?.name??e.subjectId;if(e.subjectId===`english`)return Re(e.englishSection??`A`);let n=(e.topic??`all`).trim();return!n||n===`all`?`### Your plan
+By describing the proposal as a “smarter investment”, the writer positions the audience to view the change as practical and responsible, strengthening support for their overall contention.`}function $(e){let t=e.subject?.name??e.subjectId;if(e.subjectId===`english`)return Re(e.englishSection??`A`);let n=(e.topic??`all`).trim();return!n||n===`all`?`### Your plan
 - Pick a topic to focus your practice.
 - Skim the overview (formulas / theory).
 - Hit **Questions** to start.
 
-**Subject:** ${t}`:e.subjectId===`methods`?we(n)||`### ${n}
+**Subject:** ${t}`:e.subjectId===`methods`?Ce(n)||`### ${n}
 
 No overview is defined for this label yet. Use one of the fourteen **Units 3 & 4 topics** (Functions and transformations, Differential calculus, …) with the exact spelling.
 
-**Subject:** Mathematical Methods`:e.subjectId===`general-maths`?B(n)||`### ${n}
+**Subject:** Mathematical Methods`:e.subjectId===`general-maths`?z(n)||`### ${n}
 
 No overview is defined for this label yet. Use one of the four **Units 3 & 4 topics** (Data analysis; Recursion and financial modelling; Matrices; Networks and decision mathematics) with the exact spelling.
 
@@ -2436,4 +2436,4 @@ Structured study-design notes for **${t}** are not bundled yet. Use your class m
 
 **Common traps**
 - Vague explanations (be specific, use examples)
-- Not linking evidence back to the question wording`}function ze(e){return Array.from(new Set(e.map(e=>e.trim()).filter(Boolean))).sort((e,t)=>e.localeCompare(t))}function Be(){let{subjectId:t}=ee(),n=e(),{user:i}=c(),a=s(i),[u]=r();(0,A.useEffect)(()=>{String(t)===`demo`&&!a&&n(`/dashboard`,{replace:!0})},[t,a,n]);let d=(0,A.useMemo)(()=>a?ue({isAdmin:a}):de,[a]),f=(0,A.useMemo)(()=>d.find(e=>String(e.id)===String(t)),[d,t]),[p,h]=(0,A.useState)(!0),[_,v]=(0,A.useState)([]),M=String(t)===`english`,N=String(u.get(`topic`)??`all`),P=String(u.get(`section`)??`A`).toUpperCase()||`A`,[F,I]=(0,A.useState)(N||`all`),[L,R]=(0,A.useState)(P===`B`||P===`C`?P:`A`);(0,A.useEffect)(()=>{if(!t)return;let e=!1;return(async()=>{try{if(h(!0),!i){v(m([],t));return}let n=await te(ne.bootstrap);if(e)return;n.customQuestions&&localStorage.setItem(o.customQuestions,JSON.stringify(n.customQuestions)),v(m(g(n.customQuestions,t),t))}catch{let e=[];try{e=m(g(JSON.parse(localStorage.getItem(o.customQuestions)||`{}`),t),t)}catch{e=m([],t)}v(e)}finally{e||h(!1)}})(),()=>{e=!0}},[t,i]);let z=String(t)===`methods`,B=String(t)===`general-maths`,V=String(t)===`specialist-maths`,H=(0,A.useMemo)(()=>M?[]:z?ae():B?ie():V?re():[`all`,...ze(_.map(e=>e.topic??`General`))],[_,M,z,B,V]),U=(0,A.useMemo)(()=>t?M?$({subjectId:t,subject:f,topic:F,englishSection:L}):!F||F===`all`?null:$({subjectId:t,subject:f,topic:F,englishSection:L}):null,[t,f,F,L,M]);return(0,A.useEffect)(()=>{M||H.length&&!H.includes(F)&&I(`all`)},[H,F,M]),(0,j.jsx)(l,{title:f?`${f.name} Practice`:`Practice`,subtitle:`Choose your focus, then start questions.`,edgeToEdgeHeader:!0,edgeToEdgeMain:!0,children:(0,j.jsxs)(`div`,{className:`mx-auto w-full max-w-6xl space-y-6`,children:[(0,j.jsxs)(k,{className:`overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm`,children:[(0,j.jsx)(`div`,{className:`h-1.5 bg-gradient-to-r from-brand via-brand-light to-amber`}),(0,j.jsxs)(O,{className:`flex flex-col gap-4 p-4 sm:p-5 lg:flex-row lg:items-center lg:justify-between`,children:[(0,j.jsxs)(`div`,{className:`min-w-0`,children:[(0,j.jsxs)(`div`,{className:`flex flex-wrap items-center gap-2`,children:[(0,j.jsx)(`p`,{className:`font-display text-xl font-semibold text-[#0b0f19]`,children:`Practice setup`}),(0,j.jsxs)(le,{variant:`secondary`,className:`gap-1`,children:[(0,j.jsx)(oe,{className:`size-3.5`}),`Focus mode`]})]}),(0,j.jsx)(`p`,{className:`mt-1 text-sm text-muted-foreground`,children:`Pick a topic / section, then start questions.`})]}),(0,j.jsxs)(`div`,{className:`flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-2 lg:gap-3 lg:justify-end`,children:[p?(0,j.jsxs)(`div`,{className:`flex items-center gap-2 rounded-xl border border-black/10 bg-slate-50 px-4 py-3 text-sm text-muted-foreground`,children:[(0,j.jsx)(E,{className:`size-4 animate-spin`}),`Loading…`]}):M?(0,j.jsxs)(`div`,{className:`min-w-[260px] space-y-2`,children:[(0,j.jsx)(`p`,{className:`text-xs font-semibold uppercase tracking-wide text-muted-foreground`,children:`English section`}),(0,j.jsxs)(T,{value:L,onValueChange:e=>R(e??`A`),children:[(0,j.jsx)(S,{className:`h-11 border-black/10 bg-white text-[#0b0f19]`,children:(0,j.jsx)(x,{placeholder:`Choose section`})}),(0,j.jsxs)(C,{alignItemWithTrigger:!1,children:[(0,j.jsx)(w,{value:`A`,children:`Section A — Text response`}),(0,j.jsx)(w,{value:`B`,children:`Section B — Creative`}),(0,j.jsx)(w,{value:`C`,children:`Section C — Writing`})]})]})]}):(0,j.jsxs)(`div`,{className:`min-w-[260px] space-y-2`,children:[(0,j.jsx)(`p`,{className:`text-xs font-semibold uppercase tracking-wide text-muted-foreground`,children:`Topic`}),(0,j.jsxs)(T,{value:F,onValueChange:e=>I(e??`all`),children:[(0,j.jsx)(S,{className:`h-11 border-black/10 bg-white text-[#0b0f19]`,children:(0,j.jsx)(x,{placeholder:`Choose topic`})}),(0,j.jsx)(C,{alignItemWithTrigger:!1,className:`max-h-72`,children:H.map(e=>(0,j.jsx)(w,{value:e,children:e===`all`?`All topics`:e},e))})]})]}),(0,j.jsxs)(y,{onClick:()=>{if(t){if(M){n(`/quiz/english?section=${encodeURIComponent(L)}`);return}n(`/quiz/${t}${F&&F!==`all`?`?topic=${encodeURIComponent(F)}`:``}`)}},className:`h-11 gap-2 bg-brand text-white hover:bg-brand-dark`,children:[(0,j.jsx)(se,{className:`size-4`}),`Questions`,(0,j.jsx)(b,{className:`size-4`})]})]})]})]}),(0,j.jsxs)(k,{className:`overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm`,children:[(0,j.jsx)(`div`,{className:`h-1.5 bg-gradient-to-r from-brand via-brand-light to-amber`,"aria-hidden":!0}),(0,j.jsxs)(D,{className:`space-y-3 px-6 pb-2 pt-6 sm:px-8`,children:[(0,j.jsx)(ce,{className:`font-display text-2xl font-bold tracking-tight text-[#0b0f19] sm:text-3xl`,children:`Study overview`}),(0,j.jsx)(`p`,{className:`text-base font-medium text-muted-foreground sm:text-lg`,children:M?`Section summary for English practice.`:`Large-type reference for the topic you select.`})]}),(0,j.jsx)(O,{className:`px-4 pb-8 pt-2 sm:px-6 sm:pb-10`,children:U?(0,j.jsx)(fe,{markdown:U}):(0,j.jsx)(`div`,{className:`rounded-xl border border-dashed border-black/15 bg-slate-50 p-8 text-center`,children:(0,j.jsx)(`p`,{className:`text-sm font-medium text-muted-foreground`,children:`Select topic`})})})]})]})})}export{Be as default};
+- Not linking evidence back to the question wording`}function ze(e){return Array.from(new Set(e.map(e=>e.trim()).filter(Boolean))).sort((e,t)=>e.localeCompare(t))}function Be(){let{subjectId:t}=ee(),n=e(),{user:i}=s(),a=ne(i),[l]=r();(0,k.useEffect)(()=>{String(t)===`demo`&&!a&&n(`/dashboard`,{replace:!0})},[t,a,n]);let u=(0,k.useMemo)(()=>a?O({isAdmin:a}):fe,[a]),d=(0,k.useMemo)(()=>u.find(e=>String(e.id)===String(t)),[u,t]),[f,m]=(0,k.useState)(!0),[_,v]=(0,k.useState)([]),j=String(t)===`english`,M=String(l.get(`topic`)??`all`),N=String(l.get(`section`)??`A`).toUpperCase()||`A`,[P,F]=(0,k.useState)(M||`all`),[I,L]=(0,k.useState)(N===`B`||N===`C`?N:`A`);(0,k.useEffect)(()=>{if(!t)return;let e=!1;return(async()=>{try{if(m(!0),!i){v(p([],t));return}let n=await te(re.bootstrap);if(e)return;n.customQuestions&&localStorage.setItem(o.customQuestions,JSON.stringify(n.customQuestions)),v(p(h(n.customQuestions,t),t))}catch{let e=[];try{e=p(h(JSON.parse(localStorage.getItem(o.customQuestions)||`{}`),t),t)}catch{e=p([],t)}v(e)}finally{e||m(!1)}})(),()=>{e=!0}},[t,i]);let R=String(t)===`methods`,z=String(t)===`general-maths`,B=String(t)===`specialist-maths`,V=(0,k.useMemo)(()=>j?[]:R?ae():z?ie():B?g():[`all`,...ze(_.map(e=>e.topic??`General`))],[_,j,R,z,B]),H=(0,k.useMemo)(()=>t?j?$({subjectId:t,subject:d,topic:P,englishSection:I}):!P||P===`all`?null:$({subjectId:t,subject:d,topic:P,englishSection:I}):null,[t,d,P,I,j]);(0,k.useEffect)(()=>{j||V.length&&!V.includes(P)&&F(`all`)},[V,P,j]);let U=()=>{if(t){if(j){n(`/quiz/english?section=${encodeURIComponent(I)}`);return}n(`/quiz/${t}${P&&P!==`all`?`?topic=${encodeURIComponent(P)}`:``}`)}};return(0,A.jsx)(c,{title:d?`${d.name} Practice`:`Practice`,subtitle:`Choose your focus, then start questions.`,edgeToEdgeHeader:!0,edgeToEdgeMain:!0,children:(0,A.jsxs)(`div`,{className:`mx-auto w-full max-w-6xl space-y-5 sm:space-y-6`,children:[(0,A.jsxs)(D,{className:`overflow-hidden rounded-2xl border border-slate-200/80 bg-white/95 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_32px_-16px_rgba(15,23,42,0.1)] ring-1 ring-black/[0.03] backdrop-blur-sm`,children:[(0,A.jsx)(`div`,{className:`h-1 bg-gradient-to-r from-brand/90 via-brand-light/80 to-amber/70`,"aria-hidden":!0}),(0,A.jsxs)(E,{className:`flex flex-col gap-4 p-4 sm:p-5 lg:flex-row lg:items-center lg:justify-between`,children:[(0,A.jsxs)(`div`,{className:`min-w-0`,children:[(0,A.jsxs)(`div`,{className:`flex flex-wrap items-center gap-2`,children:[(0,A.jsx)(`p`,{className:`font-display text-lg font-semibold tracking-tight text-slate-900 sm:text-xl`,children:`Practice setup`}),(0,A.jsxs)(de,{variant:`secondary`,className:`gap-1 border border-brand/15 bg-brand/8 text-brand-deep`,children:[(0,A.jsx)(oe,{className:`size-3.5`}),`Focus mode`]})]}),(0,A.jsx)(`p`,{className:`mt-1 text-sm leading-relaxed text-slate-500`,children:`Pick a topic / section, then start questions.`})]}),(0,A.jsxs)(`div`,{className:`flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-2 lg:gap-3 lg:justify-end`,children:[f?(0,A.jsxs)(`div`,{className:`flex items-center gap-2 rounded-xl border border-slate-200/80 bg-slate-50/80 px-4 py-3 text-sm text-slate-500`,children:[(0,A.jsx)(ce,{className:`size-4 animate-spin`}),`Loading…`]}):j?(0,A.jsxs)(`div`,{className:`min-w-[260px] space-y-2`,children:[(0,A.jsx)(`p`,{className:`text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-slate-500`,children:`English section`}),(0,A.jsxs)(T,{value:I,onValueChange:e=>L(e??`A`),children:[(0,A.jsx)(S,{className:`h-11 rounded-xl border-slate-200/90 bg-white text-slate-900 shadow-sm ring-1 ring-black/[0.03]`,children:(0,A.jsx)(x,{placeholder:`Choose section`})}),(0,A.jsxs)(C,{alignItemWithTrigger:!1,children:[(0,A.jsx)(w,{value:`A`,children:`Section A — Text response`}),(0,A.jsx)(w,{value:`B`,children:`Section B — Creative`}),(0,A.jsx)(w,{value:`C`,children:`Section C — Writing`})]})]})]}):(0,A.jsxs)(`div`,{className:`min-w-[260px] space-y-2`,children:[(0,A.jsx)(`p`,{className:`text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-slate-500`,children:`Topic`}),(0,A.jsxs)(T,{value:P,onValueChange:e=>F(e??`all`),children:[(0,A.jsx)(S,{className:`h-11 rounded-xl border-slate-200/90 bg-white text-slate-900 shadow-sm ring-1 ring-black/[0.03]`,children:(0,A.jsx)(x,{placeholder:`Choose topic`})}),(0,A.jsx)(C,{alignItemWithTrigger:!1,className:`max-h-72`,children:V.map(e=>(0,A.jsx)(w,{value:e,children:e===`all`?`All topics`:e},e))})]})]}),(0,A.jsxs)(y,{onClick:U,className:`h-11 gap-2 rounded-xl bg-brand text-white shadow-sm shadow-brand/25 hover:bg-brand-dark`,children:[(0,A.jsx)(se,{className:`size-4`}),`Questions`,(0,A.jsx)(b,{className:`size-4`})]})]})]})]}),(0,A.jsxs)(D,{className:`overflow-hidden rounded-2xl border border-slate-200/80 bg-white/95 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_32px_-16px_rgba(15,23,42,0.1)] ring-1 ring-black/[0.03] backdrop-blur-sm`,children:[(0,A.jsx)(`div`,{className:`h-1 bg-gradient-to-r from-brand/90 via-brand-light/80 to-amber/70`,"aria-hidden":!0}),(0,A.jsxs)(le,{className:`space-y-2 px-5 pb-1 pt-5 sm:px-7 sm:pt-6`,children:[(0,A.jsx)(ue,{className:`font-display text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl`,children:`Study overview`}),(0,A.jsx)(`p`,{className:`text-sm leading-relaxed text-slate-500 sm:text-[0.9375rem]`,children:j?`Section summary for English practice.`:`Reference notes for the topic you select.`})]}),(0,A.jsx)(E,{className:`px-3 pb-6 pt-1 sm:px-5 sm:pb-8`,children:H?(0,A.jsx)(pe,{markdown:H}):(0,A.jsx)(`div`,{className:`rounded-2xl border border-dashed border-slate-200/90 bg-slate-50/60 p-8 text-center`,children:(0,A.jsx)(`p`,{className:`text-sm font-medium text-slate-500`,children:`Select topic`})})})]})]})})}export{Be as default};

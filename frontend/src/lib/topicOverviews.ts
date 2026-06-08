@@ -151,6 +151,18 @@ Decide before you write:
   }
   return `### Section C — Analysis of argument and language
 
+#### Where to find practice articles
+
+For extra Section C practice, browse recent **opinion and analysis** pieces from:
+
+- [The Guardian — Comment is free (Australia)](https://www.theguardian.com/au/commentisfree)
+- [ABC News — Analysis & Opinion](https://www.abc.net.au/news/analysis-and-opinion)
+- [The Australia Institute — Opinions](https://australiainstitute.org.au/news/category/opinions/)
+
+Choose an article, identify the **contention**, map the main **arguments**, and practise analysing **language** (and **visuals** if present).
+
+---
+
 #### What you need to do
 
 Analyse **how** arguments, written/spoken language and **visuals** are used to persuade an intended audience.
@@ -202,19 +214,7 @@ Argument being made
 
 **Example sentence style**
 
-By describing the proposal as a “smarter investment”, the writer positions the audience to view the change as practical and responsible, strengthening support for their overall contention.
-
----
-
-#### Where to find practice articles
-
-For extra Section C practice, look for recent **opinion and analysis** pieces from Australian outlets such as:
-
-- [The Guardian — Comment is free (Australia)](https://www.theguardian.com/au/commentisfree)
-- [ABC News — Analysis & Opinion](https://www.abc.net.au/news/analysis-and-opinion)
-- [The Australia Institute — Opinions](https://australiainstitute.org.au/news/category/opinions/)
-
-Choose an article, identify the **contention**, map the main **arguments**, and practise analysing **language** (and **visuals** if present) using the paragraph formula above.`;
+By describing the proposal as a “smarter investment”, the writer positions the audience to view the change as practical and responsible, strengthening support for their overall contention.`;
 }
 
 export function getTopicOverview(args: {

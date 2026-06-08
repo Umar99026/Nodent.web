@@ -41,6 +41,10 @@ interface AuthContextValue extends AuthState {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+interface SessionResponse {
+  user: User;
+}
+
 interface BootstrapResponse {
   user: User;
   customQuestions?: Record<string, unknown[]>;
@@ -74,7 +78,7 @@ function persistCurrentUser(user: User | null) {
   localStorage.setItem(STORAGE_KEYS.currentUser, JSON.stringify(user));
 }
 
-const BOOTSTRAP_TIMEOUT_MS = 12_000;
+const SESSION_TIMEOUT_MS = 8_000;
 
 function readCachedUser(): User | null {
   try {
@@ -109,7 +113,6 @@ function readInitialAuthState(): AuthState {
 
   const cachedUser = readCachedUser();
   // If a token exists but we don't have the cached user payload, treat it as logged out.
-  // This prevents an infinite spinner on first load / partial storage clears.
   if (!cachedUser) {
     localStorage.removeItem(STORAGE_KEYS.authToken);
     return {
@@ -119,24 +122,41 @@ function readInitialAuthState(): AuthState {
       isLoading: false,
     };
   }
+
+  // Trust cache for instant UI; validate session in the background (no spinner).
   return {
     user: cachedUser,
     token: storedToken,
-    isAuthenticated: !!cachedUser,
-    isLoading: true,
+    isAuthenticated: true,
+    isLoading: false,
   };
 }
 
-function isBootstrapTimeoutError(err: unknown): boolean {
+function isAbortError(err: unknown): boolean {
   return (
-    err instanceof DOMException && err.name === "AbortError"
-  ) || (err instanceof Error && err.name === "AbortError");
+    (err instanceof DOMException && err.name === "AbortError") ||
+    (err instanceof Error && err.name === "AbortError")
+  );
+}
+
+/** Warm customQuestions in localStorage without blocking login or routes. */
+function prefetchQuestionBankInBackground() {
+  void apiFetch<BootstrapResponse>(API_PATHS.bootstrap)
+    .then((data) => {
+      if (data.customQuestions) {
+        localStorage.setItem(
+          STORAGE_KEYS.customQuestions,
+          JSON.stringify(data.customQuestions),
+        );
+      }
+    })
+    .catch(() => {});
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>(readInitialAuthState);
 
-  // Validate stored token (with timeout so a dead API cannot spin forever).
+  // Validate stored token with a small payload (not full bootstrap).
   useEffect(() => {
     const storedToken = localStorage.getItem(STORAGE_KEYS.authToken);
     if (!storedToken) return;
@@ -145,25 +165,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const controller = new AbortController();
     const timeoutId = window.setTimeout(
       () => controller.abort(),
-      BOOTSTRAP_TIMEOUT_MS,
+      SESSION_TIMEOUT_MS,
     );
 
-    apiFetch<BootstrapResponse>(API_PATHS.bootstrap, { signal: controller.signal })
+    apiFetch<SessionResponse>(API_PATHS.auth.session, {
+      signal: controller.signal,
+    })
       .then((data) => {
         const user = withProfilePhoto(data.user);
         persistCurrentUser(user);
-        if (data.customQuestions) {
-          localStorage.setItem(
-            STORAGE_KEYS.customQuestions,
-            JSON.stringify(data.customQuestions),
-          );
-        }
         setState({
           user,
           token: storedToken,
           isAuthenticated: true,
           isLoading: false,
         });
+        prefetchQuestionBankInBackground();
       })
       .catch((err) => {
         if (err instanceof ApiError && err.status === 401) {
@@ -178,6 +195,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return;
         }
 
+        // Network/API down: keep cached session so login page is not blocked for minutes.
         if (cachedUser) {
           setState({
             user: withProfilePhoto(cachedUser),
@@ -188,7 +206,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        if (isBootstrapTimeoutError(err)) {
+        if (isAbortError(err)) {
           localStorage.removeItem(STORAGE_KEYS.authToken);
         }
 
@@ -205,11 +223,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback(
-    async (email: string, password: string) => {
+    async (identity: string, password: string) => {
       const rememberMe = localStorage.getItem(STORAGE_KEYS.rememberLogin) === "true";
+      const trimmed = identity.trim();
+      const isEmail = trimmed.includes("@");
       const data = await apiFetch<AuthResponse>(API_PATHS.auth.login, {
         method: "POST",
-        body: JSON.stringify({ email, password, rememberMe }),
+        body: JSON.stringify({
+          email: isEmail ? trimmed.toLowerCase() : "",
+          username: isEmail ? "" : trimmed,
+          password,
+          rememberMe,
+        }),
       });
 
       const user = withProfilePhoto(data.user);
@@ -222,6 +247,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAuthenticated: true,
         isLoading: false,
       });
+
+      prefetchQuestionBankInBackground();
     },
     [],
   );
@@ -243,12 +270,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAuthenticated: true,
         isLoading: false,
       });
+
+      prefetchQuestionBankInBackground();
     },
     [],
   );
 
   const logout = useCallback(async () => {
-    // Clear local state immediately so the UI can redirect reliably.
     localStorage.removeItem(STORAGE_KEYS.authToken);
     localStorage.removeItem(STORAGE_KEYS.currentUser);
 
@@ -259,7 +287,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isLoading: false,
     });
 
-    // Best-effort server logout (don't block UI).
     void apiFetch(API_PATHS.auth.logout, { method: "POST" }).catch(() => {});
   }, []);
 

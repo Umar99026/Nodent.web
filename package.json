@@ -6,8 +6,8 @@
   },
   "scripts": {
     "dev": "cd frontend && npx vite",
-    "dev:api": "npx wrangler dev --port 8787",
-    "dev:all": "npx concurrently \"npm run dev\" \"npm run dev:api\"",
+    "dev:api": "npx wrangler dev functions/api/[[path]].ts --port 8787",
+    "dev:all": "npx concurrently -k \"npm run dev\" \"npm run dev:api\"",
     "build": "cd frontend && npm run build && node ../scripts/sync-frontend-dist.mjs",
     "deploy": "npm run build && npx wrangler pages deploy . --branch main"
   },

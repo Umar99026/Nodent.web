@@ -29,6 +29,7 @@ export const API_PATHS = {
     login: "/api/auth/login",
     signup: "/api/auth/signup",
     logout: "/api/auth/logout",
+    session: "/api/auth/session",
     account: "/api/auth/account",
     forgotPassword: "/api/auth/forgot-password",
     resetPassword: "/api/auth/reset-password",

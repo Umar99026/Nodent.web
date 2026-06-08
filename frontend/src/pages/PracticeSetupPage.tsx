@@ -162,42 +162,45 @@ export default function PracticeSetupPage() {
       edgeToEdgeHeader
       edgeToEdgeMain
     >
-      <div className="mx-auto w-full max-w-6xl space-y-6">
+      <div className="mx-auto w-full max-w-6xl space-y-5 sm:space-y-6">
         {/* Horizontal setup tile */}
-        <Card className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm">
-          <div className="h-1.5 bg-gradient-to-r from-brand via-brand-light to-amber" />
+        <Card className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white/95 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_32px_-16px_rgba(15,23,42,0.1)] ring-1 ring-black/[0.03] backdrop-blur-sm">
+          <div className="h-1 bg-gradient-to-r from-brand/90 via-brand-light/80 to-amber/70" aria-hidden />
           <CardContent className="flex flex-col gap-4 p-4 sm:p-5 lg:flex-row lg:items-center lg:justify-between">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <p className="font-display text-xl font-semibold text-[#0b0f19]">
+                <p className="font-display text-lg font-semibold tracking-tight text-slate-900 sm:text-xl">
                   Practice setup
                 </p>
-                <Badge variant="secondary" className="gap-1">
+                <Badge
+                  variant="secondary"
+                  className="gap-1 border border-brand/15 bg-brand/8 text-brand-deep"
+                >
                   <Sparkles className="size-3.5" />
                   Focus mode
                 </Badge>
               </div>
-              <p className="mt-1 text-sm text-muted-foreground">
+              <p className="mt-1 text-sm leading-relaxed text-slate-500">
                 Pick a topic / section, then start questions.
               </p>
             </div>
 
             <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-2 lg:gap-3 lg:justify-end">
               {loading ? (
-                <div className="flex items-center gap-2 rounded-xl border border-black/10 bg-slate-50 px-4 py-3 text-sm text-muted-foreground">
+                <div className="flex items-center gap-2 rounded-xl border border-slate-200/80 bg-slate-50/80 px-4 py-3 text-sm text-slate-500">
                   <Loader2 className="size-4 animate-spin" />
                   Loading…
                 </div>
               ) : isEnglish ? (
                 <div className="min-w-[260px] space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  <p className="text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-slate-500">
                     English section
                   </p>
                   <Select
                     value={englishSection}
                     onValueChange={(v) => setEnglishSection((v as EnglishSection) ?? "A")}
                   >
-                    <SelectTrigger className="h-11 border-black/10 bg-white text-[#0b0f19]">
+                    <SelectTrigger className="h-11 rounded-xl border-slate-200/90 bg-white text-slate-900 shadow-sm ring-1 ring-black/[0.03]">
                       <SelectValue placeholder="Choose section" />
                     </SelectTrigger>
                     <SelectContent alignItemWithTrigger={false}>
@@ -209,11 +212,11 @@ export default function PracticeSetupPage() {
                 </div>
               ) : (
                 <div className="min-w-[260px] space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  <p className="text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-slate-500">
                     Topic
                   </p>
                   <Select value={topic} onValueChange={(v) => setTopic(v ?? "all")}>
-                    <SelectTrigger className="h-11 border-black/10 bg-white text-[#0b0f19]">
+                    <SelectTrigger className="h-11 rounded-xl border-slate-200/90 bg-white text-slate-900 shadow-sm ring-1 ring-black/[0.03]">
                       <SelectValue placeholder="Choose topic" />
                     </SelectTrigger>
                     <SelectContent alignItemWithTrigger={false} className="max-h-72">
@@ -229,7 +232,7 @@ export default function PracticeSetupPage() {
 
               <Button
                 onClick={handleStart}
-                className="h-11 gap-2 bg-brand text-white hover:bg-brand-dark"
+                className="h-11 gap-2 rounded-xl bg-brand text-white shadow-sm shadow-brand/25 hover:bg-brand-dark"
               >
                 <BookOpen className="size-4" />
                 Questions
@@ -240,24 +243,24 @@ export default function PracticeSetupPage() {
         </Card>
 
         {/* Overview under setup */}
-        <Card className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm">
-          <div className="h-1.5 bg-gradient-to-r from-brand via-brand-light to-amber" aria-hidden />
-          <CardHeader className="space-y-3 px-6 pb-2 pt-6 sm:px-8">
-            <CardTitle className="font-display text-2xl font-bold tracking-tight text-[#0b0f19] sm:text-3xl">
+        <Card className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white/95 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_32px_-16px_rgba(15,23,42,0.1)] ring-1 ring-black/[0.03] backdrop-blur-sm">
+          <div className="h-1 bg-gradient-to-r from-brand/90 via-brand-light/80 to-amber/70" aria-hidden />
+          <CardHeader className="space-y-2 px-5 pb-1 pt-5 sm:px-7 sm:pt-6">
+            <CardTitle className="font-display text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl">
               Study overview
             </CardTitle>
-            <p className="text-base font-medium text-muted-foreground sm:text-lg">
+            <p className="text-sm leading-relaxed text-slate-500 sm:text-[0.9375rem]">
               {isEnglish
                 ? "Section summary for English practice."
-                : "Large-type reference for the topic you select."}
+                : "Reference notes for the topic you select."}
             </p>
           </CardHeader>
-          <CardContent className="px-4 pb-8 pt-2 sm:px-6 sm:pb-10">
+          <CardContent className="px-3 pb-6 pt-1 sm:px-5 sm:pb-8">
             {overviewMarkdown ? (
               <CurriculumOverview markdown={overviewMarkdown} />
             ) : (
-              <div className="rounded-xl border border-dashed border-black/15 bg-slate-50 p-8 text-center">
-                <p className="text-sm font-medium text-muted-foreground">
+              <div className="rounded-2xl border border-dashed border-slate-200/90 bg-slate-50/60 p-8 text-center">
+                <p className="text-sm font-medium text-slate-500">
                   Select topic
                 </p>
               </div>

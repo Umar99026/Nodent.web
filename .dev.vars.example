@@ -1,0 +1,4 @@
+# Copy to `.dev.vars` in this folder (gitignored). Required for local login.
+DATABASE_URL=postgresql://USER:PASSWORD@HOST/neondb?sslmode=require
+FRONTEND_URL=http://127.0.0.1:5173
+ADMIN_KEY=localdev

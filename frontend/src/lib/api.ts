@@ -1,15 +1,24 @@
 import { STORAGE_KEYS } from "@/lib/constants";
 
 function resolveApiBase(): string {
-  const envBase = (import.meta.env.VITE_API_URL || "").trim().replace(/\/$/, "");
-  if (envBase) return envBase;
+  const raw = (import.meta.env.VITE_API_URL || "").trim();
+  if (raw) {
+    const normalized = raw.replace(/\/$/, "");
+    // Same-origin /api (Vite proxy or Cloudflare Pages Functions)
+    if (normalized === "/api" || normalized.endsWith("/api")) return "";
+    return normalized;
+  }
 
-  // On Cloudflare Pages we prefer same-origin `/api/*` so Pages Functions are used.
-  // This keeps frontend and API deployments in sync on the same domain.
   if (typeof window !== "undefined") {
     const host = window.location.hostname.toLowerCase();
     if (host === "nodent.pages.dev" || host.endsWith(".pages.dev")) {
       return "";
+    }
+    // Vite dev: use proxy in vite.config.ts (same-origin /api → :8787)
+    if (import.meta.env.DEV) return "";
+    // Built app opened on localhost without proxy (e.g. vite preview)
+    if (host === "localhost" || host === "127.0.0.1") {
+      return "http://127.0.0.1:8787";
     }
   }
 
@@ -17,6 +26,39 @@ function resolveApiBase(): string {
 }
 
 const API_BASE = resolveApiBase();
+
+/** Avoid hanging forever when the local API is not running (Vite proxy → :8787). */
+const DEFAULT_FETCH_TIMEOUT_MS = 20_000;
+
+function mergeAbortSignals(
+  timeoutMs: number,
+  external?: AbortSignal | null,
+): { signal: AbortSignal; clear: () => void } {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+  const onExternalAbort = () => controller.abort();
+  if (external) {
+    if (external.aborted) controller.abort();
+    else external.addEventListener("abort", onExternalAbort, { once: true });
+  }
+  return {
+    signal: controller.signal,
+    clear: () => {
+      window.clearTimeout(timeoutId);
+      external?.removeEventListener("abort", onExternalAbort);
+    },
+  };
+}
+
+export function isFetchTimeoutError(err: unknown): boolean {
+  return (
+    (err instanceof DOMException && err.name === "AbortError") ||
+    (err instanceof Error && err.name === "AbortError")
+  );
+}
+
+export const API_UNREACHABLE_MESSAGE =
+  "Could not reach the server. For local dev, run npm run dev:all (frontend + API on port 8787).";
 
 /** Use for bare `fetch()` calls that must hit the Worker in production (e.g. token upload). */
 export function getApiBase(): string {
@@ -30,6 +72,26 @@ export class ApiError extends Error {
     super(message);
     this.name = "ApiError";
     this.status = status;
+  }
+}
+
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+): Promise<Response> {
+  const { signal, clear } = mergeAbortSignals(
+    DEFAULT_FETCH_TIMEOUT_MS,
+    init.signal ?? null,
+  );
+  try {
+    return await fetch(url, { ...init, signal });
+  } catch (err) {
+    if (isFetchTimeoutError(err)) {
+      throw new ApiError(0, API_UNREACHABLE_MESSAGE);
+    }
+    throw err;
+  } finally {
+    clear();
   }
 }
 
@@ -56,7 +118,7 @@ export async function apiFetch<T>(
     headers.set("Content-Type", "application/json");
   }
 
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await fetchWithTimeout(`${API_BASE}${path}`, {
     ...options,
     headers,
   });
@@ -116,7 +178,7 @@ export async function apiFetchAdmin<T>(
     headers.set("Content-Type", "application/json");
   }
 
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await fetchWithTimeout(`${API_BASE}${path}`, {
     ...options,
     headers,
   });
