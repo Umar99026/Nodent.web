@@ -54,6 +54,8 @@ import {
   ChevronDown,
   ChevronRight,
   ArrowRightLeft,
+  RefreshCw,
+  UserPlus,
 } from "lucide-react";
 
 import { baseSubjects, subjectsForUser } from "@/lib/subjects";
@@ -114,6 +116,22 @@ type EnglishAdminPrompt = {
   book: string;
   prompt: string;
 };
+
+type AdminRecentUser = {
+  id: number;
+  username: string;
+  email: string;
+  createdAt: string;
+};
+
+function formatSignupWhen(createdAt: string): string {
+  const d = new Date(createdAt);
+  if (Number.isNaN(d.getTime())) return createdAt || "—";
+  return d.toLocaleString(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
 
 /* ------------------------------------------------------------------ */
 /*  Component                                                          */
@@ -192,6 +210,10 @@ export default function AdminPage() {
     Array<{ section: "A" | "B" | "C"; book: string; prompt: string }>
   >([]);
   const [englishPrompts, setEnglishPrompts] = useState<EnglishAdminPrompt[]>([]);
+
+  const [recentUsers, setRecentUsers] = useState<AdminRecentUser[]>([]);
+  const [totalUsers, setTotalUsers] = useState(0);
+  const [recentUsersLoading, setRecentUsersLoading] = useState(true);
 
   const [selectedQuestionIds, setSelectedQuestionIds] = useState<Set<string>>(
     new Set(),
@@ -581,6 +603,22 @@ export default function AdminPage() {
     }
   }, []);
 
+  const fetchRecentUsers = useCallback(async () => {
+    try {
+      setRecentUsersLoading(true);
+      const data = await apiFetchAdmin<{ users?: AdminRecentUser[]; total?: number }>(
+        `${API_PATHS.admin.users}?limit=10`,
+      );
+      setRecentUsers(Array.isArray(data?.users) ? data.users : []);
+      setTotalUsers(Number(data?.total ?? 0));
+    } catch {
+      setRecentUsers([]);
+      setTotalUsers(0);
+    } finally {
+      setRecentUsersLoading(false);
+    }
+  }, []);
+
   const fetchEnglishPrompts = useCallback(async () => {
     try {
       const booksResp = await apiFetch<{ books: Array<{ id: number; title: string }> }>(
@@ -632,7 +670,11 @@ export default function AdminPage() {
     if (!isAdmin) return;
     let cancelled = false;
     (async () => {
-      const [current] = await Promise.all([fetchQuestions(), fetchEnglishPrompts()]);
+      const [current] = await Promise.all([
+        fetchQuestions(),
+        fetchEnglishPrompts(),
+        fetchRecentUsers(),
+      ]);
       if (cancelled) return;
       await applyStemRepairs(current);
       if (cancelled) return;
@@ -649,6 +691,7 @@ export default function AdminPage() {
     isAdmin,
     fetchQuestions,
     fetchEnglishPrompts,
+    fetchRecentUsers,
     applyStemRepairs,
     applyBankCorrections,
     syncBuiltinsToDatabase,
@@ -1985,6 +2028,68 @@ export default function AdminPage() {
             </CardContent>
           </Card>
         ) : null}
+
+        <Card className="paper-texture">
+          <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+            <div className="space-y-1">
+              <CardTitle className="flex items-center gap-2 font-display text-lg">
+                <UserPlus className="size-5 text-brand" />
+                Recent signups
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                {totalUsers} real account{totalUsers === 1 ? "" : "s"} — latest 10 shown
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              disabled={recentUsersLoading}
+              onClick={() => void fetchRecentUsers()}
+            >
+              {recentUsersLoading ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <RefreshCw className="size-4" />
+              )}
+              Refresh
+            </Button>
+          </CardHeader>
+          <CardContent>
+            {recentUsersLoading && recentUsers.length === 0 ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="size-4 animate-spin" />
+                Loading signups…
+              </div>
+            ) : recentUsers.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No signups yet.</p>
+            ) : (
+              <div className="overflow-x-auto rounded-lg border border-black/10">
+                <table className="w-full min-w-[520px] text-left text-sm">
+                  <thead className="bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
+                    <tr>
+                      <th className="px-3 py-2 font-medium">When</th>
+                      <th className="px-3 py-2 font-medium">Username</th>
+                      <th className="px-3 py-2 font-medium">Email</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recentUsers.map((u) => (
+                      <tr key={u.id} className="border-t border-black/5">
+                        <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">
+                          {formatSignupWhen(u.createdAt)}
+                        </td>
+                        <td className="px-3 py-2 font-medium">{u.username || "—"}</td>
+                        <td className="px-3 py-2">{u.email}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         <Card className="paper-texture">
           <CardHeader>

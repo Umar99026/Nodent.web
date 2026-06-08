@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
-import { eq, or, and, asc, sql } from "drizzle-orm";
+import { eq, or, and, asc, desc, sql, notIlike } from "drizzle-orm";
 import {
   pgTable, serial, text, integer, unique, index,
 } from "drizzle-orm/pg-core";
@@ -845,6 +845,10 @@ async function sendHtmlEmail(
   const apiKey = String(env.RESEND_API_KEY || "").trim();
   const from = String(env.EMAIL_FROM || "Nodent <onboarding@resend.dev>").trim();
 
+  if (!apiKey) {
+    console.warn(`[${logTag}] RESEND_API_KEY is not set — trying MailChannels fallback`);
+  }
+
   if (apiKey) {
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -1513,11 +1517,22 @@ app.post("/api/auth/signup", async (c) => {
   const rememberMe = body.rememberMe !== false; // default true for signups
   const token = createToken();
   await db.insert(sessions).values({ token, userId, createdAt: nowIso(), expiresAt: sessionExpiry(rememberMe) });
-  c.executionCtx.waitUntil(
-    sendNewSignupNotificationEmail(c.env, { id: userId, username, email }).catch((e) => {
-      console.error("[signup-notify] failed:", errorChain(e));
-    }),
-  );
+  try {
+    const sent = await sendNewSignupNotificationEmail(c.env, {
+      id: userId,
+      username,
+      email,
+    });
+    if (sent) {
+      console.info("[signup-notify] alert sent to", signupNotifyEmail(c.env));
+    } else {
+      console.error(
+        "[signup-notify] alert not sent — set RESEND_API_KEY (and EMAIL_FROM) in Cloudflare Pages",
+      );
+    }
+  } catch (e) {
+    console.error("[signup-notify] failed:", errorChain(e));
+  }
   return c.json({ token, user: { id: userId, username, email, profilePhoto: null } });
 });
 
@@ -3063,6 +3078,42 @@ app.post(
 );
 
 // ---- Admin ----
+const SMOKE_TEST_EMAIL_SUFFIX = "@nodent-smoke.test";
+const notSmokeTestUser = notIlike(users.email, `%${SMOKE_TEST_EMAIL_SUFFIX}`);
+
+app.get("/api/admin/users", adminAccessMiddleware, async (c: any) => {
+  const db = c.get("db");
+  const limitRaw = Number(c.req.query("limit") ?? 10);
+  const limit = Number.isFinite(limitRaw)
+    ? Math.min(Math.max(Math.trunc(limitRaw), 1), 50)
+    : 10;
+  const rows = await db
+    .select({
+      id: users.id,
+      username: users.username,
+      email: users.email,
+      createdAt: users.createdAt,
+    })
+    .from(users)
+    .where(notSmokeTestUser)
+    .orderBy(desc(users.createdAt))
+    .limit(limit);
+  const countResult = await db.execute(
+    sql`SELECT COUNT(*)::int AS count FROM users WHERE LOWER(email) NOT LIKE ${`%${SMOKE_TEST_EMAIL_SUFFIX}`}`,
+  );
+  const total = Number((countResult.rows?.[0] as { count?: number })?.count ?? 0);
+  return c.json({ users: rows, total });
+});
+
+app.get("/api/admin/stats", adminAccessMiddleware, async (c: any) => {
+  const db = c.get("db");
+  const countResult = await db.execute(
+    sql`SELECT COUNT(*)::int AS count FROM users WHERE LOWER(email) NOT LIKE ${`%${SMOKE_TEST_EMAIL_SUFFIX}`}`,
+  );
+  const totalUsers = Number((countResult.rows?.[0] as { count?: number })?.count ?? 0);
+  return c.json({ totalUsers });
+});
+
 app.get("/api/admin/questions", adminAccessMiddleware, async (c: any) => {
   const db = c.get("db");
   const rows = await db
