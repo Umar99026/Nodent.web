@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { lazy, Suspense, type ReactNode } from "react";
 import { StudyTimerProvider } from "@/context/StudyTimerContext";
 import { ADMIN_EMAIL, STORAGE_KEYS } from "@/lib/constants";
+import LandingPage from "@/pages/LandingPage";
 
 // Lazy-load page components — stubs will be replaced with real implementations
 const LoginPage = lazy(() => import("@/pages/LoginPage"));
@@ -23,7 +24,6 @@ const EnglishPromptResponsesPage = lazy(
 const AdminPage = lazy(() => import("@/pages/AdminPage"));
 const UploadWrittenImagesPage = lazy(() => import("@/pages/UploadWrittenImagesPage"));
 const PracticeSetupPage = lazy(() => import("@/pages/PracticeSetupPage"));
-const LandingPage = lazy(() => import("@/pages/LandingPage"));
 
 function LoadingFallback() {
   return (
@@ -39,7 +39,7 @@ function LoadingFallback() {
 }
 
 /**
- * Protects a route — redirects unauthenticated users to /login.
+ * Protects a route — redirects unauthenticated users to the landing page.
  */
 function hasStoredAuthToken() {
   return (
@@ -56,7 +56,7 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
   }
 
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/" replace />;
   }
 
   return <>{children}</>;
