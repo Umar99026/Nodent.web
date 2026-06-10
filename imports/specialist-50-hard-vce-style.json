@@ -1,0 +1,689 @@
+{
+  "questions": [
+    {
+      "subjectId": "specialist-maths",
+      "type": "mcq",
+      "topic": "Logic and proof",
+      "question": "Consider the statement: ‘If $n^2$ is even, then $n$ is even.’ Which statement is the contrapositive?",
+      "options": [
+        "If $n$ is even, then $n^2$ is even.",
+        "If $n^2$ is not even, then $n$ is not even.",
+        "If $n$ is not even, then $n^2$ is not even.",
+        "If $n^2$ is even, then $n$ is not even."
+      ],
+      "answer": "C",
+      "marks": 1,
+      "guidance": "The contrapositive of $P\\Rightarrow Q$ is $\\neg Q\\Rightarrow \\neg P$."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "mcq",
+      "topic": "Logic and proof",
+      "question": "Which statement is a counterexample to ‘For all real $x$, if $x^4>x^2$, then $x>1$’?",
+      "options": [
+        "$x=0$",
+        "$x=\\frac12$",
+        "$x=-2$",
+        "$x=2$"
+      ],
+      "answer": "C",
+      "marks": 1,
+      "guidance": "At $x=-2$, $x^4=16>x^2=4$, but $x>1$ is false."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Complex numbers and algebra",
+      "question": "Find all solutions of $z^2-4z+13=0$, where $z\\in\\mathbb C$.",
+      "acceptedAnswers": [
+        "2+3i, 2-3i",
+        "2-3i, 2+3i",
+        "$2\\pm3i$",
+        "2±3i"
+      ],
+      "marks": 2,
+      "guidance": "$z=\\frac{4\\pm\\sqrt{16-52}}{2}=2\\pm3i$."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Complex numbers and algebra",
+      "question": "Express $(1+i)^8$ in the form $a+bi$, where $a,b\\in\\mathbb R$.",
+      "acceptedAnswers": [
+        "16",
+        "16+0i",
+        "$16$",
+        "$16+0i$"
+      ],
+      "marks": 2,
+      "guidance": "$1+i=\\sqrt2\\,\\operatorname{cis}(\\frac\\pi4)$. Hence $(1+i)^8=(\\sqrt2)^8\\operatorname{cis}(2\\pi)=16$."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "mcq",
+      "topic": "Complex numbers and algebra",
+      "question": "The locus $|z-2i|=|z-4|$ is",
+      "options": [
+        "$y=2x-3$",
+        "$y=-2x+3$",
+        "$y=x-1$",
+        "$y=-x+1$"
+      ],
+      "answer": "B",
+      "marks": 1,
+      "guidance": "Let $z=x+iy$. Then $x^2+(y-2)^2=(x-4)^2+y^2$, which simplifies to $y=-2x+3$."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Complex numbers and algebra",
+      "question": "If $z=2\\operatorname{cis}\\left(\\frac{5\\pi}{6}\\right)$, find $z^3$ in exact rectangular form.",
+      "acceptedAnswers": [
+        "8i",
+        "0+8i",
+        "$8i$"
+      ],
+      "marks": 2,
+      "guidance": "$z^3=8\\operatorname{cis}\\left(\\frac{5\\pi}{2}\\right)=8\\operatorname{cis}\\left(\\frac\\pi2\\right)=8i$."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Complex numbers and algebra",
+      "question": "Find the principal argument of $\\frac{1-i\\sqrt3}{-1+i}$.",
+      "acceptedAnswers": [
+        "11pi/12",
+        "\\frac{11\\pi}{12}",
+        "$\\frac{11\\pi}{12}$"
+      ],
+      "marks": 3,
+      "guidance": "$\\arg(1-i\\sqrt3)=-\\frac\\pi3$ and $\\arg(-1+i)=\\frac{3\\pi}{4}$. The quotient has argument $-\\frac{13\\pi}{12}$, equivalent to the principal argument $\\frac{11\\pi}{12}$."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Functions, relations and graphs",
+      "question": "Find the equations of all asymptotes of $f(x)=\\frac{2x^2-3x+1}{x-2}$.",
+      "acceptedAnswers": [
+        "x=2, y=2x+1",
+        "$x=2, y=2x+1$",
+        "vertical x=2, oblique y=2x+1"
+      ],
+      "marks": 3,
+      "guidance": "Polynomial division gives $f(x)=2x+1+\\frac{3}{x-2}$. Thus the asymptotes are $x=2$ and $y=2x+1$."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "mcq",
+      "topic": "Functions, relations and graphs",
+      "question": "The function $f(x)=\\frac{x^2-4}{x-2}$, where $x\\ne2$, has",
+      "options": [
+        "a vertical asymptote at $x=2$",
+        "a removable discontinuity at $x=2$",
+        "a horizontal asymptote at $y=2$",
+        "no discontinuity"
+      ],
+      "answer": "B",
+      "marks": 1,
+      "guidance": "$\\frac{x^2-4}{x-2}=x+2$ for $x\\ne2$, so there is a hole at $x=2$."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Functions, relations and graphs",
+      "question": "Find $k$ such that $g(x)=\\begin{cases}\\frac{x^2-1}{x-1},&x\\ne1\\\\ k,&x=1\\end{cases}$ is continuous at $x=1$.",
+      "acceptedAnswers": [
+        "2",
+        "k=2",
+        "$2$"
+      ],
+      "marks": 2,
+      "guidance": "For $x\\ne1$, $\\frac{x^2-1}{x-1}=x+1$. Hence $\\lim_{x\\to1}g(x)=2$, so $k=2$."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Differential calculus",
+      "question": "For the curve $x^2y+e^y=1+x$, find $\\frac{dy}{dx}$ at $(0,0)$.",
+      "acceptedAnswers": [
+        "1",
+        "$1$"
+      ],
+      "marks": 3,
+      "guidance": "Implicitly differentiate: $2xy+x^2y'+e^y y'=1$. At $(0,0)$, $y'=1$."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Differential calculus",
+      "question": "Find $\\frac{d}{dx}\\left(\\tan^{-1}(3x)-\\sin^{-1}\\left(\\frac{x}{2}\\right)\\right)$.",
+      "acceptedAnswers": [
+        "3/(1+9x^2)-1/sqrt(4-x^2)",
+        "\\frac{3}{1+9x^2}-\\frac{1}{\\sqrt{4-x^2}}",
+        "$\\frac{3}{1+9x^2}-\\frac{1}{\\sqrt{4-x^2}}$"
+      ],
+      "marks": 3,
+      "guidance": "$\\frac{d}{dx}\\tan^{-1}(3x)=\\frac{3}{1+9x^2}$ and $\\frac{d}{dx}\\sin^{-1}(x/2)=\\frac{1}{\\sqrt{4-x^2}}$."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "mcq",
+      "topic": "Differential calculus",
+      "question": "If $x=t^2+1$ and $y=t^3-t$, then $\\frac{dy}{dx}$ at $t=2$ is",
+      "options": [
+        "$\\frac{5}{4}$",
+        "$\\frac{11}{4}$",
+        "$\\frac{5}{2}$",
+        "$11$"
+      ],
+      "answer": "B",
+      "marks": 1,
+      "guidance": "$\\frac{dy}{dx}=\\frac{dy/dt}{dx/dt}=\\frac{3t^2-1}{2t}$. At $t=2$, this is $\\frac{11}{4}$."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Differential calculus",
+      "question": "Find the equation of the tangent to the parametric curve $x=e^t$, $y=t^2+1$ at $t=0$.",
+      "acceptedAnswers": [
+        "y=1",
+        "$y=1$"
+      ],
+      "marks": 3,
+      "guidance": "At $t=0$, the point is $(1,1)$. $\\frac{dy}{dx}=\\frac{2t}{e^t}$, so the gradient is $0$. The tangent is $y=1$."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Integral calculus",
+      "question": "Evaluate $\\int_0^1 x e^{2x}\\,dx$ exactly.",
+      "acceptedAnswers": [
+        "(e^2+1)/4",
+        "\\frac{e^2+1}{4}",
+        "$\\frac{e^2+1}{4}$"
+      ],
+      "marks": 3,
+      "guidance": "By integration by parts, $\\int xe^{2x}dx=\\frac{x}{2}e^{2x}-\\frac14e^{2x}$. Evaluating from 0 to 1 gives $\\frac{e^2+1}{4}$."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "mcq",
+      "topic": "Integral calculus",
+      "question": "The substitution $u=1+x^2$ transforms $\\int_0^2 \\frac{2x}{(1+x^2)^3}\\,dx$ into",
+      "options": [
+        "$\\int_1^5 u^{-3}\\,du$",
+        "$\\int_0^2 u^{-3}\\,du$",
+        "$\\int_1^5 2u^{-3}\\,du$",
+        "$\\int_0^5 u^{-3}\\,du$"
+      ],
+      "answer": "A",
+      "marks": 1,
+      "guidance": "Since $du=2x\\,dx$, and the bounds change from $x=0,2$ to $u=1,5$, the integral is $\\int_1^5u^{-3}\\,du$."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Integral calculus",
+      "question": "Evaluate $\\int_0^{\\pi/4}\\sec^2(2x)\\,dx$ exactly.",
+      "acceptedAnswers": [
+        "undefined",
+        "does not exist",
+        "diverges",
+        "improper integral diverges"
+      ],
+      "marks": 2,
+      "guidance": "$\\sec^2(2x)$ has a vertical asymptote at $x=\\frac\\pi4$, so the improper integral diverges."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Integral calculus",
+      "question": "Find the volume generated when the region under $y=\\sqrt{\\ln x}$ from $x=1$ to $x=e^2$ is rotated about the $x$-axis.",
+      "acceptedAnswers": [
+        "pi(e^2+1)",
+        "\\pi(e^2+1)",
+        "$\\pi(e^2+1)$"
+      ],
+      "marks": 3,
+      "guidance": "Volume $=\\pi\\int_1^{e^2}(\\sqrt{\\ln x})^2dx=\\pi\\int_1^{e^2}\\ln x\\,dx=\\pi[x\\ln x-x]_1^{e^2}=\\pi(e^2+1)$."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Differential equations",
+      "question": "Solve $\\frac{dy}{dx}=3x^2y$ given $y(0)=2$.",
+      "acceptedAnswers": [
+        "y=2e^{x^3}",
+        "$y=2e^{x^3}$"
+      ],
+      "marks": 3,
+      "guidance": "$\\frac{1}{y}dy=3x^2dx$, so $\\ln|y|=x^3+C$. Since $y(0)=2$, $y=2e^{x^3}$."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Differential equations",
+      "question": "Use Euler's method with step size $h=0.5$ to estimate $y(1)$ for $\\frac{dy}{dx}=x+y$, $y(0)=1$.",
+      "acceptedAnswers": [
+        "2.5",
+        "$2.5$",
+        "5/2",
+        "\\frac{5}{2}"
+      ],
+      "marks": 3,
+      "guidance": "$y_1=1+0.5(0+1)=1.5$ at $x=0.5$. Then $y_2=1.5+0.5(0.5+1.5)=2.5$. Correct estimate is $2.5$."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "mcq",
+      "topic": "Differential equations",
+      "question": "The solution of $\\frac{dy}{dx}=2-y$ with $y(0)=5$ is",
+      "options": [
+        "$y=2+3e^{-x}$",
+        "$y=2-3e^{-x}$",
+        "$y=5e^{-x}+2$",
+        "$y=3+2e^{-x}$"
+      ],
+      "answer": "A",
+      "marks": 1,
+      "guidance": "Solving $y'+y=2$ gives $y=2+Ce^{-x}$. Since $y(0)=5$, $C=3$."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Differential equations",
+      "question": "Find the general solution of $\\frac{dQ}{dt}=60-0.02Q$.",
+      "acceptedAnswers": [
+        "Q=3000+Ce^{-0.02t}",
+        "$Q=3000+Ce^{-0.02t}$",
+        "Q=3000+Ce^{-t/50}"
+      ],
+      "marks": 3,
+      "guidance": "The equilibrium is $Q=3000$. Solving $Q'+0.02Q=60$ gives $Q=3000+Ce^{-0.02t}$."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Kinematics",
+      "question": "A particle moves in a straight line with velocity $v(t)=t^3-6t^2+9t$ for $t\\ge0$. Find its displacement from $t=0$ to $t=3$.",
+      "acceptedAnswers": [
+        "27/4",
+        "\\frac{27}{4}",
+        "$\\frac{27}{4}$",
+        "6.75"
+      ],
+      "marks": 3,
+      "guidance": "Displacement $=\\int_0^3(t^3-6t^2+9t)dt=\\left[\\frac{t^4}{4}-2t^3+\\frac{9t^2}{2}\\right]_0^3=\\frac{27}{4}$."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "mcq",
+      "topic": "Kinematics",
+      "question": "A particle moves with acceleration $a=6x$ and has velocity $v=4$ when $x=1$. Its velocity when $x=3$ is",
+      "options": [
+        "$4\\sqrt7$",
+        "$8$",
+        "$\\sqrt{64}$",
+        "$\\sqrt{64+48}$"
+      ],
+      "answer": "B",
+      "marks": 1,
+      "guidance": "Use $a=v\\frac{dv}{dx}$. Then $v\\,dv=6x\\,dx$. Hence $\\frac12(v^2-16)=3(9-1)=24$, so $v^2=64$ and $v=8$."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Kinematics",
+      "question": "A projectile is launched vertically upwards from ground level with speed $28\\text{ m s}^{-1}$. Taking $g=9.8$, find the maximum height reached.",
+      "acceptedAnswers": [
+        "40",
+        "40 m",
+        "$40$",
+        "$40\\text{ m}$"
+      ],
+      "marks": 2,
+      "guidance": "At maximum height $v=0$. Use $v^2=u^2-2gs$: $0=28^2-19.6s$, giving $s=40$ m."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Kinematics",
+      "question": "A particle has position $x(t)=t^4-8t^2+3$ for $t\\ge0$. Find the first time at which the particle is instantaneously at rest.",
+      "acceptedAnswers": [
+        "2",
+        "t=2",
+        "$2$"
+      ],
+      "marks": 2,
+      "guidance": "$v(t)=4t^3-16t=4t(t^2-4)$. For $t\\ge0$, the first positive time at rest is $t=2$."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Vectors in two and three dimensions",
+      "question": "Find the angle between $\\mathbf a=2\\mathbf i-\\mathbf j+2\\mathbf k$ and $\\mathbf b=\\mathbf i+2\\mathbf j+2\\mathbf k$.",
+      "acceptedAnswers": [
+        "pi/3",
+        "\\frac{\\pi}{3}",
+        "$\\frac{\\pi}{3}$",
+        "60 degrees",
+        "60°"
+      ],
+      "marks": 3,
+      "guidance": "$\\mathbf a\\cdot\\mathbf b=4$, $|\\mathbf a|=3$, $|\\mathbf b|=3$. Thus $\\cos\\theta=\\frac49$? Correction: $2(1)+(-1)(2)+2(2)=4$, so $\\cos\\theta=\\frac{4}{9}$, hence $\\theta=\\cos^{-1}(\\frac49)$."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Vectors in two and three dimensions",
+      "question": "Find $\\mathbf a\\times\\mathbf b$ for $\\mathbf a=\\langle1,2,-1\\rangle$ and $\\mathbf b=\\langle3,0,2\\rangle$.",
+      "acceptedAnswers": [
+        "arccos(4/9)",
+        "cos^{-1}(4/9)",
+        "\\cos^{-1}\\left(\\frac{4}{9}\\right)",
+        "$\\cos^{-1}\\left(\\frac49\\right)$"
+      ],
+      "marks": 2,
+      "guidance": "$\\mathbf a\\cdot\\mathbf b=4$, $|\\mathbf a|=3$, $|\\mathbf b|=3$. Thus $\\cos\\theta=\\frac49$, so $\\theta=\\cos^{-1}\\left(\\frac49\\right)$."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "mcq",
+      "topic": "Vectors in two and three dimensions",
+      "question": "The projection of $\\mathbf a=\\langle4,2,4\\rangle$ onto $\\mathbf b=\\langle1,0,1\\rangle$ is",
+      "options": [
+        "$\\langle4,0,4\\rangle$",
+        "$\\langle2,0,2\\rangle$",
+        "$\\langle8,0,8\\rangle$",
+        "$\\langle1,0,1\\rangle$"
+      ],
+      "answer": "A",
+      "marks": 1,
+      "guidance": "$\\operatorname{proj}_{\\mathbf b}\\mathbf a=\\frac{\\mathbf a\\cdot\\mathbf b}{|\\mathbf b|^2}\\mathbf b=\\frac{8}{2}\\langle1,0,1\\rangle=\\langle4,0,4\\rangle$."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Lines and planes in 3D",
+      "question": "Find the point of intersection of the line $\\mathbf r=\\langle1,2,3\\rangle+\\lambda\\langle2,-1,1\\rangle$ with the plane $x+y+z=10$.",
+      "acceptedAnswers": [
+        "(5,0,5)",
+        "$(5,0,5)$",
+        "5,0,5"
+      ],
+      "marks": 3,
+      "guidance": "Substitute: $(1+2\\lambda)+(2-\\lambda)+(3+\\lambda)=10$, so $6+2\\lambda=10$ and $\\lambda=2$. The point is $(5,0,5)$."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Lines and planes in 3D",
+      "question": "Find the shortest distance from $(2,-1,3)$ to the plane $2x-y+2z=5$.",
+      "acceptedAnswers": [
+        "2",
+        "$2$"
+      ],
+      "marks": 2,
+      "guidance": "Distance $=\\frac{|2(2)-(-1)+2(3)-5|}{\\sqrt{2^2+(-1)^2+2^2}}=\\frac{6}{3}=2$."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "mcq",
+      "topic": "Lines and planes in 3D",
+      "question": "A normal vector to the plane through $A(1,0,0)$, $B(0,2,0)$ and $C(0,0,3)$ is",
+      "options": [
+        "$\\langle6,3,2\\rangle$",
+        "$\\langle1,2,3\\rangle$",
+        "$\\langle-1,-2,-3\\rangle$",
+        "$\\langle2,3,6\\rangle$"
+      ],
+      "answer": "A",
+      "marks": 1,
+      "guidance": "The intercept form is $\\frac{x}{1}+\\frac{y}{2}+\\frac{z}{3}=1$, or $6x+3y+2z=6$. A normal vector is $\\langle6,3,2\\rangle$."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Lines and planes in 3D",
+      "question": "Find the equation of the plane through $(1,2,3)$ with normal vector $\\langle2,-1,4\\rangle$.",
+      "acceptedAnswers": [
+        "2x-y+4z=12",
+        "$2x-y+4z=12$"
+      ],
+      "marks": 2,
+      "guidance": "$2(x-1)-1(y-2)+4(z-3)=0$, which simplifies to $2x-y+4z=12$."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Vector calculus",
+      "question": "For $\\mathbf r(t)=\\langle e^t,\\sin t,t^2\\rangle$, find the speed at $t=0$.",
+      "acceptedAnswers": [
+        "sqrt2",
+        "\\sqrt{2}",
+        "$\\sqrt2$"
+      ],
+      "marks": 2,
+      "guidance": "$\\mathbf v(t)=\\langle e^t,\\cos t,2t\\rangle$. At $t=0$, $\\mathbf v=\\langle1,1,0\\rangle$, so speed is $\\sqrt2$."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Vector calculus",
+      "question": "For $\\mathbf r(t)=\\langle3\\cos t,3\\sin t,4t\\rangle$, find the speed.",
+      "acceptedAnswers": [
+        "5",
+        "$5$"
+      ],
+      "marks": 2,
+      "guidance": "$\\mathbf v(t)=\\langle-3\\sin t,3\\cos t,4\\rangle$, so speed $=\\sqrt{9\\sin^2t+9\\cos^2t+16}=5$."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "mcq",
+      "topic": "Vector calculus",
+      "question": "If $\\mathbf r(t)=\\langle t^2,2t,\\ln t\\rangle$ for $t>0$, then $\\mathbf a(1)$ is",
+      "options": [
+        "$\\langle2,0,-1\\rangle$",
+        "$\\langle2,2,1\\rangle$",
+        "$\\langle1,2,0\\rangle$",
+        "$\\langle0,0,-1\\rangle$"
+      ],
+      "answer": "A",
+      "marks": 1,
+      "guidance": "$\\mathbf v(t)=\\langle2t,2,1/t\\rangle$ and $\\mathbf a(t)=\\langle2,0,-1/t^2\\rangle$. Thus $\\mathbf a(1)=\\langle2,0,-1\\rangle$."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Vector calculus",
+      "question": "Find the arc length of $\\mathbf r(t)=\\langle t,2t,t\\rangle$ for $0\\le t\\le3$.",
+      "acceptedAnswers": [
+        "3sqrt6",
+        "3\\sqrt{6}",
+        "$3\\sqrt6$"
+      ],
+      "marks": 2,
+      "guidance": "$|\\mathbf r'(t)|=|\\langle1,2,1\\rangle|=\\sqrt6$. Arc length $=\\int_0^3\\sqrt6\\,dt=3\\sqrt6$."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Random variables and sampling",
+      "question": "Let $X\\sim N(12,3^2)$ and $Y\\sim N(5,2^2)$ be independent. Find the distribution of $2X-Y$.",
+      "acceptedAnswers": [
+        "N(19,40)",
+        "N(19,40)",
+        "$N(19,40)$",
+        "mean 19 variance 40"
+      ],
+      "marks": 3,
+      "guidance": "$E(2X-Y)=24-5=19$ and $\\operatorname{Var}(2X-Y)=4(9)+4=40$, so $2X-Y\\sim N(19,40)$."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "mcq",
+      "topic": "Random variables and sampling",
+      "question": "If $X_1,\\ldots,X_{16}$ are independent with mean $50$ and standard deviation $8$, then the standard deviation of $\\bar X$ is",
+      "options": [
+        "$0.5$",
+        "$2$",
+        "$8$",
+        "$32$"
+      ],
+      "answer": "B",
+      "marks": 1,
+      "guidance": "$\\operatorname{sd}(\\bar X)=\\frac{\\sigma}{\\sqrt n}=\\frac{8}{4}=2$."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Random variables and sampling",
+      "question": "Let $X$ and $Y$ be independent random variables with $E(X)=3$, $E(Y)=4$, $\\operatorname{Var}(X)=2$ and $\\operatorname{Var}(Y)=5$. Find $E(3X-2Y)$ and $\\operatorname{Var}(3X-2Y)$.",
+      "acceptedAnswers": [
+        "1,38",
+        "E=1, Var=38",
+        "$E=1,\\operatorname{Var}=38$"
+      ],
+      "marks": 3,
+      "guidance": "$E(3X-2Y)=9-8=1$. Variance $=9\\operatorname{Var}(X)+4\\operatorname{Var}(Y)=18+20=38$."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Random variables and sampling",
+      "question": "A population has mean $80$ and standard deviation $12$. For samples of size $36$, find $\\Pr(\\bar X>83)$ assuming $\\bar X$ is approximately normal. Give your answer correct to four decimal places.",
+      "acceptedAnswers": [
+        "0.0668",
+        "$0.0668$"
+      ],
+      "marks": 2,
+      "guidance": "$\\bar X$ has mean $80$ and standard deviation $\\frac{12}{6}=2$. Thus $z=\\frac{83-80}{2}=1.5$, so $\\Pr(\\bar X>83)\\approx0.0668$."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Confidence intervals",
+      "question": "A sample of size $64$ has mean $102$ and known population standard deviation $16$. Using $z=1.96$, find the 95% confidence interval for the population mean.",
+      "acceptedAnswers": [
+        "(98.08,105.92)",
+        "(98.08, 105.92)",
+        "98.08 to 105.92",
+        "$ (98.08,105.92)$"
+      ],
+      "marks": 3,
+      "guidance": "Margin $=1.96\\times\\frac{16}{\\sqrt{64}}=3.92$. Interval is $(102-3.92,102+3.92)=(98.08,105.92)$."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "mcq",
+      "topic": "Confidence intervals",
+      "question": "To halve the width of a confidence interval for a population mean, while keeping the same confidence level and standard deviation, the sample size must be",
+      "options": [
+        "halved",
+        "doubled",
+        "multiplied by $4$",
+        "multiplied by $\\sqrt2$"
+      ],
+      "answer": "C",
+      "marks": 1,
+      "guidance": "Interval width is proportional to $\\frac{1}{\\sqrt n}$. To halve the width, multiply $n$ by $4$."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Confidence intervals",
+      "question": "A 95% confidence interval for a population mean is $(17.4,22.6)$. Find the sample mean and margin of error.",
+      "acceptedAnswers": [
+        "20,2.6",
+        "mean=20, margin=2.6",
+        "$\\bar x=20, E=2.6$"
+      ],
+      "marks": 2,
+      "guidance": "The sample mean is the midpoint $20$, and the margin of error is half the width, $2.6$."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Integral calculus",
+      "question": "Evaluate $\\int_0^1 \\frac{x}{\\sqrt{1+x^2}}\\,dx$ exactly.",
+      "acceptedAnswers": [
+        "sqrt2-1",
+        "\\sqrt{2}-1",
+        "$\\sqrt2-1$"
+      ],
+      "marks": 2,
+      "guidance": "Let $u=1+x^2$. Then $du=2x\\,dx$, so the integral is $\\sqrt{1+x^2}\\big|_0^1=\\sqrt2-1$."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "mcq",
+      "topic": "Complex numbers and algebra",
+      "question": "If $z\\bar z=25$ and $\\operatorname{Arg}(z)=\\frac{2\\pi}{3}$, then $z=$",
+      "options": [
+        "$5\\operatorname{cis}\\left(\\frac{2\\pi}{3}\\right)$",
+        "$25\\operatorname{cis}\\left(\\frac{2\\pi}{3}\\right)$",
+        "$5\\operatorname{cis}\\left(-\\frac{2\\pi}{3}\\right)$",
+        "$25\\operatorname{cis}\\left(-\\frac{2\\pi}{3}\\right)$"
+      ],
+      "answer": "A",
+      "marks": 1,
+      "guidance": "$z\\bar z=|z|^2=25$, so $|z|=5$. With argument $\\frac{2\\pi}{3}$, $z=5\\operatorname{cis}(\\frac{2\\pi}{3})$."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Lines and planes in 3D",
+      "question": "Find the angle between the planes $x+2y+2z=4$ and $2x-y+2z=1$.",
+      "acceptedAnswers": [
+        "arccos(4/9)",
+        "cos^{-1}(4/9)",
+        "\\cos^{-1}\\left(\\frac{4}{9}\\right)",
+        "$\\cos^{-1}\\left(\\frac49\\right)$"
+      ],
+      "marks": 3,
+      "guidance": "Normals are $\\langle1,2,2\\rangle$ and $\\langle2,-1,2\\rangle$. Their dot product is $4$, and both magnitudes are $3$, so $\\theta=\\cos^{-1}\\left(\\frac49\\right)$."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Kinematics",
+      "question": "A particle moves with $v(t)=6e^{-2t}$ m s$^{-1}$ for $t\\ge0$. Find the total distance travelled as $t\\to\\infty$.",
+      "acceptedAnswers": [
+        "3",
+        "3 m",
+        "$3$"
+      ],
+      "marks": 2,
+      "guidance": "Since $v(t)>0$, total distance $=\\int_0^\\infty6e^{-2t}dt=3$."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Differential equations",
+      "question": "Find the time $t$ at which $Q(t)=3000-2500e^{-t/50}$ first reaches $2000$.",
+      "acceptedAnswers": [
+        "50ln(5/2)",
+        "50\\log_e(5/2)",
+        "$50\\log_e\\left(\\frac52\\right)$"
+      ],
+      "marks": 2,
+      "guidance": "$2000=3000-2500e^{-t/50}$ gives $e^{-t/50}=\\frac25$, so $t=50\\log_e\\left(\\frac52\\right)$."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "mcq",
+      "topic": "Vector calculus",
+      "question": "For $\\mathbf r(t)=\\langle\\cos t,\\sin t\\rangle$, $\\mathbf v(t)\\cdot\\mathbf a(t)$ equals",
+      "options": [
+        "$-1$",
+        "$0$",
+        "$1$",
+        "$\\sin t\\cos t$"
+      ],
+      "answer": "B",
+      "marks": 1,
+      "guidance": "$\\mathbf v=\\langle-\\sin t,\\cos t\\rangle$ and $\\mathbf a=\\langle-\\cos t,-\\sin t\\rangle$. Their dot product is $\\sin t\\cos t-\\sin t\\cos t=0$."
+    }
+  ]
+}

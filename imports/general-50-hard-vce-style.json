@@ -1,0 +1,684 @@
+{
+  "questions": [
+    {
+      "subjectId": "general-maths",
+      "type": "mcq",
+      "topic": "Data analysis",
+      "question": "The ordered data set $12, 15, 18, 18, 21, 24, 30, 34$ has an interquartile range of",
+      "options": [
+        "$6$",
+        "$9$",
+        "$10.5$",
+        "$16$"
+      ],
+      "answer": "C",
+      "marks": 1,
+      "guidance": "Lower half: $12,15,18,18$, so $Q_1=\\frac{15+18}{2}=16.5$. Upper half: $21,24,30,34$, so $Q_3=\\frac{24+30}{2}=27$. IQR $=27-16.5=10.5$."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Data analysis",
+      "question": "For the data set $4, 7, 9, 11, 14, 15, 21$, find the median and the range.",
+      "acceptedAnswers": [
+        "median 11, range 17",
+        "11,17",
+        "$11,17$",
+        "median=11 range=17"
+      ],
+      "marks": 2,
+      "guidance": "The median is the middle value, $11$. The range is $21-4=17$."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Data analysis",
+      "question": "A data set has $Q_1=42$, $Q_3=68$, minimum $15$ and maximum $112$. Find the upper fence.",
+      "acceptedAnswers": [
+        "107",
+        "$107$"
+      ],
+      "marks": 2,
+      "guidance": "IQR $=68-42=26$. Upper fence $=Q_3+1.5\\times IQR=68+39=107$."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "mcq",
+      "topic": "Data analysis",
+      "question": "A standardised score is calculated using $z=\\frac{x-\\bar x}{s}$. If $x=72$, $\\bar x=60$ and $s=8$, then $z=$",
+      "options": [
+        "$-1.5$",
+        "$0.67$",
+        "$1.5$",
+        "$12$"
+      ],
+      "answer": "C",
+      "marks": 1,
+      "guidance": "$z=\\frac{72-60}{8}=1.5$."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Data analysis",
+      "question": "The heights of a group of students are approximately normally distributed with mean $168$ cm and standard deviation $6$ cm. Using the 68-95-99.7 rule, find the percentage of students with heights between $156$ cm and $180$ cm.",
+      "acceptedAnswers": [
+        "95%",
+        "95",
+        "$95\\%$"
+      ],
+      "marks": 2,
+      "guidance": "$156$ and $180$ are two standard deviations below and above the mean, so approximately $95\\%$ lie in this interval."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "mcq",
+      "topic": "Data analysis",
+      "question": "For a least squares line $y=84-2.5x$, which statement is correct?",
+      "options": [
+        "For each increase of 1 in $x$, the predicted value of $y$ increases by $2.5$.",
+        "For each increase of 1 in $x$, the predicted value of $y$ decreases by $2.5$.",
+        "When $x=0$, the predicted value of $y$ is $-2.5$.",
+        "The correlation coefficient is $-2.5$."
+      ],
+      "answer": "B",
+      "marks": 1,
+      "guidance": "The slope is $-2.5$, so each increase of 1 in $x$ decreases predicted $y$ by $2.5$."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Data analysis",
+      "question": "The least squares line for predicting price, in dollars, from age, in years, is $\\text{price}=420000-8500\\times\\text{age}$. Find the predicted price of a $12$-year-old property.",
+      "acceptedAnswers": [
+        "318000",
+        "$318000$",
+        "$318,000",
+        "318,000"
+      ],
+      "marks": 2,
+      "guidance": "$420000-8500(12)=420000-102000=318000$."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Data analysis",
+      "question": "For a data set, Pearson's correlation coefficient is $r=-0.72$. Find the coefficient of determination as a percentage, correct to one decimal place.",
+      "acceptedAnswers": [
+        "51.8%",
+        "51.8",
+        "$51.8\\%$"
+      ],
+      "marks": 2,
+      "guidance": "$r^2=(-0.72)^2=0.5184$, so the coefficient of determination is $51.8\\%$."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "mcq",
+      "topic": "Data analysis",
+      "question": "A residual is calculated as",
+      "options": [
+        "actual value $+$ predicted value",
+        "predicted value $-$ actual value",
+        "actual value $-$ predicted value",
+        "actual value $\\times$ predicted value"
+      ],
+      "answer": "C",
+      "marks": 1,
+      "guidance": "Residual $=$ actual response value $-$ predicted response value."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Data analysis",
+      "question": "A model predicts $\\hat y=1250$ for a value whose actual observed value is $1175$. Find the residual.",
+      "acceptedAnswers": [
+        "-75",
+        "$-75$"
+      ],
+      "marks": 2,
+      "guidance": "Residual $=1175-1250=-75$."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Data analysis",
+      "question": "A seasonal index for quarter 3 is $1.25$. If the actual value in quarter 3 is $340$, find the deseasonalised value.",
+      "acceptedAnswers": [
+        "272",
+        "$272$"
+      ],
+      "marks": 2,
+      "guidance": "Deseasonalised value $=\\frac{340}{1.25}=272$."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "mcq",
+      "topic": "Data analysis",
+      "question": "If a seasonal index is $0.80$, then compared with the average season, that season is",
+      "options": [
+        "$20\\%$ lower",
+        "$20\\%$ higher",
+        "$80\\%$ lower",
+        "$80\\%$ higher"
+      ],
+      "answer": "A",
+      "marks": 1,
+      "guidance": "A seasonal index of $0.80$ means the season is $80\\%$ of average, or $20\\%$ lower than average."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Data analysis",
+      "question": "The values for days 1 to 5 of a time series are $18, 22, 25, 19, 30$. Find the three-median smoothed value for day 3.",
+      "acceptedAnswers": [
+        "22",
+        "$22$"
+      ],
+      "marks": 2,
+      "guidance": "For day 3, use days 2, 3 and 4: $22,25,19$. Their median is $22$."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Recursion and financial modelling",
+      "question": "A sequence is defined by $u_0=500$ and $u_{n+1}=1.04u_n+30$. Find $u_2$, correct to the nearest cent.",
+      "acceptedAnswers": [
+        "571.20",
+        "$571.20$",
+        "571.2"
+      ],
+      "marks": 2,
+      "guidance": "$u_1=1.04(500)+30=550$. $u_2=1.04(550)+30=571.20$."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "mcq",
+      "topic": "Recursion and financial modelling",
+      "question": "An investment of $P$ dollars earns interest at $6\\%$ per annum compounding monthly. The monthly recurrence multiplier is",
+      "options": [
+        "$1.006$",
+        "$1.005$",
+        "$1.06$",
+        "$0.005$"
+      ],
+      "answer": "B",
+      "marks": 1,
+      "guidance": "The monthly interest rate is $0.06/12=0.005$, so the multiplier is $1.005$."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Recursion and financial modelling",
+      "question": "A loan balance follows $L_0=120000$, $L_{n+1}=1.006L_n-850$. Find the interest charged in the first month.",
+      "acceptedAnswers": [
+        "720",
+        "$720$",
+        "$720.00",
+        "720.00"
+      ],
+      "marks": 2,
+      "guidance": "Interest in the first month is $0.006\\times120000=720$."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Recursion and financial modelling",
+      "question": "A car worth $36000$ depreciates by the flat-rate method to $21600$ after $4$ years. Find the annual flat-rate depreciation amount.",
+      "acceptedAnswers": [
+        "3600",
+        "$3600$",
+        "$3,600",
+        "3,600"
+      ],
+      "marks": 2,
+      "guidance": "Total depreciation is $36000-21600=14400$. Over 4 years, annual depreciation is $14400/4=3600$."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "mcq",
+      "topic": "Recursion and financial modelling",
+      "question": "A machine worth $50000$ depreciates by $12\\%$ per year using reducing balance depreciation. Its value after $n$ years is",
+      "options": [
+        "$50000-0.12n$",
+        "$50000(1.12)^n$",
+        "$50000(0.88)^n$",
+        "$50000-6000n$"
+      ],
+      "answer": "C",
+      "marks": 1,
+      "guidance": "Reducing balance depreciation by $12\\%$ means the value is multiplied by $0.88$ each year."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Recursion and financial modelling",
+      "question": "Equipment is bought for $18000$ and depreciates by $15\\%$ per year using reducing balance depreciation. Find its value after $3$ years, correct to the nearest dollar.",
+      "acceptedAnswers": [
+        "11054",
+        "$11054$",
+        "$11,054",
+        "11,054"
+      ],
+      "marks": 2,
+      "guidance": "$V_3=18000(0.85)^3=11054.25$, so the value is approximately $11054$."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Recursion and financial modelling",
+      "question": "An item worth $24000$ depreciates by unit cost depreciation at $1.80$ per kilometre. If it is used for $4500$ km, find its new value.",
+      "acceptedAnswers": [
+        "15900",
+        "$15900$",
+        "$15,900",
+        "15,900"
+      ],
+      "marks": 2,
+      "guidance": "Depreciation $=1.80\\times4500=8100$. New value $=24000-8100=15900$."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "mcq",
+      "topic": "Recursion and financial modelling",
+      "question": "A perpetuity has principal $300000$ and earns $4.8\\%$ per annum. The annual payment that can be made forever is",
+      "options": [
+        "$12000$",
+        "$14400$",
+        "$15600$",
+        "$300000$"
+      ],
+      "answer": "B",
+      "marks": 1,
+      "guidance": "Annual perpetuity payment $=300000\\times0.048=14400$."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Recursion and financial modelling",
+      "question": "An account starts with $2500$ and earns $3.9\\%$ per annum compounding monthly. No deposits or withdrawals are made. Find the balance after $2$ years, correct to the nearest cent.",
+      "acceptedAnswers": [
+        "2702.56",
+        "$2702.56$",
+        "2702.56"
+      ],
+      "marks": 3,
+      "guidance": "Monthly rate $=0.039/12=0.00325$. Balance $=2500(1.00325)^{24}=2702.56$."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Recursion and financial modelling",
+      "question": "A savings account has $A_0=6000$ and $A_{n+1}=1.002A_n+120$, where $n$ is measured in months. Find $A_1$.",
+      "acceptedAnswers": [
+        "6132",
+        "$6132$",
+        "$6,132",
+        "6132.00"
+      ],
+      "marks": 1,
+      "guidance": "$A_1=1.002(6000)+120=6132$."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Recursion and financial modelling",
+      "question": "A $400000$ loan is charged interest at $5.4\\%$ per annum compounding monthly. Monthly repayments are $2500$. Write a recurrence relation for the loan balance $L_n$ after $n$ months.",
+      "acceptedAnswers": [
+        "L0=400000, L_{n+1}=1.0045L_n-2500",
+        "$L_0=400000,\\ L_{n+1}=1.0045L_n-2500$",
+        "L_0=400000, L_{n+1}=1.0045L_n-2500"
+      ],
+      "marks": 3,
+      "guidance": "Monthly interest rate is $0.054/12=0.0045$. Therefore $L_0=400000$ and $L_{n+1}=1.0045L_n-2500$."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "mcq",
+      "topic": "Matrices",
+      "question": "If matrix $A$ has order $3\\times 2$ and matrix $B$ has order $2\\times 4$, then $AB$ has order",
+      "options": [
+        "$2\\times2$",
+        "$3\\times4$",
+        "$4\\times3$",
+        "$3\\times2$"
+      ],
+      "answer": "B",
+      "marks": 1,
+      "guidance": "A $3\\times2$ matrix multiplied by a $2\\times4$ matrix gives a $3\\times4$ matrix."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Matrices",
+      "question": "Let $A=\\begin{bmatrix}2&-1\\\\3&4\\end{bmatrix}$ and $B=\\begin{bmatrix}5\\\\7\\end{bmatrix}$. Find $AB$.",
+      "acceptedAnswers": [
+        "[3,43]",
+        "\\begin{bmatrix}3\\\\43\\end{bmatrix}",
+        "$\\begin{bmatrix}3\\\\43\\end{bmatrix}$",
+        "(3,43)"
+      ],
+      "marks": 2,
+      "guidance": "$AB=\\begin{bmatrix}2(5)+(-1)(7)\\\\3(5)+4(7)\\end{bmatrix}=\\begin{bmatrix}3\\\\43\\end{bmatrix}$."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "mcq",
+      "topic": "Matrices",
+      "question": "The matrix $\\begin{bmatrix}1&0&0\\\\0&1&0\\\\0&0&1\\end{bmatrix}$ is",
+      "options": [
+        "a zero matrix",
+        "an identity matrix",
+        "a row matrix",
+        "a transition matrix only"
+      ],
+      "answer": "B",
+      "marks": 1,
+      "guidance": "A square matrix with 1s on the leading diagonal and 0s elsewhere is an identity matrix."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Matrices",
+      "question": "Let $A=\\begin{bmatrix}4&7\\\\2&5\\end{bmatrix}$. Find $\\det(A)$.",
+      "acceptedAnswers": [
+        "6",
+        "$6$"
+      ],
+      "marks": 2,
+      "guidance": "$\\det(A)=4(5)-7(2)=20-14=6$."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Matrices",
+      "question": "Let $A=\\begin{bmatrix}1&2\\\\3&4\\end{bmatrix}$. Find the element in row 2, column 1 of $A^2$.",
+      "acceptedAnswers": [
+        "15",
+        "$15$"
+      ],
+      "marks": 2,
+      "guidance": "$A^2=\\begin{bmatrix}7&10\\\\15&22\\end{bmatrix}$, so the row 2, column 1 element is $15$."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "mcq",
+      "topic": "Matrices",
+      "question": "A transition matrix has columns that each sum to",
+      "options": [
+        "$0$",
+        "$1$",
+        "$2$",
+        "the number of states"
+      ],
+      "answer": "B",
+      "marks": 1,
+      "guidance": "In this course convention, transition matrices use columns for current state, so each column sums to 1."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Matrices",
+      "question": "A transition matrix is $M=\\begin{bmatrix}0.8&0.3\\\\0.2&0.7\\end{bmatrix}$ and $S_0=\\begin{bmatrix}100\\\\50\\end{bmatrix}$. Find $S_1=MS_0$.",
+      "acceptedAnswers": [
+        "[95,55]",
+        "\\begin{bmatrix}95\\\\55\\end{bmatrix}",
+        "$\\begin{bmatrix}95\\\\55\\end{bmatrix}$",
+        "(95,55)"
+      ],
+      "marks": 2,
+      "guidance": "$S_1=\\begin{bmatrix}0.8(100)+0.3(50)\\\\0.2(100)+0.7(50)\\end{bmatrix}=\\begin{bmatrix}95\\\\55\\end{bmatrix}$."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Matrices",
+      "question": "A population vector is $P_0=\\begin{bmatrix}40\\\\60\\end{bmatrix}$ and $P_{n+1}=\\begin{bmatrix}0.6&0.2\\\\0.4&0.8\\end{bmatrix}P_n$. Find the total population after one transition.",
+      "acceptedAnswers": [
+        "100",
+        "$100$"
+      ],
+      "marks": 2,
+      "guidance": "$P_1=\\begin{bmatrix}0.6(40)+0.2(60)\\\\0.4(40)+0.8(60)\\end{bmatrix}=\\begin{bmatrix}36\\\\64\\end{bmatrix}$. Total $=100$."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "mcq",
+      "topic": "Matrices",
+      "question": "For $A=\\begin{bmatrix}2&1\\\\5&3\\end{bmatrix}$, the inverse exists because",
+      "options": [
+        "$A$ has no zero entries",
+        "$A$ is a square matrix",
+        "$\\det(A)\\ne0$",
+        "$A$ is symmetric"
+      ],
+      "answer": "C",
+      "marks": 1,
+      "guidance": "$\\det(A)=2(3)-1(5)=1\\ne0$, so the inverse exists."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Matrices",
+      "question": "A permutation sends the order $(A,B,C,D)$ to $(C,A,D,B)$. Starting from $(A,B,C,D)$, what is the order after applying the same permutation twice?",
+      "acceptedAnswers": [
+        "D,C,B,A",
+        "(D,C,B,A)",
+        "D C B A"
+      ],
+      "marks": 2,
+      "guidance": "First application gives $(C,A,D,B)$. Apply the same positions again: new order becomes $(D,C,B,A)$."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Networks and decision mathematics",
+      "question": "A graph has $8$ vertices and $11$ edges. If it is connected and planar, find the number of faces.",
+      "acceptedAnswers": [
+        "5",
+        "$5$"
+      ],
+      "marks": 2,
+      "guidance": "Euler's formula gives $v+f=e+2$. Hence $8+f=11+2$, so $f=5$."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "mcq",
+      "topic": "Networks and decision mathematics",
+      "question": "A connected graph has exactly two vertices of odd degree. Which statement is true?",
+      "options": [
+        "It has an Eulerian circuit but no Eulerian trail.",
+        "It has an Eulerian trail but no Eulerian circuit.",
+        "It has neither an Eulerian trail nor an Eulerian circuit.",
+        "It must be a tree."
+      ],
+      "answer": "B",
+      "marks": 1,
+      "guidance": "A connected graph has an Eulerian trail if exactly two vertices have odd degree, and an Eulerian circuit if all vertices have even degree."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Networks and decision mathematics",
+      "question": "A tree has $13$ vertices. How many edges does it have?",
+      "acceptedAnswers": [
+        "12",
+        "$12$"
+      ],
+      "marks": 1,
+      "guidance": "A tree with $v$ vertices has $v-1$ edges. Hence $13-1=12$."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "mcq",
+      "topic": "Networks and decision mathematics",
+      "question": "In a simple connected graph with vertices $A,B,C,D$, a route that visits each vertex exactly once is called",
+      "options": [
+        "an Eulerian circuit",
+        "a Hamiltonian path",
+        "a bridge",
+        "a cut"
+      ],
+      "answer": "B",
+      "marks": 1,
+      "guidance": "A Hamiltonian path visits each vertex exactly once."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Networks and decision mathematics",
+      "question": "A network has edges with weights $AB=4$, $AC=6$, $BC=3$, $BD=5$, $CD=2$. Find the weight of the minimum spanning tree.",
+      "acceptedAnswers": [
+        "9",
+        "$9$"
+      ],
+      "marks": 3,
+      "guidance": "Choose the smallest edges that connect all vertices without a cycle: $CD=2$, $BC=3$, $AB=4$. Total $=9$."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Networks and decision mathematics",
+      "question": "A shortest path from $S$ to $T$ has edge weights $7, 4, 9$ along the selected route. Find the length of this path.",
+      "acceptedAnswers": [
+        "20",
+        "$20$"
+      ],
+      "marks": 1,
+      "guidance": "Total path length $=7+4+9=20$."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "mcq",
+      "topic": "Networks and decision mathematics",
+      "question": "For a maximum flow problem, the maximum flow is equal to",
+      "options": [
+        "the number of edges in the network",
+        "the capacity of the minimum cut",
+        "the capacity of the maximum cut",
+        "the sum of all edge capacities"
+      ],
+      "answer": "B",
+      "marks": 1,
+      "guidance": "By the max-flow min-cut theorem, maximum flow equals the capacity of the minimum cut."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Networks and decision mathematics",
+      "question": "A cut in a flow network crosses edges with capacities $12$, $9$, $4$ and $15$. Find the capacity of the cut.",
+      "acceptedAnswers": [
+        "40",
+        "$40$"
+      ],
+      "marks": 1,
+      "guidance": "Cut capacity $=12+9+4+15=40$."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Networks and decision mathematics",
+      "question": "A project has activities $A,B,C,D$ with durations $A=3$, $B=5$, $C=4$, $D=6$. Activity $D$ cannot start until both $B$ and $C$ are complete; $B$ and $C$ cannot start until $A$ is complete. Find the minimum completion time.",
+      "acceptedAnswers": [
+        "14",
+        "14 days",
+        "$14$"
+      ],
+      "marks": 3,
+      "guidance": "After $A$, $B$ and $C$ run in parallel. The longer is $B=5$. Then $D=6$. Minimum time $=3+5+6=14$."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "mcq",
+      "topic": "Networks and decision mathematics",
+      "question": "In the Hungarian algorithm for a minimisation problem, the first step is usually to",
+      "options": [
+        "add the largest value in each row to all entries in that row",
+        "subtract the smallest value in each row from all entries in that row",
+        "multiply each row by its smallest value",
+        "delete all rows that contain a zero"
+      ],
+      "answer": "B",
+      "marks": 1,
+      "guidance": "For a minimisation assignment problem, the row reduction step subtracts the smallest value in each row."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Networks and decision mathematics",
+      "question": "Three workers $A,B,C$ are to be assigned to three jobs $1,2,3$. The costs are $A:(9,4,7)$, $B:(6,8,5)$, $C:(5,7,6)$. Find the minimum total cost.",
+      "acceptedAnswers": [
+        "14",
+        "$14$"
+      ],
+      "marks": 3,
+      "guidance": "Check assignments: $A2+B3+C1=4+5+5=14$, which is minimal."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Data analysis",
+      "question": "A data set has mean $24$ and standard deviation $5$. A value has standardised score $z=-1.4$. Find the original value.",
+      "acceptedAnswers": [
+        "17",
+        "$17$"
+      ],
+      "marks": 2,
+      "guidance": "$z=\\frac{x-24}{5}=-1.4$, so $x-24=-7$ and $x=17$."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "mcq",
+      "topic": "Recursion and financial modelling",
+      "question": "The recurrence $V_0=18000$, $V_{n+1}=V_n-1500$ models",
+      "options": [
+        "compound interest",
+        "reducing balance depreciation",
+        "flat rate depreciation",
+        "a perpetuity"
+      ],
+      "answer": "C",
+      "marks": 1,
+      "guidance": "The value decreases by the same dollar amount each period, so it is flat rate depreciation."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Matrices",
+      "question": "Let $A=\\begin{bmatrix}3&1\\\\2&4\\end{bmatrix}$ and $B=\\begin{bmatrix}1&5\\\\0&2\\end{bmatrix}$. Find the element in row 1, column 2 of $AB$.",
+      "acceptedAnswers": [
+        "17",
+        "$17$"
+      ],
+      "marks": 2,
+      "guidance": "Row 1 of $A$ times column 2 of $B$: $3(5)+1(2)=17$."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "short_answer",
+      "topic": "Networks and decision mathematics",
+      "question": "A connected graph has vertex degrees $3,3,2,2,2,2$. Does it have an Eulerian circuit? Answer yes or no.",
+      "acceptedAnswers": [
+        "no",
+        "No",
+        "NO"
+      ],
+      "marks": 1,
+      "guidance": "An Eulerian circuit requires all vertices to have even degree. There are two vertices of odd degree, so it does not have an Eulerian circuit."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "mcq",
+      "topic": "Data analysis",
+      "question": "A least squares model is fitted to data with $r=0.91$. Which description best matches the linear association?",
+      "options": [
+        "weak and positive",
+        "strong and positive",
+        "weak and negative",
+        "strong and negative"
+      ],
+      "answer": "B",
+      "marks": 1,
+      "guidance": "Since $r=0.91$ is close to $1$, the association is strong and positive."
+    }
+  ]
+}

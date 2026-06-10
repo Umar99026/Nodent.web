@@ -1,0 +1,696 @@
+{
+  "questions": [
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Differential calculus",
+      "question": "Find the value of $\\frac{dy}{dx}$ at $x=1$ for $y=(x^2+1)^3e^{-2x}$.",
+      "acceptedAnswers": [
+        "8e^{-2}",
+        "8/e^2",
+        "\\frac{8}{e^2}",
+        "$8e^{-2}$",
+        "$\\frac{8}{e^2}$"
+      ],
+      "marks": 3,
+      "guidance": "Use the product and chain rules: $y'=e^{-2x}[6x(x^2+1)^2-2(x^2+1)^3]$. At $x=1$, $y'=e^{-2}(24-16)=8e^{-2}$."
+    },
+    {
+      "subjectId": "methods",
+      "type": "mcq",
+      "topic": "Functions and transformations",
+      "question": "Let $f(x)=a\\sin(2x)+b$, where $a>0$. The range of $f$ is $[-3,7]$. Which ordered pair $(a,b)$ is correct?",
+      "options": [
+        "$(3,2)$",
+        "$(5,2)$",
+        "$(5,-3)$",
+        "$(2,5)$"
+      ],
+      "answer": "B",
+      "marks": 1,
+      "guidance": "Amplitude is $\\frac{7-(-3)}{2}=5$ and midline is $\\frac{7+(-3)}{2}=2$, so $(a,b)=(5,2)$."
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Exponential and logarithmic functions",
+      "question": "Solve $e^{2x}-9e^x+20=0$ for $x$.",
+      "acceptedAnswers": [
+        "x=log_e(4), log_e(5)",
+        "x=ln4, ln5",
+        "ln(4), ln(5)",
+        "\\log_e(4), \\log_e(5)",
+        "$x=\\log_e(4),\\log_e(5)$"
+      ],
+      "marks": 2,
+      "guidance": "Let $u=e^x$. Then $u^2-9u+20=0$, so $u=4$ or $u=5$. Hence $x=\\log_e4$ or $x=\\log_e5$."
+    },
+    {
+      "subjectId": "methods",
+      "type": "mcq",
+      "topic": "Circular functions",
+      "question": "All solutions of $2\\cos(3x-\\pi)=1$ for $0\\le x\\le \\pi$ are",
+      "options": [
+        "$\\frac{2\\pi}{9},\\frac{4\\pi}{9}$",
+        "$\\frac{2\\pi}{9},\\frac{4\\pi}{9},\\frac{8\\pi}{9}$",
+        "$\\frac{4\\pi}{9},\\frac{8\\pi}{9}$",
+        "$\\frac{2\\pi}{9},\\frac{8\\pi}{9}$"
+      ],
+      "answer": "B",
+      "marks": 1,
+      "guidance": "$\\cos(3x-\\pi)=\\frac12$. Thus $3x-\\pi=\\pm\\frac{\\pi}{3}+2k\\pi$, giving $x=\\frac{2\\pi}{9},\\frac{4\\pi}{9},\\frac{8\\pi}{9}$ in the interval."
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Applications of differentiation",
+      "question": "For $f(x)=x^3-6x^2+9x+2$, find the maximum value of $f$ on $0\\le x\\le 4$.",
+      "acceptedAnswers": [
+        "6",
+        "$6$"
+      ],
+      "marks": 3,
+      "guidance": "$f'(x)=3(x-1)(x-3)$. Check $x=0,1,3,4$: $f(0)=2$, $f(1)=6$, $f(3)=2$, $f(4)=6$. The maximum value is $6$."
+    },
+    {
+      "subjectId": "methods",
+      "type": "mcq",
+      "topic": "Algebra and equations",
+      "question": "The equation $x^2-2kx+k+3=0$ has exactly one real solution when",
+      "options": [
+        "$k=\\frac{1-\\sqrt{13}}{2}$ or $k=\\frac{1+\\sqrt{13}}{2}$",
+        "$k=-1$ or $k=3$",
+        "$k=\\frac{-1-\\sqrt{13}}{2}$ or $k=\\frac{-1+\\sqrt{13}}{2}$",
+        "$k=1$ only"
+      ],
+      "answer": "A",
+      "marks": 1,
+      "guidance": "A repeated root requires discriminant zero: $(-2k)^2-4(k+3)=0$, so $k^2-k-3=0$. Hence $k=\\frac{1\\pm\\sqrt{13}}{2}$."
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Integral calculus",
+      "question": "Evaluate $\\int_0^1 x(1-x)^4\\,dx$ exactly.",
+      "acceptedAnswers": [
+        "1/30",
+        "\\frac{1}{30}",
+        "$\\frac{1}{30}$"
+      ],
+      "marks": 3,
+      "guidance": "Expand or use substitution: $x(1-x)^4=x-4x^2+6x^3-4x^4+x^5$. The integral from 0 to 1 is $\\frac12-\\frac43+\\frac32-\\frac45+\\frac16=\\frac1{30}$."
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Applications of integration",
+      "question": "Find the exact area enclosed by $y=x^2$ and $y=2x+3$.",
+      "acceptedAnswers": [
+        "32/3",
+        "\\frac{32}{3}",
+        "$\\frac{32}{3}$"
+      ],
+      "marks": 4,
+      "guidance": "Intersections satisfy $x^2=2x+3$, so $x=-1,3$. Area $=\\int_{-1}^{3}(2x+3-x^2)\\,dx=\\frac{32}{3}$."
+    },
+    {
+      "subjectId": "methods",
+      "type": "mcq",
+      "topic": "Polynomial, power and rational functions",
+      "question": "The rational function $f(x)=\\frac{2x^2-5x-3}{x^2-9}$ has a removable discontinuity at",
+      "options": [
+        "$x=-3$ only",
+        "$x=3$ only",
+        "$x=-3$ and $x=3$",
+        "neither $x=-3$ nor $x=3$"
+      ],
+      "answer": "B",
+      "marks": 1,
+      "guidance": "$2x^2-5x-3=(2x+1)(x-3)$ and $x^2-9=(x-3)(x+3)$. The factor $x-3$ cancels, so the removable discontinuity is at $x=3$."
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Discrete random variables",
+      "question": "Let $X$ have probability mass function $\\Pr(X=x)=kx$ for $x=1,2,3,4$ and $0$ otherwise. Find $\\operatorname{Var}(X)$.",
+      "acceptedAnswers": [
+        "1",
+        "$1$"
+      ],
+      "marks": 3,
+      "guidance": "$k(1+2+3+4)=1$, so $k=\\frac1{10}$. $E(X)=\\frac{1^2+2^2+3^2+4^2}{10}=3$ and $E(X^2)=\\frac{1^3+2^3+3^3+4^3}{10}=10$. Hence variance $=10-3^2=1$."
+    },
+    {
+      "subjectId": "methods",
+      "type": "mcq",
+      "topic": "Continuous random variables",
+      "question": "For $0\\le x\\le 2$, let $f(x)=kx(2-x)$ be a probability density function. The value of $k$ is",
+      "options": [
+        "$\\frac12$",
+        "$\\frac34$",
+        "$1$",
+        "$\\frac32$"
+      ],
+      "answer": "B",
+      "marks": 1,
+      "guidance": "$1=\\int_0^2 kx(2-x)\\,dx=k\\left[x^2-\\frac{x^3}{3}\\right]_0^2=\\frac{4k}{3}$, so $k=\\frac34$."
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "The normal distribution",
+      "question": "Let $X\\sim N(\\mu,\\sigma^2)$. Given $\\Pr(X<50)=0.8413$ and $\\Pr(X<38)=0.1587$, find $\\mu$ and $\\sigma$.",
+      "acceptedAnswers": [
+        "mu=44, sigma=6",
+        "\\mu=44, \\sigma=6",
+        "(44,6)",
+        "$\\mu=44,\\sigma=6$"
+      ],
+      "marks": 3,
+      "guidance": "Using $0.8413\\approx\\Phi(1)$ and $0.1587\\approx\\Phi(-1)$ gives $\\frac{50-\\mu}{\\sigma}=1$ and $\\frac{38-\\mu}{\\sigma}=-1$. Solving gives $\\mu=44$, $\\sigma=6$."
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Sampling and sample proportions",
+      "question": "A sample proportion is $\\hat p=0.36$ from a sample of size $n=400$. Find the standard deviation of $\\hat P$, assuming the population proportion is $0.36$.",
+      "acceptedAnswers": [
+        "0.024",
+        "$0.024$",
+        "3/125",
+        "\\frac{3}{125}"
+      ],
+      "marks": 2,
+      "guidance": "$\\operatorname{sd}(\\hat P)=\\sqrt{\\frac{p(1-p)}{n}}=\\sqrt{\\frac{0.36(0.64)}{400}}=0.024$."
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Confidence intervals for proportions",
+      "question": "An approximate 95% confidence interval for a population proportion is $(0.412,0.588)$. If the sample proportion is the midpoint and the interval was formed using $z=1.96$, find the sample size $n$ to the nearest integer.",
+      "acceptedAnswers": [
+        "124",
+        "n=124",
+        "$124$"
+      ],
+      "marks": 3,
+      "guidance": "The midpoint is $\\hat p=0.5$ and the margin of error is $0.088$. Solve $0.088=1.96\\sqrt{\\frac{0.5(0.5)}{n}}$, giving $n\\approx124$."
+    },
+    {
+      "subjectId": "methods",
+      "type": "mcq",
+      "topic": "Functions and transformations",
+      "question": "If $f(x)=\\log_e(x)$, then the graph of $y=-2f(x-3)+1$ has domain",
+      "options": [
+        "$(0,\\infty)$",
+        "$(3,\\infty)$",
+        "$(-3,\\infty)$",
+        "$(-\\infty,3)$"
+      ],
+      "answer": "B",
+      "marks": 1,
+      "guidance": "The logarithm input must satisfy $x-3>0$, so $x>3$."
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Applications of differentiation",
+      "question": "Find the equation of the tangent to $y=e^{2x}\\log_e(x)$ at $x=1$.",
+      "acceptedAnswers": [
+        "y=e^2 x-e^2",
+        "y=e^2(x-1)",
+        "$y=e^2(x-1)$",
+        "$y=e^2x-e^2$"
+      ],
+      "marks": 3,
+      "guidance": "$y(1)=0$. Also $y'=2e^{2x}\\log_e(x)+\\frac{e^{2x}}{x}$, so $y'(1)=e^2$. The tangent is $y=e^2(x-1)$."
+    },
+    {
+      "subjectId": "methods",
+      "type": "mcq",
+      "topic": "Algebra and equations",
+      "question": "The number of real solutions to $\\log_e(x+2)+\\log_e(4-x)=\\log_e(5)$ is",
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "answer": "C",
+      "marks": 1,
+      "guidance": "Domain is $-2<x<4$. Combine logs: $(x+2)(4-x)=5$, so $x^2-2x-3=0$, giving $x=-1$ or $x=3$, both in the domain."
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Circular functions",
+      "question": "For $f(x)=2-3\\sin(2x)$, find the exact range of $f$ on $0\\le x\\le \\frac{\\pi}{3}$.",
+      "acceptedAnswers": [
+        "[-1,2]",
+        "$[-1,2]$",
+        "-1 to 2"
+      ],
+      "marks": 3,
+      "guidance": "On $0\\le x\\le\\frac\\pi3$, $2x\\in[0,\\frac{2\\pi}{3}]$, so $\\sin(2x)$ ranges from $0$ to $1$. Hence $2-3\\sin(2x)$ ranges from $-1$ to $2$."
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Integral calculus",
+      "question": "Find $F(4)$ if $F'(x)=\\frac{3}{\\sqrt{x}}-2x$ for $x>0$ and $F(1)=5$.",
+      "acceptedAnswers": [
+        "-4",
+        "$-4$"
+      ],
+      "marks": 3,
+      "guidance": "$F(x)=6\\sqrt{x}-x^2+C$. From $F(1)=5$, $6-1+C=5$, so $C=0$. Thus $F(4)=12-16=-4$."
+    },
+    {
+      "subjectId": "methods",
+      "type": "mcq",
+      "topic": "Applications of integration",
+      "question": "The trapezium rule with one trapezium is used to approximate $\\int_0^2 f(x)\\,dx$. For which function is the approximation exact?",
+      "options": [
+        "$f(x)=x^2+1$",
+        "$f(x)=e^x$",
+        "$f(x)=3x-4$",
+        "$f(x)=\\sin x$"
+      ],
+      "answer": "C",
+      "marks": 1,
+      "guidance": "The trapezium rule is exact for linear functions, so it is exact for $f(x)=3x-4$."
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Polynomial, power and rational functions",
+      "question": "Find the stationary point of inflection of $f(x)=x^3-6x^2+12x-5$.",
+      "acceptedAnswers": [
+        "(2,3)",
+        "$(2,3)$",
+        "x=2, y=3"
+      ],
+      "marks": 3,
+      "guidance": "$f'(x)=3x^2-12x+12=3(x-2)^2$ and $f''(x)=6x-12$. At $x=2$, $f''$ changes sign and $f(2)=3$, so the point is $(2,3)$."
+    },
+    {
+      "subjectId": "methods",
+      "type": "mcq",
+      "topic": "Exponential and logarithmic functions",
+      "question": "If $a>1$, then $a^{2x-1}=\\sqrt{a}$ has solution",
+      "options": [
+        "$x=\\frac14$",
+        "$x=\\frac34$",
+        "$x=1$",
+        "$x=\\frac32$"
+      ],
+      "answer": "B",
+      "marks": 1,
+      "guidance": "$\\sqrt{a}=a^{1/2}$. Since $a>1$, equate exponents: $2x-1=\\frac12$, so $x=\\frac34$."
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Differential calculus",
+      "question": "Find $\\frac{d}{dx}\\left(\\frac{x^2+1}{e^x}\\right)$.",
+      "acceptedAnswers": [
+        "e^{-x}(-x^2+2x-1)",
+        "\\frac{-x^2+2x-1}{e^x}",
+        "$e^{-x}(-x^2+2x-1)$",
+        "$\\frac{-x^2+2x-1}{e^x}$"
+      ],
+      "marks": 3,
+      "guidance": "Write the function as $(x^2+1)e^{-x}$. Then $y'=2xe^{-x}-(x^2+1)e^{-x}=e^{-x}(-x^2+2x-1)$."
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Applications of differentiation",
+      "question": "A rectangle has its lower side on the $x$-axis and its upper vertices on $y=12-x^2$. If it is symmetric about the $y$-axis, find the maximum possible area.",
+      "acceptedAnswers": [
+        "32",
+        "$32$"
+      ],
+      "marks": 4,
+      "guidance": "Let the right upper vertex be $(x,12-x^2)$, where $x>0$. Area $A=2x(12-x^2)=24x-2x^3$. $A'=24-6x^2=0$ gives $x=2$. The maximum area is $2(2)(8)=32$."
+    },
+    {
+      "subjectId": "methods",
+      "type": "mcq",
+      "topic": "Continuous random variables",
+      "question": "Let $X$ have probability density function $f(x)=\\frac{3}{8}x^2$ for $0\\le x\\le2$. The median $m$ is",
+      "options": [
+        "$\\sqrt[3]{4}$",
+        "$1$",
+        "$\\sqrt2$",
+        "$\\frac32$"
+      ],
+      "answer": "A",
+      "marks": 1,
+      "guidance": "$\\Pr(X\\le m)=\\int_0^m\\frac38x^2\\,dx=\\frac{m^3}{8}=\\frac12$, so $m^3=4$ and $m=\\sqrt[3]{4}$."
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Discrete random variables",
+      "question": "Let $X\\sim\\operatorname{Bi}(5,p)$. If $\\Pr(X=0)=\\Pr(X=1)$, find $p$.",
+      "acceptedAnswers": [
+        "1/6",
+        "\\frac{1}{6}",
+        "$\\frac{1}{6}$"
+      ],
+      "marks": 3,
+      "guidance": "$(1-p)^5=5p(1-p)^4$. Since $p\\ne1$, divide by $(1-p)^4$ to get $1-p=5p$, so $p=\\frac16$."
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "The normal distribution",
+      "question": "If $Z\\sim N(0,1)$ and $\\Pr(-a<Z<a)=0.90$, find $a$ correct to two decimal places.",
+      "acceptedAnswers": [
+        "1.64",
+        "a=1.64",
+        "$1.64$"
+      ],
+      "marks": 2,
+      "guidance": "Central probability $0.90$ leaves $0.05$ in each tail, so $a=z_{0.95}\\approx1.64$."
+    },
+    {
+      "subjectId": "methods",
+      "type": "mcq",
+      "topic": "Sampling and sample proportions",
+      "question": "For a sample proportion $\\hat P$ with population proportion $p=0.2$, which sample size gives $\\operatorname{sd}(\\hat P)=0.04$?",
+      "options": [
+        "50",
+        "75",
+        "100",
+        "125"
+      ],
+      "answer": "C",
+      "marks": 1,
+      "guidance": "$0.04=\\sqrt{\\frac{0.2(0.8)}{n}}$. Thus $0.0016=\\frac{0.16}{n}$ and $n=100$."
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Functions and transformations",
+      "question": "Let $f(x)=3x-2$. Find $f^{-1}(4)$.",
+      "acceptedAnswers": [
+        "2",
+        "$2$"
+      ],
+      "marks": 2,
+      "guidance": "Solve $3x-2=4$, giving $x=2$. Hence $f^{-1}(4)=2$."
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Algebra and equations",
+      "question": "Find all real values of $x$ satisfying $\\frac{x-1}{x+2}\\ge 2$.",
+      "acceptedAnswers": [
+        "[-5,-2)",
+        "$[-5,-2)$",
+        "-5<=x<-2",
+        "-5\\le x<-2"
+      ],
+      "marks": 3,
+      "guidance": "$\\frac{x-1}{x+2}-2=\\frac{-x-5}{x+2}\\ge0$. Critical values are $x=-5$ and $x=-2$. The solution is $[-5,-2)$."
+    },
+    {
+      "subjectId": "methods",
+      "type": "mcq",
+      "topic": "Circular functions",
+      "question": "The minimum period of $y=4\\tan\\left(\\frac{x}{3}\\right)$ is",
+      "options": [
+        "$\\frac{\\pi}{3}$",
+        "$\\pi$",
+        "$3\\pi$",
+        "$6\\pi$"
+      ],
+      "answer": "C",
+      "marks": 1,
+      "guidance": "The period of $\\tan(bx)$ is $\\frac{\\pi}{|b|}$. Here $b=\\frac13$, so the period is $3\\pi$."
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Exponential and logarithmic functions",
+      "question": "Find the exact value of $x$ if $\\log_e(x)+\\log_e(x-3)=\\log_e(10)$ and $x>3$.",
+      "acceptedAnswers": [
+        "5",
+        "x=5",
+        "$5$"
+      ],
+      "marks": 2,
+      "guidance": "Combine logs: $x(x-3)=10$. Then $x^2-3x-10=0$, so $x=5$ or $x=-2$. The domain requires $x>3$, hence $x=5$."
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Integral calculus",
+      "question": "Evaluate $\\int_0^{\\pi/2} \\sin(2x)\\cos x\\,dx$ exactly.",
+      "acceptedAnswers": [
+        "2/3",
+        "\\frac{2}{3}",
+        "$\\frac{2}{3}$"
+      ],
+      "marks": 3,
+      "guidance": "$\\sin(2x)=2\\sin x\\cos x$, so the integral is $\\int_0^{\\pi/2}2\\sin x\\cos^2x\\,dx$. Let $u=\\cos x$, giving $\\frac23$."
+    },
+    {
+      "subjectId": "methods",
+      "type": "mcq",
+      "topic": "Applications of differentiation",
+      "question": "For $f(x)=x^4-4x^3$, the stationary point at $x=3$ is",
+      "options": [
+        "a local maximum",
+        "a local minimum",
+        "a stationary point of inflection",
+        "not stationary"
+      ],
+      "answer": "B",
+      "marks": 1,
+      "guidance": "$f'(x)=4x^2(x-3)$, so $x=3$ is stationary. $f'$ changes from negative to positive at $x=3$, so it is a local minimum."
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Differential calculus",
+      "question": "For $y=\\log_e(\\sin x)$, find $\\frac{dy}{dx}$ for $0<x<\\pi$.",
+      "acceptedAnswers": [
+        "cot x",
+        "\\cot x",
+        "$\\cot x$",
+        "\\frac{\\cos x}{\\sin x}",
+        "cos(x)/sin(x)"
+      ],
+      "marks": 2,
+      "guidance": "By the chain rule, $\\frac{dy}{dx}=\\frac{1}{\\sin x}\\cos x=\\cot x$."
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Applications of integration",
+      "question": "Find the exact area between $y=\\sin x$ and the $x$-axis for $0\\le x\\le 2\\pi$.",
+      "acceptedAnswers": [
+        "4",
+        "$4$"
+      ],
+      "marks": 3,
+      "guidance": "Area is $\\int_0^\\pi\\sin x\\,dx-\\int_\\pi^{2\\pi}\\sin x\\,dx=2+2=4$."
+    },
+    {
+      "subjectId": "methods",
+      "type": "mcq",
+      "topic": "Polynomial, power and rational functions",
+      "question": "The graph of $y=(x-2)^2(x+1)$ crosses the $x$-axis at",
+      "options": [
+        "$x=-1$ only",
+        "$x=2$ only",
+        "$x=-1$ and $x=2$",
+        "neither intercept"
+      ],
+      "answer": "A",
+      "marks": 1,
+      "guidance": "At $x=-1$ the factor has odd multiplicity, so the graph crosses. At $x=2$ the factor has even multiplicity, so it touches but does not cross."
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Continuous random variables",
+      "question": "Let $f(x)=c(4-x)$ for $0\\le x\\le4$ and $0$ otherwise. Find $\\Pr(X>1)$.",
+      "acceptedAnswers": [
+        "9/16",
+        "\\frac{9}{16}",
+        "$\\frac{9}{16}$",
+        "0.5625"
+      ],
+      "marks": 3,
+      "guidance": "Normalising gives $1=\\int_0^4 c(4-x)\\,dx=8c$, so $c=\\frac18$. Then $\\Pr(X>1)=\\int_1^4\\frac18(4-x)\\,dx=\\frac9{16}$."
+    },
+    {
+      "subjectId": "methods",
+      "type": "mcq",
+      "topic": "Discrete random variables",
+      "question": "If $X\\sim\\operatorname{Bi}(4,p)$ and $\\Pr(X=4)=\\Pr(X=3)$, then $p=$",
+      "options": [
+        "$\\frac15$",
+        "$\\frac12$",
+        "$\\frac45$",
+        "$1$"
+      ],
+      "answer": "C",
+      "marks": 1,
+      "guidance": "$p^4=4p^3(1-p)$. For $p\\ne0$, $p=4(1-p)$, so $5p=4$ and $p=\\frac45$."
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "The normal distribution",
+      "question": "Let $X\\sim N(20,4^2)$. Find $\\Pr(16<X<28)$ correct to four decimal places.",
+      "acceptedAnswers": [
+        "0.8186",
+        "$0.8186$"
+      ],
+      "marks": 2,
+      "guidance": "Standardise: $\\Pr(16<X<28)=\\Pr(-1<Z<2)=\\Phi(2)-\\Phi(-1)\\approx0.9772-0.1587=0.8186$."
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Confidence intervals for proportions",
+      "question": "In a sample of $625$, $250$ people support a proposal. Using $z=1.96$, find the approximate 95% confidence interval for the population proportion, correct to three decimal places.",
+      "acceptedAnswers": [
+        "(0.362,0.438)",
+        "(0.362, 0.438)",
+        "0.362 to 0.438",
+        "$ (0.362,0.438)$"
+      ],
+      "marks": 3,
+      "guidance": "$\\hat p=\\frac{250}{625}=0.4$. Margin $=1.96\\sqrt{\\frac{0.4(0.6)}{625}}\\approx0.0384$. Interval is approximately $(0.362,0.438)$."
+    },
+    {
+      "subjectId": "methods",
+      "type": "mcq",
+      "topic": "Differential calculus",
+      "question": "For $f(x)=\\frac{\\log_e x}{x}$, $f'(x)$ is",
+      "options": [
+        "$\\frac{1-\\log_e x}{x^2}$",
+        "$\\frac{1+\\log_e x}{x^2}$",
+        "$\\frac{\\log_e x-1}{x^2}$",
+        "$\\frac{1}{x^2\\log_e x}$"
+      ],
+      "answer": "A",
+      "marks": 1,
+      "guidance": "Using the quotient rule, $f'(x)=\\frac{x\\cdot\\frac1x-\\log_e x}{x^2}=\\frac{1-\\log_e x}{x^2}$."
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Functions and transformations",
+      "question": "If the graph of $y=f(x)$ passes through $(2,-3)$, state the point on $y=2f(1-x)+5$ corresponding to this point.",
+      "acceptedAnswers": [
+        "(-1,-1)",
+        "$(-1,-1)$"
+      ],
+      "marks": 2,
+      "guidance": "For $f(2)=-3$, set $1-x=2$, giving $x=-1$. Then $y=2(-3)+5=-1$, so the point is $(-1,-1)$."
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Algebra and equations",
+      "question": "Find the exact value(s) of $k$ for which the lines $kx+2y=5$ and $3x+(k-1)y=7$ are parallel but distinct.",
+      "acceptedAnswers": [
+        "3 or -2",
+        "-2 or 3",
+        "k=3 or k=-2",
+        "k=-2 or k=3",
+        "$k=-2,3$"
+      ],
+      "marks": 3,
+      "guidance": "Parallel requires the coefficient determinant to be zero: $k(k-1)-6=0$. Hence $k=3$ or $k=-2$. In both cases the constants are not in the same ratio, so the lines are distinct."
+    },
+    {
+      "subjectId": "methods",
+      "type": "mcq",
+      "topic": "Circular functions",
+      "question": "For $f(x)=1+2\\cos\\left(x-\\frac{\\pi}{4}\\right)$, a maximum occurs at",
+      "options": [
+        "$x=\\frac{\\pi}{4}+2k\\pi,\\ k\\in\\mathbb Z$",
+        "$x=-\\frac{\\pi}{4}+2k\\pi,\\ k\\in\\mathbb Z$",
+        "$x=\\frac{3\\pi}{4}+2k\\pi,\\ k\\in\\mathbb Z$",
+        "$x=\\frac{5\\pi}{4}+2k\\pi,\\ k\\in\\mathbb Z$"
+      ],
+      "answer": "A",
+      "marks": 1,
+      "guidance": "The maximum occurs when $\\cos\\left(x-\\frac\\pi4\\right)=1$, so $x-\\frac\\pi4=2k\\pi$."
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Exponential and logarithmic functions",
+      "question": "Find the inverse function of $f(x)=2e^{3x}-5$.",
+      "acceptedAnswers": [
+        "f^{-1}(x)=1/3 log_e((x+5)/2)",
+        "f^{-1}(x)=\\frac{1}{3}\\log_e\\left(\\frac{x+5}{2}\\right)",
+        "$f^{-1}(x)=\\frac13\\log_e\\left(\\frac{x+5}{2}\\right)$"
+      ],
+      "marks": 3,
+      "guidance": "Let $y=2e^{3x}-5$. Then $\\frac{y+5}{2}=e^{3x}$, so $x=\\frac13\\log_e\\left(\\frac{y+5}{2}\\right)$. Interchange variables."
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Applications of differentiation",
+      "question": "Find the exact coordinates of the point on $y=x^2$ closest to $(0,-3)$.",
+      "acceptedAnswers": [
+        "(0,0)",
+        "$(0,0)$"
+      ],
+      "marks": 3,
+      "guidance": "Minimise squared distance $D=x^2+(x^2+3)^2=x^4+7x^2+9$. Since $D'=2x(2x^2+7)$, the only real critical point is $x=0$, giving $(0,0)$."
+    },
+    {
+      "subjectId": "methods",
+      "type": "mcq",
+      "topic": "Integral calculus",
+      "question": "An antiderivative of $\\frac{2x}{x^2+1}$ is",
+      "options": [
+        "$\\log_e(x^2+1)+C$",
+        "$\\frac{1}{x^2+1}+C$",
+        "$2\\log_e x+C$",
+        "$\\frac{x^2}{x^2+1}+C$"
+      ],
+      "answer": "A",
+      "marks": 1,
+      "guidance": "Let $u=x^2+1$, so $du=2x\\,dx$. The antiderivative is $\\log_e(x^2+1)+C$."
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Continuous random variables",
+      "question": "Let $X$ have density $f(x)=\\frac{1}{8}(x+1)$ for $-1\\le x\\le 3$ and $0$ otherwise. Find $E(X)$.",
+      "acceptedAnswers": [
+        "5/3",
+        "\\frac{5}{3}",
+        "$\\frac{5}{3}$"
+      ],
+      "marks": 3,
+      "guidance": "$E(X)=\\int_{-1}^{3}x\\cdot\\frac18(x+1)\\,dx=\\frac18\\left[\\frac{x^3}{3}+\\frac{x^2}{2}\\right]_{-1}^{3}=\\frac53$."
+    },
+    {
+      "subjectId": "methods",
+      "type": "short_answer",
+      "topic": "Discrete random variables",
+      "question": "For $X\\sim\\operatorname{Bi}(8,\\frac14)$, find $\\Pr(X\\ge7)$ exactly.",
+      "acceptedAnswers": [
+        "25/65536",
+        "\\frac{25}{65536}",
+        "$\\frac{25}{65536}$"
+      ],
+      "marks": 3,
+      "guidance": "$\\Pr(X\\ge7)=\\binom87(\\frac14)^7(\\frac34)+(\\frac14)^8=\\frac{24+1}{65536}=\\frac{25}{65536}$."
+    }
+  ]
+}

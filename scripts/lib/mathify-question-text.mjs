@@ -2,7 +2,10 @@
 
 function fixDoubleEscapes(text) {
   return text
-    .replace(/\\{2,}(frac|sqrt|begin|end|le|ge|ne|times|div|hat|ln|log|sin|cos|tan)\b/g, "\\$1")
+    .replace(
+      /\\{2,}(frac|sqrt|begin|end|le|ge|ne|times|div|hat|ln|log|sin|cos|tan)(?=_|\b|\{)/g,
+      "\\$1",
+    )
     .replace(/\\{2,}int\b/g, "\\int");
 }
 
@@ -20,15 +23,47 @@ function normalizePowers(text) {
   return out;
 }
 
-function normalizeTrigAndLog(text) {
+function normalizeComplexNotation(text) {
   return text
+    .replace(/\\frac\\pi([0-9]+)/g, "\\frac{\\pi}{$1}")
+    .replace(/(?<!\\operatorname\{)(?<![A-Za-z])cis\s*\(/g, "\\operatorname{cis}(")
+    .replace(/(?<!\\operatorname\{)(?<![A-Za-z])Re\s*\(/g, "\\operatorname{Re}(")
+    .replace(/(?<!\\operatorname\{)(?<![A-Za-z])Im\s*\(/g, "\\operatorname{Im}(");
+}
+
+function wrapLetComplexStems(text) {
+  let out = text.replace(
+    /\bLet\s+z\s*=\s*([0-9.]+(?:\\operatorname\{cis\}|cis)\([^)]+\))\s*\.\s*Find\s+(?:\\operatorname\{Re\}|Re)\s*\(\s*z\s*\^(\{)?2(\})?\s*\)([^$]*)/gi,
+    (_m, zExpr, _open, _close, tail) => {
+      let z = String(zExpr).trim();
+      z = z.replace(/(?<!\\operatorname\{)(?<![A-Za-z])cis\s*\(/g, "\\operatorname{cis}(");
+      z = normalizePowers(z);
+      return `Let $z=${z}$. Find $\\operatorname{Re}(z^{2})$` + tail;
+    },
+  );
+  out = out.replace(
+    /Find\s+\$\\operatorname\{Re\}\(z\^\{2\}\)\s+(?=to\b)/g,
+    "Find $\\operatorname{Re}(z^{2})$ ",
+  );
+  return out;
+}
+
+function normalizeTrigAndLog(text) {
+  let out = text
+    .replace(/\\log_\{e\}/g, "\\ln")
+    .replace(/\\log_e\b/g, "\\ln")
+    .replace(/\\hat\s+([A-Za-z])/g, "\\hat{$1}");
+
+  out = out
     .replace(/(^|[^\\A-Za-z])ln\s*\(/g, "$1\\ln(")
-    .replace(/\blog\s*_\s*\{/g, "\\log_{")
-    .replace(/\blog\s*_\s*([0-9A-Za-z]+)/g, "\\log_{$1}")
-    .replace(/\blog\s*\(/g, "\\log(")
-    .replace(/\bsin\s*\(/g, "\\sin(")
-    .replace(/\bcos\s*\(/g, "\\cos(")
-    .replace(/\btan\s*\(/g, "\\tan(");
+    .replace(/(?<!\\)log\s*_\s*\{([0-9A-Za-z]+)\}/g, "\\log_{$1}")
+    .replace(/(?<!\\)log\s*_\s*([0-9A-Za-z]+)/g, "\\log_{$1}")
+    .replace(/(?<!\\)log\s*\(/g, "\\log(")
+    .replace(/(?<!\\)sin\s*\(/g, "\\sin(")
+    .replace(/(?<!\\)cos\s*\(/g, "\\cos(")
+    .replace(/(?<!\\)tan\s*\(/g, "\\tan(");
+
+  return out;
 }
 
 function mathifyIntegrand(s) {
@@ -61,7 +96,9 @@ function fixIntegralNotation(text) {
 }
 
 function segmentLooksMath(segment) {
-  return /f\s*\(\s*x\s*\)|\\int|∫|\^|e\^|\\[a-zA-Z]+|f'|d\/dx|[0-9][a-zA-Z]\^/.test(segment);
+  return /f\s*\(\s*x\s*\)|\\int|∫|\^|e\^|\\[a-zA-Z]+|f'|d\/dx|[0-9][a-zA-Z]\^|cis\s*\(|\\operatorname\{cis\}|Re\s*\(|\\operatorname\{Re\}/.test(
+    segment,
+  );
 }
 
 function wrapBareMathSegments(text) {
@@ -105,6 +142,8 @@ export function mathifyQuestionText(raw) {
   out = fixDoubleEscapes(out);
   out = fixIntegralNotation(out);
   out = normalizeTrigAndLog(out);
+  out = wrapLetComplexStems(out);
+  out = normalizeComplexNotation(out);
   out = normalizePowers(out);
   if (segmentLooksMath(out)) out = wrapOutsideExistingDollars(out);
   return out;

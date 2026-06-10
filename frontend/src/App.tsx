@@ -13,7 +13,6 @@ const ResetPasswordPage = lazy(() => import("@/pages/ResetPasswordPage"));
 const DashboardPage = lazy(() => import("@/pages/DashboardPage"));
 const QuizPage = lazy(() => import("@/pages/QuizPage"));
 const SummaryPage = lazy(() => import("@/pages/SummaryPage"));
-const StudyModePage = lazy(() => import("@/pages/StudyModePage"));
 const TrackStudyPage = lazy(() => import("@/pages/TrackStudyPageNew"));
 const QuestionForumThreadPage = lazy(
   () => import("@/pages/QuestionForumThreadPage"),
@@ -196,15 +195,6 @@ function AppRoutes() {
           element={
             <ProtectedRoute>
               <SummaryPage />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/study/:subjectId"
-          element={
-            <ProtectedRoute>
-              <StudyModePage />
             </ProtectedRoute>
           }
         />

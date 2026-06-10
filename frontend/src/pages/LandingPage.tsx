@@ -61,7 +61,7 @@ const PRICING = [
       "All maths & English subjects",
       "Live rankings & percentiles",
       "Progress dashboard & insights",
-      "Timed quiz & study mode",
+      "Timed quiz & topic content",
     ],
     locked: true,
   },

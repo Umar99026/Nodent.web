@@ -11,6 +11,7 @@ import {
   getRawCustomQuestionsForSubject,
   normalizeCustomQuestionsList,
   practiceQuestionsForSubject,
+  canonicalPracticeTopic,
   questionMatchesPracticeTopic,
 } from "@/lib/practiceQuestions";
 import { subjectsForUser } from "@/lib/subjects";
@@ -73,6 +74,7 @@ import {
   ChevronRight,
   RotateCcw,
   Clock,
+  BookOpen,
   Loader2,
 } from "lucide-react";
 
@@ -658,6 +660,11 @@ export default function QuizPage() {
         )
       : "";
 
+  const currentQuestionTopic = useMemo(() => {
+    if (!subjectId || !focusPart) return null;
+    return canonicalPracticeTopic(subjectId, focusPart);
+  }, [subjectId, focusPart]);
+
   // Handle dismissing inactivity
   const handleDismissInactivity = () => {
     setShowInactivityDialog(false);
@@ -856,15 +863,23 @@ export default function QuizPage() {
               <TooltipTrigger>
                 <Button
                   variant="outline"
-                  onClick={() => navigate(`/study/${subjectId}`)}
-                  className="gap-2 border-transparent bg-[#0b0f19] text-white hover:bg-[#0b0f19]/90"
+                  disabled={!currentQuestionTopic}
+                  onClick={() => {
+                    if (!subjectId || !currentQuestionTopic) return;
+                    navigate(
+                      `/practice/${subjectId}?topic=${encodeURIComponent(currentQuestionTopic)}`,
+                    );
+                  }}
+                  className="gap-2 border-transparent bg-[#0b0f19] text-white hover:bg-[#0b0f19]/90 disabled:opacity-50"
                 >
-                  <Clock className="size-4" />
-                  Study Mode
+                  <BookOpen className="size-4" />
+                  Content
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="bottom" align="end" className="bg-[#0b0f19] text-white">
-                Timed focus mode: set a question goal and work through grouped stimuli.
+                {currentQuestionTopic
+                  ? `Topic overview: ${currentQuestionTopic}`
+                  : "Topic overview for this question"}
               </TooltipContent>
             </Tooltip>
           </div>
