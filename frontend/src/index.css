@@ -69,8 +69,8 @@
 }
 
 :root {
-  /* Main theme: light-blue background everywhere */
-  --background: transparent;
+  /* Main theme: soft off-white background */
+  --background: #f3f4f6;
   --foreground: #0f172a;
   --card: rgba(255, 255, 255, 0.85);
   --card-foreground: #0f172a;
@@ -109,21 +109,112 @@
   * {
     @apply border-border outline-ring/50;
   }
-  body {
-    @apply bg-background text-foreground antialiased;
-    background:
-      radial-gradient(circle at top left, rgba(255,255,255,0.24), transparent 24%),
-      radial-gradient(circle at top right, rgba(255,255,255,0.14), transparent 22%),
-      linear-gradient(180deg, #56abe6 0%, #66b9ec 45%, #78c6f1 100%);
-    background-attachment: fixed;
-  }
   html {
     @apply font-sans scroll-smooth;
-    font-size: 20px;
+    overflow-x: clip;
+    -webkit-text-size-adjust: 100%;
+    font-size: 16px;
+  }
+  @media (min-width: 640px) {
+    html {
+      font-size: 18px;
+    }
+  }
+  @media (min-width: 1024px) {
+    html {
+      font-size: 20px;
+    }
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    overflow-x: clip;
+    background: #f3f4f6;
+    background-attachment: scroll;
+  }
+  @media (min-width: 1024px) {
+    body {
+      background-attachment: fixed;
+    }
   }
   h1, h2, h3 {
     font-family: var(--font-display);
     letter-spacing: -0.01em;
+  }
+}
+
+@layer utilities {
+  .safe-top {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .touch-target {
+    min-height: 2.75rem;
+    min-width: 2.75rem;
+  }
+}
+
+@layer components {
+  .surface-card {
+    @apply border border-black/8 bg-white shadow-sm;
+  }
+
+  .btn-accent {
+    @apply bg-brand-light/50 text-[#0b0f19] hover:bg-brand-light/70;
+  }
+
+  .pill-active {
+    @apply bg-brand-light/50 text-[#0b0f19] hover:bg-brand-light/70;
+  }
+
+  .practice-card {
+    @apply border border-black/8 bg-white shadow-sm overflow-hidden rounded-3xl;
+    gap: 0 !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    --tw-ring-shadow: 0 0 #0000 !important;
+  }
+
+  .practice-card-accent {
+    @apply flex h-1 w-full shrink-0;
+  }
+
+  .practice-card-accent-black {
+    @apply h-full flex-[2] bg-[#0b0f19];
+  }
+
+  .practice-card-accent-pill {
+    @apply h-full flex-1 bg-brand-light/70;
+  }
+
+  .practice-card-header {
+    @apply flex w-full shrink-0 items-center justify-between gap-4 border-b border-white/10 bg-[#0b0f19];
+    padding: 0.875rem 1rem;
+    min-height: 3rem;
+  }
+
+  @media (min-width: 640px) {
+    .practice-card-header {
+      padding: 1.125rem 1.75rem;
+      min-height: 3.25rem;
+    }
+  }
+
+  .practice-card-header-title {
+    @apply m-0 block p-0 font-display text-sm font-semibold leading-normal text-white;
+  }
+
+  .practice-card-header-meta {
+    @apply m-0 block shrink-0 p-0 text-xs leading-normal text-white/55;
+  }
+
+  .practice-chip {
+    @apply shrink-0 rounded-full border border-brand-light/50 bg-brand-light/50 px-2.5 py-0.5 text-xs font-medium text-[#0b0f19];
+  }
+
+  .practice-toolbar {
+    @apply flex flex-col gap-3 rounded-2xl border border-black/15 bg-[#0b0f19] p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4;
   }
 }
 
@@ -207,14 +298,21 @@
 
 /* ——— Marketing landing page ——— */
 .landing-root {
+  overflow-x: clip;
   background:
     radial-gradient(ellipse 80% 50% at 50% -20%, rgba(86, 171, 230, 0.18), transparent),
     linear-gradient(180deg, #f8fbff 0%, #ffffff 42%, #f4f9fd 100%);
-  background-attachment: fixed;
+  background-attachment: scroll;
+}
+
+@media (min-width: 1024px) {
+  .landing-root {
+    background-attachment: fixed;
+  }
 }
 
 .landing-section {
-  scroll-margin-top: 5.5rem;
+  scroll-margin-top: calc(4.5rem + env(safe-area-inset-top, 0px));
 }
 
 .landing-hero-glow {
@@ -508,4 +606,21 @@
   .curriculum-overview .katex-display > .katex {
     font-size: 1.12em;
   }
+}
+
+/* Quiz / question prose — scroll wide math and tables on small screens */
+.prose .katex-display,
+.rich-question-content .katex-display {
+  overflow-x: auto;
+  max-width: 100%;
+  padding: 0.15rem 0;
+  -webkit-overflow-scrolling: touch;
+}
+
+.rich-question-content table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }

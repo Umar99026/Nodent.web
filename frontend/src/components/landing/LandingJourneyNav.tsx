@@ -23,7 +23,7 @@ export function LandingJourneyNav({ activeIndex, onSelect }: LandingJourneyNavPr
             aria-controls="demo-animation-panel"
             onClick={() => onSelect(i)}
             className={cn(
-              "rounded-full border px-4 py-2 text-sm font-medium shadow-sm transition-all",
+              "min-h-11 rounded-full border px-3 py-2.5 text-xs font-medium shadow-sm transition-all sm:px-4 sm:py-2.5 sm:text-sm",
               activeIndex === i
                 ? "border-brand bg-brand/10 text-brand-dark ring-2 ring-brand/25"
                 : "border-slate-200 bg-white text-slate-700 hover:border-brand/30 hover:bg-brand/5",

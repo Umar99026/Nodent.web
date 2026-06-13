@@ -43,6 +43,7 @@ export const API_PATHS = {
   studyMode: (subjectId: number | string) =>
     `/api/study/${subjectId}`,
   track: "/api/track",
+  feedback: "/api/feedback",
   dojo: {
     unreadCount: "/api/dojo/unread-count",
     challenges: "/api/dojo/challenges",
@@ -78,6 +79,7 @@ export const API_PATHS = {
     questions: "/api/admin/questions",
     questionsBulk: "/api/admin/questions/bulk",
     questionsBulkDelete: "/api/admin/questions/bulk-delete",
+    questionsDeleteBySubject: "/api/admin/questions/delete-by-subject",
     questionsAttachImagesBulk: "/api/admin/questions/attach-images-bulk",
     questionsReassignSubject: "/api/admin/questions/reassign-subject",
     users: "/api/admin/users",
@@ -92,11 +94,19 @@ export const API_PATHS = {
     englishPromptsBulk: "/api/admin/english/prompts/bulk",
     englishPromptsBulkDelete: "/api/admin/english/prompts/bulk-delete",
     englishPrompts: "/api/admin/english/prompts",
+    aiStatus: "/api/admin/ai/status",
+    aiParseQuestions: "/api/admin/ai/parse-questions",
+    aiQuestionChat: "/api/admin/ai/question-chat",
+  },
+  written: {
+    mark: (subjectId: string, questionKey: string) =>
+      `/api/written/${encodeURIComponent(subjectId)}/${encodeURIComponent(questionKey)}/mark`,
   },
   english: {
     books: "/api/english/books",
     prompts: "/api/english/prompts",
     responses: "/api/english/responses",
-    rateResponse: (responseId: number | string) => `/api/english/responses/${responseId}/rate`,
+    aiScoreResponse: (responseId: number | string) =>
+      `/api/english/responses/${responseId}/ai-score`,
   },
 } as const;

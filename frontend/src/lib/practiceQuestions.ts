@@ -2,14 +2,24 @@ import type { AnswerPart, Question } from "@/lib/subjects";
 import { inferGeneralMathsAreaOfStudy } from "@/lib/generalMathsAreaTopic";
 import { inferMethodsAreaOfStudy } from "@/lib/methodsAreaTopic";
 import { inferSpecialistMathsAreaOfStudy } from "@/lib/specialistMathsAreaTopic";
-import { extractMarkdownImageUrls } from "@/lib/questionDisplay";
+import {
+  extractMarkdownImageUrls,
+  formatPartDescriptor,
+  normalizePartKey,
+  partLetterForIndex,
+} from "@/lib/questionDisplay";
 import { GOOGLE_SHEETS_TOPIC_LABELS } from "@/lib/mathSubjectTopics";
 import { normalizeQuestionMathText } from "@/lib/questionMathText";
 
+function topicLabelListForSubject(subjectId: string): readonly string[] | undefined {
+  const sid = canonicalSubjectId(subjectId);
+  const key = sid === "demo" ? "general-maths" : sid;
+  return GOOGLE_SHEETS_TOPIC_LABELS[key];
+}
+
 /** Trust admin-assigned topic labels that match the official subject taxonomy. */
 function isAdminCanonicalTopic(subjectId: string, topic: string): boolean {
-  const sid = canonicalSubjectId(subjectId);
-  const list = GOOGLE_SHEETS_TOPIC_LABELS[sid];
+  const list = topicLabelListForSubject(subjectId);
   if (!list?.length) return false;
   const norm = topic.trim().toLowerCase();
   return list.some((t) => t.toLowerCase() === norm);
@@ -26,7 +36,7 @@ function inferPracticeTopic(
   if (sid === "methods") {
     return inferMethodsAreaOfStudy(topicLabel, questionText, passage);
   }
-  if (sid === "general-maths") {
+  if (sid === "general-maths" || sid === "demo") {
     return inferGeneralMathsAreaOfStudy(topicLabel, questionText, passage);
   }
   if (sid === "specialist-maths") {
@@ -201,16 +211,28 @@ function parseAnswerParts(val: unknown): AnswerPart[] | undefined {
       .map((it, idx) => {
         if (!it || typeof it !== "object") return null;
         const row = it as Record<string, unknown>;
-        const label = String(row.label ?? "").trim();
-        const keyRaw = String(row.key ?? "").trim();
-        const key = keyRaw || `part${idx + 1}`;
-        if (!label) return null;
+        const labelRaw = String(row.label ?? "").trim();
+        const key = normalizePartKey(labelRaw || `part${idx + 1}`, idx);
+        if (!labelRaw) return null;
         const typeRaw = String(row.type ?? "").trim().toLowerCase();
         const type =
           typeRaw === "number" || typeRaw === "text"
             ? (typeRaw as "number" | "text")
             : undefined;
-        return { key, label, ...(type ? { type } : {}) };
+        const placeholder = String(row.placeholder ?? "").trim() || undefined;
+        const imageUrl =
+          String(row.imageUrl ?? row.image_url ?? "").trim() || undefined;
+        const marksRaw = Number(row.marks);
+        const marks =
+          Number.isFinite(marksRaw) && marksRaw > 0 ? Math.round(marksRaw) : undefined;
+        return {
+          key,
+          label: formatPartDescriptor(key, labelRaw),
+          ...(type ? { type } : {}),
+          ...(placeholder ? { placeholder } : {}),
+          ...(imageUrl ? { imageUrl } : {}),
+          ...(marks ? { marks } : {}),
+        };
       })
       .filter((p): p is AnswerPart => p != null);
 
@@ -243,15 +265,18 @@ function inferAnswerPartsFromQuestion(
   const prToken = questionText.match(/\b(?:Pr|P)\s*\([^)]*\)/i)?.[0]?.replace(/\s+/g, "");
   if (eToken && sdToken && prToken && acceptedAnswersCount >= 3) {
     return [
-      { key: "part1", label: eToken, type: "number" },
-      { key: "part2", label: sdToken, type: "number" },
-      { key: "part3", label: prToken, type: "number" },
+      { key: "a", label: formatPartDescriptor("a", eToken), type: "number" },
+      { key: "b", label: formatPartDescriptor("b", sdToken), type: "number" },
+      { key: "c", label: formatPartDescriptor("c", prToken), type: "number" },
     ];
   }
 
   const directiveParts = parseDirectiveParts(questionText);
   if (directiveParts.length >= 2) {
-    return directiveParts.map((label, idx) => ({ key: `part${idx + 1}`, label }));
+    return directiveParts.map((text, idx) => {
+      const letter = partLetterForIndex(idx);
+      return { key: letter, label: formatPartDescriptor(letter, text) };
+    });
   }
 
   return undefined;
@@ -399,7 +424,7 @@ export function normalizeCustomQuestion(raw: unknown, subjectIdHint?: string): Q
       marks,
       passage,
       id,
-      ...((false && (answerParts ?? inferredAnswerParts)?.length)
+      ...((answerParts ?? inferredAnswerParts)?.length
         ? { answerParts: answerParts ?? inferredAnswerParts }
         : {}),
       ...(groupId ? { groupId } : {}),
@@ -427,7 +452,7 @@ export function normalizeCustomQuestion(raw: unknown, subjectIdHint?: string): Q
       marks,
       passage,
       id,
-      ...((false && (answerParts ?? inferredAnswerParts)?.length)
+      ...((answerParts ?? inferredAnswerParts)?.length
         ? { answerParts: answerParts ?? inferredAnswerParts }
         : {}),
       ...(groupId ? { groupId } : {}),
@@ -455,7 +480,7 @@ export function normalizeCustomQuestion(raw: unknown, subjectIdHint?: string): Q
         marks,
         passage,
         id,
-        ...((false && (answerParts ?? inferredAnswerParts)?.length)
+        ...((answerParts ?? inferredAnswerParts)?.length
           ? { answerParts: answerParts ?? inferredAnswerParts }
           : {}),
         ...(groupId ? { groupId } : {}),
@@ -471,7 +496,7 @@ export function normalizeCustomQuestion(raw: unknown, subjectIdHint?: string): Q
       marks,
       passage,
       id,
-      ...((false && (answerParts ?? inferredAnswerParts)?.length)
+      ...((answerParts ?? inferredAnswerParts)?.length
         ? { answerParts: answerParts ?? inferredAnswerParts }
         : {}),
       ...(groupId ? { groupId } : {}),
@@ -499,7 +524,7 @@ export function normalizeCustomQuestion(raw: unknown, subjectIdHint?: string): Q
       marks,
       passage,
       id,
-      ...((false && (answerParts ?? inferredAnswerParts)?.length)
+      ...((answerParts ?? inferredAnswerParts)?.length
         ? { answerParts: answerParts ?? inferredAnswerParts }
         : {}),
       ...(groupId ? { groupId } : {}),

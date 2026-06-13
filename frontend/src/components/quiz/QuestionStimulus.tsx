@@ -273,7 +273,7 @@ export function QuestionImageGrid({
       <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
         {title}
       </p>
-      <div className="max-h-[min(70vh,560px)] space-y-4 overflow-y-auto pr-1">
+      <div className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
           {list.map((src, i) => {
             const resolved = resolveQuestionImageSrc(src);

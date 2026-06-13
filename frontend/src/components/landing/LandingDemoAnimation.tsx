@@ -80,8 +80,8 @@ export function LandingDemoAnimation({
               <p className="text-sm font-medium text-[#0b0f19]">
                 Find the derivative of y = x² cos(x)
               </p>
-              <div className="flex h-11 items-center rounded-lg border border-brand/30 bg-brand/5 px-3 font-mono text-sm text-slate-700">
-                <span>2x cos(x) − x² sin(x)</span>
+              <div className="overflow-x-auto rounded-lg border border-brand/30 bg-brand/5 px-3 py-2.5 font-mono text-sm text-slate-700">
+                <span className="whitespace-nowrap">2x cos(x) − x² sin(x)</span>
                 <span className="landing-demo-cursor ml-0.5 inline-block h-4 w-0.5 bg-brand" />
               </div>
               <div className="flex justify-end">

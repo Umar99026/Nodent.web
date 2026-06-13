@@ -43,9 +43,9 @@ export function AppShell({
   };
 
   return (
-    <div className="flex min-h-screen flex-col bg-transparent">
+    <div className="flex min-h-dvh flex-col bg-transparent">
       <AppSidebar />
-      <header className="text-white">
+      <header className="safe-top sticky top-0 z-30 border-b border-black/5 bg-[#f3f4f6]/95 text-foreground backdrop-blur-sm">
         <div
           className={`flex items-center gap-3 ${
             compactHeader ? "w-full max-w-none justify-start" : ""
@@ -67,7 +67,7 @@ export function AppShell({
                 <button
                   onClick={handleBack}
                   type="button"
-                  className="inline-flex shrink-0 items-center justify-center rounded-md p-1.5 text-white/70 transition-colors hover:bg-black/10 hover:text-white sm:p-2"
+                  className="touch-target inline-flex shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-black/5 hover:text-foreground"
                   aria-label="Go back"
                 >
                   <ArrowLeft className="size-4" />
@@ -75,7 +75,7 @@ export function AppShell({
                 <div className="min-w-0 text-left">
                   {!hideTitle && (
                     <h1
-                      className={`font-display truncate text-left tracking-tight text-white ${
+                      className={`font-display truncate text-left tracking-tight text-foreground ${
                         isTrackStudy
                           ? "text-[clamp(1.1rem,3.8vw,1.5rem)] font-bold"
                           : "text-[clamp(1rem,3vw,1.2rem)] font-semibold"
@@ -88,8 +88,8 @@ export function AppShell({
                     <div
                       className={`truncate text-left ${
                         isTrackStudy
-                          ? "text-sm font-medium text-white/75"
-                          : "text-xs text-white/65 sm:text-sm"
+                          ? "text-sm font-medium text-muted-foreground"
+                          : "text-xs text-muted-foreground sm:text-sm"
                       } ${subtitleClassName ?? ""}`}
                     >
                       {subtitle}
@@ -108,12 +108,12 @@ export function AppShell({
                   <button
                     onClick={handleBack}
                     type="button"
-                    className="inline-flex items-center justify-center rounded-md p-2 text-white/70 transition-colors hover:bg-black/10 hover:text-white"
+                    className="touch-target inline-flex items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-black/5 hover:text-foreground"
                     aria-label="Go back"
                   >
                     <ArrowLeft className="size-4" />
                   </button>
-                  <Separator orientation="vertical" className="h-5 bg-white/20" />
+                  <Separator orientation="vertical" className="h-5 bg-border" />
                 </>
               )}
 
@@ -121,7 +121,7 @@ export function AppShell({
                 <div className="min-w-0 flex-1 pr-2 text-left">
                   {!hideTitle && (
                     <h1
-                      className={`font-display truncate text-left tracking-tight text-white ${
+                      className={`font-display truncate text-left tracking-tight text-foreground ${
                         isDashboard
                           ? "text-[clamp(1.15rem,3.5vw,1.7rem)] font-bold"
                           : isTrackStudy
@@ -136,10 +136,10 @@ export function AppShell({
                     <div
                       className={`${hideTitle ? "" : "truncate text-left "} ${
                         isDashboard
-                          ? "text-sm font-medium text-white/72"
+                          ? "text-sm font-medium text-muted-foreground"
                           : isTrackStudy
-                            ? "text-sm font-medium text-white/75"
-                            : "text-xs text-white/65 sm:text-sm"
+                            ? "text-sm font-medium text-muted-foreground"
+                            : "text-xs text-muted-foreground sm:text-sm"
                       } ${subtitleClassName ?? ""}`}
                     >
                       {subtitle}
@@ -157,11 +157,11 @@ export function AppShell({
         <main
           className={`box-border w-full min-w-0 max-w-full ${
             isDashboard
-              ? "max-w-none px-4 sm:px-6 lg:px-8 text-white"
+              ? "max-w-none px-4 sm:px-6 lg:px-8 text-foreground"
               : edgeToEdgeMain
-                ? "max-w-none px-2 sm:px-3 lg:px-4 text-white"
-                : "mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-white"
-          } ${isDashboard ? "pt-2 pb-8" : "py-8"}`}
+                ? "max-w-none px-2 sm:px-3 lg:px-4 text-foreground"
+                : "mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-foreground"
+          } ${isDashboard ? "pt-2 pb-6" : "py-4 sm:py-8"}`}
         >
           <div className="animate-fade-in-up min-w-0 max-w-full">{children}</div>
         </main>

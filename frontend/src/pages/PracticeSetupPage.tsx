@@ -11,10 +11,9 @@ import {
 } from "@/lib/practiceQuestions";
 import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Sparkles, BookOpen, ArrowRight } from "lucide-react";
+import { Loader2, BookOpen, ArrowRight } from "lucide-react";
 import { generalMathsPracticeTopicOptions } from "@/lib/generalMathsAreaTopic";
 import { methodsPracticeTopicOptions } from "@/lib/methodsAreaTopic";
 import { specialistMathsPracticeTopicOptions } from "@/lib/specialistMathsAreaTopic";
@@ -164,43 +163,36 @@ export default function PracticeSetupPage() {
     >
       <div className="mx-auto w-full max-w-6xl space-y-5 sm:space-y-6">
         {/* Horizontal setup tile */}
-        <Card className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white/95 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_32px_-16px_rgba(15,23,42,0.1)] ring-1 ring-black/[0.03] backdrop-blur-sm">
-          <div className="h-1 bg-gradient-to-r from-brand/90 via-brand-light/80 to-amber/70" aria-hidden />
-          <CardContent className="flex flex-col gap-4 p-4 sm:p-5 lg:flex-row lg:items-center lg:justify-between">
+        <Card className="practice-card">
+          <div className="practice-card-header">
+            <p className="practice-card-header-title">Practice setup</p>
+          </div>
+          <CardContent className="flex flex-col gap-4 bg-[#f3f4f6]/30 px-4 py-5 sm:px-7 sm:py-6 lg:flex-row lg:items-center lg:justify-between lg:gap-6">
             <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="font-display text-lg font-semibold tracking-tight text-slate-900 sm:text-xl">
-                  Practice setup
-                </p>
-                <Badge
-                  variant="secondary"
-                  className="gap-1 border border-brand/15 bg-brand/8 text-brand-deep"
-                >
-                  <Sparkles className="size-3.5" />
-                  Focus mode
-                </Badge>
-              </div>
-              <p className="mt-1 text-sm leading-relaxed text-slate-500">
+              <p className="font-display text-lg font-semibold tracking-tight text-[#0b0f19] sm:text-xl">
+                {subject?.name ?? "Subject"}
+              </p>
+              <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
                 Pick a topic / section, then start questions.
               </p>
             </div>
 
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-2 lg:gap-3 lg:justify-end">
+            <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-end sm:justify-end lg:gap-3">
               {loading ? (
-                <div className="flex items-center gap-2 rounded-xl border border-slate-200/80 bg-slate-50/80 px-4 py-3 text-sm text-slate-500">
+                <div className="flex items-center gap-2 rounded-xl border border-black/8 bg-[#f3f4f6] px-4 py-3 text-sm text-muted-foreground">
                   <Loader2 className="size-4 animate-spin" />
                   Loading…
                 </div>
               ) : isEnglish ? (
-                <div className="min-w-[260px] space-y-2">
-                  <p className="text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                <div className="w-full min-w-0 space-y-2 sm:min-w-[260px]">
+                  <p className="text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                     English section
                   </p>
                   <Select
                     value={englishSection}
                     onValueChange={(v) => setEnglishSection((v as EnglishSection) ?? "A")}
                   >
-                    <SelectTrigger className="h-11 rounded-xl border-slate-200/90 bg-white text-slate-900 shadow-sm ring-1 ring-black/[0.03]">
+                    <SelectTrigger className="h-11 rounded-xl border-brand-light/50 bg-brand-light/50 text-[#0b0f19]">
                       <SelectValue placeholder="Choose section" />
                     </SelectTrigger>
                     <SelectContent alignItemWithTrigger={false}>
@@ -211,12 +203,12 @@ export default function PracticeSetupPage() {
                   </Select>
                 </div>
               ) : (
-                <div className="min-w-[260px] space-y-2">
-                  <p className="text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                <div className="w-full min-w-0 space-y-2 sm:min-w-[260px]">
+                  <p className="text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                     Topic
                   </p>
                   <Select value={topic} onValueChange={(v) => setTopic(v ?? "all")}>
-                    <SelectTrigger className="h-11 rounded-xl border-slate-200/90 bg-white text-slate-900 shadow-sm ring-1 ring-black/[0.03]">
+                    <SelectTrigger className="h-11 rounded-xl border-brand-light/50 bg-brand-light/50 text-[#0b0f19]">
                       <SelectValue placeholder="Choose topic" />
                     </SelectTrigger>
                     <SelectContent alignItemWithTrigger={false} className="max-h-72">
@@ -231,8 +223,9 @@ export default function PracticeSetupPage() {
               )}
 
               <Button
+                variant="accent"
                 onClick={handleStart}
-                className="h-11 gap-2 rounded-xl bg-brand text-white shadow-sm shadow-brand/25 hover:bg-brand-dark"
+                className="h-11 w-full gap-2 rounded-xl sm:w-auto"
               >
                 <BookOpen className="size-4" />
                 Questions
@@ -243,25 +236,17 @@ export default function PracticeSetupPage() {
         </Card>
 
         {/* Overview under setup */}
-        <Card className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white/95 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_32px_-16px_rgba(15,23,42,0.1)] ring-1 ring-black/[0.03] backdrop-blur-sm">
-          <div className="h-1 bg-gradient-to-r from-brand/90 via-brand-light/80 to-amber/70" aria-hidden />
-          <CardHeader className="space-y-2 px-5 pb-1 pt-5 sm:px-7 sm:pt-6">
-            <CardTitle className="font-display text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl">
-              Study overview
-            </CardTitle>
-            <p className="text-sm leading-relaxed text-slate-500 sm:text-[0.9375rem]">
-              {isEnglish
-                ? "Section summary for English practice."
-                : "Reference notes for the topic you select."}
-            </p>
-          </CardHeader>
-          <CardContent className="px-3 pb-6 pt-1 sm:px-5 sm:pb-8">
+        <Card className="practice-card">
+          <div className="practice-card-header">
+            <p className="practice-card-header-title">Study overview</p>
+          </div>
+          <CardContent className="px-4 py-5 sm:px-7 sm:py-6">
             {overviewMarkdown ? (
               <CurriculumOverview markdown={overviewMarkdown} />
             ) : (
-              <div className="rounded-2xl border border-dashed border-slate-200/90 bg-slate-50/60 p-8 text-center">
-                <p className="text-sm font-medium text-slate-500">
-                  Select topic
+              <div className="rounded-2xl border border-dashed border-black/15 bg-[#0b0f19]/[0.03] p-8 text-center">
+                <p className="text-sm font-medium text-muted-foreground">
+                  Choose a topic above to load overview notes.
                 </p>
               </div>
             )}

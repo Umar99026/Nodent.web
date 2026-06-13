@@ -4,6 +4,12 @@ export interface AnswerPart {
   key: string;
   label: string;
   type?: "text" | "number";
+  /** Grey hint shown in the answer input (PDF import / admin). */
+  placeholder?: string;
+  /** Figure shown above this part's answer input (PDF import). */
+  imageUrl?: string;
+  /** Marks for this subpart (PDF import / multipart). */
+  marks?: number;
 }
 
 export interface BaseQuestion {

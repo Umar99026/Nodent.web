@@ -1,10 +1,11 @@
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useSearchParams } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { lazy, Suspense, type ReactNode } from "react";
 import { StudyTimerProvider } from "@/context/StudyTimerContext";
 import { ADMIN_EMAIL, STORAGE_KEYS } from "@/lib/constants";
 import LandingPage from "@/pages/LandingPage";
+import FeedbackPage from "@/pages/FeedbackPage";
 
 // Lazy-load page components — stubs will be replaced with real implementations
 const LoginPage = lazy(() => import("@/pages/LoginPage"));
@@ -92,6 +93,12 @@ function GuestRoute({ children }: { children: ReactNode }) {
 
 function RootRedirect() {
   const { isAuthenticated, isLoading } = useAuth();
+  const [searchParams] = useSearchParams();
+
+  if (searchParams.get("welcome") === "1") {
+    return <Navigate to="/feedback" replace />;
+  }
+
   if (isLoading && hasStoredAuthToken()) {
     return <LoadingFallback />;
   }
@@ -108,6 +115,8 @@ function AppRoutes() {
     <Suspense fallback={<LoadingFallback />}>
       <Routes>
         <Route path="/" element={<RootRedirect />} />
+
+        <Route path="/feedback" element={<FeedbackPage />} />
 
         <Route
           path="/login"

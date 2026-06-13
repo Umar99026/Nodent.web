@@ -112,9 +112,8 @@ type EnglishResponse = {
   responseText: string;
   imageUrls: string[];
   updatedAt: string;
-  averageScore: number | null;
-  ratingCount: number;
-  myScore: number | null;
+  aiScore: number | null;
+  aiFeedback: string | null;
   section?: "A" | "B" | "C";
 };
 
@@ -182,7 +181,6 @@ export default function SummaryPage() {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [questionsLoading, setQuestionsLoading] = useState(true);
   const [englishResponses, setEnglishResponses] = useState<EnglishResponse[]>([]);
-  const [showHighScoring, setShowHighScoring] = useState(false);
   const [openEnglishResponseId, setOpenEnglishResponseId] = useState<number | null>(null);
 
   // Find subject
@@ -706,42 +704,13 @@ export default function SummaryPage() {
     );
     const openEnglishResponse =
       myRows.find((r) => r.id === openEnglishResponseId) ?? null;
-    const myRated = myRows.filter((r) => r.averageScore != null);
-    const myAvg =
-      myRated.length > 0
+    const myScored = myRows.filter((r) => r.aiScore != null);
+    const myAiAvg =
+      myScored.length > 0
         ? Math.round(
-            (myRated.reduce((acc, r) => acc + Number(r.averageScore ?? 0), 0) / myRated.length) * 10,
+            (myScored.reduce((acc, r) => acc + Number(r.aiScore ?? 0), 0) / myScored.length) * 10,
           ) / 10
         : null;
-    const highRows = englishResponses.filter((r) => (r.averageScore ?? 0) >= 8);
-    const leaderboard = Object.values(
-      englishResponses.reduce<Record<string, {
-        username: string;
-        totalResponses: number;
-        ratedResponses: number;
-        sumScores: number;
-        avg: number;
-      }>>((acc, row) => {
-        const key = String(row.username || `user-${row.userId}`);
-        const cur = acc[key] ?? {
-          username: String(row.username || "Unknown"),
-          totalResponses: 0,
-          ratedResponses: 0,
-          sumScores: 0,
-          avg: 0,
-        };
-        cur.totalResponses += 1;
-        if (row.averageScore != null) {
-          cur.ratedResponses += 1;
-          cur.sumScores += Number(row.averageScore);
-        }
-        cur.avg = cur.ratedResponses > 0 ? cur.sumScores / cur.ratedResponses : 0;
-        acc[key] = cur;
-        return acc;
-      }, {}),
-    )
-      .sort((a, b) => b.sumScores - a.sumScores || b.avg - a.avg)
-      .slice(0, 10);
 
     return (
       <AppShell
@@ -754,13 +723,15 @@ export default function SummaryPage() {
             <CardHeader>
               <CardTitle className="font-display text-lg">English statistics</CardTitle>
               <CardDescription>
-                View all your submitted responses with per-response ratings, your overall average, and the English leaderboard.
+                View your submitted responses and smart marking scores.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex flex-wrap gap-2">
                 <Badge variant="secondary">Submissions: {myRows.length}</Badge>
-                <Badge variant="secondary">Overall average: {myAvg != null ? `${myAvg}/10` : "No ratings yet"}</Badge>
+                <Badge variant="secondary">
+                  Smart marking average: {myAiAvg != null ? `${myAiAvg}/10` : "No smart marks yet"}
+                </Badge>
               </div>
             </CardContent>
           </Card>
@@ -795,81 +766,21 @@ export default function SummaryPage() {
                         <span className="truncate text-[10px] font-semibold text-[#0f172a]">
                           {r.section ? `Section ${r.section}` : "Section —"}
                         </span>
-                        <Badge variant="secondary" className="shrink-0 px-1 py-0 text-[9px]">
-                          Avg: {r.averageScore != null ? `${r.averageScore}/10` : "—"}
-                        </Badge>
+                        {r.aiScore != null ? (
+                          <Badge variant="default" className="shrink-0 bg-[#0f172a] px-1 py-0 text-[9px] text-white">
+                            Smart {r.aiScore}/10
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary" className="shrink-0 px-1 py-0 text-[9px]">
+                            Unscored
+                          </Badge>
+                        )}
                       </div>
                     </div>
                   ))}
                 </div>
               ) : null}
               {!myRows.length ? <p className="text-sm text-muted-foreground">No submissions yet.</p> : null}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="font-display text-lg">English leaderboard</CardTitle>
-              <CardDescription>Ranked by total combined response score (sum of response averages).</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {!leaderboard.length ? (
-                <p className="text-sm text-muted-foreground">No ranked responses yet.</p>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-16">Rank</TableHead>
-                      <TableHead>Student</TableHead>
-                      <TableHead className="text-right">Sum score</TableHead>
-                      <TableHead className="text-right">Average</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {leaderboard.map((row, idx) => (
-                      <TableRow
-                        key={`${row.username}-${idx}`}
-                        className={Number(user?.id) === Number(englishResponses.find((r) => r.username === row.username)?.userId) ? "bg-brand/8 font-medium" : ""}
-                      >
-                        <TableCell className="font-semibold">{idx + 1}</TableCell>
-                        <TableCell>{row.username}</TableCell>
-                        <TableCell className="text-right tabular-nums">{row.sumScores.toFixed(1)}</TableCell>
-                        <TableCell className="text-right tabular-nums">{row.avg.toFixed(1)}/10</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="font-display text-lg">High-scoring responses</CardTitle>
-              <CardDescription>Responses with average rating 8/10 or higher.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <Button variant="secondary" onClick={() => setShowHighScoring((v) => !v)}>
-                {showHighScoring ? "Hide high-scoring responses" : "View high-scoring responses"}
-              </Button>
-              {showHighScoring ? (
-                <>
-                  {highRows.map((r) => (
-                    <div key={`high-${r.id}`} className="rounded-xl border border-black/10 bg-white/70 p-3">
-                      <div className="text-xs text-muted-foreground">
-                        @{r.username} • Avg {r.averageScore}/10
-                      </div>
-                      <p className="mt-2 text-sm whitespace-pre-wrap">{r.prompt}</p>
-                      {r.responseText ? (
-                        <p className="mt-2 text-sm whitespace-pre-wrap">{r.responseText.slice(0, 320)}{r.responseText.length > 320 ? "…" : ""}</p>
-                      ) : null}
-                    </div>
-                  ))}
-                  {!highRows.length ? (
-                    <p className="text-sm text-muted-foreground">No responses above 8/10 yet.</p>
-                  ) : null}
-                </>
-              ) : null}
             </CardContent>
           </Card>
         </div>
@@ -893,7 +804,9 @@ export default function SummaryPage() {
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold text-[#0f172a]">@{openEnglishResponse.username}</p>
                   <p className="text-xs text-muted-foreground">
-                    Avg: {openEnglishResponse.averageScore != null ? `${openEnglishResponse.averageScore}/10` : "No ratings yet"}
+                    {openEnglishResponse.aiScore != null
+                      ? `Smart mark: ${openEnglishResponse.aiScore}/10`
+                      : "Not smart marked yet"}
                   </p>
                 </div>
               </div>
@@ -904,6 +817,18 @@ export default function SummaryPage() {
                 <p className="whitespace-pre-wrap text-sm leading-relaxed text-[#111827]">
                   {openEnglishResponse.responseText || "No typed response text."}
                 </p>
+                {openEnglishResponse.aiScore != null ? (
+                  <div className="mt-4 rounded-lg border border-[#0f172a]/15 bg-[#0f172a]/[0.04] p-4">
+                    <p className="text-lg font-semibold text-[#0f172a]">
+                      Smart mark: {openEnglishResponse.aiScore}/10
+                    </p>
+                    {openEnglishResponse.aiFeedback ? (
+                      <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                        {openEnglishResponse.aiFeedback}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
                 {openEnglishResponse.imageUrls?.length ? (
                   <div className="mt-4 grid gap-2 sm:grid-cols-2">
                     {openEnglishResponse.imageUrls.map((u, i) => (

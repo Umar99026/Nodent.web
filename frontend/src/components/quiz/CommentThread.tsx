@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { toast } from "sonner";
-import { MessageSquare, Loader2, ChevronRight, Paperclip, X } from "lucide-react";
+import { Loader2, ChevronRight, Paperclip, X } from "lucide-react";
 import {
   buildCommentTree,
   countDescendants,
@@ -133,26 +133,23 @@ export function CommentThread({ subjectId, questionKey }: CommentThreadProps) {
   return (
     <div className="flex min-w-0 max-w-full flex-col gap-3 overflow-hidden">
       {/* Posts list — click opens full-screen thread */}
-      <div className="min-w-0 max-w-full overflow-hidden rounded-xl border border-black/10 bg-white/95 p-3 text-[#0b0f19] shadow-sm sm:p-4">
-        <div className="mb-3 flex min-w-0 items-center gap-2">
-          <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-brand/10">
-            <MessageSquare className="size-4 text-brand" />
-          </div>
-          <div className="min-w-0">
-            <h4 className="truncate font-display text-sm font-semibold">Chat</h4>
-            <p className="truncate text-[11px] text-black/50">
-              {totalCount === 0 ? "No posts yet" : `${totalCount} in this thread`}
+      <div className="min-w-0 max-w-full overflow-hidden rounded-xl border border-black/10 bg-white shadow-sm">
+        <div className="practice-card-header">
+          <p className="practice-card-header-title">Discussion</p>
+          {totalCount > 0 ? (
+            <p className="practice-card-header-meta">
+              {totalCount} {totalCount === 1 ? "post" : "posts"}
             </p>
-          </div>
+          ) : null}
         </div>
-
-        {loading ? (
+        <div className="px-6 py-5 sm:px-7 sm:py-6">
+          {loading ? (
           <div className="flex justify-center py-8">
             <Loader2 className="size-5 animate-spin text-brand" />
           </div>
         ) : tree.length === 0 ? (
-          <p className="py-2 text-center text-xs text-black/50">
-            Add a post below.
+          <p className="py-6 text-center text-sm leading-relaxed text-muted-foreground">
+            No posts yet. Add one below.
           </p>
         ) : (
           <ul className="max-h-[min(220px,36vh)] min-w-0 space-y-2 overflow-y-auto overflow-x-hidden pr-1">
@@ -206,68 +203,74 @@ export function CommentThread({ subjectId, questionKey }: CommentThreadProps) {
               );
             })}
           </ul>
-        )}
+          )}
+        </div>
       </div>
 
       {/* New post only */}
-      <div className="min-w-0 max-w-full overflow-hidden rounded-xl border border-black/10 bg-white/95 p-3 text-[#0b0f19] shadow-sm sm:p-4">
-        <h4 className="font-display text-sm font-semibold">New post</h4>
-        <div className="mt-3 flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
-          <Input
-            placeholder="Chat…"
-            value={newComment}
-            onChange={(e) => setNewComment(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                void handleSubmit();
-              }
-            }}
-            disabled={submitting}
-            className="h-10 min-w-0 flex-1 border-black/10 bg-white text-sm text-[#0b0f19]"
-          />
-          <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-md border border-black/15 px-3 text-xs font-medium text-[#0b0f19] hover:bg-black/[0.03]">
-            {attaching ? <Loader2 className="size-3.5 animate-spin" /> : <Paperclip className="size-3.5" />}
-            Attach
-            <input
-              type="file"
-              accept="image/*"
-              multiple
-              className="sr-only"
-              disabled={attaching || submitting}
-              onChange={onPickImages}
-            />
-          </label>
-          <Button
-            type="button"
-            onClick={() => void handleSubmit()}
-            disabled={(!newComment.trim() && newImages.length === 0) || submitting}
-            className="h-10 shrink-0 bg-[#0b0f19] px-4 text-white hover:bg-[#0b0f19]/90"
-          >
-            {submitting ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              "Post"
-            )}
-          </Button>
+      <div className="min-w-0 max-w-full overflow-hidden rounded-xl border border-black/10 bg-white shadow-sm">
+        <div className="practice-card-header">
+          <p className="practice-card-header-title">New post</p>
         </div>
-        {newImages.length > 0 && (
-          <ul className="mt-3 grid grid-cols-4 gap-2">
-            {newImages.map((url, i) => (
-              <li key={`${i}-${url.slice(0, 20)}`} className="relative overflow-hidden rounded border border-black/10">
-                <img src={url} alt="" className="h-16 w-full object-cover" />
-                <button
-                  type="button"
-                  className="absolute right-1 top-1 rounded bg-white/90 p-0.5"
-                  onClick={() => setNewImages((prev) => prev.filter((_, idx) => idx !== i))}
-                  aria-label="Remove attachment"
-                >
-                  <X className="size-3" />
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
+        <div className="px-6 py-5 sm:px-7 sm:py-6">
+          <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
+            <Input
+              placeholder="Chat…"
+              value={newComment}
+              onChange={(e) => setNewComment(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  void handleSubmit();
+                }
+              }}
+              disabled={submitting}
+              className="h-10 min-w-0 flex-1 border-black/10 bg-white text-sm text-[#0b0f19]"
+            />
+            <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-md border border-black/15 px-3 text-xs font-medium text-[#0b0f19] hover:bg-black/[0.03]">
+              {attaching ? <Loader2 className="size-3.5 animate-spin" /> : <Paperclip className="size-3.5" />}
+              Attach
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                className="sr-only"
+                disabled={attaching || submitting}
+                onChange={onPickImages}
+              />
+            </label>
+            <Button
+              type="button"
+              variant="accent"
+              onClick={() => void handleSubmit()}
+              disabled={(!newComment.trim() && newImages.length === 0) || submitting}
+              className="h-10 shrink-0 px-4"
+            >
+              {submitting ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                "Post"
+              )}
+            </Button>
+          </div>
+          {newImages.length > 0 && (
+            <ul className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {newImages.map((url, i) => (
+                <li key={`${i}-${url.slice(0, 20)}`} className="relative overflow-hidden rounded border border-black/10">
+                  <img src={url} alt="" className="h-16 w-full object-cover" />
+                  <button
+                    type="button"
+                    className="absolute right-1 top-1 rounded bg-white/90 p-0.5"
+                    onClick={() => setNewImages((prev) => prev.filter((_, idx) => idx !== i))}
+                    aria-label="Remove attachment"
+                  >
+                    <X className="size-3" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
     </div>
   );

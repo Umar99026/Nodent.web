@@ -58,6 +58,16 @@ function parseNumericAnswer(raw: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+/** True when an accepted answer is a number, single token, or MCQ letter. */
+export function isAutoMarkableAnswer(raw: string): boolean {
+  const t = String(raw ?? "").trim();
+  if (!t) return false;
+  if (/^[a-d]$/i.test(t)) return true;
+  if (parseNumericAnswer(t) != null) return true;
+  if (!/\s/.test(t) && t.length <= 32 && /^[a-z0-9$%/°π.-]+$/i.test(t)) return true;
+  return false;
+}
+
 function decimalPlacesFromLiteral(raw: string): number | null {
   const t = raw.trim().toLowerCase().replace(/[.,;:!?]+$/, "").replace(/,/g, "");
   const m = t.match(/^-?(?:\d+)?\.(\d+)(?:e[+-]?\d+)?$/i);
@@ -95,6 +105,120 @@ export function inferDpHintFromAccepted(acceptedAnswers: string[]): number | nul
   return null;
 }
 
+const EXPLANATION_STOPWORDS = new Set([
+  "the",
+  "and",
+  "for",
+  "that",
+  "with",
+  "from",
+  "have",
+  "has",
+  "are",
+  "was",
+  "were",
+  "this",
+  "than",
+  "into",
+  "within",
+  "data",
+  "range",
+  "there",
+  "they",
+  "when",
+  "where",
+  "what",
+  "which",
+  "while",
+  "also",
+  "been",
+  "being",
+  "does",
+  "each",
+  "more",
+  "most",
+  "other",
+  "some",
+  "such",
+  "only",
+  "over",
+  "same",
+  "their",
+  "them",
+  "then",
+  "these",
+  "those",
+  "through",
+  "under",
+  "very",
+  "will",
+  "your",
+  "sale",
+  "price",
+  "question",
+  "answer",
+  "shown",
+  "find",
+  "state",
+  "explain",
+]);
+
+function looksLikeExplanationRubric(accepted: string): boolean {
+  const t = String(accepted ?? "").trim();
+  if (!t || /see marking guide/i.test(t)) return false;
+  const numericChars = (t.match(/[\d.+-]/g) ?? []).length;
+  if (numericChars > t.length * 0.55 && parseNumericAnswer(t) != null) return false;
+  return /[a-z]{3,}/i.test(t);
+}
+
+/** Pull 1–6 keyword phrases from a model explanation answer. */
+export function extractExplanationKeywords(accepted: string): string[] {
+  const raw = String(accepted ?? "").trim();
+  if (!raw) return [];
+
+  const segments = raw
+    .split(/\s*;\s*/)
+    .flatMap((seg) => seg.split(/\s*,\s*(?=[a-z])/i))
+    .map((s) => normalizeAnswer(s))
+    .filter((s) => s.length >= 3);
+
+  const keywords: string[] = [];
+  for (const seg of segments) {
+    if (seg.length <= 28 && !EXPLANATION_STOPWORDS.has(seg)) {
+      keywords.push(seg);
+      continue;
+    }
+    const words = seg
+      .split(/\s+/)
+      .filter(
+        (w) =>
+          w.length >= 4 &&
+          !EXPLANATION_STOPWORDS.has(w) &&
+          !/^[\d$%]+$/.test(w),
+      );
+    keywords.push(...words.slice(0, 3));
+  }
+
+  return [...new Set(keywords)].slice(0, 6);
+}
+
+/** Mark explanation answers correct when the student includes enough rubric keywords. */
+export function matchesExplanationKeywords(
+  studentAnswer: string,
+  acceptedAnswer: string,
+): boolean {
+  if (!looksLikeExplanationRubric(acceptedAnswer)) return false;
+  const studentNorm = normalizeAnswer(studentAnswer);
+  if (!studentNorm) return false;
+
+  const keywords = extractExplanationKeywords(acceptedAnswer);
+  if (!keywords.length) return false;
+
+  const hits = keywords.filter((kw) => studentNorm.includes(kw));
+  const required = keywords.length <= 2 ? 1 : Math.min(2, Math.ceil(keywords.length / 2));
+  return hits.length >= required;
+}
+
 export function isAnswerCorrect(
   studentAnswer: string,
   acceptedAnswers: string[],
@@ -121,10 +245,16 @@ export function isAnswerCorrect(
   }
 
   const normalized = normalizeAnswer(studentAnswer);
-  const correct = acceptedAnswers.some(
-    (accepted) => normalizeAnswer(String(accepted)) === normalized,
-  );
-  return { correct, dpHint };
+  for (const accepted of acceptedAnswers) {
+    const acceptedStr = String(accepted);
+    if (normalizeAnswer(acceptedStr) === normalized) {
+      return { correct: true, dpHint };
+    }
+    if (matchesExplanationKeywords(studentAnswer, acceptedStr)) {
+      return { correct: true, dpHint };
+    }
+  }
+  return { correct: false, dpHint };
 }
 
 /** Format a duration in seconds as MM:SS or HH:MM:SS. */

@@ -24,14 +24,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
   BookOpen,
   Plus,
   Search,
@@ -255,16 +247,16 @@ export default function DashboardPage() {
       title=""
       subtitle={
         <>
-          <span className="block text-[0.72rem] font-semibold uppercase tracking-[0.22em] text-white/70 sm:text-[0.8rem]">
+          <span className="block text-[0.72rem] font-semibold uppercase tracking-[0.22em] text-muted-foreground sm:text-[0.8rem]">
             Welcome back,
           </span>
-          <span className="mt-1.5 block text-[clamp(1.8rem,4.6vw,3.3rem)] font-black leading-[0.92] tracking-tight text-white/95">
+          <span className="mt-1.5 block max-w-full truncate text-[clamp(1.5rem,6vw,3.3rem)] font-black leading-[0.92] tracking-tight text-[#0b0f19] sm:whitespace-normal sm:overflow-visible">
             {user?.username ?? "Student"}
           </span>
         </>
       }
       hideTitle
-      subtitleClassName="max-w-none text-left leading-none text-white"
+      subtitleClassName="max-w-none text-left leading-none"
       headerRight={
         <button
           type="button"
@@ -290,159 +282,144 @@ export default function DashboardPage() {
       {scoreCardOpen && (
         <div className="fixed inset-0 z-[300]">
           <div
-            className="absolute inset-0 bg-black/70"
+            className="absolute inset-0 bg-black/20 backdrop-blur-[2px]"
             onClick={() => setScoreCardOpen(false)}
           />
           <div className="absolute inset-0 overflow-auto p-4 sm:p-8">
-            <div className="mx-auto w-full max-w-5xl">
-              <div className="mb-4 flex items-center justify-between">
-                <div className="text-white">
-                  <div className="flex items-center gap-2">
-                    <Star className="size-5 text-white/90" />
-                    <span className="font-display text-xl font-semibold">
+            <div className="mx-auto w-full max-w-5xl rounded-3xl border border-black/8 bg-white p-4 shadow-sm sm:p-6 lg:p-8">
+              {/* Section header — matches My Subjects */}
+              <div className="mb-5 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-3">
+                    <h2 className="font-display text-2xl font-bold tracking-tight text-[#0b0f19] sm:text-3xl">
                       Report Card
-                    </span>
+                    </h2>
                   </div>
-                  <p className="mt-1 text-sm text-white/70">
-                    Live summary based on your marks and overall performance.
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {user?.username ?? "Student"} · Live summary based on your marks and
+                    overall performance.
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setScoreCardOpen(false)}
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-red-400/25 bg-red-500/90 text-white transition-colors hover:bg-red-500"
+                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-black/10 bg-black/[0.04] text-[#0b0f19] transition-colors hover:bg-black/[0.08]"
                   aria-label="Close scorecard"
                 >
                   <X className="size-4" />
                 </button>
               </div>
 
-              <Card className="overflow-hidden border border-black/10 bg-white shadow-2xl">
-                <CardContent className="space-y-6 p-6 sm:p-8">
-                  {/* Header */}
-                  <div className="flex items-center gap-4">
-                    <Avatar className="size-12 shrink-0">
-                      <AvatarImage
-                        src={user?.profilePhoto ?? undefined}
-                        alt={user?.username ?? "User"}
-                      />
-                      <AvatarFallback className="bg-[#0b0f19] text-sm font-bold text-white">
-                        {user?.profilePhoto ? initials : "S"}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="min-w-0">
-                      <div className="font-display text-2xl font-bold tracking-tight text-[#0b0f19]">
-                        Report Card
+              {/* Top stats — compact black tiles like subject cards */}
+              <div className="mb-6 grid gap-4 sm:grid-cols-3">
+                {[
+                  {
+                    label: "Overall percentile",
+                    value:
+                      scoreCard?.overallPercentile != null
+                        ? `${Math.round(scoreCard.overallPercentile)}%`
+                        : "—",
+                  },
+                  {
+                    label: "Avg daily study",
+                    value: `${avgDailyStudyMinutes}m`,
+                  },
+                  {
+                    label: "Study streak",
+                    value: `${scoreCard?.studyStreak ?? 0}d`,
+                  },
+                ].map((stat) => (
+                  <div
+                    key={stat.label}
+                    className="group relative overflow-hidden rounded-2xl border border-black/20 bg-[#0b0f19] p-4 shadow-sm sm:p-5"
+                  >
+                    <div className="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-br from-white/[0.06] via-transparent to-transparent" />
+                    <div className="relative z-10">
+                      <div className="text-[11px] font-semibold uppercase tracking-wide text-white/60">
+                        {stat.label}
                       </div>
-                      <div className="text-sm font-medium text-black/60">
-                        {user?.username ?? "Student"}
+                      <div className="mt-1 font-display text-2xl font-semibold tabular-nums text-white sm:text-3xl">
+                        {stat.value}
                       </div>
                     </div>
                   </div>
+                ))}
+              </div>
 
-                  {/* Top stats */}
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    <div className="rounded-2xl border border-black/10 bg-white p-4">
-                      <div className="text-[11px] font-semibold uppercase tracking-wide text-black/50">
-                        Overall percentile
-                      </div>
-                      <div className="mt-1 font-display text-2xl font-semibold tabular-nums text-[#0b0f19]">
-                        {scoreCard?.overallPercentile != null
-                          ? `${Math.round(scoreCard.overallPercentile)}%`
-                          : "—"}
-                      </div>
+              {/* Subject breakdown — card grid like My Subjects */}
+              {scoreCardLoading ? (
+                <div className="text-sm text-muted-foreground">Loading…</div>
+              ) : (scoreCard?.reportSubjects?.length ?? 0) > 0 ? (
+                <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {(scoreCard?.reportSubjects ?? []).map((s) => {
+                    const name =
+                      baseSubjects.find((x) => x.id === s.subjectId)?.name ?? s.subjectId;
+                    const weak = s.weakestTopic
+                      ? `${s.weakestTopic.topic} (${s.weakestTopic.percent}%)`
+                      : "—";
+                    const strong = s.strongestTopic
+                      ? `${s.strongestTopic.topic} (${s.strongestTopic.percent}%)`
+                      : "—";
+                    return (
+                      <Card
+                        key={s.subjectId}
+                        className="group relative flex min-h-0 flex-col gap-0 overflow-hidden rounded-2xl border border-black/20 bg-[#0b0f19] p-0 py-0 text-white shadow-sm"
+                      >
+                        <div className="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-br from-white/[0.06] via-transparent to-transparent" />
+                        <CardHeader className="relative z-10 border-b-0 p-4 pb-2 sm:p-5">
+                          <div className="flex min-w-0 items-start justify-between gap-2">
+                            <CardTitle className="font-display break-words text-lg leading-snug text-white sm:text-xl">
+                              {name}
+                            </CardTitle>
+                            <Badge
+                              variant="secondary"
+                              className="shrink-0 rounded-full border border-white/20 bg-brand-light/50 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#0b0f19] sm:px-3 sm:text-xs"
+                            >
+                              {s.percentile != null ? `${Math.round(s.percentile)}%` : "—"}
+                            </Badge>
+                          </div>
+                          <CardDescription className="mt-2 space-y-1.5 text-sm leading-relaxed text-white/70">
+                            <span className="block">
+                              <span className="font-medium text-white/85">Weakest:</span> {weak}
+                            </span>
+                            <span className="block">
+                              <span className="font-medium text-white/85">Strongest:</span>{" "}
+                              {strong}
+                            </span>
+                          </CardDescription>
+                        </CardHeader>
+                      </Card>
+                    );
+                  })}
+                </div>
+              ) : (
+                <Card className="flex flex-col items-center justify-center border border-black/8 bg-[#f3f4f6]/40 py-12">
+                  <CardContent className="flex flex-col items-center text-center">
+                    <div className="mb-4 flex size-14 items-center justify-center rounded-full bg-black/[0.04]">
+                      <Star className="size-7 text-muted-foreground" />
                     </div>
-                    <div className="rounded-2xl border border-black/10 bg-white p-4">
-                      <div className="text-[11px] font-semibold uppercase tracking-wide text-black/50">
-                        Avg daily study
-                      </div>
-                      <div className="mt-1 font-display text-2xl font-semibold tabular-nums text-[#0b0f19]">
-                        {avgDailyStudyMinutes}m
-                      </div>
-                    </div>
-                    <div className="rounded-2xl border border-black/10 bg-white p-4">
-                      <div className="text-[11px] font-semibold uppercase tracking-wide text-black/50">
-                        Study streak
-                      </div>
-                      <div className="mt-1 font-display text-2xl font-semibold tabular-nums text-[#0b0f19]">
-                        {scoreCard?.studyStreak ?? 0}d
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Subject rows */}
-                  <div className="space-y-3">
-                    {scoreCardLoading ? (
-                      <div className="text-sm text-black/60">Loading…</div>
-                    ) : (scoreCard?.reportSubjects?.length ?? 0) > 0 ? (
-                      <div className="rounded-2xl border border-black/10 bg-white p-3 sm:p-4">
-                        <Table className="text-[15px] sm:text-base">
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead className="h-12 px-4 text-sm font-semibold text-black/60">
-                                Subject
-                              </TableHead>
-                              <TableHead className="h-12 px-4 text-sm font-semibold text-black/60">
-                                Weakest topic
-                              </TableHead>
-                              <TableHead className="h-12 px-4 text-sm font-semibold text-black/60">
-                                Strongest topic
-                              </TableHead>
-                              <TableHead className="h-12 px-4 text-right text-sm font-semibold text-black/60">
-                                Percentile
-                              </TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {(scoreCard?.reportSubjects ?? []).map((s) => {
-                              const name =
-                                baseSubjects.find((x) => x.id === s.subjectId)?.name ?? s.subjectId;
-                              const weak = s.weakestTopic
-                                ? `${s.weakestTopic.topic} (${s.weakestTopic.percent}%)`
-                                : "—";
-                              const strong = s.strongestTopic
-                                ? `${s.strongestTopic.topic} (${s.strongestTopic.percent}%)`
-                                : "—";
-                              return (
-                                <TableRow key={s.subjectId} className="hover:bg-slate-50/70">
-                                  <TableCell className="px-4 py-4 font-semibold text-[#0b0f19]">
-                                    {name}
-                                  </TableCell>
-                                  <TableCell className="px-4 py-4 text-black/70">
-                                    {weak}
-                                  </TableCell>
-                                  <TableCell className="px-4 py-4 text-black/70">
-                                    {strong}
-                                  </TableCell>
-                                  <TableCell className="px-4 py-4 text-right tabular-nums font-semibold text-[#0b0f19]">
-                                    {s.percentile != null ? `${Math.round(s.percentile)}%` : "—"}
-                                  </TableCell>
-                                </TableRow>
-                              );
-                            })}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    ) : (
-                      <div className="text-sm text-black/60">
-                        No subject report rows yet.
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
+                    <h3 className="font-display text-lg font-semibold text-[#0b0f19]">
+                      No subject data yet
+                    </h3>
+                    <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+                      Complete practice in your subjects to see weakest topics, strengths, and
+                      percentiles here.
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
             </div>
           </div>
         </div>
       )}
 
       {/* Subjects container */}
-      <div className="mt-4 min-w-0 max-w-full rounded-3xl border border-white/20 bg-white/10 p-4 backdrop-blur-md sm:mt-5 sm:p-6 lg:mt-6 lg:p-8">
+      <div className="mt-4 min-w-0 max-w-full rounded-3xl border border-black/8 bg-white p-4 shadow-sm sm:mt-5 sm:p-6 lg:mt-6 lg:p-8">
           {/* Section header */}
           <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <div className="flex items-center gap-3">
-                <h2 className="font-display text-2xl font-bold tracking-tight text-white sm:text-3xl">
+                <h2 className="font-display text-2xl font-bold tracking-tight text-[#0b0f19] sm:text-3xl">
                   My Subjects
                 </h2>
 
@@ -453,7 +430,7 @@ export default function DashboardPage() {
                       role="button"
                       tabIndex={0}
                       aria-label="Add subjects"
-                      className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-white/30 bg-white/15 text-white hover:bg-white/20"
+                      className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-black/10 bg-black/[0.04] text-[#0b0f19] hover:bg-black/[0.08]"
                     >
                       <Plus className="size-4" />
                     </div>
@@ -503,7 +480,7 @@ export default function DashboardPage() {
                 </DropdownMenu>
               </div>
 
-              <p className="mt-1 text-sm text-white/80">
+              <p className="mt-1 text-sm text-muted-foreground">
                 Manage your daily study, launch practice, and open subject discussion today.
               </p>
             </div>
@@ -531,16 +508,16 @@ export default function DashboardPage() {
               {mySubjects.map((subject) => (
                 <Card
                   key={subject.id}
-                  className="group relative flex min-h-0 min-w-0 flex-col gap-0 overflow-x-clip overflow-y-visible rounded-2xl border border-black/10 bg-white p-0 py-0 shadow-sm transition-shadow hover:shadow-md"
+                  className="group relative flex min-h-0 min-w-0 flex-col gap-0 overflow-x-clip overflow-y-visible rounded-2xl border border-black/20 bg-[#0b0f19] p-0 py-0 text-white shadow-sm transition-shadow hover:shadow-md"
                 >
-                  <div className="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-br from-brand/10 via-transparent to-transparent" />
+                  <div className="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-br from-white/[0.06] via-transparent to-transparent" />
                   <CardHeader className="relative z-10 border-b-0 p-4 pb-2 sm:p-5">
                     <div className="flex min-w-0 items-start justify-between gap-2 sm:gap-3">
                       <div className="min-w-0 flex-1 space-y-1 pr-1">
-                        <CardTitle className="font-display break-words text-lg leading-snug text-[#0b0f19] sm:text-xl">
+                        <CardTitle className="font-display break-words text-lg leading-snug text-white sm:text-xl">
                           {subject.name}
                         </CardTitle>
-                        <CardDescription className="break-words text-sm leading-relaxed text-[#0b0f19]/70">
+                        <CardDescription className="break-words text-sm leading-relaxed text-white/70">
                           {baseSubjects.find((s) => s.id === subject.id)?.description ??
                             subject.description}
                         </CardDescription>
@@ -549,7 +526,7 @@ export default function DashboardPage() {
                       <div className="flex shrink-0 items-start gap-1.5 sm:gap-2">
                         <Badge
                           variant="secondary"
-                          className="rounded-full bg-[#faf8f5] border border-black/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-black sm:px-3 sm:text-xs"
+                          className="rounded-full border border-white/20 bg-white/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white/90 sm:px-3 sm:text-xs"
                         >
                           vce
                         </Badge>
@@ -569,14 +546,14 @@ export default function DashboardPage() {
                   <CardFooter className="relative z-10 mt-auto flex min-w-0 flex-col gap-2 border-t-0 bg-transparent p-4 pt-0 sm:p-5 sm:pt-0 lg:flex-row lg:flex-wrap">
                     <Button
                       size="sm"
-                      className="h-11 min-h-11 w-full min-w-0 shrink-0 bg-[#0b0f19] px-2 text-sm text-white hover:bg-[#0b0f19]/90 lg:flex-1 lg:px-3"
+                      className="h-11 min-h-11 w-full min-w-0 shrink-0 bg-brand-light/50 px-2 text-sm text-[#0b0f19] hover:bg-brand-light/70 lg:flex-1 lg:px-3"
                       onClick={() => navigate(`/practice/${subject.id}`)}
                     >
                       Practice
                     </Button>
                     <Button
                       size="sm"
-                      className="h-11 min-h-11 w-full min-w-0 shrink-0 bg-[#0b0f19] px-2 text-[clamp(0.7rem,2.8vw,0.875rem)] text-white hover:bg-[#0b0f19]/90 sm:text-sm lg:flex-1 lg:px-3"
+                      className="h-11 min-h-11 w-full min-w-0 shrink-0 bg-brand-light/50 px-2 text-[clamp(0.7rem,2.8vw,0.875rem)] text-[#0b0f19] hover:bg-brand-light/70 sm:text-sm lg:flex-1 lg:px-3"
                       onClick={() => navigate(`/quiz/${subject.id}/summary`)}
                     >
                       Statistics

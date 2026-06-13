@@ -37,8 +37,10 @@ import {
 } from "@/lib/questionGroups";
 import {
   collectStimulusFromParts,
+  competitionMarksForQuestion,
   hasVisibleStimulus,
   stripQuestionHeadingFromPassage,
+  type AnswerScoreDetail,
 } from "@/lib/questionDisplay";
 import { PassageBlock } from "@/components/quiz/QuestionStimulus";
 import { AppShell } from "@/components/layout/AppShell";
@@ -335,7 +337,7 @@ export default function QuizPage() {
     return () => {
       cancelled = true;
     };
-  }, [user, subjectId]);
+  }, [user?.id, subjectId]);
 
   useEffect(() => {
     if (!user || !subjectId) return;
@@ -373,7 +375,7 @@ export default function QuizPage() {
   const randomizedQuestions = useMemo(() => {
     if (!subjectId || !user) return questions;
     return randomizedQuestionsForSubject(questions, user.id, subjectId);
-  }, [questions, user, subjectId]);
+  }, [questions, user?.id, subjectId]);
 
   const wrongReviewGroups = useMemo((): QuestionStimulusGroup[] | null => {
     if (!isWrongReview || !user || !subjectId || questions.length === 0) {
@@ -526,32 +528,56 @@ export default function QuizPage() {
     }
 
     const saved = loadPracticeState(user.id, subjectId);
-    const groupCount = buildGroupsFromOrderedFlat(randomizedQuestions, questions).length;
-    const maxIdx = Math.max(0, groupCount - 1);
-    if (saved) {
-      const norm = normalizeAnswerMap(
-        subjectId,
-        saved.answers,
-        questions,
-        randomizedQuestions,
-        getCustomQuestionsFromStorage(subjectId),
-      );
-      if (JSON.stringify(norm) !== JSON.stringify(saved.answers)) {
-        savePracticeState(user.id, subjectId, { ...saved, answers: norm });
-      }
-      // Always start at the front of the remaining question list (even if a previous session ended later).
-      // This matches the requested UX: never spawn into the end of the bank.
-      setCurrentIndex(Math.min(0, maxIdx));
-      setAnswers(norm);
-      setAnsweredAtSessionStart(new Set(Object.keys(norm)));
-    } else {
-      setAnsweredAtSessionStart(new Set());
-    }
+    const extra = getCustomQuestionsFromStorage(subjectId);
+    const localNorm = normalizeAnswerMap(
+      subjectId,
+      saved?.answers ?? {},
+      questions,
+      randomizedQuestions,
+      extra,
+    );
+    setCurrentIndex(0);
+    setAnswers(localNorm);
+    setAnsweredAtSessionStart(new Set(Object.keys(localNorm)));
+    setPinnedGroupKey(null);
     setInitialized(true);
+
+    // Merge server attempts in the background — never block the quiz UI on this.
+    let cancelled = false;
+    void (async () => {
+      try {
+        const data = await apiFetch<{
+          myQuestionAttempts?: { questionKey: string; isCorrect: boolean }[];
+        }>(`/api/competition/${subjectId}/stats?range=all`);
+        if (cancelled) return;
+        const merged: Record<string, boolean | null> = { ...localNorm };
+        for (const row of data.myQuestionAttempts ?? []) {
+          if (!row?.questionKey) continue;
+          merged[row.questionKey] = row.isCorrect;
+        }
+        const norm = normalizeAnswerMap(
+          subjectId,
+          merged,
+          questions,
+          randomizedQuestions,
+          extra,
+        );
+        if (JSON.stringify(norm) === JSON.stringify(localNorm)) return;
+        setAnswers(norm);
+        setAnsweredAtSessionStart(new Set(Object.keys(norm)));
+        const base = saved ?? { currentIndex: 0, answers: {} };
+        savePracticeState(user.id, subjectId, { ...base, answers: norm });
+      } catch {
+        // non-critical — local practice state still applies
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [
-    user,
+    user?.id,
     subjectId,
-    navigate,
     questionsLoading,
     questions,
     randomizedQuestions,
@@ -567,7 +593,15 @@ export default function QuizPage() {
 
   // Handle answer
   const handleAnswer = useCallback(
-    (qKey: string, isCorrect: boolean | null, marks: number, topic: string) => {
+    (
+      qKey: string,
+      isCorrect: boolean | null,
+      marks: number,
+      topic: string,
+      marksEarned?: number,
+    ) => {
+      const earned =
+        marksEarned ?? (isCorrect ? marks : 0);
       setAnswers((prev) => {
         const next = { ...prev, [qKey]: isCorrect };
         // Wrong-answer review must never overwrite the user's long-term practice history.
@@ -577,6 +611,20 @@ export default function QuizPage() {
         return next;
       });
 
+      if (!isWrongReview && subjectId) {
+        const answeredGroup = allGroupsFlat.find((g) =>
+          g.parts.some(
+            (p) =>
+              questionKeyStable(
+                subjectId,
+                p,
+                Math.max(0, getStableQuestionIndex(questions, p)),
+              ) === qKey,
+          ),
+        );
+        if (answeredGroup) setPinnedGroupKey(answeredGroup.key);
+      }
+
       if (!isWrongReview && isCorrect !== null) {
         apiFetch("/api/competition/answer", {
           method: "POST",
@@ -585,6 +633,7 @@ export default function QuizPage() {
             questionKey: qKey,
             isCorrect,
             marks,
+            marksEarned: earned,
             topic,
           }),
         })
@@ -597,14 +646,14 @@ export default function QuizPage() {
           });
       }
     },
-    [currentIndex, subjectId, isWrongReview, schedulePracticeSave]
+    [currentIndex, subjectId, isWrongReview, schedulePracticeSave, allGroupsFlat, questions]
   );
 
   // Navigation (index = stimulus group)
   const goTo = (index: number) => {
     const clamped = Math.max(0, Math.min(displayGroups.length - 1, index));
     setCurrentIndex(clamped);
-    setPinnedGroupKey(displayGroups[clamped]?.key ?? null);
+    setPinnedGroupKey(null);
     if (!isWrongReview && user && subjectId && displayGroups.length > 0) {
       schedulePracticeSave({ currentIndex: clamped, answers });
     }
@@ -629,15 +678,6 @@ export default function QuizPage() {
     () => (currentGroup ? collectStimulusFromParts(currentGroup.parts) : null),
     [currentGroup],
   );
-
-  // Keep the currently visible group pinned so a correct answer
-  // doesn't immediately remove it from the active list and "jump" UI.
-  useEffect(() => {
-    if (isWrongReview) return;
-    const key = currentGroup?.key;
-    if (!key) return;
-    setPinnedGroupKey((prev) => (prev === key ? prev : key));
-  }, [isWrongReview, currentGroup?.key]);
 
   const focusPart =
     subjectId && currentGroup
@@ -719,8 +759,8 @@ export default function QuizPage() {
     return (
       <AppShell title={subject ? `${subject.name} Practice` : "Practice"}>
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <div className="rounded-full bg-earth-paper p-4">
-            <RotateCcw className="size-8 text-earth-muted" />
+          <div className="rounded-full bg-black/[0.04] p-4">
+            <RotateCcw className="size-8 text-muted-foreground" />
           </div>
           <h2 className="mt-4 font-display text-xl text-foreground">
             No questions available
@@ -817,15 +857,15 @@ export default function QuizPage() {
     >
       <div className="space-y-6">
         {isWrongReview && (
-          <p className="rounded-lg border border-amber/40 bg-amber/10 px-4 py-3 text-sm text-white">
+          <p className="rounded-lg border border-amber/30 bg-amber/10 px-4 py-3 text-sm text-amber-950">
             Wrong-answer review: answers here are not sent to the competition and do not change your rank or marks.
           </p>
         )}
 
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center justify-end gap-3 sm:justify-start">
+        <div className="practice-toolbar">
+          <div className="flex min-w-0 flex-1 items-center">
             {!isWrongReview && (
-              <div className="w-56">
+              <div className="w-full max-w-xs sm:max-w-sm">
                 <Select
                   value={topicFilter}
                   onValueChange={(val) => {
@@ -842,7 +882,7 @@ export default function QuizPage() {
                     );
                   }}
                 >
-                  <SelectTrigger className="h-10 bg-white border-black/10 text-[#0b0f19]">
+                  <SelectTrigger className="h-10 border-brand-light/50 bg-brand-light/50 text-[#0b0f19]">
                     <SelectValue placeholder="Topic" />
                   </SelectTrigger>
                   <SelectContent alignItemWithTrigger={false} className="max-h-72">
@@ -856,13 +896,16 @@ export default function QuizPage() {
                 </Select>
               </div>
             )}
+            {isWrongReview ? (
+              <span className="text-sm font-medium text-white/80">Wrong-answer review</span>
+            ) : null}
           </div>
 
           <div className="flex justify-end">
             <Tooltip>
               <TooltipTrigger>
                 <Button
-                  variant="outline"
+                  variant="accent"
                   disabled={!currentQuestionTopic}
                   onClick={() => {
                     if (!subjectId || !currentQuestionTopic) return;
@@ -870,13 +913,13 @@ export default function QuizPage() {
                       `/practice/${subjectId}?topic=${encodeURIComponent(currentQuestionTopic)}`,
                     );
                   }}
-                  className="gap-2 border-transparent bg-[#0b0f19] text-white hover:bg-[#0b0f19]/90 disabled:opacity-50"
+                  className="gap-2 disabled:opacity-50"
                 >
                   <BookOpen className="size-4" />
                   Content
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="bottom" align="end" className="bg-[#0b0f19] text-white">
+              <TooltipContent side="bottom" align="end">
                 {currentQuestionTopic
                   ? `Topic overview: ${currentQuestionTopic}`
                   : "Topic overview for this question"}
@@ -889,10 +932,14 @@ export default function QuizPage() {
         <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
           {/* Left column: Question */}
           <div className="space-y-6">
-            <Card className="paper-texture">
-              <CardContent className="pt-2">
+            <Card className="practice-card">
+              <div className="practice-card-accent" aria-hidden>
+                <div className="practice-card-accent-black" />
+                <div className="practice-card-accent-pill" />
+              </div>
+              <CardContent className="bg-[#f3f4f6]/25 p-5 sm:p-6">
                 {currentGroup && subjectId && (
-                  <div className="max-h-[min(78vh,920px)] space-y-5 overflow-y-auto pr-1">
+                  <div className="space-y-5">
                     {currentGroupStimulus && hasVisibleStimulus(currentGroupStimulus) && (
                       <PassageBlock
                         passage={stripQuestionHeadingFromPassage(currentGroupStimulus.passage)}
@@ -912,12 +959,7 @@ export default function QuizPage() {
                       const hidePassage = Boolean(
                         currentGroupStimulus && hasVisibleStimulus(currentGroupStimulus),
                       );
-                      const partMarks =
-                        typeof part.marks === "number"
-                          ? part.marks
-                          : part.type === "mcq"
-                            ? 1
-                            : 2;
+                      const partMarks = competitionMarksForQuestion(part);
                       const partTopic = part.topic ?? "General";
                       const partClass = classByKey[qk];
                       return (
@@ -927,7 +969,7 @@ export default function QuizPage() {
                             "rounded-xl border p-3 sm:p-4",
                             markedCorrect
                               ? "border-success/35 bg-success/5"
-                              : "border-black/10 bg-white/50",
+                              : "border-black/10 border-l-4 border-l-brand-light/60 bg-white",
                           )}
                         >
                           {part.type === "mcq" && (
@@ -936,7 +978,13 @@ export default function QuizPage() {
                               hidePassage={hidePassage}
                               lockedCorrect={false}
                               onAnswer={(correct) =>
-                                handleAnswer(qk, correct, partMarks, partTopic)
+                                handleAnswer(
+                                  qk,
+                                  correct,
+                                  partMarks,
+                                  partTopic,
+                                  correct ? partMarks : 0,
+                                )
                               }
                               disabled={lockAfterSubmit}
                               allowRetry={isWrongReview}
@@ -948,13 +996,22 @@ export default function QuizPage() {
                           {part.type === "short" && (
                             <ShortQuestion
                               question={part}
+                              subjectId={subjectId}
+                              questionKey={qk}
                               hidePassage={hidePassage}
                               lockedCorrect={false}
-                              onAnswer={(correct) =>
-                                handleAnswer(qk, correct, partMarks, partTopic)
+                              onAnswer={(correct, detail?: AnswerScoreDetail) =>
+                                handleAnswer(
+                                  qk,
+                                  correct,
+                                  detail?.marksTotal ?? partMarks,
+                                  partTopic,
+                                  detail?.marksEarned,
+                                )
                               }
                               disabled={lockAfterSubmit}
                               allowRetry={isWrongReview}
+                              practiceOnly={isWrongReview}
                               classFullyCorrectPercent={partClass ?? null}
                               persistedState={questionUiState[qk]}
                               onStateChange={(state) => updateQuestionUiState(qk, state)}
@@ -967,8 +1024,14 @@ export default function QuizPage() {
                               questionKey={qk}
                               hidePassage={hidePassage}
                               lockedCorrect={false}
-                              onAnswer={(correct) =>
-                                handleAnswer(qk, correct, partMarks, partTopic)
+                              onAnswer={(correct, detail?: AnswerScoreDetail) =>
+                                handleAnswer(
+                                  qk,
+                                  correct,
+                                  detail?.marksTotal ?? partMarks,
+                                  partTopic,
+                                  detail?.marksEarned,
+                                )
                               }
                               disabled={lockAfterSubmit}
                               practiceOnly={isWrongReview}
@@ -987,32 +1050,34 @@ export default function QuizPage() {
             </Card>
 
             {/* Navigation */}
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <Button
                 variant="outline"
                 onClick={() => goTo(currentIndex - 1)}
                 disabled={currentIndex === 0 || displayGroups.length === 0}
-                className="gap-2 border-transparent bg-[#0b0f19] text-white hover:bg-[#0b0f19]/90 disabled:opacity-40"
+                className="h-11 min-w-[5.5rem] gap-1.5 border-transparent bg-[#0b0f19] px-3 text-white hover:bg-[#0b0f19]/90 disabled:opacity-40 sm:min-w-0 sm:gap-2 sm:px-4"
               >
-                <ChevronLeft className="size-4" />
-                Previous
+                <ChevronLeft className="size-4 shrink-0" />
+                <span className="hidden sm:inline">Previous</span>
+                <span className="sm:hidden">Prev</span>
               </Button>
 
               <Button
                 variant="outline"
                 onClick={() => goTo(currentIndex + 1)}
                 disabled={currentIndex === displayGroups.length - 1}
-                className="gap-2 border-transparent bg-[#0b0f19] text-white hover:bg-[#0b0f19]/90 disabled:opacity-40"
+                className="h-11 min-w-[5.5rem] gap-1.5 border-transparent bg-[#0b0f19] px-3 text-white hover:bg-[#0b0f19]/90 disabled:opacity-40 sm:min-w-0 sm:gap-2 sm:px-4"
               >
-                Next
-                <ChevronRight className="size-4" />
+                <span className="hidden sm:inline">Next</span>
+                <span className="sm:hidden">Next</span>
+                <ChevronRight className="size-4 shrink-0" />
               </Button>
             </div>
           </div>
 
           {/* Right column: Comments (desktop) — forum-style column, no extra card shell */}
           <div className="hidden lg:block">
-            <div className="sticky top-6">
+            <div className="sticky top-[calc(3.5rem+0.75rem)]">
               {focusPart && (
                 <CommentThread
                   key={focusQKey}

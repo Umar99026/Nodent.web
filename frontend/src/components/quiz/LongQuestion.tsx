@@ -10,11 +10,22 @@ import { PassageBlock, QuestionImageGrid } from "@/components/quiz/QuestionStimu
 import { RichQuestionContent } from "@/components/quiz/RichQuestionContent";
 import { writtenApiPath } from "@/lib/writtenAnswerUpload";
 import {
+  buildSmartMarkPayload,
+  requestSmartMark,
+  shouldUseAiMarking,
+} from "@/lib/questionAiMarking";
+import {
   collectStimulusFromQuestion,
   displayMarks,
+  formatPartDescriptor,
   hasVisibleStimulus,
+  marksEarnedFromPartResults,
+  normalizePartKey,
+  resolvePartMarks,
+  resolveMultipartPartDisplay,
   stripQuestionHeadingFromPassage,
   stripQuestionNumberPrefix,
+  type AnswerScoreDetail,
 } from "@/lib/questionDisplay";
 import { toast } from "sonner";
 import {
@@ -29,7 +40,7 @@ interface LongQuestionProps {
   question: LongQuestionType;
   subjectId: string;
   questionKey: string;
-  onAnswer: (correct: boolean | null) => void;
+  onAnswer: (correct: boolean | null, detail?: AnswerScoreDetail) => void;
   disabled?: boolean;
   hidePassage?: boolean;
   lockedCorrect?: boolean;
@@ -55,17 +66,6 @@ interface LongQuestionProps {
     dpHint: number | null;
     partResults: (boolean | null)[];
   }) => void;
-}
-
-function splitMarksAcrossParts(totalMarks: number, partCount: number): number[] {
-  const safeParts = Math.max(1, partCount);
-  const safeTotal = Math.max(1, Math.round(Number(totalMarks) || 1));
-  if (safeTotal <= safeParts) {
-    return Array(safeParts).fill(1);
-  }
-  const base = Math.floor(safeTotal / safeParts);
-  const rem = safeTotal % safeParts;
-  return Array.from({ length: safeParts }, (_, idx) => base + (idx < rem ? 1 : 0));
 }
 
 function expandAcceptedForMultipart(acceptedPool: string[]): string[] {
@@ -178,13 +178,14 @@ function detectMultipartDescriptors(questionText: string, labels: string[]): str
   }
 
   return labels.map((label, idx) => {
+    const letter = normalizePartKey(label, idx);
     const curr = escapeForRegex(label);
     const next = labels.slice(idx + 1).map((x) => escapeForRegex(x));
     const boundary = next.length ? `(?=\\(\\s*(?:${next.join("|")})\\s*\\)|$)` : "(?=$)";
     const re = new RegExp(`\\(\\s*${curr}\\s*\\)\\s*([\\s\\S]*?)${boundary}`, "i");
     const raw = questionText.match(re)?.[1] ?? "";
     const cleaned = raw.replace(/\s+/g, " ").trim().replace(/[;:,.]+$/g, "");
-    return cleaned || `${label})`;
+    return cleaned ? formatPartDescriptor(letter, cleaned) : `${letter})`;
   });
 }
 
@@ -217,22 +218,36 @@ export function LongQuestion({
   persistedState,
   onStateChange,
 }: LongQuestionProps) {
-  const configuredParts: LongQuestionType["answerParts"] = [];
-  const partLabels =
+  const configuredParts: LongQuestionType["answerParts"] =
+    question.answerParts?.filter((p) => p?.label?.trim()) ?? [];
+  const configuredDisplay =
+    configuredParts.length >= 2 ? resolveMultipartPartDisplay(configuredParts) : null;
+  const partLabels = configuredDisplay
+    ? configuredDisplay.letters
+    : detectMultipartLabels(question.question);
+  const isMultipart = configuredParts.length >= 2 || partLabels.length >= 2;
+  const partDescriptors = configuredDisplay
+    ? configuredDisplay.descriptors
+    : detectMultipartDescriptors(question.question, partLabels);
+  const partPlaceholders =
     configuredParts.length >= 2
-      ? configuredParts.map((p, idx) => p.key?.trim() || `part${idx + 1}`)
-      : detectMultipartLabels(question.question);
-  const isMultipart = partLabels.length >= 2;
-  const partDescriptors =
+      ? configuredParts.map((p) => p.placeholder?.trim() || "")
+      : [];
+  const partImageUrls =
     configuredParts.length >= 2
-      ? configuredParts.map((p) => p.label.trim())
-      : detectMultipartDescriptors(question.question, partLabels);
-  const effectiveTotalMarks = isMultipart
-    ? Math.max(displayMarks(question.marks, question.type), partLabels.length)
-    : displayMarks(question.marks, question.type);
+      ? configuredParts.map((p) => p.imageUrl?.trim() || "")
+      : [];
+  const baseMarks = displayMarks(question.marks, question.type);
   const partMarks = isMultipart
-    ? splitMarksAcrossParts(effectiveTotalMarks, partLabels.length)
+    ? resolvePartMarks(configuredParts, partLabels.length, baseMarks)
     : [];
+  const effectiveTotalMarks = isMultipart
+    ? partMarks.reduce((sum, m) => sum + m, 0)
+    : baseMarks;
+  const hasExplicitPartMarks =
+    isMultipart &&
+    configuredParts.length >= 2 &&
+    configuredParts.every((p) => typeof p.marks === "number" && (p.marks ?? 0) > 0);
   const expectedAnswersForDisplay = isMultipart
     ? expandAcceptedForMultipart(
         [
@@ -271,6 +286,8 @@ export function LongQuestion({
     average: number | null;
     count: number;
   }>({ average: null, count: 0 });
+  const [aiFeedback, setAiFeedback] = useState<string | null>(null);
+  const [aiMarking, setAiMarking] = useState(false);
 
   useEffect(() => {
     onStateChange?.({
@@ -292,6 +309,7 @@ export function LongQuestion({
         const data = await apiFetch<{
           response: { text: string } | null;
           yourPeerRating?: { average: number | null; count: number };
+          aiMark?: { correct: boolean; scorePercent: number | null; feedback: string };
         }>(writtenApiPath(subjectId, questionKey));
         if (cancelled) return;
         if (data?.yourPeerRating) {
@@ -299,6 +317,9 @@ export function LongQuestion({
             average: data.yourPeerRating.average ?? null,
             count: data.yourPeerRating.count ?? 0,
           });
+        }
+        if (data?.aiMark?.feedback) {
+          setAiFeedback(data.aiMark.feedback);
         }
         if (data?.response) {
           const t = data.response.text?.trim();
@@ -366,12 +387,14 @@ export function LongQuestion({
         .map((s) => String(s).trim())
         .filter(Boolean);
       let result: boolean | null = null;
+      let partCorrectFlags: boolean[] = [];
       if (effectiveResponse.trim() && acceptedPool.length > 0) {
         if (isMultipart) {
           const gradedParts = gradeMultipartIndividually(parts, acceptedPool);
-          setPartResults(gradedParts.map((g) => g.correct));
+          partCorrectFlags = gradedParts.map((g) => g.correct);
+          setPartResults(partCorrectFlags);
           setDpHint(Math.max(...gradedParts.map((g) => g.dpHint ?? 0)) || null);
-          result = gradedParts.every((g) => g.correct);
+          result = partCorrectFlags.every(Boolean);
         } else {
           setPartResults(Array(partLabels.length).fill(null));
           const graded = isAnswerCorrect(effectiveResponse, acceptedPool);
@@ -379,10 +402,62 @@ export function LongQuestion({
           result = graded.correct;
         }
       }
-      setAutoMarkResult(result);
-      onAnswer(result);
-      if (result === true) toast.success("Answer submitted. Marked correct.");
-      else if (result === false) toast.error("Answer submitted. Not quite right yet.");
+      let finalResult = result;
+
+      const useAi = shouldUseAiMarking({
+        questionText: question.question,
+        partLabels: partDescriptors,
+        acceptedAnswers: acceptedPool,
+        questionType: question.type,
+      });
+
+      const shouldAiMark =
+        !practiceOnly &&
+        effectiveResponse.trim() &&
+        useAi &&
+        result !== true;
+
+      if (shouldAiMark) {
+        setAiMarking(true);
+        try {
+          const ai = await requestSmartMark(subjectId, questionKey, {
+            responseText: effectiveResponse,
+            studentParts: isMultipart ? parts : undefined,
+            question: buildSmartMarkPayload(question, {
+              marks: effectiveTotalMarks,
+              partDescriptors,
+              partMarks,
+              expectedAnswers: expectedAnswersForDisplay,
+              configuredParts,
+            }),
+          });
+          if (ai) {
+            finalResult = ai.correct;
+            setAutoMarkResult(finalResult);
+            setAiFeedback(ai.feedback || null);
+            if (ai.partResults?.length) {
+              partCorrectFlags = partLabels.map((_, idx) => {
+                const hit = ai.partResults?.find((p) => p.index === idx);
+                return hit ? hit.correct : false;
+              });
+              setPartResults(partCorrectFlags);
+            }
+          }
+        } catch {
+          // Keep client-side result if AI is unavailable.
+        } finally {
+          setAiMarking(false);
+        }
+      }
+
+      const earned = isMultipart
+        ? marksEarnedFromPartResults(partCorrectFlags, partMarks)
+        : finalResult
+          ? effectiveTotalMarks
+          : 0;
+      onAnswer(finalResult, { marksEarned: earned, marksTotal: effectiveTotalMarks });
+      if (finalResult === true) toast.success("Answer submitted. Marked correct.");
+      else if (finalResult === false) toast.error("Answer submitted. Not quite right yet.");
       else toast.success("Answer submitted.");
     } catch (err) {
       toast.error(
@@ -417,20 +492,29 @@ export function LongQuestion({
 
       {!hidePassage && (() => {
         const stimulus = collectStimulusFromQuestion(question);
-        return hasVisibleStimulus(stimulus) ? (
-          <PassageBlock
-            passage={stripQuestionHeadingFromPassage(stimulus.passage)}
-            imageUrls={stimulus.imageUrls}
-          />
-        ) : null;
+        if (hasVisibleStimulus(stimulus)) {
+          return (
+            <PassageBlock
+              passage={stripQuestionHeadingFromPassage(stimulus.passage)}
+              imageUrls={stimulus.imageUrls}
+            />
+          );
+        }
+        if (question.imageUrls?.length) {
+          return (
+            <QuestionImageGrid urls={question.imageUrls} title="Source material" />
+          );
+        }
+        return null;
       })()}
-      <QuestionImageGrid urls={question.imageUrls} title="Question figures & images" />
 
-      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        {effectiveTotalMarks}{" "}
-        {effectiveTotalMarks === 1 ? "mark" : "marks"}
-        {dpHint != null && dpHint > 0 ? ` (${dpHint} d.p.)` : ""}
-      </p>
+      {!isMultipart || !hasExplicitPartMarks ? (
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          {effectiveTotalMarks}{" "}
+          {effectiveTotalMarks === 1 ? "mark" : "marks"}
+          {dpHint != null && dpHint > 0 ? ` (${dpHint} d.p.)` : ""}
+        </p>
+      ) : null}
       <div className="font-display text-[1.18rem] leading-relaxed text-foreground sm:text-[1.45rem]">
         <RichQuestionContent
           text={stripQuestionNumberPrefix(question.question)}
@@ -474,6 +558,11 @@ export function LongQuestion({
       <Fragment>
       <div className="space-y-3">
         {isMultipart ? (
+          <p className="text-xs text-muted-foreground">
+            Answer each part below, then submit once to mark all parts.
+          </p>
+        ) : null}
+        {isMultipart ? (
           <div className="flex flex-col gap-3">
             {partLabels.map((label, idx) => (
               <div key={`${label}-${idx}`} className="space-y-1">
@@ -484,6 +573,9 @@ export function LongQuestion({
                   );
                   return (
                     <>
+                {partImageUrls[idx] ? (
+                  <QuestionImageGrid urls={[partImageUrls[idx]!]} />
+                ) : null}
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-xs font-medium text-muted-foreground">{partDescriptors[idx]}</p>
                   <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -515,7 +607,7 @@ export function LongQuestion({
                         return next;
                       })
                     }
-                    placeholder="Type your answer..."
+                    placeholder={partPlaceholders[idx] || "Type your answer…"}
                     disabled={disabled || (!practiceOnly && saved)}
                     className={cn(
                       "bg-white/60",
@@ -552,7 +644,11 @@ export function LongQuestion({
             <Textarea
               value={response}
               onChange={(e) => setResponse(e.target.value)}
-              placeholder="Write your response here..."
+              placeholder={
+                configuredParts.length === 1 && configuredParts[0]?.placeholder
+                  ? configuredParts[0].placeholder
+                  : "Write your response here…"
+              }
               rows={12}
               disabled={disabled || (!practiceOnly && saved)}
               className={cn(
@@ -586,27 +682,51 @@ export function LongQuestion({
         {/* Actions */}
         <div className="flex flex-wrap gap-2">
           <Button
+            variant="accent"
             onClick={handleSave}
             disabled={
               !(isMultipart ? parts.join("").trim() : response.trim()) ||
               saving ||
+              aiMarking ||
               disabled ||
               (!practiceOnly && saved)
             }
-            className="gap-2 bg-brand hover:bg-brand-dark"
+            className="gap-2"
           >
-            {saving ? (
+            {saving || aiMarking ? (
               <Loader2 className="size-4 animate-spin" />
             ) : (
               <Save className="size-4" />
             )}
-            {!practiceOnly && saved
-              ? "Submitted"
-              : isMultipart
-                ? "Submit Answer"
-                : submitLabel}
+            {aiMarking
+              ? "AI marking…"
+              : !practiceOnly && saved
+                ? "Submitted"
+                : isMultipart
+                  ? "Submit all parts"
+                  : submitLabel}
           </Button>
         </div>
+        {isMultipart && (practiceOnly ? submitted : saved) && autoMarkResult !== null ? (
+          <div
+            className={cn(
+              "flex items-start gap-3 rounded-lg px-4 py-3 text-sm",
+              autoMarkResult ? "bg-success/10 text-success" : "bg-danger/10 text-danger",
+            )}
+          >
+            {autoMarkResult ? (
+              <>
+                <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
+                <span className="font-medium">All parts correct!</span>
+              </>
+            ) : (
+              <>
+                <XCircle className="mt-0.5 size-4 shrink-0" />
+                <span className="font-medium">Some parts need work — check each part above.</span>
+              </>
+            )}
+          </div>
+        ) : null}
         {(practiceOnly ? submitted : saved) && autoMarkResult !== null && !isMultipart && (
           <div
             className={cn(
@@ -629,6 +749,12 @@ export function LongQuestion({
                 </span>
               </>
             )}
+          </div>
+        )}
+        {aiFeedback && (practiceOnly ? submitted : saved) && (
+          <div className="rounded-lg border border-black/10 bg-black/[0.02] px-4 py-3 text-sm text-muted-foreground">
+            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-foreground">AI feedback</p>
+            <p className="leading-relaxed">{aiFeedback}</p>
           </div>
         )}
       </div>

@@ -465,6 +465,8 @@ export default function StudyModePage() {
           {part.type === "short" && (
             <ShortQuestion
               question={part}
+              subjectId={subjectId}
+              questionKey={qk}
               hidePassage={hidePassage}
               lockedCorrect={false}
               onAnswer={(correct) => {

@@ -82,9 +82,9 @@ export function AuthLayout({
       </div>
 
       {/* Right: Form area */}
-      <div className="flex items-center justify-center bg-cream px-4 py-12 sm:px-8">
+      <div className="relative flex min-h-dvh items-center justify-center bg-cream px-4 pb-8 pt-20 sm:px-8 sm:py-12">
         {/* Mobile logo */}
-        <div className="absolute left-6 top-6 flex items-center gap-2.5 lg:hidden">
+        <div className="safe-top absolute left-4 top-4 flex items-center gap-2.5 sm:left-6 sm:top-6 lg:hidden">
           <img src="/logo.png" alt="Nodent logo" className="h-8 w-8" />
           <NodentWordmark
             size="sm"
@@ -95,7 +95,7 @@ export function AuthLayout({
 
         <div
           className={cn(
-            "w-full max-w-md rounded-2xl border border-black/[0.04] bg-white/80 p-8 shadow-xl shadow-navy/[0.03] backdrop-blur-md sm:p-10",
+            "w-full max-w-md rounded-2xl border border-black/[0.04] bg-white/80 p-6 shadow-xl shadow-navy/[0.03] backdrop-blur-md sm:p-10",
             "grain-texture",
             className,
           )}

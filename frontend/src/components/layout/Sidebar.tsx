@@ -143,8 +143,8 @@ export function AppSidebar() {
 
   return (
     <>
-      <div className="sticky top-0 z-40 border-b border-white/10 bg-black/95 text-white backdrop-blur-sm">
-        <div className="flex min-h-14 flex-wrap items-center gap-3 px-2 py-2 sm:px-4 lg:px-6">
+      <div className="safe-top sticky top-0 z-40 border-b border-white/10 bg-black/95 text-white backdrop-blur-sm">
+        <div className="flex min-h-14 flex-wrap items-center gap-2 px-3 py-2 sm:gap-3 sm:px-4 lg:px-6">
         <button
           type="button"
           onClick={() => handleNav("/dashboard")}
@@ -178,9 +178,9 @@ export function AppSidebar() {
                   type="button"
                   onClick={() => handleNav(item.path)}
                   className={[
-                    "inline-flex min-w-0 flex-1 items-center justify-center gap-2 rounded-full px-3 py-2 text-xs font-semibold transition-colors sm:text-sm",
+                    "inline-flex min-h-11 min-w-0 flex-1 items-center justify-center gap-2 rounded-full px-3 py-2.5 text-xs font-semibold transition-colors sm:text-sm",
                     isActive
-                      ? "bg-white text-black"
+                      ? "bg-brand-light/50 text-[#0b0f19]"
                       : "text-white/70 hover:bg-white/8 hover:text-white",
                   ].join(" ")}
                 >
@@ -195,7 +195,7 @@ export function AppSidebar() {
         <div className="order-2 flex items-center sm:order-3">
           <DropdownMenu>
             <DropdownMenuTrigger
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/12 bg-white/8 text-white transition-colors hover:bg-white/12"
+              className="touch-target inline-flex items-center justify-center rounded-full border border-white/12 bg-white/8 text-white transition-colors hover:bg-white/12"
               aria-label="Open settings"
             >
               <Settings className="size-4" />

@@ -1,6 +1,7 @@
 import { apiFetch } from "@/lib/api";
 import { API_PATHS, STORAGE_KEYS } from "@/lib/constants";
 import {
+  canonicalSubjectId,
   getRawCustomQuestionsForSubject,
   practiceQuestionsForSubject,
 } from "@/lib/practiceQuestions";
@@ -18,6 +19,23 @@ export function readCustomQuestionsCache(): Record<string, unknown[]> {
   } catch {
     return {};
   }
+}
+
+/** Drop one subject from the browser cache (e.g. after delete-by-subject). */
+export function purgeCustomQuestionsForSubject(subjectId: string): void {
+  const want = canonicalSubjectId(subjectId);
+  const map = readCustomQuestionsCache();
+  let changed = false;
+  for (const key of Object.keys(map)) {
+    if (canonicalSubjectId(key) !== want) continue;
+    delete map[key];
+    changed = true;
+  }
+  if (!changed) return;
+  localStorage.setItem(STORAGE_KEYS.customQuestions, JSON.stringify(map));
+  window.dispatchEvent(
+    new CustomEvent(QUESTIONS_UPDATED_EVENT, { detail: map }),
+  );
 }
 
 /** Pull latest `custom_questions` from the server and update localStorage + listeners. */

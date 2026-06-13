@@ -56,6 +56,15 @@ export function McqQuestion({
   }, [lockedCorrect, question.answer]);
 
   useEffect(() => {
+    if (persistedState?.selectedOption !== undefined) {
+      setSelectedOption(persistedState.selectedOption);
+    }
+    if (persistedState?.submitted !== undefined) {
+      setSubmitted(persistedState.submitted);
+    }
+  }, [persistedState?.selectedOption, persistedState?.submitted]);
+
+  useEffect(() => {
     onStateChange?.({ selectedOption, submitted });
   }, [selectedOption, submitted]);
 
@@ -78,7 +87,7 @@ export function McqQuestion({
     if (!submitted && !disabled) {
       return cn(
         base,
-        "border-border bg-white/60 hover:border-brand-light hover:bg-brand/5 cursor-pointer"
+        "border-border bg-white hover:border-brand-light/60 hover:bg-brand-light/15 cursor-pointer"
       );
     }
 
@@ -118,14 +127,21 @@ export function McqQuestion({
 
       {!hidePassage && (() => {
         const stimulus = collectStimulusFromQuestion(question);
-        return hasVisibleStimulus(stimulus) ? (
-          <PassageBlock
-            passage={stripQuestionHeadingFromPassage(stimulus.passage)}
-            imageUrls={stimulus.imageUrls}
-          />
-        ) : null;
+        if (hasVisibleStimulus(stimulus)) {
+          return (
+            <PassageBlock
+              passage={stripQuestionHeadingFromPassage(stimulus.passage)}
+              imageUrls={stimulus.imageUrls}
+            />
+          );
+        }
+        if (question.imageUrls?.length) {
+          return (
+            <QuestionImageGrid urls={question.imageUrls} title="Question figures & images" />
+          );
+        }
+        return null;
       })()}
-      <QuestionImageGrid urls={question.imageUrls} title="Question figures & images" />
 
       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         {displayMarks(question.marks, question.type)}{" "}

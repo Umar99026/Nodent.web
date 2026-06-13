@@ -14,7 +14,6 @@ import {
   questionStemKey,
 } from "@/lib/builtinQuestionsSeed";
 import { compressImageFileToDataUrl } from "@/lib/imageCompressor";
-import { RichQuestionContent } from "@/components/quiz/RichQuestionContent";
 import { AppShell } from "@/components/layout/AppShell";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
@@ -62,12 +61,29 @@ import { baseSubjects, subjectsForUser } from "@/lib/subjects";
 import { GOOGLE_SHEETS_TOPIC_LABELS } from "@/lib/mathSubjectTopics";
 import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
+import { PdfQuestionImportPanel } from "@/components/admin/PdfQuestionImportPanel";
+import { AiQuestionImportPanel } from "@/components/admin/AiQuestionImportPanel";
+import {
+  MultipartAnswerPartsEditor,
+  buildAnswerPartsPayload,
+  emptyMultipartParts,
+  mergePartsWithAcceptedAnswers,
+  type MultipartPartDraft,
+} from "@/components/admin/MultipartAnswerPartsEditor";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 
 type QuestionType = "mcq" | "short_answer" | "long_answer";
+
+type AdminAnswerPart = {
+  key: string;
+  label: string;
+  placeholder?: string;
+  marks?: number;
+  imageUrl?: string;
+};
 
 interface AdminQuestion {
   id: string;
@@ -80,6 +96,7 @@ interface AdminQuestion {
   options?: string[];
   correctAnswer?: string;
   acceptedAnswers?: string[];
+  answerParts?: AdminAnswerPart[];
   guidance?: string;
   passage?: string;
   marks: number;
@@ -88,27 +105,47 @@ interface AdminQuestion {
   _section?: "A" | "B" | "C";
 }
 
+function adminSubjectDisplayName(
+  subjectId: string,
+  subjects: { id: string; name: string }[],
+): string {
+  const sid = canonicalSubjectId(subjectId);
+  return subjects.find((s) => s.id === sid)?.name ?? sid;
+}
+
+function adminTopicOptionsForSubject(subjectId: string): string[] {
+  const sid = canonicalSubjectId(subjectId);
+  const key = sid === "demo" ? "general-maths" : sid;
+  return [...(GOOGLE_SHEETS_TOPIC_LABELS[key] ?? [])];
+}
+
+function parseAdminAnswerParts(val: unknown): AdminAnswerPart[] | undefined {
+  if (!Array.isArray(val)) return undefined;
+  const parts = val
+    .map((it, idx) => {
+      if (!it || typeof it !== "object") return null;
+      const row = it as Record<string, unknown>;
+      const label = String(row.label ?? "").trim();
+      if (!label) return null;
+      const marksRaw = Number(row.marks);
+      return {
+        key: String(row.key ?? `part${idx + 1}`).trim() || `part${idx + 1}`,
+        label,
+        placeholder: String(row.placeholder ?? "").trim() || undefined,
+        marks:
+          Number.isFinite(marksRaw) && marksRaw > 0 ? Math.round(marksRaw) : undefined,
+        imageUrl: String(row.imageUrl ?? row.image_url ?? "").trim() || undefined,
+      };
+    })
+    .filter((p) => p != null) as AdminAnswerPart[];
+  return parts.length ? parts : undefined;
+}
+
 const QUESTION_TYPES: { value: QuestionType; label: string }[] = [
   { value: "mcq", label: "Multiple Choice" },
   { value: "short_answer", label: "Short Answer" },
   { value: "long_answer", label: "Long Answer" },
 ];
-
-type BulkRow = {
-  rowNumber: number;
-  subjectId: string;
-  type: QuestionType;
-  topic: string;
-  passage?: string;
-  question: string;
-  options_json?: string;
-  answer?: string;
-  accepted_answers_json?: string;
-  marks?: number;
-  guidance?: string;
-  image_urls_json?: string;
-  errors: string[];
-};
 
 type EnglishAdminPrompt = {
   id: number;
@@ -126,7 +163,7 @@ type AdminRecentUser = {
 
 function formatSignupWhen(createdAt: string): string {
   const d = new Date(createdAt);
-  if (Number.isNaN(d.getTime())) return createdAt || "—";
+  if (Number.isNaN(d.getTime())) return createdAt || "â€”";
   return d.toLocaleString(undefined, {
     dateStyle: "medium",
     timeStyle: "short",
@@ -172,6 +209,11 @@ export default function AdminPage() {
 
   // Long answer
   const [guidance, setGuidance] = useState("");
+  const [multipartEnabled, setMultipartEnabled] = useState(false);
+  const [answerParts, setAnswerParts] = useState<MultipartPartDraft[]>(() =>
+    emptyMultipartParts(2),
+  );
+  const [uploadingPartIndex, setUploadingPartIndex] = useState<number | null>(null);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
@@ -181,13 +223,19 @@ export default function AdminPage() {
     setMarks(questionType === "mcq" ? 1 : 2);
   }, [questionType]);
 
+  useEffect(() => {
+    if (subjectId) return;
+    if (import.meta.env.DEV && visibleSubjects.some((s) => s.id === "demo")) {
+      setSubjectId("demo");
+    }
+  }, [subjectId, visibleSubjects]);
+
   /* ------ existing questions state ------ */
   const [questions, setQuestions] = useState<AdminQuestion[]>([]);
   const [questionsLoading, setQuestionsLoading] = useState(true);
   const [expandedSubjects, setExpandedSubjects] = useState<Set<string>>(
     new Set(),
   );
-  const expandedSubjectsInitRef = useRef(false);
   const [subjectFilter, setSubjectFilter] = useState<string>("all");
 
   const [marksEdits, setMarksEdits] = useState<Record<string, number>>({});
@@ -198,11 +246,6 @@ export default function AdminPage() {
   const [retaggingMethodsTopics, setRetaggingMethodsTopics] = useState(false);
   const autoRepairExpectedRunRef = useRef(false);
 
-  /* ------ Bulk import (paste table) ------ */
-  const [bulkText, setBulkText] = useState("");
-  const [bulkRows, setBulkRows] = useState<BulkRow[]>([]);
-  const [bulkError, setBulkError] = useState("");
-  const [bulkImporting, setBulkImporting] = useState(false);
   const [englishBulkText, setEnglishBulkText] = useState("");
   const [englishBusy, setEnglishBusy] = useState(false);
   const [englishMsg, setEnglishMsg] = useState("");
@@ -270,10 +313,11 @@ export default function AdminPage() {
     const normalizedCorrect = formatExpectedAnswer(q.correctAnswer ?? q.answer);
     return {
       id: String(q.id ?? ""),
-      subjectId: String(q.subjectId ?? subjectIdFallback ?? ""),
-      subjectName: visibleSubjects.find(
-        (s) => s.id === canonicalSubjectId(String(q.subjectId ?? subjectIdFallback ?? "")),
-      )?.name,
+      subjectId: canonicalSubjectId(String(q.subjectId ?? subjectIdFallback ?? "")),
+      subjectName: adminSubjectDisplayName(
+        String(q.subjectId ?? subjectIdFallback ?? ""),
+        visibleSubjects,
+      ),
       type: (q.type as QuestionType) ?? "long_answer",
       topic: String(q.topic ?? "General"),
       question: String(q.question ?? ""),
@@ -287,6 +331,10 @@ export default function AdminPage() {
       passage: q.passage ? String(q.passage) : undefined,
       marks: Number(q.marks ?? 1) || 1,
       imageUrls: Array.isArray(q.imageUrls) ? q.imageUrls.map(String) : undefined,
+      answerParts:
+        parseAdminAnswerParts(q.answerParts) ??
+        parseAdminAnswerParts(q.answer_parts) ??
+        parseAdminAnswerParts(q.answer_parts_json),
     };
   }
 
@@ -472,7 +520,7 @@ export default function AdminPage() {
     try {
       await refreshCustomQuestionsCache();
     } catch {
-      /* admin session edge case — list still refreshed */
+      /* admin session edge case â€” list still refreshed */
     }
   }, [fetchQuestions]);
 
@@ -548,7 +596,7 @@ export default function AdminPage() {
     }
   }, []);
 
-  /** One-time sync: legacy built-in TS banks → `custom_questions` so admin is the only source. */
+  /** One-time sync: legacy built-in TS banks â†’ `custom_questions` so admin is the only source. */
   const syncBuiltinsToDatabase = useCallback(async () => {
     if (builtinSyncStartedRef.current) return;
     builtinSyncStartedRef.current = true;
@@ -698,22 +746,6 @@ export default function AdminPage() {
     publishQuestionBank,
   ]);
 
-  // “All subjects” uses collapsible groups that started fully collapsed, so new
-  // questions looked like they never appeared. Expand every group once data
-  // first loads; after that, only expand the subject you just edited.
-  useEffect(() => {
-    if (questionsLoading) return;
-    if (questions.length === 0 && englishPrompts.length === 0) return;
-    if (expandedSubjectsInitRef.current) return;
-    expandedSubjectsInitRef.current = true;
-    const names = new Set<string>();
-    for (const q of questions) {
-      names.add(q.subjectName || q.subjectId || "Unknown");
-    }
-    if (englishPrompts.length) names.add("English prompts");
-    setExpandedSubjects(names);
-  }, [questionsLoading, questions, englishPrompts]);
-
   /* ------ submit question ------ */
 
   const resetForm = () => {
@@ -725,7 +757,27 @@ export default function AdminPage() {
     setCorrectAnswer("");
     setAcceptedAnswers("");
     setGuidance("");
+    setMultipartEnabled(false);
+    setAnswerParts(emptyMultipartParts(2));
     setFormError("");
+  };
+
+  const uploadPartImage = async (file: File, partIndex: number) => {
+    if (!file.type.startsWith("image/")) return;
+    setUploadingPartIndex(partIndex);
+    try {
+      const url = await compressImageFileToDataUrl(file, {
+        maxWidth: 1000,
+        maxHeight: 1000,
+        quality: 0.65,
+        outputType: "image/jpeg",
+      });
+      setAnswerParts((prev) =>
+        prev.map((p, i) => (i === partIndex ? { ...p, imageUrl: url } : p)),
+      );
+    } finally {
+      setUploadingPartIndex(null);
+    }
   };
 
   const appendImageDataUrls = async (files: FileList | File[]) => {
@@ -793,13 +845,25 @@ export default function AdminPage() {
     }
 
     if (questionType === "long_answer") {
-      const answers = acceptedAnswers
-        .split("\n")
-        .map((a) => a.trim())
-        .filter(Boolean);
-      if (answers.length === 0) {
-        setFormError("At least one accepted answer is required");
-        return;
+      if (multipartEnabled) {
+        const validParts = answerParts.filter((p) => p.label.trim());
+        if (validParts.length < 2) {
+          setFormError("Multipart questions need at least two parts with labels");
+          return;
+        }
+        if (validParts.some((p) => !(p.acceptedAnswer ?? "").trim())) {
+          setFormError("Each part needs an accepted answer for auto-marking");
+          return;
+        }
+      } else {
+        const answers = acceptedAnswers
+          .split("\n")
+          .map((a) => a.trim())
+          .filter(Boolean);
+        if (answers.length === 0) {
+          setFormError("At least one accepted answer is required");
+          return;
+        }
       }
     }
 
@@ -829,14 +893,25 @@ export default function AdminPage() {
         .filter(Boolean);
     } else if (questionType === "long_answer") {
       if (guidance.trim()) body.guidance = guidance.trim();
-      body.acceptedAnswers = acceptedAnswers
-        .split("\n")
-        .map((a) => a.trim())
-        .filter(Boolean);
+      if (multipartEnabled) {
+        const payloadParts = buildAnswerPartsPayload(answerParts);
+        body.answerParts = payloadParts;
+        body.acceptedAnswers = answerParts
+          .map((p) => (p.acceptedAnswer ?? "").trim())
+          .filter(Boolean);
+        body.marks = payloadParts.reduce((sum, p) => sum + (p.marks ?? 0), 0) || marks;
+      } else {
+        body.acceptedAnswers = acceptedAnswers
+          .split("\n")
+          .map((a) => a.trim())
+          .filter(Boolean);
+        body.marks = marks;
+      }
     }
 
-    // Admin-configurable marks (non-MCQ defaults to >1).
-    body.marks = marks;
+    if (questionType !== "long_answer" || !multipartEnabled) {
+      body.marks = marks;
+    }
 
     try {
       await apiFetchAdmin(API_PATHS.admin.questions, {
@@ -866,6 +941,8 @@ export default function AdminPage() {
   /* ------ delete question ------ */
 
   const startEditingQuestion = (q: AdminQuestion) => {
+    const parts = q.answerParts ?? [];
+    const isMultipart = parts.length >= 2;
     setEditingQuestionId(String(q.id));
     setEditDraft({
       subjectId: q.subjectId,
@@ -879,6 +956,9 @@ export default function AdminPage() {
       acceptedAnswers: q.acceptedAnswers,
       guidance: q.guidance,
       imageUrls: q.imageUrls,
+      answerParts: isMultipart
+        ? mergePartsWithAcceptedAnswers(parts, q.acceptedAnswers)
+        : undefined,
     });
   };
 
@@ -890,6 +970,8 @@ export default function AdminPage() {
   const handleSaveQuestionEdit = async (questionId: string) => {
     setEditSaving(true);
     try {
+      const editParts = (editDraft.answerParts ?? []) as MultipartPartDraft[];
+      const editMultipart = editParts.length >= 2;
       const body: Record<string, unknown> = {
         subjectId: editDraft.subjectId,
         type: editDraft.type,
@@ -903,8 +985,16 @@ export default function AdminPage() {
       if (editDraft.type === "mcq") {
         body.options = editDraft.options;
         body.correctAnswer = editDraft.correctAnswer;
+      } else if (editDraft.type === "long_answer" && editMultipart) {
+        const payloadParts = buildAnswerPartsPayload(editParts);
+        body.answerParts = payloadParts;
+        body.acceptedAnswers = editParts
+          .map((p) => (p.acceptedAnswer ?? "").trim())
+          .filter(Boolean);
+        body.marks = payloadParts.reduce((sum, p) => sum + (p.marks ?? 0), 0) || editDraft.marks;
       } else {
         body.acceptedAnswers = editDraft.acceptedAnswers;
+        body.answerParts = null;
       }
       await apiFetchAdmin(`${API_PATHS.admin.questions}/${questionId}`, {
         method: "PUT",
@@ -1165,441 +1255,6 @@ export default function AdminPage() {
     return getExpectedAnswersForQuestion(q).join("\n");
   }
 
-  function normalizeType(raw: string): QuestionType | null {
-    const t = String(raw ?? "").trim().toLowerCase();
-    if (t === "mcq") return "mcq";
-    if (t === "multiple_choice" || t === "multiple choice" || t === "multichoice") return "mcq";
-    if (t === "short" || t === "short_answer") return "short_answer";
-    if (t === "short answer") return "short_answer";
-    if (t === "long" || t === "long_answer" || t === "written") return "long_answer";
-    if (t === "long answer" || t === "extended response") return "long_answer";
-    return null;
-  }
-
-  const buildBulkPreview = () => {
-    setBulkError("");
-    let text = bulkText.replace(/\r\n/g, "\n").trim();
-    if (!text) {
-      setBulkRows([]);
-      return;
-    }
-
-    const subjectHintMatch = text.match(/\bfor\s+([a-z0-9_-]+)\b/i);
-    const hintedSubjectId = subjectHintMatch?.[1]?.trim() || "";
-    const normalizeSubjectId = (raw: unknown): string => {
-      const v = String(raw ?? "").trim();
-      if (!v || v === "<PUT_SUBJECT_ID_HERE>") {
-        return hintedSubjectId || subjectId || visibleSubjects[0]?.id || baseSubjects[0]?.id || "methods";
-      }
-      return v;
-    };
-
-    // JSON import path (GPT-friendly): accepts either
-    // - [{...}, {...}]
-    // - { "questions": [{...}, {...}] }
-    try {
-        const cleaned = text
-          .replace(/^```(?:json)?\s*/i, "")
-          .replace(/\s*```$/i, "")
-          .trim();
-
-        let parsed: unknown;
-        try {
-          parsed = JSON.parse(cleaned);
-        } catch {
-          // Tolerate trailing hints like ", for methods" by extracting the main JSON block.
-          const firstBrace = cleaned.search(/[\[{]/);
-          const lastBrace = Math.max(cleaned.lastIndexOf("}"), cleaned.lastIndexOf("]"));
-          if (firstBrace >= 0 && lastBrace > firstBrace) {
-            parsed = JSON.parse(cleaned.slice(firstBrace, lastBrace + 1));
-          } else {
-            throw new Error("invalid json");
-          }
-        }
-
-        const items = Array.isArray(parsed)
-          ? parsed
-          : parsed && typeof parsed === "object" && Array.isArray((parsed as any).questions)
-            ? ((parsed as any).questions as unknown[])
-            : null;
-        if (!items) {
-          setBulkError("JSON must be an array or an object with a `questions` array.");
-          setBulkRows([]);
-          return;
-        }
-
-        const out: BulkRow[] = [];
-        for (let i = 0; i < items.length; i++) {
-          const rowNumber = i + 1;
-          const q = (items[i] ?? {}) as Record<string, unknown>;
-          const errors: string[] = [];
-
-          const subjectId = normalizeSubjectId(
-            q.subjectId ?? q.subject_id ?? q.subject ?? "",
-          );
-          const type =
-            normalizeType(String(q.type ?? "")) ??
-            normalizeType(String(q.questionType ?? "")) ??
-            "long_answer";
-          const topic = String(q.topic ?? "General").trim() || "General";
-          const passage = String(q.passage ?? "").trim();
-          const question = String(q.question ?? q.stem ?? q.prompt ?? "").trim();
-
-          const optionsArr = Array.isArray(q.options)
-            ? (q.options as unknown[]).map((x) => String(x).trim()).filter(Boolean)
-            : parseFlexibleList((q as any).options_json ?? q.options) ?? null;
-          const acceptedArr = Array.isArray(q.acceptedAnswers)
-            ? (q.acceptedAnswers as unknown[]).map((x) => String(x).trim()).filter(Boolean)
-            : Array.isArray((q as any).accepted_answers)
-              ? ((q as any).accepted_answers as unknown[]).map((x) => String(x).trim()).filter(Boolean)
-              : parseFlexibleList((q as any).accepted_answers_json ?? q.acceptedAnswers ?? (q as any).accepted_answers) ?? null;
-          const imageArr = Array.isArray(q.imageUrls)
-            ? (q.imageUrls as unknown[]).map((x) => String(x).trim()).filter(Boolean)
-            : Array.isArray((q as any).image_urls)
-              ? ((q as any).image_urls as unknown[]).map((x) => String(x).trim()).filter(Boolean)
-              : parseFlexibleList((q as any).image_urls_json ?? q.imageUrls ?? (q as any).image_urls) ?? null;
-
-          const options_json = optionsArr?.length ? JSON.stringify(optionsArr) : undefined;
-          const accepted_answers_json = acceptedArr?.length
-            ? JSON.stringify(acceptedArr)
-            : undefined;
-          const image_urls_json = imageArr?.length ? JSON.stringify(imageArr) : undefined;
-
-          const answer = String(q.answer ?? q.correctAnswer ?? "").trim() || undefined;
-          const guidance =
-            String(
-              q.guidance ??
-                (q as any).workedSolution ??
-                (q as any).roughWorking ??
-                (q as any).solutionWorking ??
-                "",
-            ).trim() || undefined;
-          const marksRaw = Number(q.marks ?? NaN);
-          const marks = Number.isFinite(marksRaw)
-            ? Math.max(1, Math.round(marksRaw))
-            : undefined;
-
-          if (!subjectId) errors.push("Could not resolve subjectId.");
-          if (!question) errors.push("question is required.");
-          // JSON paste mode is intentionally permissive: backend does final validation/coercion.
-
-          out.push({
-            rowNumber,
-            subjectId,
-            type: (type ?? "mcq") as QuestionType,
-            topic,
-            passage: passage || undefined,
-            question,
-            options_json,
-            answer,
-            accepted_answers_json,
-            marks,
-            guidance,
-            image_urls_json,
-            errors,
-          });
-        }
-
-        setBulkRows(out);
-        return;
-    } catch {
-      // fall through to TSV parser if not valid JSON
-    }
-
-    // GPT sometimes outputs “TSV” with spaces instead of real tabs.
-    // If we detect the known header tokens but no tabs, try converting 2+ spaces to tabs.
-    const firstLine = text.split("\n")[0] ?? "";
-    if (!firstLine.includes("\t") && firstLine.toLowerCase().includes("subject_id")) {
-      // Only replace runs of 2+ spaces to avoid destroying normal sentence spacing.
-      text = text.replace(/ {2,}/g, "\t");
-    }
-
-    const lines = text.split("\n").filter((l) => l.trim().length > 0);
-    if (!lines.length) {
-      setBulkRows([]);
-      return;
-    }
-
-    const sep: "\t" | "," | "|" | "2space" =
-      lines[0]!.includes("\t")
-        ? "\t"
-        : lines[0]!.includes("|")
-          ? "|"
-          : lines[0]!.includes(",")
-            ? ","
-            : /\s{2,}/.test(lines[0]!)
-              ? "2space"
-              : ",";
-    const splitCols = (line: string) => {
-      if (sep === "2space") return line.split(/\s{2,}/).map((x) => x.trim());
-      if (sep === "|") return line.replace(/^\|/, "").replace(/\|$/, "").split("|").map((x) => x.trim());
-      return line.split(sep).map((x) => x.trim());
-    };
-    const rawHeader = splitCols(lines[0]!);
-    const norm = (h: string) =>
-      h
-        .trim()
-        .toLowerCase()
-        .replace(/\s+/g, "")
-        .replace(/-/g, "_");
-
-    const header = rawHeader.map(norm);
-
-    const HEADER_ALIASES: Record<string, string> = {
-      subject: "subject_id",
-      subjectid: "subject_id",
-      subject_id: "subject_id",
-      subjectslug: "subject_id",
-      type: "type",
-      question: "question",
-      q: "question",
-      stem: "question",
-      prompt: "question",
-      passage: "passage",
-      stimulus: "passage",
-      topic: "topic",
-      options: "options_json",
-      optionsjson: "options_json",
-      options_json: "options_json",
-      acceptedanswers: "accepted_answers_json",
-      accepted_answers: "accepted_answers_json",
-      acceptedanswersjson: "accepted_answers_json",
-      accepted_answers_json: "accepted_answers_json",
-      answer: "answer",
-      marks: "marks",
-      guidance: "guidance",
-      workedsolution: "guidance",
-      roughworking: "guidance",
-      solutionworking: "guidance",
-      imageurls: "image_urls_json",
-      image_urls: "image_urls_json",
-      imageurlsjson: "image_urls_json",
-      image_urls_json: "image_urls_json",
-    };
-
-    const idx = (canonicalOrAlias: string) => {
-      const key = norm(canonicalOrAlias);
-      const canonical = HEADER_ALIASES[key] ?? key;
-      // find first header cell that maps to canonical
-      for (let i = 0; i < header.length; i++) {
-        const mapped = HEADER_ALIASES[header[i]!] ?? header[i]!;
-        if (mapped === canonical) return i;
-      }
-      return -1;
-    };
-
-    const requiredHeaders = ["subject_id", "type", "question"];
-    const missing = requiredHeaders.filter((h) => idx(h) < 0);
-    if (missing.length) {
-      setBulkError(
-        `Missing required columns: ${missing.join(", ")}. Detected headers: ${rawHeader.join(", ")}. ` +
-          `If you generated this with GPT, make sure it outputs REAL tabs (TSV). ` +
-          `Tip: ask it to wrap the TSV in a code block and then copy/paste.`,
-      );
-      setBulkRows([]);
-      return;
-    }
-
-    const out: BulkRow[] = [];
-    let prev: Partial<BulkRow> | null = null;
-
-    for (let i = 1; i < lines.length; i++) {
-      const rowNumber = i + 1;
-      const cols = splitCols(lines[i]!);
-      const get = (h: string) => {
-        const j = idx(h);
-        return j >= 0 ? String(cols[j] ?? "").trim() : "";
-      };
-
-      const errors: string[] = [];
-
-      const rawSubject = get("subject_id");
-      const rawType = get("type");
-      const rawQuestion = get("question");
-
-      const subjectId = rawSubject || (prev?.subjectId ? prev.subjectId : "");
-      const type = normalizeType(rawType) || (prev?.type ? prev.type : null);
-      const topic = get("topic") || (prev?.topic ? prev.topic : "General");
-      const passage = get("passage") || (prev?.passage ? prev.passage : "");
-      const question = rawQuestion;
-
-      if (!subjectId) errors.push("subject_id is required (or inherit from previous row).");
-      if (!type) errors.push("type is required (mcq/short_answer/long_answer) (or inherit).");
-      if (!question) errors.push("question is required.");
-
-      const options_json = get("options_json") || get("options");
-      const accepted_answers_json = get("accepted_answers_json") || get("accepted_answers");
-      const image_urls_json = get("image_urls_json") || get("image_urls");
-      const guidance = get("guidance");
-      const answer = get("answer");
-      const marksRaw = get("marks");
-      const marks = marksRaw ? Math.max(1, Math.round(Number(marksRaw) || 0)) : undefined;
-
-      if (type === "mcq") {
-        const opts = parseFlexibleList(options_json || "");
-        if (!opts || opts.length < 2) {
-          errors.push(
-            'MCQ requires options_json (2+). Use JSON like ["A","B","C","D"] or paste options as `A | B | C | D` or one-per-line.',
-          );
-        }
-      }
-      if (type === "short_answer") {
-        const acc = parseFlexibleList(accepted_answers_json || "");
-        if (!acc || acc.length === 0) {
-          errors.push(
-            'Short answer requires accepted_answers_json (1+). Use JSON like ["2","x=2"] or one-per-line.',
-          );
-        }
-      }
-      if (image_urls_json) {
-        const imgs = parseFlexibleList(image_urls_json);
-        if (!imgs) errors.push("image_urls_json must be a JSON array of URLs.");
-      }
-
-      const row: BulkRow = {
-        rowNumber,
-        subjectId,
-        type: (type ?? "mcq") as QuestionType,
-        topic: topic || "General",
-        passage: passage || undefined,
-        question,
-        // keep original text; backend will accept flexible formats too
-        options_json: options_json || undefined,
-        answer: answer || undefined,
-        accepted_answers_json: accepted_answers_json || undefined,
-        marks,
-        guidance: guidance || undefined,
-        image_urls_json: image_urls_json || undefined,
-        errors,
-      };
-
-      out.push(row);
-      prev = {
-        subjectId: row.subjectId,
-        type: row.type,
-        topic: row.topic,
-        passage: row.passage,
-      };
-    }
-
-    setBulkRows(out);
-  };
-
-  const importBulkRows = async () => {
-    setBulkError("");
-    if (!bulkRows.length) {
-      toast.error("Nothing to import.");
-      return;
-    }
-    const bad = bulkRows.filter((r) => r.errors.length > 0);
-    if (bad.length) {
-      toast.error(`Fix ${bad.length} row(s) with errors before importing.`);
-      return;
-    }
-    setBulkImporting(true);
-    try {
-      // Keep payloads small to avoid proxy/worker timeouts on large imports.
-      const CHUNK_SIZE = 10;
-      let importedTotal = 0;
-      const allErrors: { index: number; message: string }[] = [];
-
-      for (let start = 0; start < bulkRows.length; start += CHUNK_SIZE) {
-        const chunk = bulkRows.slice(start, start + CHUNK_SIZE);
-        const payload = {
-          questions: chunk.map((r) => ({
-            subjectId: r.subjectId,
-            type: r.type,
-            topic: r.topic,
-            passage: r.passage,
-            question: r.question,
-            options_json: r.options_json,
-            answer: r.answer,
-            accepted_answers_json: r.accepted_answers_json,
-            marks: r.marks,
-            guidance: r.guidance,
-            image_urls_json: r.image_urls_json,
-          })),
-        };
-
-        try {
-          const res = await apiFetchAdmin<{
-            ok: boolean;
-            imported: number;
-            errors?: { index: number; message: string }[];
-          }>(API_PATHS.admin.questionsBulk, {
-            method: "POST",
-            body: JSON.stringify(payload),
-          });
-
-          importedTotal += Number(res?.imported ?? 0);
-          if (Array.isArray(res?.errors) && res.errors.length) {
-            // Re-map per-chunk index to original row index for clearer error messages.
-            allErrors.push(
-              ...res.errors.map((e) => ({
-                index: start + e.index,
-                message: e.message,
-              })),
-            );
-          }
-        } catch {
-          // Local Node API doesn't expose /questions/bulk.
-          // Fallback to one-by-one inserts via /questions so imports still work locally.
-          for (let i = 0; i < chunk.length; i++) {
-            const row = chunk[i]!;
-            try {
-              const options = parseFlexibleList(row.options_json ?? "");
-              const acceptedAnswers = parseFlexibleList(row.accepted_answers_json ?? "");
-              const imageUrls = parseFlexibleList(row.image_urls_json ?? "");
-
-              await apiFetchAdmin(API_PATHS.admin.questions, {
-                method: "POST",
-                body: JSON.stringify({
-                  subjectId: row.subjectId,
-                  type: row.type,
-                  topic: row.topic,
-                  passage: row.passage,
-                  question: row.question,
-                  options: options ?? undefined,
-                  answer: row.answer,
-                  acceptedAnswers: acceptedAnswers ?? undefined,
-                  marks: row.marks,
-                  guidance: row.guidance,
-                  imageUrls: imageUrls ?? undefined,
-                }),
-              });
-              importedTotal++;
-            } catch (e) {
-              const msg = e instanceof ApiError ? e.message : "Row import failed.";
-              allErrors.push({ index: start + i, message: msg });
-            }
-          }
-        }
-      }
-
-      if (allErrors.length) {
-        setBulkError(
-          `Imported ${importedTotal}. Some rows failed: ` +
-            allErrors
-              .slice(0, 8)
-              .map((e) => `#${e.index + 1} ${e.message}`)
-              .join("; "),
-        );
-        toast.error("Imported with errors. See details below.");
-      } else {
-        toast.success(`Imported ${importedTotal} questions.`);
-      }
-
-      setBulkText("");
-      setBulkRows([]);
-      await publishQuestionBank();
-    } catch (e) {
-      const msg = e instanceof ApiError ? e.message : "Bulk import failed.";
-      setBulkError(msg);
-      toast.error(msg);
-    } finally {
-      setBulkImporting(false);
-    }
-  };
 
   const parseEnglishRows = () => {
     const normalizedInput = englishBulkText
@@ -1701,8 +1356,8 @@ export default function AdminPage() {
           : "";
       setEnglishMsg(
         `Imported prompts: ${res.importedPrompts ?? 0} (books in bank: ${res.importedBooks ?? 0})${
-          e ? ` • ${e} row(s) skipped` : ""
-        }${sampleErrors ? ` • sample: ${sampleErrors}` : ""}`,
+          e ? ` â€¢ ${e} row(s) skipped` : ""
+        }${sampleErrors ? ` â€¢ sample: ${sampleErrors}` : ""}`,
       );
       if (!e) {
         setEnglishBulkText("");
@@ -1824,8 +1479,7 @@ export default function AdminPage() {
   };
 
   const editTopicOptions = useMemo(() => {
-    const sid = canonicalSubjectId(String(editDraft.subjectId ?? ""));
-    return GOOGLE_SHEETS_TOPIC_LABELS[sid] ?? [];
+    return adminTopicOptionsForSubject(String(editDraft.subjectId ?? ""));
   }, [editDraft.subjectId]);
 
   const renderMathsQuestionEditForm = (q: AdminQuestion) => (
@@ -1916,6 +1570,34 @@ export default function AdminPage() {
           }
         />
       </div>
+      <div className="space-y-1">
+        <Label className="text-xs">Passage / stimulus text</Label>
+        <Textarea
+          rows={2}
+          className="bg-white/70 text-xs"
+          value={editDraft.passage ?? q.passage ?? ""}
+          onChange={(e) =>
+            setEditDraft((d) => ({ ...d, passage: e.target.value }))
+          }
+        />
+      </div>
+      <div className="space-y-1">
+        <Label className="text-xs">Stimulus images (one URL per line)</Label>
+        <Textarea
+          rows={2}
+          className="bg-white/70 text-xs"
+          value={(editDraft.imageUrls ?? q.imageUrls ?? []).join("\n")}
+          onChange={(e) =>
+            setEditDraft((d) => ({
+              ...d,
+              imageUrls: e.target.value
+                .split("\n")
+                .map((x) => x.trim())
+                .filter(Boolean),
+            }))
+          }
+        />
+      </div>
       {editDraft.type === "mcq" || q.type === "mcq" ? (
         <>
           <div className="space-y-1">
@@ -1943,6 +1625,89 @@ export default function AdminPage() {
             />
           </div>
         </>
+      ) : editDraft.type === "long_answer" || q.type === "long_answer" ? (
+        <>
+          <div className="space-y-1">
+            <Label className="text-xs">Marking guidance</Label>
+            <Textarea
+              rows={2}
+              className="bg-white/70 text-xs"
+              value={editDraft.guidance ?? q.guidance ?? ""}
+              onChange={(e) =>
+                setEditDraft((d) => ({ ...d, guidance: e.target.value }))
+              }
+            />
+          </div>
+          {(editDraft.answerParts?.length ?? 0) >= 2 ? (
+            <MultipartAnswerPartsEditor
+              parts={(editDraft.answerParts ?? []) as MultipartPartDraft[]}
+              onChange={(parts) =>
+                setEditDraft((d) => ({ ...d, answerParts: parts }))
+              }
+              onUploadPartImage={async (file, partIndex) => {
+                setUploadingPartIndex(partIndex);
+                try {
+                  const url = await compressImageFileToDataUrl(file, {
+                    maxWidth: 1000,
+                    maxHeight: 1000,
+                    quality: 0.65,
+                    outputType: "image/jpeg",
+                  });
+                  setEditDraft((d) => {
+                    const prev = (d.answerParts ?? []) as MultipartPartDraft[];
+                    return {
+                      ...d,
+                      answerParts: prev.map((p, i) =>
+                        i === partIndex ? { ...p, imageUrl: url } : p,
+                      ),
+                    };
+                  });
+                } finally {
+                  setUploadingPartIndex(null);
+                }
+              }}
+              uploadingPartIndex={uploadingPartIndex}
+            />
+          ) : (
+            <div className="space-y-1">
+              <Label className="text-xs">Accepted answers (one per line)</Label>
+              <Textarea
+                rows={3}
+                className="bg-white/70 text-xs"
+                value={(editDraft.acceptedAnswers ?? q.acceptedAnswers ?? []).join("\n")}
+                onChange={(e) =>
+                  setEditDraft((d) => ({
+                    ...d,
+                    acceptedAnswers: e.target.value
+                      .split("\n")
+                      .map((x) => x.trim())
+                      .filter(Boolean),
+                  }))
+                }
+              />
+            </div>
+          )}
+          {(editDraft.answerParts?.length ?? 0) < 2 ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              className="gap-1"
+              onClick={() =>
+                setEditDraft((d) => ({
+                  ...d,
+                  answerParts: mergePartsWithAcceptedAnswers(
+                    emptyMultipartParts(2),
+                    d.acceptedAnswers ?? q.acceptedAnswers,
+                  ),
+                }))
+              }
+            >
+              <Plus className="size-3.5" />
+              Convert to multipart
+            </Button>
+          ) : null}
+        </>
       ) : (
         <div className="space-y-1">
           <Label className="text-xs">Accepted answers (one per line)</Label>
@@ -1966,6 +1731,7 @@ export default function AdminPage() {
         <Button
           type="button"
           size="sm"
+          variant="accent"
           disabled={editSaving}
           onClick={() => void handleSaveQuestionEdit(String(q.id))}
         >
@@ -1988,7 +1754,7 @@ export default function AdminPage() {
         edgeToEdgeHeader
       >
         <div className="max-w-none space-y-6">
-          <Card className="paper-texture">
+          <Card className="surface-card">
             <CardHeader>
               <CardTitle className="font-display text-lg">Admin access required</CardTitle>
             </CardHeader>
@@ -2009,27 +1775,7 @@ export default function AdminPage() {
       edgeToEdgeHeader
     >
       <div className="max-w-none space-y-8">
-        {import.meta.env.DEV ? (
-          <Card className="border-brand/30 bg-brand/5 paper-texture">
-            <CardHeader className="pb-2">
-              <CardTitle className="font-display text-lg">Demo subject (localhost only)</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm text-muted-foreground">
-              <p>
-                Choose <span className="font-medium text-foreground">Demo</span> in the{" "}
-                <span className="font-medium text-foreground">Subject</span> dropdown below, or set{" "}
-                <code className="rounded bg-black/10 px-1">subject_id</code> to{" "}
-                <code className="rounded bg-black/10 px-1">demo</code> in bulk import. Demo never
-                ships on the live site.
-              </p>
-              <p>
-                After import, add Demo on your dashboard under My Subjects to practice it.
-              </p>
-            </CardContent>
-          </Card>
-        ) : null}
-
-        <Card className="paper-texture">
+        <Card className="surface-card">
           <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
             <div className="space-y-1">
               <CardTitle className="flex items-center gap-2 font-display text-lg">
@@ -2037,7 +1783,7 @@ export default function AdminPage() {
                 Recent signups
               </CardTitle>
               <p className="text-sm text-muted-foreground">
-                {totalUsers} real account{totalUsers === 1 ? "" : "s"} — latest 10 shown
+                {totalUsers} real account{totalUsers === 1 ? "" : "s"} â€” latest 10 shown
               </p>
             </div>
             <Button
@@ -2060,7 +1806,7 @@ export default function AdminPage() {
             {recentUsersLoading && recentUsers.length === 0 ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="size-4 animate-spin" />
-                Loading signups…
+                Loading signupsâ€¦
               </div>
             ) : recentUsers.length === 0 ? (
               <p className="text-sm text-muted-foreground">No signups yet.</p>
@@ -2080,7 +1826,7 @@ export default function AdminPage() {
                         <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">
                           {formatSignupWhen(u.createdAt)}
                         </td>
-                        <td className="px-3 py-2 font-medium">{u.username || "—"}</td>
+                        <td className="px-3 py-2 font-medium">{u.username || "â€”"}</td>
                         <td className="px-3 py-2">{u.email}</td>
                       </tr>
                     ))}
@@ -2091,121 +1837,30 @@ export default function AdminPage() {
           </CardContent>
         </Card>
 
-        <Card className="paper-texture">
-          <CardHeader>
-            <CardTitle className="font-display text-lg">Bulk import (paste table)</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Paste TSV copied from Sheets/Excel.{" "}
-              <span className="font-medium text-foreground">Detail rows</span> can leave{" "}
-              <code className="rounded bg-black/10 px-1">subject_id</code>,{" "}
-              <code className="rounded bg-black/10 px-1">type</code>,{" "}
-              <code className="rounded bg-black/10 px-1">topic</code>,{" "}
-              <code className="rounded bg-black/10 px-1">passage</code> blank to inherit from the
-              previous row. Questions sharing the same non-empty{" "}
-              <code className="rounded bg-black/10 px-1">passage</code> render on the same page in
-              Quiz/Study.
-            </p>
+        <PdfQuestionImportPanel
+          subjects={visibleSubjects.map((s) => ({ id: s.id, name: s.name }))}
+          defaultSubjectId={subjectId}
+          onImported={publishQuestionBank}
+        />
 
-            <Textarea
-              value={bulkText}
-              onChange={(e) => setBulkText(e.target.value)}
-              rows={8}
-              className="bg-white/60"
-              placeholder={`subject_id\ttype\ttopic\tpassage\tquestion\toptions_json\tanswer\taccepted_answers_json\tmarks\tguidance\timage_urls_json
-methods\tmcq\tAlgebra\t\t1. Simplify...\t["A","B","C","D"]\tA\t\t1\t\t["https://.../fig1.png"]
-\tshort_answer\t\tSame passage for next part\t1(b) Hence...\t\t\t["2","x=2"]\t2\t\t`}
-            />
-
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <Button type="button" variant="secondary" onClick={buildBulkPreview} className="gap-2">
-                Preview rows
-              </Button>
-              <Button
-                type="button"
-                onClick={() => void importBulkRows()}
-                disabled={bulkImporting || bulkRows.length === 0}
-                className="gap-2"
-              >
-                {bulkImporting ? (
-                  <>
-                    <Loader2 className="size-4 animate-spin" />
-                    Importing…
-                  </>
-                ) : (
-                  "Import into question bank"
-                )}
-              </Button>
-              <p className="text-xs text-muted-foreground">
-                {bulkRows.length ? `${bulkRows.length} row(s) parsed` : "No preview yet"}
-              </p>
-            </div>
-
-            {bulkError ? (
-              <div className="rounded-lg border border-red-500/40 bg-red-500/15 px-3 py-2 text-sm text-foreground">
-                {bulkError}
-              </div>
-            ) : null}
-
-            {bulkRows.length ? (
-              <div className="overflow-auto rounded-xl border border-black/10 bg-white/70">
-                <table className="w-full min-w-[980px] text-left text-xs">
-                  <thead className="sticky top-0 bg-white">
-                    <tr className="border-b border-black/10">
-                      <th className="px-3 py-2">Row</th>
-                      <th className="px-3 py-2">Subject</th>
-                      <th className="px-3 py-2">Type</th>
-                      <th className="px-3 py-2">Topic</th>
-                      <th className="px-3 py-2">Passage</th>
-                      <th className="px-3 py-2">Question</th>
-                      <th className="px-3 py-2">Images</th>
-                      <th className="px-3 py-2">Errors</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {bulkRows.slice(0, 200).map((r) => (
-                      <tr key={r.rowNumber} className="border-b border-black/5 align-top">
-                        <td className="px-3 py-2 tabular-nums text-muted-foreground">{r.rowNumber}</td>
-                        <td className="px-3 py-2">{r.subjectId}</td>
-                        <td className="px-3 py-2">{r.type}</td>
-                        <td className="px-3 py-2">{r.topic}</td>
-                        <td className="px-3 py-2 max-w-[260px] whitespace-pre-wrap">{r.passage ?? ""}</td>
-                        <td className="px-3 py-2 max-w-[320px] whitespace-pre-wrap">
-                          <RichQuestionContent text={r.question} className="prose prose-sm max-w-none prose-p:my-0" />
-                        </td>
-                        <td className="px-3 py-2 max-w-[220px] whitespace-pre-wrap text-muted-foreground">
-                          {r.image_urls_json ?? ""}
-                        </td>
-                        <td className="px-3 py-2">
-                          {r.errors.length ? (
-                            <div className="space-y-1">
-                              {r.errors.map((e, i) => (
-                                <div key={i} className="text-red-700">
-                                  {e}
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <span className="text-emerald-700">OK</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : null}
-          </CardContent>
-        </Card>
+        <AiQuestionImportPanel
+          subjects={visibleSubjects.map((s) => ({ id: s.id, name: s.name }))}
+          defaultSubjectId={subjectId}
+          onImported={publishQuestionBank}
+        />
 
         {/* Add Question Form */}
-        <Card className="paper-texture">
+        <Card className="surface-card">
           <CardHeader>
             <CardTitle className="font-display flex items-center gap-2 text-lg">
               <Plus className="size-5 text-brand" />
               Add Question
             </CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Manual entry. For PDFs with figures, use{" "}
+              <span className="font-medium text-foreground">Import questions</span> above â€” crop
+              images there, then import to Demo.
+            </p>
           </CardHeader>
           <CardContent className="space-y-5">
             {/* Admin access is determined by authenticated email only. */}
@@ -2258,7 +1913,7 @@ methods\tmcq\tAlgebra\t\t1. Simplify...\t["A","B","C","D"]\tA\t\t1\t\t["https://
               </Select>
             </div>
 
-            {questionType !== "mcq" && (
+            {questionType !== "mcq" && !(questionType === "long_answer" && multipartEnabled) && (
               <div className="space-y-1.5">
                 <Label>Marks</Label>
                 <Input
@@ -2286,11 +1941,12 @@ methods\tmcq\tAlgebra\t\t1. Simplify...\t["A","B","C","D"]\tA\t\t1\t\t["https://
             {/* Images (optional) */}
             <div className="space-y-1.5">
               <Label>
-                Question Images{" "}
+                Question Images / Stimulus{" "}
                 <span className="text-muted-foreground">(optional)</span>
               </Label>
               <p className="text-xs text-muted-foreground">
-                Paste one image URL per line or drag/drop image files. Students will see it under the question.
+                Shared figures shown above the question (diagrams, tables, data). Paste URLs or
+                drag/drop images.
               </p>
 
               {/* Drag + Drop uploader */}
@@ -2460,6 +2116,34 @@ methods\tmcq\tAlgebra\t\t1. Simplify...\t["A","B","C","D"]\tA\t\t1\t\t["https://
             {questionType === "long_answer" && (
               <>
                 <Separator />
+                <label className="flex cursor-pointer items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={multipartEnabled}
+                    onChange={(e) => {
+                      const on = e.target.checked;
+                      setMultipartEnabled(on);
+                      if (on && answerParts.length < 2) {
+                        setAnswerParts(emptyMultipartParts(2));
+                      }
+                    }}
+                    className="size-4 rounded border-black/20"
+                  />
+                  <span className="font-medium">Multipart question</span>
+                  <span className="text-muted-foreground">
+                    (separate answer box per part â€” ideal for Demo)
+                  </span>
+                </label>
+
+                {multipartEnabled ? (
+                  <MultipartAnswerPartsEditor
+                    parts={answerParts}
+                    onChange={setAnswerParts}
+                    onUploadPartImage={uploadPartImage}
+                    uploadingPartIndex={uploadingPartIndex}
+                  />
+                ) : null}
+
                 <div className="space-y-1.5">
                   <Label>
                     Marking Guidance{" "}
@@ -2473,18 +2157,20 @@ methods\tmcq\tAlgebra\t\t1. Simplify...\t["A","B","C","D"]\tA\t\t1\t\t["https://
                   />
                 </div>
 
-                <div className="space-y-1.5">
-                  <Label>Accepted Answers</Label>
-                  <p className="text-xs text-muted-foreground">
-                    Enter one accepted answer/keyword per line
-                  </p>
-                  <Textarea
-                    placeholder={"Answer 1\nAnswer 2\nAnswer 3"}
-                    value={acceptedAnswers}
-                    onChange={(e) => setAcceptedAnswers(e.target.value)}
-                    rows={4}
-                  />
-                </div>
+                {!multipartEnabled ? (
+                  <div className="space-y-1.5">
+                    <Label>Accepted Answers</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Enter one accepted answer/keyword per line
+                    </p>
+                    <Textarea
+                      placeholder={"Answer 1\nAnswer 2\nAnswer 3"}
+                      value={acceptedAnswers}
+                      onChange={(e) => setAcceptedAnswers(e.target.value)}
+                      rows={4}
+                    />
+                  </div>
+                ) : null}
               </>
             )}
 
@@ -2493,7 +2179,8 @@ methods\tmcq\tAlgebra\t\t1. Simplify...\t["A","B","C","D"]\tA\t\t1\t\t["https://
                 type="button"
                 onClick={() => void handleSubmit()}
                 disabled={isSubmitting}
-                className="gap-1.5 bg-brand text-white hover:bg-brand-dark"
+                variant="accent"
+                className="gap-1.5"
               >
                 {isSubmitting ? (
                   <>
@@ -2512,7 +2199,7 @@ methods\tmcq\tAlgebra\t\t1. Simplify...\t["A","B","C","D"]\tA\t\t1\t\t["https://
         </Card>
 
         {/* Questions & prompts bank (maths + English together) */}
-        <Card className="paper-texture">
+        <Card className="surface-card">
           <CardHeader>
             <CardTitle className="font-display text-lg">
               Questions &amp; prompts bank
@@ -2527,7 +2214,7 @@ methods\tmcq\tAlgebra\t\t1. Simplify...\t["A","B","C","D"]\tA\t\t1\t\t["https://
                 use <span className="font-medium text-foreground">Move selected</span> to reassign subjects.
                 {builtinSyncing ? (
                   <span className="ml-1 inline-flex items-center gap-1 text-foreground">
-                    <Loader2 className="size-3 animate-spin" /> Syncing…
+                    <Loader2 className="size-3 animate-spin" /> Syncingâ€¦
                   </span>
                 ) : null}
               </p>
@@ -2563,7 +2250,7 @@ methods\tmcq\tAlgebra\t\t1. Simplify...\t["A","B","C","D"]\tA\t\t1\t\t["https://
                 className="bg-white/60"
                 placeholder={`section\tbook\tprompt
 A\tThe Women of Troy\tHow does Euripides show power and helplessness?
-B\tSection B Curated Prompts\tTitle: Origins — write a crafted text on belonging.
+B\tSection B Curated Prompts\tTitle: Origins â€” write a crafted text on belonging.
 C\tSection C Argument Prompts\tWrite an argument on patience in modern life.`}
               />
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -2578,6 +2265,7 @@ C\tSection C Argument Prompts\tWrite an argument on patience in modern life.`}
                 </Button>
                 <Button
                   type="button"
+                  variant="accent"
                   onClick={() => void importEnglishPrompts()}
                   className="gap-2"
                   disabled={englishBusy || englishPreviewRows.length === 0}
@@ -2642,7 +2330,7 @@ C\tSection C Argument Prompts\tWrite an argument on patience in modern life.`}
                       }
                     >
                       <SelectTrigger className="h-8 w-[11.5rem]">
-                        <SelectValue placeholder="Move to subject…" />
+                        <SelectValue placeholder="Move to subjectâ€¦" />
                       </SelectTrigger>
                       <SelectContent>
                         {visibleSubjects
@@ -2735,7 +2423,7 @@ C\tSection C Argument Prompts\tWrite an argument on patience in modern life.`}
                 <span className="font-medium text-foreground">
                   {visibleSubjects.find((s) => s.id === subjectFilter)?.name ?? subjectFilter}
                 </span>{" "}
-                yet. Use Add Question or bulk import with{" "}
+                yet. Use Add Question or AI/PDF import with{" "}
                 <code className="rounded bg-black/10 px-1">subject_id</code>{" "}
                 <code className="rounded bg-black/10 px-1">{subjectFilter}</code>.
               </p>

@@ -13,7 +13,7 @@ export function questionSupportsAnswerUpload(q: Question): boolean {
 export function writtenApiPath(
   subjectId: string,
   questionKey: string,
-  suffix: "" | "/all" | "/rate" = "",
+  suffix: "" | "/all" | "/rate" | "/mark" = "",
 ): string {
   return `/api/written/${encodeURIComponent(subjectId)}/${encodeURIComponent(questionKey)}${suffix}`;
 }

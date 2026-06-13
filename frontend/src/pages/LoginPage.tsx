@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { FEEDBACK_PATH } from "@/components/landing/WelcomeFeedbackSection";
 import { useAuth } from "@/context/AuthContext";
 import { ApiError, API_UNREACHABLE_MESSAGE } from "@/lib/api";
 import { STORAGE_KEYS } from "@/lib/constants";
@@ -107,7 +108,7 @@ export default function LoginPage() {
     setIsSubmitting(true);
     try {
       await signup(signupUsername.trim(), signupEmail.trim(), signupPassword);
-      navigate("/dashboard", { replace: true });
+      navigate(FEEDBACK_PATH, { replace: true });
     } catch (err) {
       if (err instanceof ApiError) {
         setServerError(err.status === 0 ? API_UNREACHABLE_MESSAGE : err.message);

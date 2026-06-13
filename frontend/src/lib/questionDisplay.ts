@@ -5,6 +5,95 @@ export function displayMarks(marks: number | undefined, type: "mcq" | "short" | 
   return type === "mcq" ? 1 : 2;
 }
 
+/** Per-part marks from answerParts, or split total evenly when not set. */
+export function resolvePartMarks(
+  configuredParts: { marks?: number }[],
+  partCount: number,
+  totalMarks: number,
+): number[] {
+  const safeParts = Math.max(1, partCount);
+  if (configuredParts.length >= 2 && configuredParts.length === safeParts) {
+    const explicit = configuredParts.map((p) =>
+      typeof p.marks === "number" && p.marks > 0 ? Math.round(p.marks) : 0,
+    );
+    if (explicit.every((m) => m > 0)) return explicit;
+  }
+  const safeTotal = Math.max(1, Math.round(totalMarks));
+  if (safeTotal <= safeParts) return Array(safeParts).fill(1);
+  const base = Math.floor(safeTotal / safeParts);
+  const rem = safeTotal % safeParts;
+  return Array.from({ length: safeParts }, (_, idx) => base + (idx < rem ? 1 : 0));
+}
+
+export type AnswerScoreDetail = {
+  marksEarned: number;
+  marksTotal: number;
+};
+
+/** Sum marks for each correct multipart sub-part. */
+export function marksEarnedFromPartResults(
+  partResults: Array<boolean | null | undefined>,
+  partMarks: number[],
+): number {
+  return partResults.reduce(
+    (sum, ok, idx) => sum + (ok ? Math.max(1, Math.round(partMarks[idx] ?? 1)) : 0),
+    0,
+  );
+}
+
+/** Total marks for competition / scorecard (sum of part marks when multipart). */
+export function competitionMarksForQuestion(q: {
+  marks?: number;
+  type?: "mcq" | "short" | "long";
+  answerParts?: Array<{ marks?: number; label?: string }>;
+}): number {
+  const parts = q.answerParts?.filter((p) => p?.label?.trim()) ?? [];
+  const qType = q.type ?? "short";
+  if (parts.length >= 2) {
+    const partMarks = resolvePartMarks(
+      parts,
+      parts.length,
+      displayMarks(q.marks, qType),
+    );
+    return partMarks.reduce((sum, m) => sum + m, 0);
+  }
+  return displayMarks(q.marks, qType);
+}
+export function partLetterForIndex(index: number): string {
+  return String.fromCharCode(97 + Math.min(Math.max(0, index), 25));
+}
+
+/** Normalize stored part keys (part1, A, etc.) to a, b, c, … */
+export function normalizePartKey(key: string | undefined, index: number): string {
+  const k = key?.trim().toLowerCase() ?? "";
+  if (/^[a-z]$/.test(k)) return k;
+  const m = k.match(/^part(\d+)$/i);
+  if (m?.[1]) {
+    const n = Number(m[1]);
+    if (Number.isFinite(n) && n >= 1 && n <= 26) return partLetterForIndex(n - 1);
+  }
+  return partLetterForIndex(index);
+}
+
+/** Student-facing part heading, e.g. "a) Find the mean". */
+export function formatPartDescriptor(letter: string, label: string): string {
+  const L = letter.trim().toLowerCase();
+  const clean = label.trim();
+  if (!clean || /^answer$/i.test(clean)) return `${L})`;
+  if (/^[a-z]\s*[).:\-–—]/i.test(clean)) return clean;
+  return `${L}) ${clean}`;
+}
+
+export function resolveMultipartPartDisplay(
+  answerParts: Array<{ key?: string; label?: string }>,
+): { letters: string[]; descriptors: string[] } {
+  const letters = answerParts.map((p, idx) => normalizePartKey(p.key, idx));
+  const descriptors = answerParts.map((p, idx) =>
+    formatPartDescriptor(letters[idx]!, p.label ?? ""),
+  );
+  return { letters, descriptors };
+}
+
 /** Remove scenario/topic labels duplicated in the stem (topic already shows in the badge). */
 export function stripScenarioLabelPrefix(text: string): string {
   let out = String(text ?? "").trim();
@@ -25,8 +114,19 @@ export function stripScenarioLabelPrefix(text: string): string {
   return out.trim();
 }
 
+/** Remove “(3 marks)” / “3 marks” annotations from displayed question text. */
+export function stripMarksAnnotations(text: string): string {
+  return String(text ?? "")
+    .replace(/\(\s*\d+\s*marks?\s*\)/gi, "")
+    .replace(/\b\d+\s*marks?\b/gi, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+}
+
 export function stripQuestionNumberPrefix(text: string): string {
-  const src = stripScenarioLabelPrefix(String(text ?? "").trim());
+  const src = stripMarksAnnotations(stripScenarioLabelPrefix(String(text ?? "").trim()));
   if (!src) return "";
   return src
     // Remove placeholder test labels sometimes injected by imports.
@@ -76,10 +176,17 @@ export function collectStimulusFromText(
 ): StimulusContent {
   const rawPassage = passage?.trim() ?? "";
   const merged = [...(existingUrls ?? []), ...extractMarkdownImageUrls(rawPassage)];
+  const seen = new Set<string>();
+  const imageUrls = merged.filter((u) => {
+    const key = String(u ?? "").trim();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
   const prose = rawPassage ? stripMarkdownImages(rawPassage) : "";
   return {
     passage: prose || undefined,
-    imageUrls: merged.filter(Boolean),
+    imageUrls,
   };
 }
 

@@ -11,8 +11,8 @@ export default defineConfig({
     },
   },
   server: {
-    // Bind IPv4 so http://localhost works on Windows (not only [::1]).
-    host: "127.0.0.1",
+    // Listen on all interfaces so http://localhost and http://127.0.0.1 both work on Windows.
+    host: true,
     port: 5173,
     strictPort: false,
     proxy: {

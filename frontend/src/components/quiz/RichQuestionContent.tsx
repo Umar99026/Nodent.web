@@ -213,13 +213,14 @@ export function RichQuestionContent({
   return (
     <div
       className={cn(
+        "rich-question-content",
         overviewMode
           ? "overview-markdown max-w-none text-foreground [&_.katex]:text-[1em] sm:[&_.katex]:text-[1.02em]"
           : "prose prose-sm max-w-none text-foreground dark:prose-invert",
-        "[&_.katex]:text-foreground [&_.katex-display]:my-3",
+        "[&_.katex]:text-foreground [&_.katex-display]:my-3 [&_.katex-display]:max-w-full [&_.katex-display]:overflow-x-auto",
         "[&_img]:mx-auto [&_img]:block [&_img]:max-h-[min(70vh,560px)] [&_img]:w-auto [&_img]:max-w-full [&_img]:rounded-lg [&_img]:border [&_img]:border-black/10 [&_img]:bg-muted/20 [&_img]:object-contain",
         !overviewMode &&
-          "[&_table]:text-sm [&_th]:border [&_td]:border [&_th]:border-black/10 [&_td]:border-black/10",
+          "[&_table]:block [&_table]:max-w-full [&_table]:overflow-x-auto [&_table]:text-sm [&_th]:border [&_td]:border [&_th]:border-black/10 [&_td]:border-black/10",
         className,
       )}
     >

@@ -66,7 +66,7 @@ export function LandingDemoStudyProgress() {
             type="button"
             onClick={() => setView("weekly")}
             className={cn(
-              "h-7 rounded-md px-2.5 text-xs font-medium transition-colors",
+              "h-9 rounded-md px-3 text-xs font-medium transition-colors",
               view === "weekly"
                 ? "bg-[#0b0f19] text-white"
                 : "text-[#0b0f19]/70 hover:bg-black/5",
@@ -78,7 +78,7 @@ export function LandingDemoStudyProgress() {
             type="button"
             onClick={() => setView("heatmap")}
             className={cn(
-              "h-7 rounded-md px-2.5 text-xs font-medium transition-colors",
+              "h-9 rounded-md px-3 text-xs font-medium transition-colors",
               view === "heatmap"
                 ? "bg-[#0b0f19] text-white"
                 : "text-[#0b0f19]/70 hover:bg-black/5",

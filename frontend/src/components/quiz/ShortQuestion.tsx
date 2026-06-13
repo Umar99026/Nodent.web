@@ -2,28 +2,44 @@ import { useState, useEffect } from "react";
 import { cn, getQuestionTypeLabel, inferDpHintFromAccepted, isAnswerCorrect } from "@/lib/utils";
 import type { ShortQuestion as ShortQuestionType } from "@/lib/subjects";
 import {
+  buildSmartMarkPayload,
+  requestSmartMark,
+  shouldUseAiMarking,
+} from "@/lib/questionAiMarking";
+import {
   collectStimulusFromQuestion,
   displayMarks,
+  formatPartDescriptor,
   hasVisibleStimulus,
+  marksEarnedFromPartResults,
+  normalizePartKey,
+  resolvePartMarks,
+  resolveMultipartPartDisplay,
   stripQuestionHeadingFromPassage,
   stripQuestionNumberPrefix,
+  type AnswerScoreDetail,
 } from "@/lib/questionDisplay";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { PassageBlock, QuestionImageGrid } from "@/components/quiz/QuestionStimulus";
 import { RichQuestionContent } from "@/components/quiz/RichQuestionContent";
-import { CheckCircle2, XCircle, Send } from "lucide-react";
+import { CheckCircle2, XCircle, Send, Loader2 } from "lucide-react";
 
 interface ShortQuestionProps {
   question: ShortQuestionType;
-  onAnswer: (isCorrect: boolean) => void;
+  subjectId?: string;
+  questionKey?: string;
+  onAnswer: (isCorrect: boolean, detail?: AnswerScoreDetail) => void;
   disabled?: boolean;
   hidePassage?: boolean;
   lockedCorrect?: boolean;
   classFullyCorrectPercent?: number | null;
   /** Allow multiple attempts (used for wrong-answer practice). */
   allowRetry?: boolean;
+  /** Practice-only mode (no smart marking API). Used for wrong-answer review. */
+  practiceOnly?: boolean;
   persistedState?: {
     answer?: string;
     parts?: string[];
@@ -40,17 +56,6 @@ interface ShortQuestionProps {
     dpHint: number | null;
     partResults: (boolean | null)[];
   }) => void;
-}
-
-function splitMarksAcrossParts(totalMarks: number, partCount: number): number[] {
-  const safeParts = Math.max(1, partCount);
-  const safeTotal = Math.max(1, Math.round(Number(totalMarks) || 1));
-  if (safeTotal <= safeParts) {
-    return Array(safeParts).fill(1);
-  }
-  const base = Math.floor(safeTotal / safeParts);
-  const rem = safeTotal % safeParts;
-  return Array.from({ length: safeParts }, (_, idx) => base + (idx < rem ? 1 : 0));
 }
 
 function expandAcceptedForMultipart(acceptedPool: string[]): string[] {
@@ -163,13 +168,14 @@ function detectMultipartDescriptors(questionText: string, labels: string[]): str
   }
 
   return labels.map((label, idx) => {
+    const letter = normalizePartKey(label, idx);
     const curr = escapeForRegex(label);
     const next = labels.slice(idx + 1).map((x) => escapeForRegex(x));
     const boundary = next.length ? `(?=\\(\\s*(?:${next.join("|")})\\s*\\)|$)` : "(?=$)";
     const re = new RegExp(`\\(\\s*${curr}\\s*\\)\\s*([\\s\\S]*?)${boundary}`, "i");
     const raw = questionText.match(re)?.[1] ?? "";
     const cleaned = raw.replace(/\s+/g, " ").trim().replace(/[;:,.]+$/g, "");
-    return cleaned || `${label})`;
+    return cleaned ? formatPartDescriptor(letter, cleaned) : `${letter})`;
   });
 }
 
@@ -190,12 +196,15 @@ function parseDirectiveParts(questionText: string): string[] {
 
 export function ShortQuestion({
   question,
+  subjectId = "",
+  questionKey = "",
   onAnswer,
   disabled = false,
   hidePassage = false,
   lockedCorrect = false,
   classFullyCorrectPercent,
   allowRetry = false,
+  practiceOnly = false,
   persistedState,
   onStateChange,
 }: ShortQuestionProps) {
@@ -205,23 +214,39 @@ export function ShortQuestion({
   const [isCorrect, setIsCorrect] = useState(Boolean(persistedState?.isCorrect));
   const [dpHint, setDpHint] = useState<number | null>(persistedState?.dpHint ?? null);
   const [partResults, setPartResults] = useState<(boolean | null)[]>(persistedState?.partResults ?? []);
+  const [aiMarking, setAiMarking] = useState(false);
+  const [aiFeedback, setAiFeedback] = useState<string | null>(null);
 
-  const configuredParts: ShortQuestionType["answerParts"] = [];
-  const partLabels =
-    configuredParts.length >= 2
-      ? configuredParts.map((p, idx) => p.key?.trim() || `part${idx + 1}`)
-      : detectMultipartLabels(question.question);
-  const isMultipart = partLabels.length >= 2;
-  const effectiveTotalMarks = isMultipart
-    ? Math.max(displayMarks(question.marks, question.type), partLabels.length)
-    : displayMarks(question.marks, question.type);
+  const configuredParts: ShortQuestionType["answerParts"] =
+    question.answerParts?.filter((p) => p?.label?.trim()) ?? [];
+  const configuredDisplay =
+    configuredParts.length >= 2 ? resolveMultipartPartDisplay(configuredParts) : null;
+  const partLabels = configuredDisplay
+    ? configuredDisplay.letters
+    : detectMultipartLabels(question.question);
+  const isMultipart = configuredParts.length >= 2 || partLabels.length >= 2;
+  const baseMarks = displayMarks(question.marks, question.type);
   const partMarks = isMultipart
-    ? splitMarksAcrossParts(effectiveTotalMarks, partLabels.length)
+    ? resolvePartMarks(configuredParts, partLabels.length, baseMarks)
     : [];
-  const partDescriptors =
+  const effectiveTotalMarks = isMultipart
+    ? partMarks.reduce((sum, m) => sum + m, 0)
+    : baseMarks;
+  const hasExplicitPartMarks =
+    isMultipart &&
+    configuredParts.length >= 2 &&
+    configuredParts.every((p) => typeof p.marks === "number" && (p.marks ?? 0) > 0);
+  const partDescriptors = configuredDisplay
+    ? configuredDisplay.descriptors
+    : detectMultipartDescriptors(question.question, partLabels);
+  const partPlaceholders =
     configuredParts.length >= 2
-      ? configuredParts.map((p) => p.label.trim())
-      : detectMultipartDescriptors(question.question, partLabels);
+      ? configuredParts.map((p) => p.placeholder?.trim() || "")
+      : [];
+  const partImageUrls =
+    configuredParts.length >= 2
+      ? configuredParts.map((p) => p.imageUrl?.trim() || "")
+      : [];
   const expectedAnswersForDisplay = isMultipart
     ? expandAcceptedForMultipart(question.acceptedAnswers ?? [])
         .map(formatExpectedAnswer)
@@ -235,6 +260,15 @@ export function ShortQuestion({
   const singleDpHint = !isMultipart
     ? inferDpHintFromAccepted([expectedAnswersForDisplay[0] ?? ""])
     : null;
+
+  const useSmartMarking = shouldUseAiMarking({
+    questionText: question.question,
+    partLabels: partDescriptors,
+    acceptedAnswers: question.acceptedAnswers,
+    questionType: question.type,
+  });
+
+  const useTextArea = useSmartMarking && !isMultipart;
 
   useEffect(() => {
     onStateChange?.({
@@ -265,19 +299,22 @@ export function ShortQuestion({
   const canSubmit =
     (isMultipart ? parts.every((p) => p.trim().length > 0) : !!compositeAnswer.trim()) &&
     !disabled &&
+    !aiMarking &&
     (!submitted || (allowRetry && !isCorrect));
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!canSubmit) return;
 
     const accepted = question.acceptedAnswers ?? [];
     let correct = false;
     let nextDpHint: number | null = null;
+    let partCorrectFlags: boolean[] = [];
 
     if (isMultipart) {
       const gradedParts = gradeMultipartIndividually(parts, accepted);
-      setPartResults(gradedParts.map((g) => g.correct));
-      correct = gradedParts.every((g) => g.correct);
+      partCorrectFlags = gradedParts.map((g) => g.correct);
+      setPartResults(partCorrectFlags);
+      correct = partCorrectFlags.every(Boolean);
       nextDpHint = Math.max(...gradedParts.map((g) => g.dpHint ?? 0)) || null;
     } else {
       setPartResults([]);
@@ -287,12 +324,59 @@ export function ShortQuestion({
     }
     setDpHint(nextDpHint);
 
-    setIsCorrect(correct);
+    let finalCorrect = correct;
+
+    if (
+      useSmartMarking &&
+      !practiceOnly &&
+      subjectId &&
+      questionKey &&
+      !correct
+    ) {
+      setAiMarking(true);
+      try {
+        const responseText = isMultipart
+          ? partLabels.map((label, idx) => `${label}) ${parts[idx] ?? ""}`.trim()).join("\n")
+          : compositeAnswer;
+        const ai = await requestSmartMark(subjectId, questionKey, {
+          responseText,
+          studentParts: isMultipart ? parts : undefined,
+          question: buildSmartMarkPayload(question, {
+            marks: effectiveTotalMarks,
+            partDescriptors,
+            partMarks,
+            expectedAnswers: expectedAnswersForDisplay,
+            configuredParts,
+          }),
+        });
+        if (ai) {
+          finalCorrect = ai.correct;
+          setAiFeedback(ai.feedback || null);
+          if (ai.partResults?.length) {
+            partCorrectFlags = partLabels.map((_, idx) => {
+              const hit = ai.partResults?.find((p) => p.index === idx);
+              return hit ? hit.correct : false;
+            });
+            setPartResults(partCorrectFlags);
+          }
+        }
+      } finally {
+        setAiMarking(false);
+      }
+    }
+
+    setIsCorrect(finalCorrect);
     setSubmitted(true);
-    onAnswer(correct);
+    const earned = isMultipart
+      ? marksEarnedFromPartResults(partCorrectFlags, partMarks)
+      : finalCorrect
+        ? effectiveTotalMarks
+        : 0;
+    onAnswer(finalCorrect, { marksEarned: earned, marksTotal: effectiveTotalMarks });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (isMultipart) return;
     if (e.key === "Enter") {
       e.preventDefault();
       handleSubmit();
@@ -323,20 +407,29 @@ export function ShortQuestion({
 
       {!hidePassage && (() => {
         const stimulus = collectStimulusFromQuestion(question);
-        return hasVisibleStimulus(stimulus) ? (
-          <PassageBlock
-            passage={stripQuestionHeadingFromPassage(stimulus.passage)}
-            imageUrls={stimulus.imageUrls}
-          />
-        ) : null;
+        if (hasVisibleStimulus(stimulus)) {
+          return (
+            <PassageBlock
+              passage={stripQuestionHeadingFromPassage(stimulus.passage)}
+              imageUrls={stimulus.imageUrls}
+            />
+          );
+        }
+        if (question.imageUrls?.length) {
+          return (
+            <QuestionImageGrid urls={question.imageUrls} title="Source material" />
+          );
+        }
+        return null;
       })()}
-      <QuestionImageGrid urls={question.imageUrls} title="Question figures & images" />
 
-      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        {effectiveTotalMarks}{" "}
-        {effectiveTotalMarks === 1 ? "mark" : "marks"}
-        {dpHint != null && dpHint > 0 ? ` (${dpHint} d.p.)` : ""}
-      </p>
+      {!isMultipart || !hasExplicitPartMarks ? (
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          {effectiveTotalMarks}{" "}
+          {effectiveTotalMarks === 1 ? "mark" : "marks"}
+          {dpHint != null && dpHint > 0 ? ` (${dpHint} d.p.)` : ""}
+        </p>
+      ) : null}
       <div className="font-display text-[1.18rem] leading-relaxed text-foreground sm:text-[1.45rem]">
         <RichQuestionContent
           text={stripQuestionNumberPrefix(question.question)}
@@ -353,12 +446,18 @@ export function ShortQuestion({
 
       {/* Answer input */}
       <div className="space-y-3">
+        {useSmartMarking ? (
+          <p className="text-xs text-muted-foreground">
+            Smart marking — write in full sentences where needed.
+          </p>
+        ) : null}
         {isMultipart && (
-          <p className="text-xs text-muted-foreground">Answer each part below.</p>
+          <p className="text-xs text-muted-foreground">
+            Answer each part below, then submit once to mark all parts.
+          </p>
         )}
-        <div className="flex gap-2">
-          {isMultipart ? (
-            <div className="flex flex-1 flex-col gap-2">
+        {isMultipart ? (
+            <div className="flex flex-col gap-3">
               {partLabels.map((label, idx) => (
                 <div key={`${label}-${idx}`} className="space-y-1">
                   {(() => {
@@ -368,6 +467,9 @@ export function ShortQuestion({
                     );
                     return (
                       <>
+                  {partImageUrls[idx] ? (
+                    <QuestionImageGrid urls={[partImageUrls[idx]!]} />
+                  ) : null}
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-xs font-medium text-muted-foreground">{partDescriptors[idx]}</p>
                     <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -390,25 +492,50 @@ export function ShortQuestion({
                         {partUnit}
                       </span>
                     ) : null}
-                    <Input
-                      value={parts[idx] ?? ""}
-                      onChange={(e) =>
-                        setParts((prev) => {
-                          const next = [...prev];
-                          next[idx] = e.target.value;
-                          return next;
-                        })
-                      }
-                      onKeyDown={handleKeyDown}
-                      placeholder="Type your answer..."
-                      disabled={disabled || (submitted && !allowRetry)}
-                      className={cn(
-                        "bg-white/60 text-base",
-                        partUnit && "rounded-l-none",
-                        submitted && isCorrect && "border-success/60 bg-success/5",
-                        submitted && !isCorrect && "border-danger/60 bg-danger/5"
-                      )}
-                    />
+                    {shouldUseAiMarking({
+                      questionText: partDescriptors[idx] ?? "",
+                      acceptedAnswers: [expectedAnswersForDisplay[idx] ?? ""],
+                      questionType: "short",
+                    }) ? (
+                      <Textarea
+                        value={parts[idx] ?? ""}
+                        onChange={(e) =>
+                          setParts((prev) => {
+                            const next = [...prev];
+                            next[idx] = e.target.value;
+                            return next;
+                          })
+                        }
+                        placeholder={partPlaceholders[idx] || "Write your answer…"}
+                        disabled={disabled || (submitted && !allowRetry)}
+                        rows={3}
+                        className={cn(
+                          "bg-white/60 text-sm",
+                          submitted && isCorrect && "border-success/60 bg-success/5",
+                          submitted && !isCorrect && "border-danger/60 bg-danger/5",
+                        )}
+                      />
+                    ) : (
+                      <Input
+                        value={parts[idx] ?? ""}
+                        onChange={(e) =>
+                          setParts((prev) => {
+                            const next = [...prev];
+                            next[idx] = e.target.value;
+                            return next;
+                          })
+                        }
+                        onKeyDown={handleKeyDown}
+                        placeholder={partPlaceholders[idx] || "Type your answer…"}
+                        disabled={disabled || (submitted && !allowRetry)}
+                        className={cn(
+                          "bg-white/60 text-base",
+                          partUnit && "rounded-l-none",
+                          submitted && isCorrect && "border-success/60 bg-success/5",
+                          submitted && !isCorrect && "border-danger/60 bg-danger/5",
+                        )}
+                      />
+                    )}
                   </div>
                   <div className="flex items-center justify-between text-[11px] text-muted-foreground">
                     <span>
@@ -434,27 +561,69 @@ export function ShortQuestion({
               ))}
             </div>
           ) : (
-            <div className="flex-1 space-y-1">
-              <div className="flex items-stretch">
-                {inferPartUnitHint("", expectedAnswersForDisplay[0]) ? (
-                  <span className="inline-flex items-center rounded-l-md border border-r-0 border-black/15 bg-muted px-2 text-xs font-semibold text-muted-foreground">
-                    {inferPartUnitHint("", expectedAnswersForDisplay[0])}
-                  </span>
-                ) : null}
-                <Input
-                  value={answer}
-                  onChange={(e) => setAnswer(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder="Type your answer..."
-                  disabled={disabled || (submitted && !allowRetry)}
-                  className={cn(
-                    "flex-1 bg-white/60 text-base",
-                    inferPartUnitHint("", expectedAnswersForDisplay[0]) && "rounded-l-none",
-                    submitted && isCorrect && "border-success/60 bg-success/5",
-                    submitted && !isCorrect && "border-danger/60 bg-danger/5"
+            <div className="space-y-1">
+              {configuredParts.length === 1 && configuredParts[0]!.label.trim() ? (
+                <p className="text-xs font-medium text-muted-foreground">
+                  {configuredParts[0]!.label.trim()}
+                </p>
+              ) : null}
+              <div className={cn("flex gap-2", useTextArea ? "flex-col" : "items-stretch")}>
+                <div className={cn("flex flex-1 items-stretch", useTextArea && "w-full")}>
+                  {!useTextArea && inferPartUnitHint("", expectedAnswersForDisplay[0]) ? (
+                    <span className="inline-flex items-center rounded-l-md border border-r-0 border-black/15 bg-muted px-2 text-xs font-semibold text-muted-foreground">
+                      {inferPartUnitHint("", expectedAnswersForDisplay[0])}
+                    </span>
+                  ) : null}
+                  {useTextArea ? (
+                    <Textarea
+                      value={answer}
+                      onChange={(e) => setAnswer(e.target.value)}
+                      placeholder="Write your answer…"
+                      disabled={disabled || (submitted && !allowRetry)}
+                      rows={5}
+                      className={cn(
+                        "bg-white/60 text-sm leading-relaxed",
+                        submitted && isCorrect && "border-success/60 bg-success/5",
+                        submitted && !isCorrect && "border-danger/60 bg-danger/5",
+                      )}
+                    />
+                  ) : (
+                    <Input
+                      value={answer}
+                      onChange={(e) => setAnswer(e.target.value)}
+                      onKeyDown={handleKeyDown}
+                      placeholder="Type your answer..."
+                      disabled={disabled || (submitted && !allowRetry)}
+                      className={cn(
+                        "flex-1 bg-white/60 text-base",
+                        inferPartUnitHint("", expectedAnswersForDisplay[0]) && "rounded-l-none",
+                        submitted && isCorrect && "border-success/60 bg-success/5",
+                        submitted && !isCorrect && "border-danger/60 bg-danger/5",
+                      )}
+                    />
                   )}
-                />
+                </div>
+                <Button
+                  onClick={() => void handleSubmit()}
+                  disabled={!canSubmit}
+                  className={cn(
+                    "shrink-0 gap-2 btn-accent",
+                    useTextArea && "w-full sm:w-auto",
+                  )}
+                >
+                  {aiMarking ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Send className="size-4" />
+                  )}
+                  {aiMarking
+                    ? "Marking…"
+                    : submitted && isCorrect
+                      ? "Correct"
+                      : "Submit"}
+                </Button>
               </div>
+              {!useTextArea ? (
               <div className="flex items-center justify-between text-[11px] text-muted-foreground">
                 <span>
                   {singleDpHint === 2
@@ -464,7 +633,8 @@ export function ShortQuestion({
                       : "Any valid format"}
                 </span>
               </div>
-              {submitted && !isCorrect && allowRetry && (
+              ) : null}
+              {submitted && !isCorrect && allowRetry && !useSmartMarking && (
                 <p className="text-[11px] text-muted-foreground">
                   Correct answer:{" "}
                   <span className="text-[13px] font-semibold text-foreground">
@@ -474,17 +644,50 @@ export function ShortQuestion({
               )}
             </div>
           )}
+
+        {isMultipart ? (
           <Button
-            onClick={handleSubmit}
+            onClick={() => void handleSubmit()}
             disabled={!canSubmit}
-            className="shrink-0 gap-2 bg-brand hover:bg-brand-dark"
+            className="btn-accent w-full gap-2 sm:w-auto"
           >
-            <Send className="size-4" />
-            {submitted && isCorrect ? "Correct" : "Submit"}
+            {aiMarking ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Send className="size-4" />
+            )}
+            {aiMarking
+              ? "Marking…"
+              : submitted
+                ? isCorrect
+                  ? "All parts correct"
+                  : "Submitted"
+                : "Submit all parts"}
           </Button>
-        </div>
+        ) : null}
 
         {/* Feedback */}
+        {submitted && isMultipart && (
+          <div
+            className={cn(
+              "flex items-start gap-3 rounded-lg px-4 py-3 text-sm",
+              isCorrect ? "bg-success/10 text-success" : "bg-danger/10 text-danger",
+            )}
+          >
+            {isCorrect ? (
+              <>
+                <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
+                <span className="font-medium">All parts correct!</span>
+              </>
+            ) : (
+              <>
+                <XCircle className="mt-0.5 size-4 shrink-0" />
+                <span className="font-medium">Some parts need work — check each part above.</span>
+              </>
+            )}
+          </div>
+        )}
+
         {submitted && !isMultipart && (
           <div
             className={cn(
@@ -502,10 +705,13 @@ export function ShortQuestion({
             ) : (
               <>
                 <XCircle className="mt-0.5 size-4 shrink-0" />
-                <div>
+                <div className="space-y-1">
                   <span className="font-medium">
                     Not quite — keep working on this one.
                   </span>
+                  {aiFeedback ? (
+                    <p className="text-xs leading-relaxed opacity-90">{aiFeedback}</p>
+                  ) : null}
                 </div>
               </>
             )}

@@ -50,6 +50,9 @@ import {
 
 const PROGRESS_VIEW_STORAGE = "nodent_study_progress_view";
 
+/** Dashboard nav pill / accent controls (brand-light) */
+const PILL_ACCENT = "#7fc7f2";
+
 function dateString(d: Date): string {
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, "0");
@@ -313,7 +316,7 @@ export default function TrackStudyPageNew() {
       <div className="max-w-none space-y-6 text-[#0b0f19]">
         {/* Top analytics row */}
         <div className="grid gap-6 lg:grid-cols-3">
-          <Card className="border-black/10 bg-white text-[#0b0f19] shadow-xl">
+          <Card className="surface-card text-[#0b0f19]">
             <CardHeader className="pb-3">
               <CardTitle className="font-display text-xl">Today Breakdown</CardTitle>
             </CardHeader>
@@ -355,26 +358,26 @@ export default function TrackStudyPageNew() {
                         return [formatSeconds(s), "Time"];
                       }}
                     />
-                    <Bar dataKey="minutes" fill="#56abe6" radius={[6, 6, 0, 0]} />
+                    <Bar dataKey="minutes" fill={PILL_ACCENT} radius={[6, 6, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="border-black/10 bg-white text-[#0b0f19] shadow-xl">
+          <Card className="surface-card text-[#0b0f19]">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center justify-between gap-3 font-display text-xl">
                 <span>{progressView === "weekly" ? "Weekly Progress" : "Over-time Heatmap"}</span>
-                <div className="inline-flex rounded-lg border border-black/10 bg-slate-50 p-1">
+                <div className="inline-flex rounded-lg border border-brand-light/40 bg-brand-light/15 p-1">
                   <Button
                     type="button"
                     size="sm"
-                    variant={progressView === "weekly" ? "default" : "ghost"}
+                    variant={progressView === "weekly" ? "accent" : "ghost"}
                     className={
                       progressView === "weekly"
-                        ? "h-7 bg-[#0b0f19] px-2.5 text-xs text-white hover:bg-[#0b0f19]/90"
-                        : "h-7 px-2.5 text-xs text-[#0b0f19]/70 hover:bg-black/5"
+                        ? "h-7 px-2.5 text-xs"
+                        : "h-7 px-2.5 text-xs text-[#0b0f19]/70 hover:bg-brand-light/25"
                     }
                     onClick={() => handleProgressViewChange("weekly")}
                   >
@@ -383,11 +386,11 @@ export default function TrackStudyPageNew() {
                   <Button
                     type="button"
                     size="sm"
-                    variant={progressView === "heatmap" ? "default" : "ghost"}
+                    variant={progressView === "heatmap" ? "accent" : "ghost"}
                     className={
                       progressView === "heatmap"
-                        ? "h-7 bg-[#0b0f19] px-2.5 text-xs text-white hover:bg-[#0b0f19]/90"
-                        : "h-7 px-2.5 text-xs text-[#0b0f19]/70 hover:bg-black/5"
+                        ? "h-7 px-2.5 text-xs"
+                        : "h-7 px-2.5 text-xs text-[#0b0f19]/70 hover:bg-brand-light/25"
                     }
                     onClick={() => handleProgressViewChange("heatmap")}
                   >
@@ -438,7 +441,13 @@ export default function TrackStudyPageNew() {
                           return [formatSeconds(s), "Time"];
                         }}
                       />
-                      <Line type="monotone" dataKey="minutes" stroke="#56abe6" strokeWidth={3} dot={{ r: 3 }} />
+                      <Line
+                        type="monotone"
+                        dataKey="minutes"
+                        stroke={PILL_ACCENT}
+                        strokeWidth={3}
+                        dot={{ r: 3, fill: PILL_ACCENT }}
+                      />
                       <Line type="monotone" dataKey="goal" stroke="rgba(15,23,42,0.45)" strokeDasharray="6 6" />
                     </LineChart>
                   </ResponsiveContainer>
@@ -452,25 +461,25 @@ export default function TrackStudyPageNew() {
                         title={`${cell.date}: ${formatSeconds(cell.seconds)}${cell.met ? " (target met)" : ""}`}
                         className={
                           cell.met
-                            ? "h-3.5 w-3.5 rounded-[3px] bg-emerald-500"
+                            ? "h-3.5 w-3.5 rounded-[3px] bg-brand-light"
                             : cell.seconds > 0
-                              ? "h-3.5 w-3.5 rounded-[3px] bg-emerald-200"
-                              : "h-3.5 w-3.5 rounded-[3px] bg-slate-200"
+                              ? "h-3.5 w-3.5 rounded-[3px] bg-brand-light/50"
+                              : "h-3.5 w-3.5 rounded-[3px] bg-brand-light/15"
                         }
                       />
                     ))}
                   </div>
                   <div className="flex items-center gap-4 text-xs text-[#0b0f19]/65">
                     <span className="inline-flex items-center gap-1.5">
-                      <span className="h-3 w-3 rounded-[3px] bg-emerald-500" />
+                      <span className="h-3 w-3 rounded-[3px] bg-brand-light" />
                       target met
                     </span>
                     <span className="inline-flex items-center gap-1.5">
-                      <span className="h-3 w-3 rounded-[3px] bg-emerald-200" />
+                      <span className="h-3 w-3 rounded-[3px] bg-brand-light/50" />
                       studied, below target
                     </span>
                     <span className="inline-flex items-center gap-1.5">
-                      <span className="h-3 w-3 rounded-[3px] bg-slate-200" />
+                      <span className="h-3 w-3 rounded-[3px] bg-brand-light/15" />
                       no study
                     </span>
                   </div>
@@ -479,7 +488,7 @@ export default function TrackStudyPageNew() {
             </CardContent>
           </Card>
 
-          <Card className="border-black/10 bg-white text-[#0b0f19] shadow-xl">
+          <Card className="surface-card text-[#0b0f19]">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center justify-between gap-3 font-display text-xl">
                 <span>Today by Subject</span>
@@ -524,7 +533,7 @@ export default function TrackStudyPageNew() {
         </div>
 
         {/* Daily goal row */}
-        <Card className="border-black/10 bg-white text-[#0b0f19] shadow-xl">
+        <Card className="surface-card text-[#0b0f19]">
           <CardContent className="pt-6">
             <div className="grid gap-4 lg:grid-cols-[240px_1fr_auto] lg:items-end">
               <div className="space-y-1">
@@ -548,7 +557,10 @@ export default function TrackStudyPageNew() {
                     {Math.min(100, goalPct * 100).toFixed(1)}%
                   </span>
                 </div>
-                <Progress value={Math.min(100, goalPct * 100)} className="h-3 bg-black/10" />
+                <Progress
+                  value={Math.min(100, goalPct * 100)}
+                  className="[&_[data-slot=progress-track]]:h-3 [&_[data-slot=progress-track]]:rounded-full [&_[data-slot=progress-track]]:bg-brand-light/20 [&_[data-slot=progress-indicator]]:rounded-full [&_[data-slot=progress-indicator]]:bg-brand-light/50"
+                />
                 <p className="text-xs text-[#0b0f19]/55">
                   {formatSeconds(state.dailySeconds)} studied today
                 </p>
@@ -562,7 +574,7 @@ export default function TrackStudyPageNew() {
         </Card>
 
         {/* Timer + controls */}
-        <Card className="border-black/10 bg-white text-[#0b0f19] shadow-xl">
+        <Card className="surface-card text-[#0b0f19]">
           <CardHeader className="pb-3">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <CardTitle className="flex items-center gap-3 text-xl">
@@ -639,7 +651,7 @@ export default function TrackStudyPageNew() {
                     selectSubject(val);
                   }}
                 >
-                  <SelectTrigger className="bg-white border-brand/30 text-brand focus:ring-brand/30">
+                  <SelectTrigger className="border-brand-light/50 bg-brand-light/50 text-[#0b0f19] focus:ring-brand-light/40">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -671,7 +683,7 @@ export default function TrackStudyPageNew() {
                     cy={ringSize / 2}
                     r={radius}
                     fill="none"
-                    stroke="#94a3b8"
+                    stroke={PILL_ACCENT}
                     strokeWidth={strokeWidth}
                     strokeLinecap="round"
                     strokeDasharray={circumference}
@@ -701,11 +713,12 @@ export default function TrackStudyPageNew() {
             {/* Manual Start / Stop */}
             <div className="flex items-center justify-center gap-3 pt-1">
               <Button
+                variant={state.isRunning ? "outline" : "accent"}
                 onClick={() => setRunningSession(!state.isRunning)}
                 className={
                   state.isRunning
-                    ? "bg-[#0b0f19] text-white hover:bg-[#0b0f19]/90 border border-transparent"
-                    : "bg-brand text-white hover:bg-brand-dark border border-transparent"
+                    ? "border-transparent bg-[#0b0f19] text-white hover:bg-[#0b0f19]/90"
+                    : "border-transparent"
                 }
               >
                 {state.isRunning ? (
@@ -799,7 +812,7 @@ export default function TrackStudyPageNew() {
                             cy={320}
                             r={292}
                             fill="none"
-                            stroke="#94a3b8"
+                            stroke={PILL_ACCENT}
                             strokeWidth={20}
                             strokeLinecap="round"
                             strokeDasharray={2 * Math.PI * 292}
@@ -826,11 +839,12 @@ export default function TrackStudyPageNew() {
                     </div>
 
                     <Button
+                      variant={state.isRunning ? "outline" : "accent"}
                       onClick={() => setRunningSession(!state.isRunning)}
                       className={
                         state.isRunning
-                          ? "min-h-12 w-full max-w-[560px] shrink-0 flex-wrap justify-center gap-2 bg-white text-[#0b0f19] hover:bg-white/90 sm:min-h-14"
-                          : "min-h-12 w-full max-w-[560px] shrink-0 flex-wrap justify-center gap-2 bg-brand text-white hover:bg-brand-dark sm:min-h-14"
+                          ? "min-h-12 w-full max-w-[560px] shrink-0 flex-wrap justify-center gap-2 border-transparent bg-white text-[#0b0f19] hover:bg-white/90 sm:min-h-14"
+                          : "min-h-12 w-full max-w-[560px] shrink-0 flex-wrap justify-center gap-2 border-transparent sm:min-h-14"
                       }
                     >
                       {state.isRunning ? (

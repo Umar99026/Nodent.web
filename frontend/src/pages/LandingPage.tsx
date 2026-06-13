@@ -77,7 +77,6 @@ const PRICING = [
 
 export default function LandingPage() {
   const [demoStepIndex, setDemoStepIndex] = useState(0);
-
   const selectDemoStep = useCallback((index: number) => {
     setDemoStepIndex(index);
     document.getElementById("demo-animation")?.scrollIntoView({
@@ -87,13 +86,13 @@ export default function LandingPage() {
   }, []);
 
   return (
-    <div className="landing-root min-h-screen text-[#0b0f19]">
+    <div className="landing-root min-h-dvh overflow-x-clip text-[#0b0f19]">
       <LandingNav />
 
       {/* Hero */}
       <section
         id="top"
-        className="landing-section relative overflow-hidden pt-28 pb-20 sm:pt-32 sm:pb-28"
+        className="landing-section relative overflow-x-clip pt-24 pb-16 sm:pt-32 sm:pb-28"
       >
         <div className="landing-hero-glow pointer-events-none absolute inset-0" aria-hidden />
         <div className="orb-float-slow pointer-events-none absolute -left-32 top-20 h-96 w-96 rounded-full bg-brand/20 blur-3xl" />
@@ -105,7 +104,7 @@ export default function LandingPage() {
               <Sparkles className="size-4" />
               Competitive VCE revision
             </p>
-            <h1 className="font-display text-4xl font-bold leading-[1.08] tracking-tight text-[#0b0f19] sm:text-5xl lg:text-[3.35rem]">
+            <h1 className="font-display text-[clamp(1.85rem,6.5vw,3.35rem)] font-bold leading-[1.1] tracking-tight text-[#0b0f19]">
               Know where you stand{" "}
               <span className="landing-gradient-text">before results land.</span>
             </h1>
@@ -113,12 +112,12 @@ export default function LandingPage() {
               A competitive VCE revision platform where students answer questions, track
               progress, climb leaderboards, and see how they compare — before SACs and exams.
             </p>
-            <div className="mt-10 flex flex-wrap items-center gap-3">
+            <div className="mt-8 flex flex-col gap-3 sm:mt-10 sm:flex-row sm:flex-wrap sm:items-center">
               <Link
                 to="/login"
                 className={cn(
                   buttonVariants({ size: "lg" }),
-                  "inline-flex h-12 items-center rounded-full bg-brand px-7 text-base text-white shadow-lg shadow-brand/30 hover:bg-brand-dark",
+                  "inline-flex h-12 w-full items-center justify-center rounded-full bg-brand px-7 text-base text-white shadow-lg shadow-brand/30 hover:bg-brand-dark sm:w-auto",
                 )}
               >
                 Start revising with clarity
@@ -127,7 +126,7 @@ export default function LandingPage() {
               <Button
                 size="lg"
                 variant="outline"
-                className="h-12 rounded-full border-slate-200 bg-white/80 px-7 text-base text-slate-800 hover:bg-white"
+                className="h-12 w-full rounded-full border-slate-200 bg-white/80 px-7 text-base text-slate-800 hover:bg-white sm:w-auto"
                 onClick={() =>
                   document.getElementById("demo")?.scrollIntoView({ behavior: "smooth" })
                 }
@@ -137,7 +136,7 @@ export default function LandingPage() {
             </div>
           </div>
 
-          <div className="landing-hero-float relative z-0 mx-auto mt-6 w-full max-w-2xl sm:max-w-3xl lg:mt-10 lg:max-w-none lg:w-full">
+          <div className="landing-hero-float relative z-0 mx-auto mt-6 w-full max-w-2xl overflow-hidden sm:max-w-3xl lg:mt-10 lg:max-w-none lg:w-full">
             <div className="landing-mockup-main glass-card grain-texture overflow-hidden rounded-2xl border-2 border-white/70 shadow-2xl shadow-brand/20 sm:rounded-3xl lg:origin-top lg:scale-[1.04]">
               <div className="flex items-center gap-2.5 border-b-2 border-slate-100 bg-slate-50/90 px-5 py-4 sm:px-6 sm:py-4.5">
                 <span className="size-3 rounded-full bg-red-400/80" />
