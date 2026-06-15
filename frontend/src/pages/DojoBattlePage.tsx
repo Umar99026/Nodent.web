@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { RichQuestionContent } from "@/components/quiz/RichQuestionContent";
+import { stripMcqOptionPrefix } from "@/lib/questionDisplay";
 
 type BattleState = {
   id: string;
@@ -210,8 +211,9 @@ export default function DojoBattlePage() {
 
                 {isMcq && Array.isArray(question.options) ? (
                   <div className="grid gap-3 sm:grid-cols-2">
-                    {question.options.map((opt: string) => {
+                    {question.options.map((opt: string, index: number) => {
                       const active = selectedMcqOption === opt;
+                      const letter = String.fromCharCode(65 + index);
                       return (
                         <button
                           key={opt}
@@ -225,7 +227,7 @@ export default function DojoBattlePage() {
                         >
                           <div className="text-sm font-semibold">
                             <RichQuestionContent
-                              text={opt}
+                              text={stripMcqOptionPrefix(opt, letter)}
                               className="prose prose-sm max-w-none prose-p:my-0"
                             />
                           </div>

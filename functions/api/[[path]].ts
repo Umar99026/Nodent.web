@@ -85,6 +85,7 @@ const customQuestions = pgTable("custom_questions", {
   guidance: text("guidance"),
   passage: text("passage"),
   marks: integer("marks").notNull().default(1),
+  aiMarkingEnabled: integer("ai_marking_enabled"),
   createdAt: text("created_at").notNull(),
 });
 
@@ -282,10 +283,88 @@ function questionStemKey(text: string): string {
   return String(text ?? "").trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+class DuplicateQuestionError extends Error {
+  constructor() {
+    super("Duplicate question stem for this subject.");
+    this.name = "DuplicateQuestionError";
+  }
+}
+
+function isDuplicateQuestionDbError(e: unknown): boolean {
+  const msg = errorChain(e).toLowerCase();
+  return (
+    e instanceof DuplicateQuestionError ||
+    msg.includes("custom_questions_subject_stem_unique") ||
+    (msg.includes("duplicate key") && msg.includes("custom_questions"))
+  );
+}
+
+/** DB lookup — authoritative duplicate check (survives concurrent imports). */
+async function findExistingQuestionByStem(
+  db: any,
+  subjectId: string,
+  question: string,
+  excludeId?: number,
+): Promise<number | null> {
+  const sid = canonicalSubjectId(subjectId);
+  const stem = questionStemKey(question);
+  if (!sid || !stem) return null;
+  const exclude = Number(excludeId);
+  const result = await db.execute(
+    Number.isFinite(exclude) && exclude > 0
+      ? sql`
+          SELECT id FROM custom_questions
+          WHERE LOWER(TRIM(subject_id)) = ${sid}
+            AND LOWER(REGEXP_REPLACE(TRIM(question), '\\s+', ' ', 'g')) = ${stem}
+            AND id <> ${exclude}
+          ORDER BY id ASC
+          LIMIT 1
+        `
+      : sql`
+          SELECT id FROM custom_questions
+          WHERE LOWER(TRIM(subject_id)) = ${sid}
+            AND LOWER(REGEXP_REPLACE(TRIM(question), '\\s+', ' ', 'g')) = ${stem}
+          ORDER BY id ASC
+          LIMIT 1
+        `,
+  );
+  const rows = Array.isArray(result) ? result : (result.rows ?? []);
+  const id = Number((rows[0] as { id?: unknown })?.id);
+  return Number.isFinite(id) && id > 0 ? id : null;
+}
+
 function customQuestionStemSetKey(subjectId: string, question: string): string {
   const sid = canonicalSubjectId(subjectId);
   const stem = questionStemKey(question);
   return stem ? `${sid}::${stem}` : "";
+}
+
+function hashImportFingerprint(raw: string): string {
+  let h = 2166136261;
+  for (let i = 0; i < raw.length; i++) {
+    h ^= raw.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0).toString(36);
+}
+
+/** Dedupe key — generic stems like "See figure." also use parts + images. */
+function customQuestionImportKey(
+  subjectId: string,
+  question: string,
+  body: Record<string, unknown>,
+): string {
+  const base = customQuestionStemSetKey(subjectId, question);
+  if (!base) return "";
+  const stem = questionStemKey(question);
+  if (stem !== "see figure." && stem !== "see figure") return base;
+
+  const fingerprint = JSON.stringify({
+    parts: body.answerParts ?? body.answer_parts_json ?? null,
+    images: body.imageUrls ?? body.image_urls_json ?? null,
+    passage: body.passage ?? null,
+  });
+  return `${base}::${hashImportFingerprint(fingerprint)}`;
 }
 
 async function loadCustomQuestionStemKeys(db: any): Promise<Set<string>> {
@@ -1313,6 +1392,9 @@ async function ensureCoreTables(db: any) {
     ALTER TABLE custom_questions ADD COLUMN IF NOT EXISTS answer_parts_json text
   `);
   await db.execute(sql`
+    ALTER TABLE custom_questions ADD COLUMN IF NOT EXISTS ai_marking_enabled integer
+  `);
+  await db.execute(sql`
     ALTER TABLE question_attempts ADD COLUMN IF NOT EXISTS marks_earned integer
   `);
   await db.execute(sql`
@@ -2025,6 +2107,9 @@ app.get("/api/bootstrap", authMiddleware, async (c: any) => {
     const marks =
       Number.isFinite(marksNum) && marksNum > 0 ? Math.round(marksNum) : 1;
     const parts = safeJsonParse(row.answerPartsJson) as unknown[] | undefined;
+    const aiRaw = (row as { aiMarkingEnabled?: number | null }).aiMarkingEnabled;
+    const useAiMarking =
+      aiRaw === 0 ? false : aiRaw === 1 ? true : undefined;
     grouped[sid].push({
       id: row.id,
       type: t === "short_answer" ? "short" : t === "long_answer" ? "long" : row.type,
@@ -2038,6 +2123,7 @@ app.get("/api/bootstrap", authMiddleware, async (c: any) => {
       guidance: row.guidance || undefined,
       passage: row.passage || undefined,
       marks,
+      useAiMarking,
     });
   }
   const subjRows = await db.execute(sql`
@@ -3529,6 +3615,9 @@ app.get("/api/admin/questions", adminAccessMiddleware, async (c: any) => {
       acc?.length || row.type === "mcq" || !answerFallback ? acc : [answerFallback];
     const imgs = safeJsonParse(row.imageUrls) as string[] | undefined;
     const parts = safeJsonParse(row.answerPartsJson) as unknown[] | undefined;
+    const aiRaw = (row as { aiMarkingEnabled?: number | null }).aiMarkingEnabled;
+    const useAiMarking =
+      aiRaw === 0 ? false : aiRaw === 1 ? true : undefined;
     return {
       id: String(row.id),
       subjectId: row.subjectId,
@@ -3544,6 +3633,7 @@ app.get("/api/admin/questions", adminAccessMiddleware, async (c: any) => {
       marks: typeof row.marks === "number" ? row.marks : 1,
       guidance: row.guidance || undefined,
       passage: row.passage || undefined,
+      useAiMarking,
     };
   });
   return c.json(list);
@@ -4013,6 +4103,14 @@ function parseCustomQuestionPayload(body: Record<string, unknown>) {
     ? Math.max(1, marksParsed)
     : marksDefault;
 
+  let aiMarkingEnabled: number | null = null;
+  if (body.useAiMarking != null) {
+    aiMarkingEnabled = body.useAiMarking === false || body.useAiMarking === 0 ? 0 : 1;
+  } else if (body.ai_marking_enabled != null) {
+    const n = Number(body.ai_marking_enabled);
+    aiMarkingEnabled = n === 0 ? 0 : 1;
+  }
+
   let answerPartsJson: string | null = null;
   if (Array.isArray(body.answerParts)) {
     answerPartsJson = JSON.stringify(body.answerParts);
@@ -4050,6 +4148,7 @@ function parseCustomQuestionPayload(body: Record<string, unknown>) {
     imageUrlsJson,
     answer,
     marks,
+    aiMarkingEnabled,
   };
 }
 
@@ -4061,25 +4160,34 @@ async function insertCustomQuestionRow(
   if (!p.subjectId || !p.type || !p.question) {
     throw new Error("subjectId, type, and question are required.");
   }
-  const result = await db
-    .insert(customQuestions)
-    .values({
-      subjectId: p.subjectId,
-      type: p.type,
-      topic: p.topic,
-      question: p.question,
-      imageUrls: p.imageUrlsJson,
-      options: p.optionsJson,
-      answer: p.answer,
-      acceptedAnswers: p.acceptedAnswersJson,
-      answerPartsJson: p.answerPartsJson,
-      guidance: p.guidance,
-      passage: p.passage,
-      marks: p.marks,
-      createdAt: nowIso(),
-    })
-    .returning({ id: customQuestions.id });
-  return Number(result[0].id);
+  const existingId = await findExistingQuestionByStem(db, p.subjectId, p.question);
+  if (existingId) throw new DuplicateQuestionError();
+
+  try {
+    const result = await db
+      .insert(customQuestions)
+      .values({
+        subjectId: p.subjectId,
+        type: p.type,
+        topic: p.topic,
+        question: p.question,
+        imageUrls: p.imageUrlsJson,
+        options: p.optionsJson,
+        answer: p.answer,
+        acceptedAnswers: p.acceptedAnswersJson,
+        answerPartsJson: p.answerPartsJson,
+        guidance: p.guidance,
+        passage: p.passage,
+        marks: p.marks,
+        aiMarkingEnabled: p.aiMarkingEnabled,
+        createdAt: nowIso(),
+      })
+      .returning({ id: customQuestions.id });
+    return Number(result[0].id);
+  } catch (e: unknown) {
+    if (isDuplicateQuestionDbError(e)) throw new DuplicateQuestionError();
+    throw e;
+  }
 }
 
 app.post("/api/admin/questions", adminAccessMiddleware, async (c: any) => {
@@ -4097,16 +4205,16 @@ app.post("/api/admin/questions", adminAccessMiddleware, async (c: any) => {
 
   try {
     const p = parseCustomQuestionPayload(body);
-    const stemKey = customQuestionStemSetKey(p.subjectId, p.question);
-    if (stemKey) {
-      const existing = await loadCustomQuestionStemKeys(db);
-      if (existing.has(stemKey)) {
-        return c.json({ error: "A question with this text already exists for this subject." }, 409);
-      }
+    const existingId = await findExistingQuestionByStem(db, p.subjectId, p.question);
+    if (existingId) {
+      return c.json({ error: "A question with this text already exists for this subject." }, 409);
     }
     const id = await insertCustomQuestionRow(db, body);
     return c.json({ ok: true, id });
   } catch (e: unknown) {
+    if (isDuplicateQuestionDbError(e)) {
+      return c.json({ error: "A question with this text already exists for this subject." }, 409);
+    }
     const msg = errorChain(e);
     console.error("[admin/questions POST]", msg);
     let hint = "";
@@ -4142,6 +4250,12 @@ app.put("/api/admin/questions/:id", adminAccessMiddleware, async (c: any) => {
   }
   if (body.marks != null) {
     updates.marks = Math.max(1, Math.round(Number(body.marks ?? 1)));
+  }
+  if (body.useAiMarking != null) {
+    updates.aiMarkingEnabled = body.useAiMarking === false || body.useAiMarking === 0 ? 0 : 1;
+  } else if (body.ai_marking_enabled != null) {
+    const n = Number(body.ai_marking_enabled);
+    updates.aiMarkingEnabled = n === 0 ? 0 : 1;
   }
   if (body.options != null || body.options_json != null) {
     if (Array.isArray(body.options)) {
@@ -4186,11 +4300,43 @@ app.put("/api/admin/questions/:id", adminAccessMiddleware, async (c: any) => {
   if (!Object.keys(updates).length) {
     return c.json({ error: "No updatable fields provided." }, 400);
   }
-  await c
-    .get("db")
+
+  const db = c.get("db");
+  const questionId = Number(c.req.param("id"));
+  if (updates.question != null || updates.subjectId != null) {
+    const current = await db
+      .select({
+        subjectId: customQuestions.subjectId,
+        question: customQuestions.question,
+      })
+      .from(customQuestions)
+      .where(eq(customQuestions.id, questionId))
+      .limit(1);
+    if (!current.length) {
+      return c.json({ error: "Question not found." }, 404);
+    }
+    const nextSubjectId = String(
+      updates.subjectId ?? current[0].subjectId ?? "",
+    );
+    const nextQuestion = String(updates.question ?? current[0].question ?? "");
+    const dupeId = await findExistingQuestionByStem(
+      db,
+      nextSubjectId,
+      nextQuestion,
+      questionId,
+    );
+    if (dupeId) {
+      return c.json(
+        { error: "A question with this text already exists for this subject." },
+        409,
+      );
+    }
+  }
+
+  await db
     .update(customQuestions)
     .set(updates)
-    .where(eq(customQuestions.id, Number(c.req.param("id"))));
+    .where(eq(customQuestions.id, questionId));
   return c.json({ ok: true });
 });
 
@@ -4210,7 +4356,11 @@ app.post("/api/admin/questions/bulk", adminAccessMiddleware, async (c: any) => {
   for (let i = 0; i < rows.length; i++) {
     try {
       const p = parseCustomQuestionPayload(rows[i] as Record<string, unknown>);
-      const stemKey = customQuestionStemSetKey(p.subjectId, p.question);
+      const stemKey = customQuestionImportKey(
+        p.subjectId,
+        p.question,
+        rows[i] as Record<string, unknown>,
+      );
       if (stemKey && stemKeys.has(stemKey)) {
         skipped++;
         continue;
@@ -4219,6 +4369,10 @@ app.post("/api/admin/questions/bulk", adminAccessMiddleware, async (c: any) => {
       if (stemKey) stemKeys.add(stemKey);
       imported++;
     } catch (e: unknown) {
+      if (e instanceof DuplicateQuestionError || isDuplicateQuestionDbError(e)) {
+        skipped++;
+        continue;
+      }
       errors.push({
         index: i,
         message: e instanceof Error ? e.message : String(e),
@@ -4321,14 +4475,34 @@ app.post("/api/admin/questions/reassign-subject", adminAccessMiddleware, async (
     return c.json({ error: "questionIds array is required." }, 400);
   }
   let updated = 0;
+  let skipped = 0;
   for (const id of ids) {
+    const rows = await db
+      .select({
+        id: customQuestions.id,
+        question: customQuestions.question,
+      })
+      .from(customQuestions)
+      .where(eq(customQuestions.id, id))
+      .limit(1);
+    if (!rows.length) continue;
+    const dupeId = await findExistingQuestionByStem(
+      db,
+      subjectId,
+      String(rows[0].question ?? ""),
+      id,
+    );
+    if (dupeId) {
+      skipped++;
+      continue;
+    }
     await db
       .update(customQuestions)
       .set({ subjectId })
       .where(eq(customQuestions.id, id));
     updated++;
   }
-  return c.json({ ok: true, updated, subjectId });
+  return c.json({ ok: true, updated, skipped, subjectId });
 });
 
 app.post("/api/admin/methods/retag-topics", adminAccessMiddleware, async (c: any) => {
@@ -4565,6 +4739,7 @@ app.post("/api/admin/questions/sync-from-sheet", adminAccessMiddleware, async (c
     let imported = 0;
     let updated = 0;
     let deleted = 0;
+    let skipped = 0;
     const errors: { row: number; message: string }[] = [];
 
     for (let i = 0; i < rawRows.length; i++) {
@@ -4600,7 +4775,40 @@ app.post("/api/admin/questions/sync-from-sheet", adminAccessMiddleware, async (c
         const answer = p.answer || null;
         const guidance = p.guidance || null;
         const passage = p.passage || null;
-        const createdAt = nowIso();
+        const questionText = cleanText(p.question, 1000);
+
+        if (!Number.isFinite(databaseId)) {
+          const dupeId = await findExistingQuestionByStem(db, subjectIdSheet, questionText);
+          if (dupeId) {
+            skipped++;
+            continue;
+          }
+        }
+
+        const insertRow = async () => {
+          try {
+            await insertCustomQuestionRow(db, {
+              subjectId: subjectIdSheet,
+              type: p.type,
+              topic,
+              question: questionText,
+              image_urls_json: imageUrlsJson,
+              options_json: optionsJson,
+              answer,
+              accepted_answers_json: acceptedRaw,
+              guidance,
+              passage,
+              marks,
+            });
+            imported++;
+          } catch (e: unknown) {
+            if (e instanceof DuplicateQuestionError || isDuplicateQuestionDbError(e)) {
+              skipped++;
+              return;
+            }
+            throw e;
+          }
+        };
 
         if (Number.isFinite(databaseId)) {
           const exists = await db
@@ -4609,13 +4817,23 @@ app.post("/api/admin/questions/sync-from-sheet", adminAccessMiddleware, async (c
             .where(eq(customQuestions.id, databaseId))
             .limit(1);
           if (exists.length > 0) {
+            const dupeId = await findExistingQuestionByStem(
+              db,
+              subjectIdSheet,
+              questionText,
+              databaseId,
+            );
+            if (dupeId) {
+              skipped++;
+              continue;
+            }
             await db
               .update(customQuestions)
               .set({
                 subjectId: subjectIdSheet,
                 type: p.type,
                 topic,
-                question: p.question,
+                question: questionText,
                 imageUrls: imageUrlsJson,
                 options: optionsJson,
                 answer,
@@ -4627,38 +4845,10 @@ app.post("/api/admin/questions/sync-from-sheet", adminAccessMiddleware, async (c
               .where(eq(customQuestions.id, databaseId));
             updated++;
           } else {
-            await db.insert(customQuestions).values({
-              subjectId: subjectIdSheet,
-              type: p.type,
-              topic,
-              question: p.question,
-              imageUrls: imageUrlsJson,
-              options: optionsJson,
-              answer,
-              acceptedAnswers: acceptedRaw,
-              guidance,
-              passage,
-              marks,
-              createdAt,
-            });
-            imported++;
+            await insertRow();
           }
         } else {
-          await db.insert(customQuestions).values({
-            subjectId: subjectIdSheet,
-            type: p.type,
-            topic,
-            question: p.question,
-            imageUrls: imageUrlsJson,
-            options: optionsJson,
-            answer,
-            acceptedAnswers: acceptedRaw,
-            guidance,
-            passage,
-            marks,
-            createdAt,
-          });
-          imported++;
+          await insertRow();
         }
       } catch (e: unknown) {
         errors.push({
@@ -4673,6 +4863,7 @@ app.post("/api/admin/questions/sync-from-sheet", adminAccessMiddleware, async (c
       imported,
       updated,
       deleted,
+      skipped,
       errors,
       tabErrors,
       rowsRead: rawRows.length,

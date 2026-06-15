@@ -105,6 +105,34 @@ export function inferDpHintFromAccepted(acceptedAnswers: string[]): number | nul
   return null;
 }
 
+function textNeedsSqrtHint(text: string): boolean {
+  const t = String(text ?? "");
+  return /\\sqrt\b|sqrt\s*\(|√/.test(t);
+}
+
+function textNeedsPowerHint(text: string): boolean {
+  const t = String(text ?? "");
+  return /\^[\d({a-zA-Zπ-]|\^\{/.test(t);
+}
+
+/** Hint under answer inputs when the accepted answer uses sqrt / powers. */
+export function inferMathTypingHint(acceptedAnswers: string[]): string | null {
+  const parts = acceptedAnswers.map((s) => String(s ?? "").trim()).filter(Boolean);
+  if (!parts.length) return null;
+
+  const hasSqrt = parts.some(textNeedsSqrtHint);
+  const hasPower = parts.some(textNeedsPowerHint);
+  if (!hasSqrt && !hasPower) return null;
+
+  if (hasSqrt && hasPower) {
+    return "Type square roots as sqrt() and powers with ^ (e.g. sqrt(2), x^2, e^(-x)).";
+  }
+  if (hasSqrt) {
+    return "Type square roots as sqrt() (e.g. sqrt(2) or sqrt(x+1)).";
+  }
+  return "Type powers with ^ (e.g. x^2, e^(-3), (x+1)^4).";
+}
+
 const EXPLANATION_STOPWORDS = new Set([
   "the",
   "and",

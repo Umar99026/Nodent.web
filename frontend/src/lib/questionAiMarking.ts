@@ -3,6 +3,19 @@ import { API_PATHS } from "@/lib/constants";
 import { isAutoMarkableAnswer } from "@/lib/utils";
 import type { AnswerPart, Question } from "@/lib/subjects";
 
+/** Maths subjects: smart marking only for genuinely open-ended long-answer items. */
+export const MATHS_SUBJECT_IDS = new Set([
+  "methods",
+  "general-maths",
+  "specialist-maths",
+  "demo",
+]);
+
+export function isMathsSubject(subjectId?: string): boolean {
+  const sid = String(subjectId ?? "").trim().toLowerCase();
+  return MATHS_SUBJECT_IDS.has(sid);
+}
+
 /** Strip $...$ for verb detection in maths stems. */
 function stripLatexForDetection(text: string): string {
   return String(text ?? "")
@@ -12,7 +25,7 @@ function stripLatexForDetection(text: string): string {
 }
 
 const OPEN_ENDED_STEM_RE =
-  /\b(explain|prove|show\s+that|justify|discuss|outline|identify|describe|compare|evaluate|comment|analyse|analyze|deduce|demonstrate|interpret|suggest|account\s+for|give\s+reasons|how\s+does|how\s+do|why\s+does|why\s+do|why\s+is|why\s+are|what\s+evidence|in\s+words|argue|assess|examine|sketch\s+the\s+graph\s+of)\b/i;
+  /\b(explain|prove|show\s+that|justify|verify|discuss|outline|identify|describe|compare|evaluate|comment|analyse|analyze|deduce|demonstrate|interpret|suggest|account\s+for|give\s+reasons|how\s+does|how\s+do|why\s+does|why\s+do|why\s+is|why\s+are|what\s+evidence|in\s+words|argue|assess|examine|sketch\s+the\s+graph\s+of|state\s+a\s+sequence)\b/i;
 
 export function questionStemNeedsAiMarking(
   questionText: string,
@@ -30,21 +43,74 @@ export function acceptedAnswersNeedAiMarking(acceptedAnswers: string[]): boolean
   return true;
 }
 
+function isShortType(questionType?: Question["type"] | string): boolean {
+  const t = String(questionType ?? "");
+  return t === "short" || t === "short_answer";
+}
+
+function isLongType(questionType?: Question["type"] | string): boolean {
+  const t = String(questionType ?? "");
+  return t === "long" || t === "long_answer";
+}
+
 /** Whether smart marking should run (open-ended stem, prose rubric, or long type). */
 export function shouldUseAiMarking(input: {
   questionText: string;
   partLabels?: string[];
   acceptedAnswers?: string[];
   questionType?: Question["type"] | string;
+  subjectId?: string;
 }): boolean {
   const partLabels = input.partLabels ?? [];
-  if (questionStemNeedsAiMarking(input.questionText, partLabels)) return true;
-  if (input.questionType === "long") return true;
-
+  const type = input.questionType;
   const accepted = input.acceptedAnswers ?? [];
-  if (acceptedAnswersNeedAiMarking(accepted)) return true;
 
+  if (type === "mcq") return false;
+
+  if (isMathsSubject(input.subjectId)) {
+    if (isShortType(type)) return false;
+    if (!isLongType(type)) return false;
+    if (questionStemNeedsAiMarking(input.questionText, partLabels)) return true;
+    return acceptedAnswersNeedAiMarking(accepted);
+  }
+
+  if (questionStemNeedsAiMarking(input.questionText, partLabels)) return true;
+  if (isLongType(type)) return true;
+  if (acceptedAnswersNeedAiMarking(accepted)) return true;
   return false;
+}
+
+/** Admin toggle wins when set; otherwise infer from stem / answers / type. */
+export function resolveAiMarking(input: {
+  useAiMarking?: boolean | null;
+  questionText: string;
+  partLabels?: string[];
+  acceptedAnswers?: string[];
+  questionType?: Question["type"] | string;
+  subjectId?: string;
+}): boolean {
+  const inferred = shouldUseAiMarking(input);
+  if (input.useAiMarking === false) return false;
+  if (isMathsSubject(input.subjectId)) return inferred;
+  if (input.useAiMarking === true) return true;
+  return inferred;
+}
+
+export function inferUseAiMarkingForImport(input: {
+  type: string;
+  questionText: string;
+  partLabels?: string[];
+  acceptedAnswers?: string[];
+  subjectId?: string;
+}): boolean {
+  if (input.type === "mcq") return false;
+  return shouldUseAiMarking({
+    questionText: input.questionText,
+    partLabels: input.partLabels,
+    acceptedAnswers: input.acceptedAnswers,
+    questionType: input.type === "long_answer" ? "long" : "short",
+    subjectId: input.subjectId,
+  });
 }
 
 export type SmartMarkQuestionPayload = {

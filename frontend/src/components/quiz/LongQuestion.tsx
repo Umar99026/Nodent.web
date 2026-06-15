@@ -1,5 +1,5 @@
 import { useEffect, useState, Fragment } from "react";
-import { cn, getQuestionTypeLabel, inferDpHintFromAccepted, isAnswerCorrect } from "@/lib/utils";
+import { cn, getQuestionTypeLabel, isAnswerCorrect } from "@/lib/utils";
 import type { LongQuestion as LongQuestionType } from "@/lib/subjects";
 import { apiFetch } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
@@ -12,7 +12,7 @@ import { writtenApiPath } from "@/lib/writtenAnswerUpload";
 import {
   buildSmartMarkPayload,
   requestSmartMark,
-  shouldUseAiMarking,
+  resolveAiMarking,
 } from "@/lib/questionAiMarking";
 import {
   collectStimulusFromQuestion,
@@ -23,6 +23,7 @@ import {
   normalizePartKey,
   resolvePartMarks,
   resolveMultipartPartDisplay,
+  multipartSharedStem,
   stripQuestionHeadingFromPassage,
   stripQuestionNumberPrefix,
   type AnswerScoreDetail,
@@ -30,7 +31,6 @@ import {
 import { toast } from "sonner";
 import {
   Save,
-  Lightbulb,
   Loader2,
   CheckCircle2,
   XCircle,
@@ -213,7 +213,7 @@ export function LongQuestion({
   hidePassage = false,
   lockedCorrect = false,
   classFullyCorrectPercent,
-  submitLabel = "Save Answer",
+  submitLabel = "Submit Answer",
   practiceOnly = false,
   persistedState,
   onStateChange,
@@ -266,14 +266,10 @@ export function LongQuestion({
               : []
         ),
       ];
-  const partDpHints = isMultipart
-    ? partLabels.map((_, idx) =>
-        inferDpHintFromAccepted([expectedAnswersForDisplay[idx] ?? ""]),
-      )
-    : [];
-  const singleDpHint = !isMultipart
-    ? inferDpHintFromAccepted([expectedAnswersForDisplay[0] ?? ""])
-    : null;
+  const displayStem =
+    isMultipart && configuredParts.length >= 2
+      ? multipartSharedStem(question)
+      : stripQuestionNumberPrefix(question.question);
   const [response, setResponse] = useState(persistedState?.response ?? "");
   const [parts, setParts] = useState<string[]>(persistedState?.parts ?? []);
   const [saving, setSaving] = useState(false);
@@ -404,11 +400,13 @@ export function LongQuestion({
       }
       let finalResult = result;
 
-      const useAi = shouldUseAiMarking({
+      const useAi = resolveAiMarking({
+        useAiMarking: question.useAiMarking,
         questionText: question.question,
         partLabels: partDescriptors,
         acceptedAnswers: acceptedPool,
         questionType: question.type,
+        subjectId,
       });
 
       const shouldAiMark =
@@ -512,23 +510,16 @@ export function LongQuestion({
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           {effectiveTotalMarks}{" "}
           {effectiveTotalMarks === 1 ? "mark" : "marks"}
-          {dpHint != null && dpHint > 0 ? ` (${dpHint} d.p.)` : ""}
         </p>
       ) : null}
+      {displayStem.trim() ? (
       <div className="font-display text-[1.18rem] leading-relaxed text-foreground sm:text-[1.45rem]">
         <RichQuestionContent
-          text={stripQuestionNumberPrefix(question.question)}
+          text={displayStem}
           className="prose prose-base max-w-none prose-p:my-0"
         />
       </div>
-
-      {/* Guidance */}
-      {question.guidance && (
-        <div className="flex items-start gap-3 rounded-lg bg-amber/10 px-4 py-3 text-sm text-amber">
-          <Lightbulb className="mt-0.5 size-4 shrink-0" />
-          <RichQuestionContent text={question.guidance} className="prose prose-sm max-w-none prose-p:my-0" />
-        </div>
-      )}
+      ) : null}
 
       <QuestionImageGrid
         urls={question.answerImageUrls}
@@ -577,7 +568,12 @@ export function LongQuestion({
                   <QuestionImageGrid urls={[partImageUrls[idx]!]} />
                 ) : null}
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs font-medium text-muted-foreground">{partDescriptors[idx]}</p>
+                  <div className="min-w-0 flex-1 font-display text-[1.18rem] leading-relaxed text-foreground sm:text-[1.45rem]">
+                    <RichQuestionContent
+                      text={partDescriptors[idx] ?? ""}
+                      className="prose prose-base max-w-none prose-p:my-0 sm:prose-lg"
+                    />
+                  </div>
                   <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                     {partMarks[idx]} {partMarks[idx] === 1 ? "mark" : "marks"}
                   </span>
@@ -616,15 +612,6 @@ export function LongQuestion({
                     )}
                   />
                 </div>
-                <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                  <span>
-                    {partDpHints[idx] === 2
-                      ? "Answer to 2 d.p."
-                      : partDpHints[idx] === 0
-                        ? "Whole number (no decimals)"
-                        : "Any valid format"}
-                  </span>
-                </div>
                 {practiceOnly && submitted && partResults[idx] === false && (
                   <p className="text-[11px] text-muted-foreground">
                     Correct answer:{" "}
@@ -656,15 +643,6 @@ export function LongQuestion({
                 saved && "border-success/40"
               )}
             />
-            <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-              <span>
-                {singleDpHint === 2
-                  ? "Answer to 2 d.p."
-                  : singleDpHint === 0
-                    ? "Whole number (no decimals)"
-                    : "Any valid format"}
-              </span>
-            </div>
             {practiceOnly &&
               submitted &&
               autoMarkResult === false &&

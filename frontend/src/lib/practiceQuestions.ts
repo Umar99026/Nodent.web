@@ -5,7 +5,8 @@ import { inferSpecialistMathsAreaOfStudy } from "@/lib/specialistMathsAreaTopic"
 import {
   extractMarkdownImageUrls,
   formatPartDescriptor,
-  normalizePartKey,
+  formatSinglePartLabel,
+  normalizeMcqOptions,
   partLetterForIndex,
 } from "@/lib/questionDisplay";
 import { GOOGLE_SHEETS_TOPIC_LABELS } from "@/lib/mathSubjectTopics";
@@ -212,7 +213,6 @@ function parseAnswerParts(val: unknown): AnswerPart[] | undefined {
         if (!it || typeof it !== "object") return null;
         const row = it as Record<string, unknown>;
         const labelRaw = String(row.label ?? "").trim();
-        const key = normalizePartKey(labelRaw || `part${idx + 1}`, idx);
         if (!labelRaw) return null;
         const typeRaw = String(row.type ?? "").trim().toLowerCase();
         const type =
@@ -226,8 +226,8 @@ function parseAnswerParts(val: unknown): AnswerPart[] | undefined {
         const marks =
           Number.isFinite(marksRaw) && marksRaw > 0 ? Math.round(marksRaw) : undefined;
         return {
-          key,
-          label: formatPartDescriptor(key, labelRaw),
+          key: partLetterForIndex(idx),
+          label: labelRaw,
           ...(type ? { type } : {}),
           ...(placeholder ? { placeholder } : {}),
           ...(imageUrl ? { imageUrl } : {}),
@@ -236,22 +236,33 @@ function parseAnswerParts(val: unknown): AnswerPart[] | undefined {
       })
       .filter((p): p is AnswerPart => p != null);
 
+  let parts: AnswerPart[] | undefined;
   if (Array.isArray(val)) {
     const direct = toParts(val);
-    return direct.length ? direct : undefined;
-  }
-  if (typeof val === "string" && val.trim()) {
+    parts = direct.length ? direct : undefined;
+  } else if (typeof val === "string" && val.trim()) {
     try {
       const parsed = JSON.parse(val);
       if (Array.isArray(parsed)) {
         const fromJson = toParts(parsed);
-        return fromJson.length ? fromJson : undefined;
+        parts = fromJson.length ? fromJson : undefined;
       }
     } catch {
-      return undefined;
+      parts = undefined;
     }
   }
-  return undefined;
+
+  if (!parts?.length) return undefined;
+  if (parts.length === 1) {
+    const only = parts[0]!;
+    const label = formatSinglePartLabel(only.label);
+    return label ? [{ ...only, key: "a", label }] : [{ ...only, key: "a", label: only.label }];
+  }
+  return parts.map((p, idx) => ({
+    ...p,
+    key: partLetterForIndex(idx),
+    label: formatPartDescriptor(partLetterForIndex(idx), p.label),
+  }));
 }
 
 function inferAnswerPartsFromQuestion(
@@ -361,6 +372,15 @@ export function normalizeCustomQuestion(raw: unknown, subjectIdHint?: string): Q
   const guidanceRaw = cleanQuestionText(q.guidance);
   let passage = passageRaw ? passageRaw : undefined;
   const guidance = guidanceRaw ? guidanceRaw : undefined;
+  const useAiMarkingRaw = (q as { useAiMarking?: unknown; use_ai_marking?: unknown })
+    .useAiMarking ?? (q as { use_ai_marking?: unknown }).use_ai_marking;
+  const useAiMarking =
+    useAiMarkingRaw === false || useAiMarkingRaw === 0
+      ? false
+      : useAiMarkingRaw === true || useAiMarkingRaw === 1
+        ? true
+        : undefined;
+  const useAiMarkingExtra = useAiMarking !== undefined ? { useAiMarking } : {};
   if (passage) {
     const fromPassage = extractMarkdownImageUrls(passage);
     if (fromPassage.length) {
@@ -428,13 +448,16 @@ export function normalizeCustomQuestion(raw: unknown, subjectIdHint?: string): Q
         ? { answerParts: answerParts ?? inferredAnswerParts }
         : {}),
       ...(groupId ? { groupId } : {}),
+      ...useAiMarkingExtra,
     };
   }
 
   if (typeRaw === "mcq") {
     let options = parseStringArray(q.options);
     if (!options.length) options = parseStringArray(q.options_json);
-    options = options.map((opt) => cleanQuestionText(opt)).filter(Boolean);
+    options = normalizeMcqOptions(
+      options.map((opt) => cleanQuestionText(opt)).filter(Boolean),
+    );
     let answer = String(q.answer ?? "").trim();
     if (/^[A-Za-z]$/.test(answer) && options.length) {
       const i = answer.toUpperCase().charCodeAt(0) - "A".charCodeAt(0);
@@ -456,6 +479,7 @@ export function normalizeCustomQuestion(raw: unknown, subjectIdHint?: string): Q
         ? { answerParts: answerParts ?? inferredAnswerParts }
         : {}),
       ...(groupId ? { groupId } : {}),
+      ...useAiMarkingExtra,
     };
   }
 
@@ -484,6 +508,7 @@ export function normalizeCustomQuestion(raw: unknown, subjectIdHint?: string): Q
           ? { answerParts: answerParts ?? inferredAnswerParts }
           : {}),
         ...(groupId ? { groupId } : {}),
+      ...useAiMarkingExtra,
       };
     }
     return {
@@ -500,6 +525,7 @@ export function normalizeCustomQuestion(raw: unknown, subjectIdHint?: string): Q
         ? { answerParts: answerParts ?? inferredAnswerParts }
         : {}),
       ...(groupId ? { groupId } : {}),
+      ...useAiMarkingExtra,
     };
   }
 
@@ -528,6 +554,7 @@ export function normalizeCustomQuestion(raw: unknown, subjectIdHint?: string): Q
         ? { answerParts: answerParts ?? inferredAnswerParts }
         : {}),
       ...(groupId ? { groupId } : {}),
+      ...useAiMarkingExtra,
     };
   }
 

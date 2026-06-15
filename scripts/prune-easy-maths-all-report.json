@@ -1,0 +1,1267 @@
+{
+  "targetPerSubject": 50,
+  "subjects": [
+    {
+      "subject": "methods",
+      "totalBefore": 300,
+      "removeCount": 50,
+      "totalAfter": 250,
+      "byTopic": {
+        "Binomial Distribution": 4,
+        "Differential calculus": 4,
+        "Applications of integration": 4,
+        "Circular functions": 4,
+        "Algebra and equations": 4,
+        "Polynomial, power and rational functions": 4,
+        "Exponential and logarithmic functions": 4,
+        "Applications of differentiation": 3,
+        "Integral calculus": 3,
+        "Discrete random variables": 3,
+        "Functions and transformations": 3,
+        "Continuous random variables": 3,
+        "The normal distribution": 3,
+        "Sampling and sample proportions": 3,
+        "Confidence intervals for proportions": 1
+      },
+      "removed": [
+        {
+          "id": 1221,
+          "type": "short_answer",
+          "topic": "Binomial Distribution",
+          "marks": 2,
+          "ease": 59,
+          "preview": "If X~Bi(19,0.215), find Var(X) to 3 d.p."
+        },
+        {
+          "id": 4665,
+          "type": "short_answer",
+          "topic": "Differential calculus",
+          "marks": 2,
+          "ease": 66,
+          "preview": ". ?"
+        },
+        {
+          "id": 1573,
+          "type": "short_answer",
+          "topic": "Applications of integration",
+          "marks": 2,
+          "ease": 70,
+          "preview": "Evaluate ."
+        },
+        {
+          "id": 2653,
+          "type": "mcq",
+          "topic": "Circular functions",
+          "marks": 1,
+          "ease": 78,
+          "preview": "The minimum period of is"
+        },
+        {
+          "id": 2639,
+          "type": "mcq",
+          "topic": "Algebra and equations",
+          "marks": 1,
+          "ease": 67,
+          "preview": "The number of real solutions to is"
+        },
+        {
+          "id": 2659,
+          "type": "mcq",
+          "topic": "Polynomial, power and rational functions",
+          "marks": 1,
+          "ease": 67,
+          "preview": "The graph of crosses the -axis at"
+        },
+        {
+          "id": 2774,
+          "type": "short_answer",
+          "topic": "Exponential and logarithmic functions",
+          "marks": 2,
+          "ease": 70,
+          "preview": "Evaluate ."
+        },
+        {
+          "id": 4668,
+          "type": "short_answer",
+          "topic": "Applications of differentiation",
+          "marks": 2,
+          "ease": 66,
+          "preview": ". -coordinate of the stationary point?"
+        },
+        {
+          "id": 1586,
+          "type": "short_answer",
+          "topic": "Integral calculus",
+          "marks": 2,
+          "ease": 70,
+          "preview": "Evaluate ."
+        },
+        {
+          "id": 4662,
+          "type": "short_answer",
+          "topic": "Discrete random variables",
+          "marks": 2,
+          "ease": 68,
+          "preview": ". Is this allowed? yes or no."
+        },
+        {
+          "id": 4671,
+          "type": "short_answer",
+          "topic": "Functions and transformations",
+          "marks": 2,
+          "ease": 68,
+          "preview": "with domain . Is one-to-one? yes or no."
+        },
+        {
+          "id": 2633,
+          "type": "mcq",
+          "topic": "Continuous random variables",
+          "marks": 1,
+          "ease": 67,
+          "preview": "For , let be a probability density function. The value of is"
+        },
+        {
+          "id": 1590,
+          "type": "short_answer",
+          "topic": "The normal distribution",
+          "marks": 2,
+          "ease": 66,
+          "preview": "is about what percent (integer)?"
+        },
+        {
+          "id": 1619,
+          "type": "short_answer",
+          "topic": "Sampling and sample proportions",
+          "marks": 2,
+          "ease": 66,
+          "preview": "from . Number of successes?"
+        },
+        {
+          "id": 1564,
+          "type": "short_answer",
+          "topic": "Confidence intervals for proportions",
+          "marks": 2,
+          "ease": 66,
+          "preview": "90% confidence uses ? (2 d.p.)"
+        },
+        {
+          "id": 1222,
+          "type": "short_answer",
+          "topic": "Binomial Distribution",
+          "marks": 2,
+          "ease": 59,
+          "preview": "If X~Bi(20,0.230), find Var(X) to 3 d.p."
+        },
+        {
+          "id": 1514,
+          "type": "short_answer",
+          "topic": "Differential calculus",
+          "marks": 2,
+          "ease": 60,
+          "preview": "Gradient of tangent to at ."
+        },
+        {
+          "id": 1615,
+          "type": "short_answer",
+          "topic": "Applications of integration",
+          "marks": 2,
+          "ease": 70,
+          "preview": "Evaluate ."
+        },
+        {
+          "id": 2667,
+          "type": "mcq",
+          "topic": "Circular functions",
+          "marks": 1,
+          "ease": 78,
+          "preview": "For , a maximum occurs at"
+        },
+        {
+          "id": 1569,
+          "type": "short_answer",
+          "topic": "Algebra and equations",
+          "marks": 2,
+          "ease": 66,
+          "preview": ". Smaller root?"
+        },
+        {
+          "id": 1538,
+          "type": "short_answer",
+          "topic": "Polynomial, power and rational functions",
+          "marks": 2,
+          "ease": 66,
+          "preview": ". Number of **distinct** -intercepts?"
+        },
+        {
+          "id": 1581,
+          "type": "short_answer",
+          "topic": "Exponential and logarithmic functions",
+          "marks": 2,
+          "ease": 66,
+          "preview": ". ?"
+        },
+        {
+          "id": 4688,
+          "type": "short_answer",
+          "topic": "Applications of differentiation",
+          "marks": 2,
+          "ease": 66,
+          "preview": "Tangent to at . Gradient?"
+        },
+        {
+          "id": 1600,
+          "type": "short_answer",
+          "topic": "Integral calculus",
+          "marks": 2,
+          "ease": 70,
+          "preview": "Evaluate ."
+        },
+        {
+          "id": 1602,
+          "type": "short_answer",
+          "topic": "Discrete random variables",
+          "marks": 2,
+          "ease": 66,
+          "preview": ", . as fraction?"
+        },
+        {
+          "id": 1607,
+          "type": "short_answer",
+          "topic": "Functions and transformations",
+          "marks": 2,
+          "ease": 66,
+          "preview": ". Minimum value?"
+        },
+        {
+          "id": 1533,
+          "type": "short_answer",
+          "topic": "Continuous random variables",
+          "marks": 2,
+          "ease": 66,
+          "preview": "CDF means ?"
+        },
+        {
+          "id": 1604,
+          "type": "short_answer",
+          "topic": "The normal distribution",
+          "marks": 2,
+          "ease": 66,
+          "preview": ", . for ?"
+        },
+        {
+          "id": 1507,
+          "type": "short_answer",
+          "topic": "Sampling and sample proportions",
+          "marks": 2,
+          "ease": 60,
+          "preview": ", . Standard error (3 d.p.)."
+        },
+        {
+          "id": 1223,
+          "type": "short_answer",
+          "topic": "Binomial Distribution",
+          "marks": 2,
+          "ease": 59,
+          "preview": "If X~Bi(21,0.245), find Var(X) to 3 d.p."
+        },
+        {
+          "id": 1556,
+          "type": "short_answer",
+          "topic": "Differential calculus",
+          "marks": 2,
+          "ease": 60,
+          "preview": ". Find at ."
+        },
+        {
+          "id": 4670,
+          "type": "short_answer",
+          "topic": "Applications of integration",
+          "marks": 2,
+          "ease": 70,
+          "preview": "Evaluate ."
+        },
+        {
+          "id": 1540,
+          "type": "short_answer",
+          "topic": "Circular functions",
+          "marks": 2,
+          "ease": 66,
+          "preview": "Tide model . Amplitude (metres)?"
+        },
+        {
+          "id": 1583,
+          "type": "short_answer",
+          "topic": "Algebra and equations",
+          "marks": 2,
+          "ease": 66,
+          "preview": ". Larger solution?"
+        },
+        {
+          "id": 1552,
+          "type": "short_answer",
+          "topic": "Polynomial, power and rational functions",
+          "marks": 2,
+          "ease": 66,
+          "preview": ". How many **distinct** real zeros?"
+        },
+        {
+          "id": 1595,
+          "type": "short_answer",
+          "topic": "Exponential and logarithmic functions",
+          "marks": 2,
+          "ease": 66,
+          "preview": "?"
+        },
+        {
+          "id": 1529,
+          "type": "short_answer",
+          "topic": "Applications of differentiation",
+          "marks": 2,
+          "ease": 60,
+          "preview": ". Velocity at ."
+        },
+        {
+          "id": 2053,
+          "type": "short_answer",
+          "topic": "Integral calculus",
+          "marks": 2,
+          "ease": 70,
+          "preview": "Evaluate ."
+        },
+        {
+          "id": 1616,
+          "type": "short_answer",
+          "topic": "Discrete random variables",
+          "marks": 2,
+          "ease": 66,
+          "preview": ". If always , then ?"
+        },
+        {
+          "id": 4677,
+          "type": "short_answer",
+          "topic": "Functions and transformations",
+          "marks": 2,
+          "ease": 66,
+          "preview": ". Maximum value of ?"
+        },
+        {
+          "id": 1589,
+          "type": "short_answer",
+          "topic": "Continuous random variables",
+          "marks": 2,
+          "ease": 66,
+          "preview": "PDF on . ?"
+        },
+        {
+          "id": 1534,
+          "type": "short_answer",
+          "topic": "The normal distribution",
+          "marks": 2,
+          "ease": 60,
+          "preview": ". equals . Enter the threshold."
+        },
+        {
+          "id": 1535,
+          "type": "short_answer",
+          "topic": "Sampling and sample proportions",
+          "marks": 2,
+          "ease": 59,
+          "preview": "In trials there are successes. How many failures?"
+        },
+        {
+          "id": 1224,
+          "type": "short_answer",
+          "topic": "Binomial Distribution",
+          "marks": 2,
+          "ease": 59,
+          "preview": "If X~Bi(22,0.260), find Var(X) to 3 d.p."
+        },
+        {
+          "id": 1570,
+          "type": "short_answer",
+          "topic": "Differential calculus",
+          "marks": 2,
+          "ease": 60,
+          "preview": ". Find ."
+        },
+        {
+          "id": 1587,
+          "type": "short_answer",
+          "topic": "Applications of integration",
+          "marks": 2,
+          "ease": 66,
+          "preview": "m/s. Displacement from to s?"
+        },
+        {
+          "id": 1554,
+          "type": "short_answer",
+          "topic": "Circular functions",
+          "marks": 2,
+          "ease": 66,
+          "preview": "?"
+        },
+        {
+          "id": 1597,
+          "type": "short_answer",
+          "topic": "Algebra and equations",
+          "marks": 2,
+          "ease": 66,
+          "preview": ". ?"
+        },
+        {
+          "id": 1566,
+          "type": "short_answer",
+          "topic": "Polynomial, power and rational functions",
+          "marks": 2,
+          "ease": 66,
+          "preview": ". As , ?"
+        },
+        {
+          "id": 1609,
+          "type": "short_answer",
+          "topic": "Exponential and logarithmic functions",
+          "marks": 2,
+          "ease": 66,
+          "preview": "?"
+        }
+      ]
+    },
+    {
+      "subject": "specialist-maths",
+      "totalBefore": 205,
+      "removeCount": 50,
+      "totalAfter": 155,
+      "byTopic": {
+        "Vectors": 4,
+        "Complex numbers and algebra": 4,
+        "Vector calculus": 4,
+        "Vectors in two and three dimensions": 4,
+        "Functions, relations and graphs": 4,
+        "Random variables and sampling": 4,
+        "Integral calculus": 4,
+        "Differential equations": 4,
+        "Lines and planes in 3D": 4,
+        "Kinematics": 4,
+        "Differential calculus": 4,
+        "Logic and proof": 3,
+        "Confidence intervals": 3
+      },
+      "removed": [
+        {
+          "id": 1422,
+          "type": "short_answer",
+          "topic": "Vectors",
+          "marks": 2,
+          "ease": 76,
+          "preview": "Find a·b for a=(3,0,5) and b=(4,3,-3)."
+        },
+        {
+          "id": 2718,
+          "type": "mcq",
+          "topic": "Complex numbers and algebra",
+          "marks": 1,
+          "ease": 78,
+          "preview": "If and , then"
+        },
+        {
+          "id": 2722,
+          "type": "mcq",
+          "topic": "Vector calculus",
+          "marks": 1,
+          "ease": 78,
+          "preview": "For , equals"
+        },
+        {
+          "id": 1794,
+          "type": "short_answer",
+          "topic": "Vectors in two and three dimensions",
+          "marks": 2,
+          "ease": 66,
+          "preview": "?"
+        },
+        {
+          "id": 1813,
+          "type": "short_answer",
+          "topic": "Functions, relations and graphs",
+          "marks": 2,
+          "ease": 66,
+          "preview": ". Number of -intercepts?"
+        },
+        {
+          "id": 1809,
+          "type": "short_answer",
+          "topic": "Random variables and sampling",
+          "marks": 2,
+          "ease": 66,
+          "preview": "independent, , . ?"
+        },
+        {
+          "id": 2717,
+          "type": "short_answer",
+          "topic": "Integral calculus",
+          "marks": 2,
+          "ease": 66,
+          "preview": "Evaluate exactly."
+        },
+        {
+          "id": 6820,
+          "type": "short_answer",
+          "topic": "Differential equations",
+          "marks": 2,
+          "ease": 68,
+          "preview": "Does satisfy for any constant ? (true or false)"
+        },
+        {
+          "id": 6840,
+          "type": "short_answer",
+          "topic": "Lines and planes in 3D",
+          "marks": 2,
+          "ease": 68,
+          "preview": "Lines and in -plane. Do they intersect? yes or no."
+        },
+        {
+          "id": 2001,
+          "type": "short_answer",
+          "topic": "Kinematics",
+          "marks": 2,
+          "ease": 66,
+          "preview": ". Displacement from to ?"
+        },
+        {
+          "id": 4710,
+          "type": "short_answer",
+          "topic": "Differential calculus",
+          "marks": 2,
+          "ease": 66,
+          "preview": "at equals?"
+        },
+        {
+          "id": 2673,
+          "type": "mcq",
+          "topic": "Logic and proof",
+          "marks": 1,
+          "ease": 67,
+          "preview": "Consider the statement: ‘If is even, then is even.’ Which statement is the contrapositive?"
+        },
+        {
+          "id": 6830,
+          "type": "short_answer",
+          "topic": "Confidence intervals",
+          "marks": 2,
+          "ease": 66,
+          "preview": "Standard error of the mean decreases when increases — true or false?"
+        },
+        {
+          "id": 1423,
+          "type": "short_answer",
+          "topic": "Vectors",
+          "marks": 2,
+          "ease": 76,
+          "preview": "Find a·b for a=(4,1,6) and b=(5,4,-4)."
+        },
+        {
+          "id": 1752,
+          "type": "short_answer",
+          "topic": "Complex numbers and algebra",
+          "marks": 2,
+          "ease": 60,
+          "preview": ". Find ."
+        },
+        {
+          "id": 4714,
+          "type": "short_answer",
+          "topic": "Vector calculus",
+          "marks": 2,
+          "ease": 74,
+          "preview": ". Speed at equals — true or false?"
+        },
+        {
+          "id": 1806,
+          "type": "short_answer",
+          "topic": "Vectors in two and three dimensions",
+          "marks": 2,
+          "ease": 66,
+          "preview": "Work with , . ?"
+        },
+        {
+          "id": 4712,
+          "type": "short_answer",
+          "topic": "Functions, relations and graphs",
+          "marks": 2,
+          "ease": 66,
+          "preview": "Graph . How many vertical asymptotes?"
+        },
+        {
+          "id": 6813,
+          "type": "short_answer",
+          "topic": "Random variables and sampling",
+          "marks": 2,
+          "ease": 66,
+          "preview": "Independent with , . ?"
+        },
+        {
+          "id": 4705,
+          "type": "short_answer",
+          "topic": "Integral calculus",
+          "marks": 2,
+          "ease": 66,
+          "preview": "disk about -axis, on gives ?"
+        },
+        {
+          "id": 1816,
+          "type": "short_answer",
+          "topic": "Differential equations",
+          "marks": 2,
+          "ease": 65,
+          "preview": "Logistic-style: carrying capacity 1000, . Long-term approaches?"
+        },
+        {
+          "id": 6811,
+          "type": "short_answer",
+          "topic": "Lines and planes in 3D",
+          "marks": 2,
+          "ease": 66,
+          "preview": "Line : which coordinate stays constant?"
+        },
+        {
+          "id": 6839,
+          "type": "short_answer",
+          "topic": "Kinematics",
+          "marks": 2,
+          "ease": 66,
+          "preview": "Acceleration , . ?"
+        },
+        {
+          "id": 1754,
+          "type": "short_answer",
+          "topic": "Differential calculus",
+          "marks": 2,
+          "ease": 60,
+          "preview": "For , at find if ."
+        },
+        {
+          "id": 6815,
+          "type": "short_answer",
+          "topic": "Logic and proof",
+          "marks": 2,
+          "ease": 66,
+          "preview": "Contrapositive of is ?"
+        },
+        {
+          "id": 6814,
+          "type": "short_answer",
+          "topic": "Confidence intervals",
+          "marks": 2,
+          "ease": 59,
+          "preview": "95% CI for mean uses ? (2 d.p.)"
+        },
+        {
+          "id": 1424,
+          "type": "short_answer",
+          "topic": "Vectors",
+          "marks": 2,
+          "ease": 76,
+          "preview": "Find a·b for a=(5,2,7) and b=(6,5,-1)."
+        },
+        {
+          "id": 1776,
+          "type": "short_answer",
+          "topic": "Complex numbers and algebra",
+          "marks": 2,
+          "ease": 60,
+          "preview": "For , find the real part."
+        },
+        {
+          "id": 2707,
+          "type": "short_answer",
+          "topic": "Vector calculus",
+          "marks": 2,
+          "ease": 60,
+          "preview": "For , find the speed."
+        },
+        {
+          "id": 6810,
+          "type": "short_answer",
+          "topic": "Vectors in two and three dimensions",
+          "marks": 2,
+          "ease": 66,
+          "preview": ", . ?"
+        },
+        {
+          "id": 6807,
+          "type": "short_answer",
+          "topic": "Functions, relations and graphs",
+          "marks": 2,
+          "ease": 66,
+          "preview": ": vertical asymptote ?"
+        },
+        {
+          "id": 1797,
+          "type": "short_answer",
+          "topic": "Random variables and sampling",
+          "marks": 2,
+          "ease": 60,
+          "preview": "Independent with , . Find ."
+        },
+        {
+          "id": 6838,
+          "type": "short_answer",
+          "topic": "Integral calculus",
+          "marks": 2,
+          "ease": 66,
+          "preview": "?"
+        },
+        {
+          "id": 1780,
+          "type": "short_answer",
+          "topic": "Differential equations",
+          "marks": 2,
+          "ease": 60,
+          "preview": ", , . Next at ."
+        },
+        {
+          "id": 6821,
+          "type": "short_answer",
+          "topic": "Lines and planes in 3D",
+          "marks": 2,
+          "ease": 66,
+          "preview": "Plane : normal vector -component?"
+        },
+        {
+          "id": 1757,
+          "type": "short_answer",
+          "topic": "Kinematics",
+          "marks": 2,
+          "ease": 60,
+          "preview": ". Velocity at ."
+        },
+        {
+          "id": 6825,
+          "type": "short_answer",
+          "topic": "Differential calculus",
+          "marks": 2,
+          "ease": 60,
+          "preview": "Derivative of at ."
+        },
+        {
+          "id": 6831,
+          "type": "short_answer",
+          "topic": "Logic and proof",
+          "marks": 2,
+          "ease": 59,
+          "preview": "Mathematical induction on usually starts the base step at ?"
+        },
+        {
+          "id": 6842,
+          "type": "short_answer",
+          "topic": "Confidence intervals",
+          "marks": 2,
+          "ease": 59,
+          "preview": "Sample , , , 95% CI half-width . Find half-width."
+        },
+        {
+          "id": 1425,
+          "type": "short_answer",
+          "topic": "Vectors",
+          "marks": 2,
+          "ease": 76,
+          "preview": "Find a·b for a=(6,3,3) and b=(7,6,-2)."
+        },
+        {
+          "id": 6844,
+          "type": "short_answer",
+          "topic": "Complex numbers and algebra",
+          "marks": 2,
+          "ease": 60,
+          "preview": ". Write ."
+        },
+        {
+          "id": 1796,
+          "type": "short_answer",
+          "topic": "Vector calculus",
+          "marks": 2,
+          "ease": 59,
+          "preview": "If and , position at has sum of coordinates?"
+        },
+        {
+          "id": 1770,
+          "type": "short_answer",
+          "topic": "Vectors in two and three dimensions",
+          "marks": 2,
+          "ease": 60,
+          "preview": ". Find ."
+        },
+        {
+          "id": 6824,
+          "type": "short_answer",
+          "topic": "Functions, relations and graphs",
+          "marks": 2,
+          "ease": 66,
+          "preview": "has minimum value?"
+        },
+        {
+          "id": 6823,
+          "type": "short_answer",
+          "topic": "Random variables and sampling",
+          "marks": 2,
+          "ease": 60,
+          "preview": ". Find ."
+        },
+        {
+          "id": 1779,
+          "type": "short_answer",
+          "topic": "Integral calculus",
+          "marks": 2,
+          "ease": 59,
+          "preview": "(no constant) includes plus what symbol letter?"
+        },
+        {
+          "id": 1792,
+          "type": "short_answer",
+          "topic": "Differential equations",
+          "marks": 2,
+          "ease": 59,
+          "preview": "Slope field for at point : slope equals?"
+        },
+        {
+          "id": 6827,
+          "type": "short_answer",
+          "topic": "Lines and planes in 3D",
+          "marks": 2,
+          "ease": 66,
+          "preview": "Distance from origin to plane equals?"
+        },
+        {
+          "id": 1769,
+          "type": "short_answer",
+          "topic": "Kinematics",
+          "marks": 2,
+          "ease": 60,
+          "preview": ". Acceleration at ."
+        },
+        {
+          "id": 1814,
+          "type": "short_answer",
+          "topic": "Differential calculus",
+          "marks": 2,
+          "ease": 59,
+          "preview": "Inverse of at point where : ?"
+        }
+      ]
+    },
+    {
+      "subject": "general-maths",
+      "totalBefore": 292,
+      "removeCount": 50,
+      "totalAfter": 242,
+      "byTopic": {
+        "Recursion and financial modelling": 13,
+        "Matrices": 13,
+        "Data analysis": 12,
+        "Networks and decision mathematics": 12
+      },
+      "removed": [
+        {
+          "id": 6228,
+          "type": "mcq",
+          "topic": "Recursion and financial modelling",
+          "marks": 1,
+          "ease": 98,
+          "preview": "Which sequence is geometric?"
+        },
+        {
+          "id": 6232,
+          "type": "mcq",
+          "topic": "Matrices",
+          "marks": 1,
+          "ease": 98,
+          "preview": "Which sum is defined?"
+        },
+        {
+          "id": 6220,
+          "type": "mcq",
+          "topic": "Data analysis",
+          "marks": 1,
+          "ease": 98,
+          "preview": "Which variable is categorical?"
+        },
+        {
+          "id": 1741,
+          "type": "mcq",
+          "topic": "Networks and decision mathematics",
+          "marks": 1,
+          "ease": 82,
+          "preview": "A Hamiltonian path is:"
+        },
+        {
+          "id": 6226,
+          "type": "mcq",
+          "topic": "Recursion and financial modelling",
+          "marks": 1,
+          "ease": 91,
+          "preview": "Which recurrence represents compound interest with no deposits?"
+        },
+        {
+          "id": 2755,
+          "type": "mcq",
+          "topic": "Matrices",
+          "marks": 1,
+          "ease": 82,
+          "preview": "For , the inverse exists because"
+        },
+        {
+          "id": 6222,
+          "type": "mcq",
+          "topic": "Data analysis",
+          "marks": 1,
+          "ease": 91,
+          "preview": "Which measure of centre is most resistant to outliers?"
+        },
+        {
+          "id": 1742,
+          "type": "mcq",
+          "topic": "Networks and decision mathematics",
+          "marks": 1,
+          "ease": 82,
+          "preview": "Dijkstra’s algorithm is used for:"
+        },
+        {
+          "id": 6227,
+          "type": "mcq",
+          "topic": "Recursion and financial modelling",
+          "marks": 1,
+          "ease": 82,
+          "preview": "Flat-rate depreciation means:"
+        },
+        {
+          "id": 6233,
+          "type": "mcq",
+          "topic": "Matrices",
+          "marks": 1,
+          "ease": 82,
+          "preview": "Leslie matrices are associated with:"
+        },
+        {
+          "id": 6221,
+          "type": "mcq",
+          "topic": "Data analysis",
+          "marks": 1,
+          "ease": 88,
+          "preview": "Correlation r = −0.91 suggests:"
+        },
+        {
+          "id": 1743,
+          "type": "mcq",
+          "topic": "Networks and decision mathematics",
+          "marks": 1,
+          "ease": 82,
+          "preview": "Prim’s and Kruskal’s algorithms find:"
+        },
+        {
+          "id": 1716,
+          "type": "mcq",
+          "topic": "Recursion and financial modelling",
+          "marks": 1,
+          "ease": 75,
+          "preview": "A reducing-balance loan has balance recurrence . Here R is:"
+        },
+        {
+          "id": 1725,
+          "type": "mcq",
+          "topic": "Matrices",
+          "marks": 1,
+          "ease": 81,
+          "preview": "A matrix with 2 rows and 3 columns has order:"
+        },
+        {
+          "id": 2731,
+          "type": "mcq",
+          "topic": "Data analysis",
+          "marks": 1,
+          "ease": 78,
+          "preview": "A residual is calculated as"
+        },
+        {
+          "id": 1746,
+          "type": "mcq",
+          "topic": "Networks and decision mathematics",
+          "marks": 1,
+          "ease": 82,
+          "preview": "Float (slack) on an activity is:"
+        },
+        {
+          "id": 1718,
+          "type": "mcq",
+          "topic": "Recursion and financial modelling",
+          "marks": 1,
+          "ease": 75,
+          "preview": "An investment with regular deposits is commonly modelled as:"
+        },
+        {
+          "id": 1727,
+          "type": "mcq",
+          "topic": "Matrices",
+          "marks": 1,
+          "ease": 81,
+          "preview": "2 × [1 3; 2 4] equals:"
+        },
+        {
+          "id": 6083,
+          "type": "mcq",
+          "topic": "Data analysis",
+          "marks": 1,
+          "ease": 78,
+          "preview": "Using seven-median smoothing, the smoothed value of for 2016 is"
+        },
+        {
+          "id": 1747,
+          "type": "mcq",
+          "topic": "Networks and decision mathematics",
+          "marks": 1,
+          "ease": 82,
+          "preview": "A weighted graph is used when:"
+        },
+        {
+          "id": 1719,
+          "type": "mcq",
+          "topic": "Recursion and financial modelling",
+          "marks": 1,
+          "ease": 75,
+          "preview": ", per year, years. Using , is:"
+        },
+        {
+          "id": 1733,
+          "type": "mcq",
+          "topic": "Matrices",
+          "marks": 1,
+          "ease": 81,
+          "preview": "[1 2; 0 1] + [3 0; 1 2] ="
+        },
+        {
+          "id": 1706,
+          "type": "mcq",
+          "topic": "Data analysis",
+          "marks": 1,
+          "ease": 75,
+          "preview": "A residual plot shows a clear curved pattern. This suggests:"
+        },
+        {
+          "id": 1738,
+          "type": "mcq",
+          "topic": "Networks and decision mathematics",
+          "marks": 1,
+          "ease": 75,
+          "preview": "In a graph, the degree of a vertex is:"
+        },
+        {
+          "id": 1721,
+          "type": "mcq",
+          "topic": "Recursion and financial modelling",
+          "marks": 1,
+          "ease": 75,
+          "preview": "First-order linear recurrence is often used to model:"
+        },
+        {
+          "id": 6097,
+          "type": "mcq",
+          "topic": "Matrices",
+          "marks": 1,
+          "ease": 79,
+          "preview": "Element indicates that"
+        },
+        {
+          "id": 1708,
+          "type": "mcq",
+          "topic": "Data analysis",
+          "marks": 1,
+          "ease": 73,
+          "preview": "In a time series, regular peaks every 12 months most likely indicate:"
+        },
+        {
+          "id": 1739,
+          "type": "mcq",
+          "topic": "Networks and decision mathematics",
+          "marks": 1,
+          "ease": 75,
+          "preview": "An Eulerian circuit exists in a connected graph when:"
+        },
+        {
+          "id": 6086,
+          "type": "mcq",
+          "topic": "Recursion and financial modelling",
+          "marks": 1,
+          "ease": 75,
+          "preview": "A first-order linear recurrence generates a geometric sequence if"
+        },
+        {
+          "id": 1730,
+          "type": "mcq",
+          "topic": "Matrices",
+          "marks": 1,
+          "ease": 75,
+          "preview": "The identity matrix I has the property that:"
+        },
+        {
+          "id": 2728,
+          "type": "mcq",
+          "topic": "Data analysis",
+          "marks": 1,
+          "ease": 73,
+          "preview": "For a least squares line , which statement is correct?"
+        },
+        {
+          "id": 1744,
+          "type": "mcq",
+          "topic": "Networks and decision mathematics",
+          "marks": 1,
+          "ease": 75,
+          "preview": "A spanning tree of a connected graph:"
+        },
+        {
+          "id": 6087,
+          "type": "mcq",
+          "topic": "Recursion and financial modelling",
+          "marks": 1,
+          "ease": 75,
+          "preview": "For with weekly interest, the annual interest rate is"
+        },
+        {
+          "id": 1731,
+          "type": "mcq",
+          "topic": "Matrices",
+          "marks": 1,
+          "ease": 75,
+          "preview": "A transition matrix is mainly used to:"
+        },
+        {
+          "id": 6224,
+          "type": "short_answer",
+          "topic": "Data analysis",
+          "marks": 1,
+          "ease": 73,
+          "preview": "State the correlation r value closest to ‘no linear relationship’."
+        },
+        {
+          "id": 1745,
+          "type": "mcq",
+          "topic": "Networks and decision mathematics",
+          "marks": 1,
+          "ease": 75,
+          "preview": "In critical path analysis, activities on the critical path have:"
+        },
+        {
+          "id": 2769,
+          "type": "mcq",
+          "topic": "Recursion and financial modelling",
+          "marks": 1,
+          "ease": 74,
+          "preview": "The recurrence , models"
+        },
+        {
+          "id": 1734,
+          "type": "mcq",
+          "topic": "Matrices",
+          "marks": 1,
+          "ease": 75,
+          "preview": "Row-by-column multiplication means entry (i,j) of AB is found by:"
+        },
+        {
+          "id": 2723,
+          "type": "mcq",
+          "topic": "Data analysis",
+          "marks": 1,
+          "ease": 71,
+          "preview": "The ordered data set has an interquartile range of"
+        },
+        {
+          "id": 6237,
+          "type": "short_answer",
+          "topic": "Networks and decision mathematics",
+          "marks": 1,
+          "ease": 73,
+          "preview": "State the condition on vertex degrees for an Eulerian circuit."
+        },
+        {
+          "id": 6231,
+          "type": "short_answer",
+          "topic": "Recursion and financial modelling",
+          "marks": 1,
+          "ease": 73,
+          "preview": "Name one difference between arithmetic and geometric growth."
+        },
+        {
+          "id": 2749,
+          "type": "mcq",
+          "topic": "Matrices",
+          "marks": 1,
+          "ease": 74,
+          "preview": "The matrix is"
+        },
+        {
+          "id": 6223,
+          "type": "short_answer",
+          "topic": "Data analysis",
+          "marks": 1,
+          "ease": 70,
+          "preview": "Write the formula for a residual."
+        },
+        {
+          "id": 6238,
+          "type": "short_answer",
+          "topic": "Networks and decision mathematics",
+          "marks": 1,
+          "ease": 73,
+          "preview": "Name one algorithm for a minimum spanning tree."
+        },
+        {
+          "id": 6229,
+          "type": "short_answer",
+          "topic": "Recursion and financial modelling",
+          "marks": 1,
+          "ease": 70,
+          "preview": "Write the compound interest formula."
+        },
+        {
+          "id": 6101,
+          "type": "mcq",
+          "topic": "Matrices",
+          "marks": 1,
+          "ease": 72,
+          "preview": "The number at Botanical Gardens from Thursday to Sunday has"
+        },
+        {
+          "id": 1700,
+          "type": "mcq",
+          "topic": "Data analysis",
+          "marks": 1,
+          "ease": 67,
+          "preview": "A dataset has Q1 = 12, Q3 = 20. What is the IQR?"
+        },
+        {
+          "id": 6103,
+          "type": "mcq",
+          "topic": "Networks and decision mathematics",
+          "marks": 1,
+          "ease": 72,
+          "preview": "For the graph shown, the number of faces is"
+        },
+        {
+          "id": 1713,
+          "type": "mcq",
+          "topic": "Recursion and financial modelling",
+          "marks": 1,
+          "ease": 67,
+          "preview": "A geometric sequence has first term 100 and ratio 1.1. The third term is:"
+        },
+        {
+          "id": 6234,
+          "type": "short_answer",
+          "topic": "Matrices",
+          "marks": 1,
+          "ease": 71,
+          "preview": "State the order of a matrix with 3 rows and 2 columns."
+        }
+      ]
+    }
+  ]
+}

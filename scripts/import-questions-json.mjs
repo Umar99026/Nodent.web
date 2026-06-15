@@ -54,12 +54,18 @@ if (!Array.isArray(questions) || !questions.length) {
 
 const sql = neon(loadDatabaseUrl());
 
+function questionStemKey(subjectId, question) {
+  const sid = canonicalSubjectId(subjectId);
+  const stem = String(question ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+  return stem ? `${sid}::${stem}` : "";
+}
+
 const existingRows = await sql`
   SELECT subject_id, question
   FROM custom_questions
 `;
 const existingStems = new Set(
-  existingRows.map((r) => `${canonicalSubjectId(r.subject_id)}::${String(r.question).trim()}`),
+  existingRows.map((r) => questionStemKey(r.subject_id, r.question)).filter(Boolean),
 );
 
 let imported = 0;
@@ -90,8 +96,8 @@ for (let i = 0; i < questions.length; i++) {
     continue;
   }
 
-  const stemKey = `${subjectId}::${question}`;
-  if (existingStems.has(stemKey)) {
+  const stemKey = questionStemKey(subjectId, question);
+  if (stemKey && existingStems.has(stemKey)) {
     skipped++;
     continue;
   }
@@ -119,7 +125,12 @@ for (let i = 0; i < questions.length; i++) {
     existingStems.add(stemKey);
     imported++;
   } catch (e) {
-    errors.push({ index: i, message: e instanceof Error ? e.message : String(e) });
+    const msg = e instanceof Error ? e.message : String(e);
+    if (/custom_questions_subject_stem_unique|duplicate key/i.test(msg)) {
+      skipped++;
+      continue;
+    }
+    errors.push({ index: i, message: msg });
   }
 }
 

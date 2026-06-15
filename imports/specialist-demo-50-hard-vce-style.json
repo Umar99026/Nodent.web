@@ -1,0 +1,1168 @@
+{
+  "questions": [
+    {
+      "subjectId": "specialist-maths",
+      "type": "mcq",
+      "topic": "Logic and proof",
+      "question": "Which of the following is true about the statement 'For all integers $n$, if $n$ is even, then $n^2$ is even'?",
+      "options": [
+        "It is true; the contrapositive is false.",
+        "It is true; the contrapositive is also true.",
+        "It is false; a counterexample exists.",
+        "It is false; the contrapositive is true."
+      ],
+      "answer": "B",
+      "marks": 1,
+      "guidance": "The statement and its contrapositive both hold true."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "long_answer",
+      "topic": "Logic and proof",
+      "question": "Consider the statement: 'If $p$ is a prime number greater than 3, then $p$ is of the form $6k \\\\pm 1$ for some integer $k$.'. \n\n(a) Prove that every prime number greater than 3 is either one more or one less than a multiple of 6.  \n\n(b) Provide an example of a prime number greater than 3 and check its validity against the statement.",
+      "acceptedAnswers": [
+        "Any prime $p>3$ is either $6k+1$ or $6k-1$.",
+        "Example: $7$ (as $6\\cdot1+1=7$) or $11$ (as $6\\cdot2-1=11$)."
+      ],
+      "marks": 4,
+      "guidance": "Part (a) requires direct proof through contradiction or modular arithmetic. Part (b) checks the understanding through an example.",
+      "answerParts": [
+        {
+          "key": "part1",
+          "label": "Prove that every prime number greater than 3 follows the form $6k \\pm 1$.",
+          "marks": 2,
+          "acceptedAnswer": "Any prime $p>3$ is either $6k+1$ or $6k-1$.",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "part2",
+          "label": "Provide an example of a prime number greater than 3 and verify it meets the conditions.",
+          "marks": 2,
+          "acceptedAnswer": "Example: $7$ (as $6\\cdot1+1=7$) or $11$ (as $6\\cdot2-1=11$).",
+          "placeholder": "Type your answer…"
+        }
+      ]
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "mcq",
+      "topic": "Logic and proof",
+      "question": "Identify the negation of the statement 'If $x$ is a real number, then $x^2 \\geq 0$.",
+      "options": [
+        "$x$ is a real number and $x^2 < 0$.",
+        "$x$ is not a real number.",
+        "$x^2 < 0$ for some real $x$.",
+        "$x^2 \\geq 0$ for all real $x$."
+      ],
+      "answer": "A",
+      "marks": 1,
+      "guidance": "The negation of an implication is the conjunction of the hypothesis and the negation of the conclusion."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "mcq",
+      "topic": "Logic and proof",
+      "question": "Consider the statement: 'If $x^2 + 1 = 0$, then $x$ is a complex number.' Which of the following is a valid logical fallacy related to this statement?",
+      "options": [
+        "If $x$ is a real number, then $x^2 + 1 \\neq 0$.",
+        "If $x$ is a complex number, then $x^2 + 1 = 0$.",
+        "If $x^2 + 1 = 0$, then $x$ is not a real number.",
+        "If $x$ is not a complex number, then $x^2 + 1 \\neq 0$."
+      ],
+      "answer": "C",
+      "marks": 1,
+      "guidance": "A logical fallacy involves misinterpretation or incorrect application of logical implications.",
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "long_answer",
+      "topic": "Logic and proof",
+      "question": "Let $P(n)$ be the statement 'The sum of the first $n$ odd numbers is $n^2$'. Prove that $P(1)$ is true and show that if $P(k)$ is true for some integer $k$, then $P(k+1)$ is also true. Finally, conclude that $P(n)$ is true for all integers $n \\geq 1$.",
+      "acceptedAnswers": [
+        "1^2=1",
+        "(k+1)^2=k^2+2k+1",
+        "By induction, $P(n)$ holds for all $n \\geq 1$."
+      ],
+      "marks": 6,
+      "guidance": "Check that $P(1)$ correctly calculates to $1$. For the induction step, verify the algebraic manipulation from $P(k)$ to $P(k+1)$. Conclude with an explanation of induction.",
+      "answerParts": [
+        {
+          "key": "P1",
+          "label": "Show that $P(1)$ is true.",
+          "marks": 2,
+          "acceptedAnswer": "1^2=1",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "P2",
+          "label": "Show that $P(k+1)$ is true assuming $P(k)$ is true.",
+          "marks": 2,
+          "acceptedAnswer": "(k+1)^2=k^2+2k+1",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "P3",
+          "label": "Conclude that $P(n)$ is true for all integers $n \\geq 1$.",
+          "marks": 2,
+          "acceptedAnswer": "By induction, $P(n)$ holds for all $n \\geq 1$.",
+          "placeholder": "Type your answer…"
+        }
+      ]
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "mcq",
+      "topic": "Complex numbers and algebra",
+      "question": "What is the principal value of the argument of the complex number $z = -1 + i$?",
+      "options": [
+        "$\\frac{\\pi}{4}$",
+        "$\\frac{3\\pi}{4}$",
+        "$-\\frac{3\\pi}{4}$",
+        "$\\frac{5\\pi}{4}$"
+      ],
+      "answer": "B",
+      "marks": 1,
+      "guidance": "$\\arg(-1 + i) = \\tan^{-1}\\left(\\frac{1}{-1}\\right) + \\pi = \\frac{3\\pi}{4}$.",
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "long_answer",
+      "topic": "Complex numbers and algebra",
+      "question": "Given the complex number $z = 4 \\operatorname{cis}\\left(\\frac{\\pi}{3}\\right)$, perform the following tasks:",
+      "acceptedAnswers": [
+        "4",
+        "\\frac{\\pi}{3}",
+        "4e^{i\\frac{\\pi}{3}}"
+      ],
+      "marks": 4,
+      "guidance": "Modulus is the coefficient; argument is the angle; exponential form is $re^{i\\theta}$.",
+      "answerParts": [
+        {
+          "key": "modulus",
+          "label": "Find the modulus of $z$.",
+          "marks": 1,
+          "acceptedAnswer": "4",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "argument",
+          "label": "Find the argument of $z$.",
+          "marks": 1,
+          "acceptedAnswer": "\\frac{\\pi}{3}",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "exp",
+          "label": "Express $z$ in exponential form.",
+          "marks": 2,
+          "acceptedAnswer": "4e^{i\\frac{\\pi}{3}}",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "mcq",
+      "topic": "Complex numbers and algebra",
+      "question": "What is the principal argument of the complex number $z = -1 - i$?",
+      "options": [
+        "$\\frac{3\\pi}{4}$",
+        "$\\frac{5\\pi}{4}$",
+        "$-\\frac{3\\pi}{4}$",
+        "$-\\frac{5\\pi}{4}$"
+      ],
+      "answer": "B",
+      "marks": 1,
+      "guidance": "The argument is found using $\\tan^{-1}\\left(\\frac{y}{x}\\right)$ where $x=-1$ and $y=-1$.",
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "long_answer",
+      "topic": "Complex numbers and algebra",
+      "question": "Given the complex number $z = 3 - 4i$, perform the following steps:",
+      "acceptedAnswers": [
+        "5",
+        "-\\frac{4}{3} \\pi"
+      ],
+      "marks": 4,
+      "guidance": "Use the formulas for modulus $|z| = \\sqrt{x^2 + y^2}$ and argument $\\arg(z) = \\tan^{-1}\\left(\\frac{y}{x}\\right)$ where $z = x + iy$.",
+      "answerParts": [
+        {
+          "key": "modulus",
+          "label": "Find the modulus of $z$.",
+          "marks": 2,
+          "acceptedAnswer": "5",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "argument",
+          "label": "Find the argument of $z$ in radians.",
+          "marks": 2,
+          "acceptedAnswer": "-\\frac{4}{3} \\pi",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": true
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "long_answer",
+      "topic": "Complex numbers and algebra",
+      "question": "Let $z = re^{i\\theta}$ be a complex number in polar form, where $r = 5$ and $\\theta = \\frac{\\pi}{6} + k\\pi$ for $k \\in \\mathbb{Z}$. Find the following:",
+      "acceptedAnswers": [
+        "5",
+        "\\frac{\\pi}{6}",
+        "\\frac{5\\sqrt{3}}{2} + \\frac{5}{2}i"
+      ],
+      "marks": 8,
+      "guidance": "For the modulus, $|z| = r$; for the argument, substitute $k=0$; $z = re^{i\\theta} = r(\\cos(\\theta) + i\\sin(\\theta))$.",
+      "answerParts": [
+        {
+          "key": "modulus",
+          "label": "Calculate the modulus of $z$.",
+          "marks": 2,
+          "acceptedAnswer": "5",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "argument",
+          "label": "Determine the argument of $z$ in radians for $k=0$.",
+          "marks": 2,
+          "acceptedAnswer": "\\frac{\\pi}{6}",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "rect_form",
+          "label": "Express $z$ in Cartesian form $a + bi$.",
+          "marks": 4,
+          "acceptedAnswer": "\\frac{5\\sqrt{3}}{2} + \\frac{5}{2}i",
+          "placeholder": "Type your answer…"
+        }
+      ]
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "mcq",
+      "topic": "Functions, relations and graphs",
+      "question": "Consider the function $f(x) = \\frac{x^3 - 3x + 2}{x^2 - 2x}$. What can be concluded about its behavior at the point $x=0$?",
+      "options": [
+        "It has a removable discontinuity at $x=0$",
+        "It has a vertical asymptote at $x=0$",
+        "It is continuous at $x=0$",
+        "It has a hole at $x=0$"
+      ],
+      "answer": "A",
+      "marks": 1,
+      "guidance": "Factor the numerator and denominator to examine the limit at $x=0$.",
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "short_answer",
+      "topic": "Functions, relations and graphs",
+      "question": "Determine the x-coordinates of the points where the function $f(x) = x^3 - 6x^2 + 9x + 1$ has local extrema.",
+      "acceptedAnswers": [
+        "1, 3"
+      ],
+      "marks": 3,
+      "guidance": "Take the derivative $f'(x)$ and set it to zero to find critical points. Check the second derivative for concavity.",
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "long_answer",
+      "topic": "Functions, relations and graphs",
+      "question": "Let $g(x) = \\frac{2x^2 - 5}{x^2 - 1}$. \n1. Determine the vertical and horizontal asymptotes of $g(x)$. \n2. Find the intercepts of the function.",
+      "acceptedAnswers": [
+        "x=1; x=-1; y=2",
+        "\\frac{\\sqrt{5}}{2}; -\\frac{\\sqrt{5}}{2}"
+      ],
+      "marks": 4,
+      "guidance": "For vertical asymptotes, set the denominator to zero. For horizontal asymptotes, analyze the degrees of the numerator and denominator. For intercepts, set $g(x)=0$.",
+      "answerParts": [
+        {
+          "key": "asymptotes",
+          "label": "List the vertical and horizontal asymptotes of $g(x)$.",
+          "marks": 2,
+          "acceptedAnswer": "x=1; x=-1; y=2",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "intercepts",
+          "label": "Find the x-intercepts of $g(x)$.",
+          "marks": 2,
+          "acceptedAnswer": "\\frac{\\sqrt{5}}{2}; -\\frac{\\sqrt{5}}{2}",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": true
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "mcq",
+      "topic": "Functions, relations and graphs",
+      "question": "The function $h(x) = \\ln(x^2 + 1)$ has a derivative $h'(x)$. What is true about $h'(x)$?",
+      "options": [
+        "$h'(x)$ is always positive",
+        "$h'(x)$ is always negative",
+        "$h'(x)$ has a maximum value",
+        "$h'(x)$ is undefined at $x=0$"
+      ],
+      "answer": "A",
+      "marks": 1,
+      "guidance": "Differentiate using the chain rule to determine the sign of $h'(x)$.",
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "mcq",
+      "topic": "Differential calculus",
+      "question": "For the function $f(x) = x^3 - 6x^2 + 9x + 1$, what is the value of the second derivative at the point where the first derivative is zero?",
+      "options": [
+        "0",
+        "6",
+        "12",
+        "18"
+      ],
+      "answer": "B",
+      "marks": 1,
+      "guidance": "First, find $f'(x) = 3x^2 - 12x + 9$ and set it to zero. Solve for $x$ and then find $f''(x)$.",
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "long_answer",
+      "topic": "Differential calculus",
+      "question": "Consider the function $g(x) = \frac{x^3 - 3x + 2}{x^2 - 1}$. (a) Determine the critical points of $g(x)$. (b) Identify the nature of each critical point using the second derivative test.",
+      "acceptedAnswers": [
+        "1,-1",
+        "Local maximum at $x=1$, local minimum at $x=-1."
+      ],
+      "marks": 4,
+      "guidance": "(a) Find $g'(x)$, set it to zero and solve for $x$. (b) Calculate $g''(x)$ and evaluate its sign at each critical point.",
+      "answerParts": [
+        {
+          "key": "critical_points",
+          "label": "Find the critical points of $g(x)$.",
+          "marks": 2,
+          "acceptedAnswer": "1,-1",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "nature_of_points",
+          "label": "Determine the nature of each critical point using the second derivative test.",
+          "marks": 2,
+          "acceptedAnswer": "Local maximum at $x=1$, local minimum at $x=-1.",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": true
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "long_answer",
+      "topic": "Differential calculus",
+      "question": "Consider the function $f(x) = x^3 - 3x^2 + 4$. (a) Find the coordinates of the local extrema of $f$ and classify each as a local maximum or minimum. (b) Determine the inflection points of $f$.",
+      "acceptedAnswers": [
+        "(1, 2), (2, 2)",
+        "(0, 4), (2, 2)"
+      ],
+      "marks": 6,
+      "guidance": "(a) Set $f'(x)=0$ to find critical points, then use the second derivative test to classify them. (b) Find $f''(x)$ and solve for points where it changes sign.",
+      "answerParts": [
+        {
+          "key": "local_extrema",
+          "label": "Find the coordinates of the local extrema of $f$ (in the form $(x, y)$).",
+          "marks": 3,
+          "acceptedAnswer": "(1, 2), (2, 2)",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "inflection_points",
+          "label": "Find the inflection points of $f$ (in the form $(x, y)$).",
+          "marks": 3,
+          "acceptedAnswer": "(0, 4), (2, 2)",
+          "placeholder": "Type your answer…"
+        }
+      ]
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "mcq",
+      "topic": "Differential calculus",
+      "question": "Let $g(x) = \frac{x^2 + 2x + 1}{x - 1}$. What is the value of $g'(1)$?",
+      "options": [
+        "0",
+        "1",
+        "\\text{undefined}",
+        "2"
+      ],
+      "answer": "C",
+      "marks": 1,
+      "guidance": "Evaluate the derivative using the quotient rule and check the limit as $x$ approaches 1."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "mcq",
+      "topic": "Integral calculus",
+      "question": "Evaluate the integral $\\int_0^1 (1-x^2)^{3/2} \\, dx$. What is the result?",
+      "options": [
+        "$\\frac{1}{8}$",
+        "$\\frac{2}{3}$",
+        "$\\frac{2}{5}$",
+        "$\\frac{1}{3}$"
+      ],
+      "answer": "B",
+      "marks": 1,
+      "guidance": "Use the substitution $x = \frac{1}{\\sqrt{2}} \\sin(\\theta)$ to simplify the integral.",
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "long_answer",
+      "topic": "Integral calculus",
+      "question": "Let $f(x) = x^2 e^{-x}$. Evaluate the integral $\\int_0^{\\infty} f(x) \\, dx$ and find the value of this integral. Additionally, determine the value of $\\int_0^{\\infty} x f(x) \\, dx$.",
+      "acceptedAnswers": [
+        "2",
+        "6"
+      ],
+      "marks": 4,
+      "guidance": "Use integration by parts for both integrals, and recall that $\\int_0^{\\infty} x^n e^{-x} \\, dx = n!$.",
+      "answerParts": [
+        {
+          "key": "integralValue",
+          "label": "Evaluate $\\int_0^{\\infty} x^2 e^{-x} \\, dx$. Provide the exact value.",
+          "marks": 2,
+          "acceptedAnswer": "2",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "integralValue2",
+          "label": "Evaluate $\\int_0^{\\infty} x^3 e^{-x} \\, dx$. Provide the exact value.",
+          "marks": 2,
+          "acceptedAnswer": "6",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "mcq",
+      "topic": "Integral calculus",
+      "question": "What is the value of $\\int_{0}^{\\frac{\\pi}{2}} \\sin^2(x) \\, dx$?",
+      "options": [
+        "$\\frac{\\pi}{4}$",
+        "$\\frac{1}{2}$",
+        "$\\frac{\\pi}{8}$",
+        "$\\frac{1}{4}$"
+      ],
+      "answer": "A",
+      "marks": 1,
+      "guidance": "Use the half-angle identity: $\\sin^2(x) = \\frac{1 - \\cos(2x)}{2}$.",
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "long_answer",
+      "topic": "Integral calculus",
+      "question": "Consider the function $f(x) = x^3 - 3x^2 + 4$. 1. Find the critical points of the function. 2. Determine the nature of each critical point (maximum, minimum, or saddle point). 3. Calculate the area enclosed by the curve $y = f(x)$ and the x-axis between the critical points you found in part 1.",
+      "acceptedAnswers": [
+        "1, 2",
+        "minima, maxima",
+        "15/2"
+      ],
+      "marks": 8,
+      "guidance": "Use the first derivative test to find critical points and their nature; evaluate the definite integral for the area.",
+      "answerParts": [
+        {
+          "key": "critical_points",
+          "label": "Find the critical points of $f(x)$.",
+          "marks": 2,
+          "acceptedAnswer": "1, 2",
+          "placeholder": "Enter critical points as comma-separated values."
+        },
+        {
+          "key": "nature_points",
+          "label": "Determine the nature (max, min, saddle) of each critical point.",
+          "marks": 2,
+          "acceptedAnswer": "minima, maxima",
+          "placeholder": "Enter nature of points as comma-separated values."
+        },
+        {
+          "key": "area_enclosed",
+          "label": "Calculate the area enclosed by the curve and the x-axis.",
+          "marks": 4,
+          "acceptedAnswer": "15/2",
+          "placeholder": "Enter area as a simplified fraction."
+        }
+      ]
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "mcq",
+      "topic": "Differential equations",
+      "question": "The general solution of the differential equation $\\frac{dy}{dx} = y \\sin(x)$ is",
+      "options": [
+        "$y = Ce^{-\\cos(x)}$",
+        "$y = Ce^{\\cos(x)}$",
+        "$y = Ce^{-\\cos(x)} + \\cos(x)$",
+        "$y = e^{\\cos(x)} + C$"
+      ],
+      "answer": "B",
+      "marks": 1,
+      "guidance": "This is a separable equation. Integrating gives $\\ln|y| = -\\cos(x) + C$."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "long_answer",
+      "topic": "Differential equations",
+      "question": "Consider the differential equation $\\frac{dy}{dx} = 3y - 2x$. Solve for $y$ given the initial condition $y(1) = 4$.",
+      "acceptedAnswers": [
+        "y = Ce^{3x} + \\frac{2}{3}x - \\frac{2}{9}",
+        "C = \\frac{2}{9}"
+      ],
+      "marks": 4,
+      "guidance": "Solve the differential equation using an integrating factor. Substitute the initial condition.",
+      "answerParts": [
+        {
+          "key": "solve_for_y",
+          "label": "Find the particular solution $y$ in terms of $x$.",
+          "marks": 3,
+          "acceptedAnswer": "y = Ce^{3x} + \\frac{2}{3}x - \\frac{2}{9}",
+          "placeholder": "Enter the solution for $y$."
+        },
+        {
+          "key": "find_C",
+          "label": "Find the value of the constant $C$.",
+          "marks": 1,
+          "acceptedAnswer": "C = \\frac{2}{9}",
+          "placeholder": "Enter the value of $C$."
+        }
+      ]
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "mcq",
+      "topic": "Differential equations",
+      "question": "Which of the following is the solution to the differential equation $\\frac{dy}{dx} + 4y = 8$ with initial condition $y(0)=1$?",
+      "options": [
+        "$y = 2 - e^{-4x}$",
+        "$y = 2 + e^{-4x}$",
+        "$y = 2e^{-4x} + 1$",
+        "$y = 2 - 4e^{-4x}$"
+      ],
+      "answer": "A",
+      "marks": 1,
+      "guidance": "The integrating factor is $e^{4x}$. Apply it and substitute the initial condition."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "long_answer",
+      "topic": "Differential equations",
+      "question": "Consider the differential equation \\( \\frac{dy}{dx} = y \\sin(x) \\) with initial condition \\( y(0) = 1 \\). (a) Solve the differential equation. (b) Determine the value of \\( y(\\frac{\\pi}{2}) \\). (c) Find the general solution for \\( \\frac{dy}{dx} = y^2 \\cos(x) \\).",
+      "acceptedAnswers": [
+        "y = e^{\\cos(x) + C}",
+        "e^{0} = 1",
+        "y = \\frac{1}{C - \\sin(x)}"
+      ],
+      "marks": 6,
+      "guidance": "For part (a), separate variables and integrate. For part (b), substitute \\( x = \\frac{\\pi}{2} \\) into the solution. For part (c), solve the new differential equation using a similar method.",
+      "answerParts": [
+        {
+          "key": "solution_part_a",
+          "label": "Solve the differential equation \\( \\frac{dy}{dx} = y \\sin(x) \\).",
+          "marks": 2,
+          "acceptedAnswer": "y = e^{\\cos(x) + C}",
+          "placeholder": "Enter your solution here"
+        },
+        {
+          "key": "value_part_b",
+          "label": "Determine the value of \\( y(\\frac{\\pi}{2}) \\).",
+          "marks": 2,
+          "acceptedAnswer": "e^{0} = 1",
+          "placeholder": "Enter your answer here"
+        },
+        {
+          "key": "solution_part_c",
+          "label": "Find the general solution for \\( \\frac{dy}{dx} = y^2 \\cos(x) \\).",
+          "marks": 2,
+          "acceptedAnswer": "y = \\frac{1}{C - \\sin(x)}",
+          "placeholder": "Enter your solution here"
+        }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "mcq",
+      "topic": "Kinematics",
+      "question": "A car accelerates from rest to a speed of $20\\text{ m s}^{-1}$ while travelling a distance of $100\\text{ m}$. What is the car's acceleration?",
+      "options": [
+        "$4\\text{ m s}^{-2}$",
+        "$5\\text{ m s}^{-2}$",
+        "$6\\text{ m s}^{-2}$",
+        "$10\\text{ m s}^{-2}$"
+      ],
+      "answer": "B",
+      "marks": 1,
+      "guidance": "Use the equation $v^2 = u^2 + 2as$. Here, $u=0$, $v=20$, and $s=100$.",
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "long_answer",
+      "topic": "Kinematics",
+      "question": "A ball is thrown vertically upwards with an initial velocity of $12\\text{ m s}^{-1}$. Calculate the following: (a) the time taken to reach the maximum height; (b) the maximum height reached; (c) the time taken to return to the thrower.",
+      "acceptedAnswers": [
+        "1.224",
+        "7.35",
+        "2.448"
+      ],
+      "marks": 6,
+      "guidance": "(a) Use $t = \\frac{u}{g}$; (b) Use $h = \\frac{u^2}{2g}$; (c) Total time is twice the time to max height.",
+      "answerParts": [
+        {
+          "key": "timeToMaxHeight",
+          "label": "Find the time taken to reach the maximum height (in seconds).",
+          "marks": 2,
+          "acceptedAnswer": "1.224",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "maxHeight",
+          "label": "Find the maximum height reached (in meters).",
+          "marks": 2,
+          "acceptedAnswer": "7.35",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "timeToReturn",
+          "label": "Find the total time taken to return to the thrower (in seconds).",
+          "marks": 2,
+          "acceptedAnswer": "2.448",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": true
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "mcq",
+      "topic": "Kinematics",
+      "question": "A particle moves along a straight line with its position given by $s(t) = 4t^3 - 24t^2 + 36t$. At what time does the particle come to rest?",
+      "options": [
+        "$2$ seconds",
+        "$3$ seconds",
+        "$4$ seconds",
+        "$6$ seconds"
+      ],
+      "answer": "B",
+      "marks": 1,
+      "guidance": "To find when the particle comes to rest, set the velocity $v(t) = s'(t) = 0$.",
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "long_answer",
+      "topic": "Kinematics",
+      "question": "A particle moves along a straight line with a position function given by $s(t) = t^4 - 8t^3 + 18t^2$ for $t \\ge 0$. Find the time(s) at which the particle comes to rest, and calculate the total distance traveled by the particle from $t=0$ to the time it first comes to rest.",
+      "acceptedAnswers": [
+        "2, 6",
+        "16"
+      ],
+      "marks": 4,
+      "guidance": "First, differentiate $s(t)$ to find the velocity $v(t)$. Set $v(t) = 0$ to find rest times. Then compute the distance traveled using $s(t)$ at those times. The first time the particle comes to rest is $t=2$. Calculate the distance $s(2) - s(0)$ for the total distance.",
+      "answerParts": [
+        {
+          "key": "rest_time",
+          "label": "Find the time(s) when the particle comes to rest (i.e., when the velocity is zero).",
+          "marks": 2,
+          "acceptedAnswer": "2, 6",
+          "placeholder": "Enter the time(s) in seconds."
+        },
+        {
+          "key": "distance_traveled",
+          "label": "Calculate the total distance traveled by the particle from $t=0$ to the time it first comes to rest.",
+          "marks": 2,
+          "acceptedAnswer": "16",
+          "placeholder": "Enter the total distance in meters."
+        }
+      ]
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "mcq",
+      "topic": "Vectors in two and three dimensions",
+      "question": "Let \\( \\mathbf{a} = \\langle 1, -2, 3 \\rangle \\) and \\( \\mathbf{b} = \\langle 4, 0, -1 \\rangle \\). What is the value of \\( \\mathbf{a} \\cdot \\mathbf{b} \\)?",
+      "options": [
+        "-5",
+        "-1",
+        "1",
+        "5"
+      ],
+      "answer": "A",
+      "marks": 1,
+      "guidance": "Calculate \\( \\mathbf{a} \\cdot \\mathbf{b} = 1 \\cdot 4 + (-2) \\cdot 0 + 3 \\cdot (-1) = 4 - 3 = 1 \\).",
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "long_answer",
+      "topic": "Vectors in two and three dimensions",
+      "question": "Consider the vectors \\( \\mathbf{u} = \\langle 2, 1, -1 \\rangle \\) and \\( \\mathbf{v} = \\langle 0, 3, 4 \\rangle \\). (a) Find \\( \\mathbf{u} \\times \\mathbf{v} \\). (b) Find the angle \\( \\theta \\) between the two vectors using the dot product.",
+      "acceptedAnswers": [
+        "\\langle 5, -8, 6 \\rangle",
+        "\\arccos\\left(\\frac{1}{\\sqrt{29}}\\right)"
+      ],
+      "marks": 4,
+      "guidance": "For part (a), use the determinant method for the cross product. For part (b), calculate the dot product and use \\( \\cos\\theta = \\frac{\\mathbf{u} \\cdot \\mathbf{v}}{|\\mathbf{u}| |\\mathbf{v}|} \\).",
+      "answerParts": [
+        {
+          "key": "part1",
+          "label": "Calculate \\( \\mathbf{u} \\times \\mathbf{v} \\).",
+          "marks": 2,
+          "acceptedAnswer": "\\langle 5, -8, 6 \\rangle",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "part2",
+          "label": "Find \\( \\theta \\) between \\( \\mathbf{u} \\) and \\( \\mathbf{v} \\) in radians.",
+          "marks": 2,
+          "acceptedAnswer": "\\arccos\\left(\\frac{1}{\\sqrt{29}}\\right)",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": true
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "mcq",
+      "topic": "Vectors in two and three dimensions",
+      "question": "Given vectors $\\mathbf a = \\langle 2, -3, 4 \\rangle$ and $\\mathbf b = \\langle 1, 5, -2 \\rangle$, which of the following expressions correctly represents $\\mathbf a \\cdot (\\mathbf a \\times \\mathbf b)$?",
+      "options": [
+        "0",
+        "\\langle 0, 0, 0 \\rangle",
+        "\\mathbf a \\times \\mathbf b",
+        "\\mathbf b \\times \\mathbf a"
+      ],
+      "answer": "A",
+      "marks": 1,
+      "guidance": "The scalar triple product $\\mathbf a \\cdot (\\mathbf a \\times \\mathbf b)$ is always zero."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "long_answer",
+      "topic": "Vectors in two and three dimensions",
+      "question": "Consider the points $A(1, 2, 3)$, $B(4, 0, 1)$, and $C(0, 3, 5)$.  \n(a) Find the vector $\\mathbf{AB}$.  \n(b) Determine the area of triangle $ABC$.  \n(c) Find the coordinates of the centroid of triangle $ABC$.",
+      "acceptedAnswers": [
+        "\\langle 3, -2, -2 \\rangle",
+        "\\frac{\\sqrt{14}}{2}",
+        "\\left(\\frac{5}{3}, \\frac{5}{3}, \\frac{9}{3}\\right)"
+      ],
+      "marks": 7,
+      "guidance": "For part (a), $\\mathbf{AB} = \\langle 4-1, 0-2, 1-3 \\rangle$. For part (b), use the cross product $\\frac{1}{2} | \\mathbf{AB} \\times \\mathbf{AC} |$. For part (c), use $\\left(\\frac{x_1+x_2+x_3}{3}, \\frac{y_1+y_2+y_3}{3}, \\frac{z_1+z_2+z_3}{3}\\right)$.",
+      "answerParts": [
+        {
+          "key": "part1",
+          "label": "Find the vector $\\mathbf{AB}$.",
+          "marks": 2,
+          "acceptedAnswer": "\\langle 3, -2, -2 \\rangle",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "part2",
+          "label": "Calculate the area of triangle $ABC$.",
+          "marks": 3,
+          "acceptedAnswer": "\\frac{\\sqrt{14}}{2}",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "part3",
+          "label": "Find the coordinates of the centroid of triangle $ABC$.",
+          "marks": 2,
+          "acceptedAnswer": "\\left(\\frac{5}{3}, \\frac{5}{3}, \\frac{9}{3}\\right)",
+          "placeholder": "Type your answer…"
+        }
+      ]
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "mcq",
+      "topic": "Lines and planes in 3D",
+      "question": "The equation of a plane that passes through the point $P(1, 2, 3)$ and is perpendicular to the vector $\\mathbf{n} = \\langle 4, -5, 2 \\rangle$ is given by:",
+      "options": [
+        "$4(x-1)-5(y-2)+2(z-3)=0$",
+        "$4x-5y+2z=0$",
+        "$4x-5y+2z=20$",
+        "$4x+5y-2z=20$"
+      ],
+      "answer": "C",
+      "marks": 1,
+      "guidance": "The equation of the plane can be derived using the point-normal form: $\\mathbf{n} \\cdot (\\mathbf{r} - \\mathbf{r_0}) = 0$.",
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "long_answer",
+      "topic": "Lines and planes in 3D",
+      "question": "Consider the line defined by the vector equation $\\mathbf{r} = \\langle 1, 2, 3 \\rangle + \\lambda \\langle 4, -1, 2 \\rangle$. \n\n1. Find the point on this line where it intersects the plane defined by the equation $x + 2y + 3z = 12$.\n\n2. Verify if the point found in part 1 lies on the plane by substituting its coordinates into the plane equation.",
+      "acceptedAnswers": [
+        "(2, 3, 4)",
+        "True"
+      ],
+      "marks": 4,
+      "guidance": "For part 1, substitute $x=1+4\\lambda$, $y=2-\\lambda$, $z=3+2\\lambda$ into the plane equation and solve for $\\lambda$. Then calculate the coordinates. For part 2, check if the sum equals 12.",
+      "answerParts": [
+        {
+          "key": "intersection_point",
+          "label": "Find the point of intersection of the line and the plane.",
+          "marks": 2,
+          "acceptedAnswer": "(2, 3, 4)",
+          "placeholder": "Enter coordinates as (x,y,z)"
+        },
+        {
+          "key": "verification",
+          "label": "Substitute the intersection point into the plane equation.",
+          "marks": 2,
+          "acceptedAnswer": "True",
+          "placeholder": "Enter True or False"
+        }
+      ]
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "long_answer",
+      "topic": "Lines and planes in 3D",
+      "question": "A line is defined by the vector equation $\\mathbf{r} = \\langle 3, 4, 5 \\rangle + \\mu \\langle 1, -2, 3 \\rangle$. A plane is defined by the equation $x - 2y + z = 1$. Determine:",
+      "acceptedAnswers": [
+        "(4, 3, 2)",
+        "\\sqrt{29}"
+      ],
+      "marks": 5,
+      "guidance": "1. To find the intersection, substitute the line equations into the plane equation. Solve for \\mu, then find the coordinates. 2. Use the distance formula from the origin to the intersection point.",
+      "answerParts": [
+        {
+          "key": "intersection",
+          "label": "Find the coordinates of the point of intersection of the line with the plane.",
+          "marks": 3,
+          "acceptedAnswer": "(4, 3, 2)",
+          "placeholder": "(x,y,z)"
+        },
+        {
+          "key": "distance",
+          "label": "Calculate the distance from the point of intersection to the origin.",
+          "marks": 2,
+          "acceptedAnswer": "\\sqrt{29}",
+          "placeholder": "distance"
+        }
+      ]
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "mcq",
+      "topic": "Lines and planes in 3D",
+      "question": "Consider the line defined by $\\mathbf{r} = \\langle 1, 2, 3 \\rangle + t\\langle 4, -5, 6 \\rangle$. Which of the following points lies on this line?",
+      "options": [
+        "$\\langle 5, -3, 9 \\rangle$",
+        "$\\langle 1, 2, 3 \\rangle$",
+        "$\\langle 0, -1, 4 \\rangle$",
+        "$\\langle 9, -8, 15 \\rangle"
+      ],
+      "answer": "A",
+      "marks": 1,
+      "guidance": "Set the line equation to find a suitable value of t that gives the point."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "mcq",
+      "topic": "Vector calculus",
+      "question": "For a particle moving along the path defined by the vector function $\\mathbf r(t)=\\langle t^3, t^2, t \\rangle$, what is the value of the acceleration vector $\\mathbf a(2)$?",
+      "options": [
+        "$\\langle 12, 2, 0 \\rangle$",
+        "$\\langle 12, 0, 1 \\rangle$",
+        "$\\langle 6, 1, 0 \\rangle$",
+        "$\\langle 0, 2, 0 \\rangle$"
+      ],
+      "answer": "A",
+      "marks": 1,
+      "guidance": "Velocity is found by differentiating $\\mathbf r(t)$ twice. First, $\\mathbf v(t)=\\langle 3t^2, 2t, 1 \\rangle$ and then $\\mathbf a(t)=\\langle 6t, 2, 0 \\rangle$. Thus, $\\mathbf a(2)=\\langle 12, 2, 0 \\rangle$.",
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "long_answer",
+      "topic": "Vector calculus",
+      "question": "Let $\\mathbf r(t) = \\langle t, t^2, t^3 \\rangle$. Calculate the following:",
+      "acceptedAnswers": [
+        "3",
+        "\\langle 1, 2, 3 \\rangle"
+      ],
+      "marks": 4,
+      "guidance": "To find speed, compute $\\mathbf v(t) = \\langle 1, 2t, 3t^2 \\rangle$ and evaluate at $t=1$. The direction is given by the tangent vector $\\mathbf v(1)$.",
+      "answerParts": [
+        {
+          "key": "speed",
+          "label": "Find the speed at $t=1$.",
+          "marks": 2,
+          "acceptedAnswer": "3",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "direction",
+          "label": "Find the direction of the tangent vector at $t=1$.",
+          "marks": 2,
+          "acceptedAnswer": "\\langle 1, 2, 3 \\rangle",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "mcq",
+      "topic": "Vector calculus",
+      "question": "A curve is defined by the parametric equations $x = \\sin(t)$, $y = \\cos(t)$, $z = t$ for $0 \\leq t \\leq 2\\pi$. What is the unit tangent vector at $t = \\frac{\\pi}{2}$?",
+      "options": [
+        "$\\langle 0, 0, 1 \\rangle$",
+        "$\\langle 1, 0, 0 \\rangle$",
+        "$\\langle 0, -1, 0 \\rangle$",
+        "$\\langle 0, 1, 0 \\rangle$"
+      ],
+      "answer": "A",
+      "marks": 1,
+      "guidance": "First, find $\\mathbf r'(t)$ and then evaluate it at $t = \\frac{\\pi}{2}$. The unit tangent vector is given by normalizing $\\mathbf r'(t)$.",
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "long_answer",
+      "topic": "Vector calculus",
+      "question": "Consider the vector function $\\mathbf{r}(t) = \\langle t^3, t^2, 2t \\rangle$ for $t \\in [0, 1]$. Calculate the following:",
+      "acceptedAnswers": [
+        "\\langle 6, 0, 2 \\rangle",
+        "\\sqrt{41}",
+        "\\frac{5}{2}"
+      ],
+      "marks": 8,
+      "guidance": "1. Find $\\mathbf{v}(t) = \\langle 3t^2, 2t, 2 \\rangle$ and then $\\mathbf{a}(t) = \\langle 6t, 2, 0 \\rangle$ for part A. 2. For part B, calculate the speed $\\|\\mathbf{v}(1)\\|$. 3. Use the integral of speed for part C.",
+      "answerParts": [
+        {
+          "key": "A",
+          "label": "Find the acceleration vector $\\mathbf{a}(t)$ at $t=1$.",
+          "marks": 2,
+          "acceptedAnswer": "\\langle 6, 0, 2 \\rangle",
+          "placeholder": "Enter the vector in angle brackets."
+        },
+        {
+          "key": "B",
+          "label": "Determine the speed of the particle at $t=1$.",
+          "marks": 2,
+          "acceptedAnswer": "\\sqrt{41}",
+          "placeholder": "Enter the numeric speed."
+        },
+        {
+          "key": "C",
+          "label": "Find the distance travelled by the particle from $t=0$ to $t=1$.",
+          "marks": 4,
+          "acceptedAnswer": "\\frac{5}{2}",
+          "placeholder": "Enter the total distance."
+        }
+      ]
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "mcq",
+      "topic": "Random variables and sampling",
+      "question": "Let $X\\sim N(20,4^2)$ and $Y\\sim N(15,3^2)$ be independent. What is the probability that $Z=2X-Y$ is less than $30$?",
+      "options": [
+        "$P(Z<30)=0.8413$",
+        "$P(Z<30)=0.1587$",
+        "$P(Z<30)=0.9772$",
+        "$P(Z<30)=0.0228$"
+      ],
+      "answer": "A",
+      "marks": 1,
+      "guidance": "Calculate $Z\\sim N(\\mu_Z, \\sigma_Z^2)$, then find $P(Z<30)$ using standard normal distribution."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "long_answer",
+      "topic": "Random variables and sampling",
+      "question": "Consider two independent random variables $X\\sim N(10,2^2)$ and $Y\\sim N(8,1^2)$. (a) Determine the distribution of $3X - 4Y$. (b) Find $P(3X - 4Y > 5)$.",
+      "acceptedAnswers": [
+        "N(26, 25)",
+        "0.8413;0.8413"
+      ],
+      "marks": 4,
+      "guidance": "Part (a): Use properties of expectation and variance. Part (b): Standardize the resulting normal variable and use Z-tables.",
+      "answerParts": [
+        {
+          "key": "part_a",
+          "label": "Find the mean and variance of $3X - 4Y$.",
+          "marks": 2,
+          "acceptedAnswer": "N(26, 25)",
+          "placeholder": "Enter the distribution here."
+        },
+        {
+          "key": "part_b",
+          "label": "Calculate $P(3X - 4Y > 5)$ using the standard normal distribution.",
+          "marks": 2,
+          "acceptedAnswer": "0.8413;0.8413",
+          "placeholder": "Enter the probability here."
+        }
+      ]
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "mcq",
+      "topic": "Random variables and sampling",
+      "question": "If $X_1, X_2, X_3, X_4, X_5$ are independent random variables each with mean $10$ and variance $4$, what is the variance of the sample mean $\bar{X}$?",
+      "options": [
+        "$0.8$",
+        "$1.6$",
+        "$2$",
+        "$4$"
+      ],
+      "answer": "A",
+      "marks": 1,
+      "guidance": "Use the formula for the variance of the sample mean, $\\text{Var}(\\bar{X}) = \\frac{\\sigma^2}{n}$."
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "long_answer",
+      "topic": "Random variables and sampling",
+      "question": "Let $X$ and $Y$ be independent random variables such that $X \\sim N(10, 4^2)$ and $Y \\sim N(15, 3^2)$. Define the random variable $Z = 2X - 3Y + 5$. Find the following:",
+      "acceptedAnswers": [
+        "-1",
+        "25",
+        "N(-1, 25)"
+      ],
+      "marks": 6,
+      "guidance": "Mean calculated as $E(Z) = 2E(X) - 3E(Y) + 5$. Variance calculated as $\\operatorname{Var}(Z) = 4\\operatorname{Var}(X) + 9\\operatorname{Var}(Y)$. The distribution follows from the mean and variance.",
+      "answerParts": [
+        {
+          "key": "mean",
+          "label": "Calculate the mean of $Z$.",
+          "marks": 2,
+          "acceptedAnswer": "-1",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "variance",
+          "label": "Calculate the variance of $Z$.",
+          "marks": 2,
+          "acceptedAnswer": "25",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "distribution",
+          "label": "State the distribution of $Z$.",
+          "marks": 2,
+          "acceptedAnswer": "N(-1, 25)",
+          "placeholder": "Type your answer…"
+        }
+      ]
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "mcq",
+      "topic": "Confidence intervals",
+      "question": "A researcher wants to determine the average height of students in a school. She collects a sample of 36 students with a mean height of 170 cm and a standard deviation of 10 cm. If she uses a 95% confidence level, what is the width of the confidence interval for the population mean?",
+      "options": [
+        "10 cm",
+        "8 cm",
+        "4 cm",
+        "20 cm"
+      ],
+      "answer": "B",
+      "marks": 1,
+      "guidance": "Width of CI = $2 \\times z \\times \\frac{s}{\\sqrt{n}}$ where $z=1.96$ for 95% CI.",
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "long_answer",
+      "topic": "Confidence intervals",
+      "question": "A study is conducted to estimate the average time spent on homework by high school students. A random sample of 50 students reports a mean of 2.5 hours with a standard deviation of 0.8 hours. Calculate the 90% confidence interval for the population mean. Then, interpret the result in the context of the study.",
+      "acceptedAnswers": [
+        "[2.24,2.76]",
+        "We are 90% confident that the average time spent on homework by all high school students is between 2.24 and 2.76 hours."
+      ],
+      "marks": 4,
+      "guidance": "First calculate the margin of error using $z=1.645$ for 90% CI. Then interpret the CI in context.",
+      "answerParts": [
+        {
+          "key": "ci",
+          "label": "Calculate the 90% confidence interval.",
+          "marks": 2,
+          "acceptedAnswer": "[2.24,2.76]",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "interpretation",
+          "label": "Interpret the confidence interval in the context of the study.",
+          "marks": 2,
+          "acceptedAnswer": "We are 90% confident that the average time spent on homework by all high school students is between 2.24 and 2.76 hours.",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": true
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "long_answer",
+      "topic": "Confidence intervals",
+      "question": "A researcher collects data from a sample of size $n=100$ with a sample mean of $45$ and a sample standard deviation of $10$. Using a $95\\%$ confidence level, calculate the confidence interval for the population mean. Then, if the sample mean were to increase to $48$, find the new confidence interval and compare the widths of both intervals.",
+      "acceptedAnswers": [
+        "(43.04, 46.96)",
+        "(46.04, 49.96)",
+        "2.92, 3.92"
+      ],
+      "marks": 8,
+      "guidance": "Use the formula for the confidence interval: $\\bar{x} \\pm z_{\\alpha/2} \\times \\frac{s}{\\sqrt{n}}$. For $z_{0.025}=1.96$. The width of the interval is the difference between the upper and lower bounds.",
+      "answerParts": [
+        {
+          "key": "ci1",
+          "label": "Calculate the $95\\%$ confidence interval for the population mean based on the original sample.",
+          "marks": 3,
+          "acceptedAnswer": "(43.04, 46.96)",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "ci2",
+          "label": "Calculate the new $95\\%$ confidence interval based on the increased sample mean.",
+          "marks": 3,
+          "acceptedAnswer": "(46.04, 49.96)",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "widths",
+          "label": "Compare the widths of both confidence intervals.",
+          "marks": 2,
+          "acceptedAnswer": "2.92, 3.92",
+          "placeholder": "Type your answer…"
+        }
+      ]
+    },
+    {
+      "subjectId": "specialist-maths",
+      "type": "mcq",
+      "topic": "Confidence intervals",
+      "question": "A survey of $150$ households shows a mean annual income of $75,000$ with a standard deviation of $12,000$. What is the $99\\%$ confidence interval for the population mean income?",
+      "options": [
+        "(73,000, 77,000)",
+        "(74,000, 76,000)",
+        "(74,500, 75,500)",
+        "(73,500, 76,500)"
+      ],
+      "answer": "A",
+      "marks": 1,
+      "guidance": "Calculate the margin of error using $z_{0.005}=2.576$ for $99\\%$ confidence and apply it to the sample mean."
+    }
+  ]
+}

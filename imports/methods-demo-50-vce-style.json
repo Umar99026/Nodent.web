@@ -1,0 +1,993 @@
+{
+  "questions": [
+    {
+      "subjectId": "demo",
+      "type": "mcq",
+      "topic": "Functions and transformations",
+      "question": "Which of the following graphs represents the transformation of the function $f(x) = x^2$ that results in the function $g(x) = (x-3)^2 + 2$?",
+      "options": [
+        "A: A vertical shift up by 2 and a horizontal shift right by 3",
+        "B: A vertical shift down by 2 and a horizontal shift right by 3",
+        "C: A horizontal shift left by 3 and a vertical shift up by 2",
+        "D: A horizontal shift right by 3 and a vertical shift down by 2"
+      ],
+      "answer": "A",
+      "marks": 1,
+      "guidance": "Identify the transformations applied to the function."
+    },
+    {
+      "subjectId": "demo",
+      "type": "long_answer",
+      "topic": "Functions and transformations",
+      "question": "The function $f(x) = |x - 1| + 2$ is given. Describe the transformations applied to the basic function $y = |x|$ to obtain $f(x)$ and determine the value of $f(-3)$.",
+      "acceptedAnswers": [
+        "The graph is shifted right by 1 unit and up by 2 units.",
+        "$f(-3) = 4$"
+      ],
+      "marks": 2,
+      "guidance": "Explain the transformations and calculate the function value.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Describe the transformations applied to the function $y = |x|$ to obtain $f(x)$.",
+          "marks": 1,
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) Calculate the value of $f(-3)$.",
+          "marks": 1,
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": true
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Functions and transformations",
+      "question": "Given the function $h(x) = 2^{x+1} - 3$, find the equation of the function after a vertical stretch by a factor of 3 and a vertical shift down by 5.",
+      "acceptedAnswers": [
+        "$h(x) = 6^{x+1} - 8$"
+      ],
+      "marks": 3,
+      "guidance": "Apply the transformations to the original function."
+    },
+    {
+      "subjectId": "demo",
+      "type": "mcq",
+      "topic": "Functions and transformations",
+      "question": "If the function $f(x) = x^3$ is transformed to $g(x) = -2f(x-1) + 4$, what is the transformation sequence applied to $f$?",
+      "options": [
+        "A: Reflection in the x-axis, vertical stretch by 2, horizontal shift right by 1, vertical shift up by 4",
+        "B: Reflection in the y-axis, vertical shrink by 2, horizontal shift left by 1, vertical shift down by 4",
+        "C: Vertical stretch by 2, reflection in the x-axis, horizontal shift left by 1, vertical shift down by 4",
+        "D: Horizontal shift right by 1, vertical stretch by 2, reflection in the x-axis, vertical shift down by 4"
+      ],
+      "answer": "A",
+      "marks": 1,
+      "guidance": "Identify and sequence the transformations in order."
+    },
+    {
+      "subjectId": "demo",
+      "type": "mcq",
+      "topic": "Polynomial, power and rational functions",
+      "question": "Which of the following functions has a horizontal asymptote at $y=3$?",
+      "options": [
+        "$f(x)=3$",
+        "$f(x)=\\frac{3x^2+1}{2x^2+5}$",
+        "$f(x)=\\frac{1}{x^2+1}$",
+        "$f(x)=\\frac{3x+1}{x}$"
+      ],
+      "answer": "B",
+      "marks": 1,
+      "guidance": "Identify the degrees of the polynomial in the numerator and denominator."
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Polynomial, power and rational functions",
+      "question": "Determine the x-intercepts of the function $f(x) = x^3 - 6x^2 + 9x$.",
+      "acceptedAnswers": [
+        "$x=0$; $x=3$"
+      ],
+      "marks": 2,
+      "guidance": "Set $f(x)=0$ and factor the polynomial."
+    },
+    {
+      "subjectId": "demo",
+      "type": "long_answer",
+      "topic": "Polynomial, power and rational functions",
+      "question": "Let $f(x) = x^2 - 4x + 3$. \n(a) Find the roots of the function. \n(b) Determine the vertex of the parabola represented by $f(x)$.",
+      "acceptedAnswers": [
+        "$x=1$; $x=3$",
+        "$(2,-1)$"
+      ],
+      "marks": 2,
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Find the roots of the function $f(x)$.",
+          "marks": 1,
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) Determine the vertex of the parabola represented by $f(x)$.",
+          "marks": 1,
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "long_answer",
+      "topic": "Polynomial, power and rational functions",
+      "question": "For the function $g(x) = \\frac{x^2 - 1}{x - 1}$,",
+      "acceptedAnswers": [
+        "$g(x) = x + 1$",
+        "$x \\neq 1$"
+      ],
+      "marks": 2,
+      "guidance": "Factor and simplify, then state where the original function is undefined.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Simplify $g(x)$.",
+          "marks": 1,
+          "acceptedAnswer": "$g(x) = x + 1$",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) State any restrictions on the domain.",
+          "marks": 1,
+          "acceptedAnswer": "$x \\neq 1$",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "mcq",
+      "topic": "Exponential and logarithmic functions",
+      "question": "What is the value of $x$ if $3^x = 81$?",
+      "options": [
+        "A) 3",
+        "B) 4",
+        "C) 2",
+        "D) 5"
+      ],
+      "answer": "B",
+      "acceptedAnswers": [],
+      "marks": 1,
+      "guidance": "Calculate $x$ where $3^x = 81$."
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Exponential and logarithmic functions",
+      "question": "Solve for $x$: $2^{x+1} = 16$.",
+      "acceptedAnswers": [
+        "$x=3$"
+      ],
+      "marks": 2,
+      "guidance": "Rewrite $16$ as a power of $2$ and solve for $x$.",
+      "answerParts": [],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "long_answer",
+      "topic": "Exponential and logarithmic functions",
+      "question": "The function $f(x) = \frac{1}{2} \times 2^x$ models a quantity that doubles every hour. Determine the time when the quantity will first exceed 20 units.",
+      "acceptedAnswers": [
+        "$x>4$",
+        "$5$"
+      ],
+      "marks": 3,
+      "guidance": "Set up the inequality and solve for $x$.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Set up the equation $f(x) > 20$ and solve for $x$.",
+          "marks": 2,
+          "acceptedAnswer": "$x>4$",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) What is the smallest integer value of $x$ that satisfies this condition?",
+          "marks": 1,
+          "acceptedAnswer": "$5$",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Exponential and logarithmic functions",
+      "question": "Using logarithms, solve for $x$ in the equation $e^{2x} = 7$.",
+      "acceptedAnswers": [
+        "$x = \frac{1}{2} \times \text{ln}(7)$"
+      ],
+      "marks": 2,
+      "guidance": "Apply the natural logarithm to both sides and isolate $x$.",
+      "answerParts": [],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "mcq",
+      "topic": "Circular functions",
+      "question": "What is the value of $\\sin(45^\\circ) + \\cos(45^\\circ)$?",
+      "options": [
+        "$1$",
+        "$\\sqrt{2}$",
+        "$\\sqrt{2} + 1$",
+        "$\\frac{\\sqrt{2}}{2}$"
+      ],
+      "answer": "B",
+      "marks": 1,
+      "guidance": "Use the values of $\\sin$ and $\\cos$ at $45^\\circ$.",
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "long_answer",
+      "topic": "Circular functions",
+      "question": "The function $f(x) = 2\\sin(x) + 1$ is transformed to $g(x) = f(x-\\frac{\\pi}{4})$.",
+      "acceptedAnswers": [
+        "$2$",
+        "$1$"
+      ],
+      "marks": 3,
+      "guidance": "Evaluate the transformed function at the required points.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Determine the maximum value of $f(x)$.",
+          "marks": 1,
+          "acceptedAnswer": "$2$",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) Find the $y$-intercept of $g(x)$.",
+          "marks": 2,
+          "acceptedAnswer": "$1$",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": true
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Circular functions",
+      "question": "Solve for $x$ in the equation $\\tan(x) = 1$ in the interval $[0, 2\\pi)$.",
+      "acceptedAnswers": [
+        "$\\frac{\\pi}{4}$; $\\frac{5\\pi}{4}$"
+      ],
+      "marks": 2,
+      "guidance": "Identify where the tangent function equals 1 within the specified interval.",
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "mcq",
+      "topic": "Circular functions",
+      "question": "Which of the following is the amplitude of the function $y = -3\\cos(2x + \\frac{\\pi}{3})$?",
+      "options": [
+        "$-3$",
+        "$3$",
+        "$0$",
+        "$\\frac{3}{2}$"
+      ],
+      "answer": "B",
+      "marks": 1,
+      "guidance": "The amplitude is the absolute value of the coefficient in front of the cosine function.",
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "mcq",
+      "topic": "Algebra and equations",
+      "question": "What is the solution to the equation $2x + 3 = 11$?",
+      "options": [
+        "A) 4",
+        "B) 3",
+        "C) 5",
+        "D) 0"
+      ],
+      "answer": "A",
+      "marks": 1,
+      "guidance": "Check the rearrangement and simplification of the equation."
+    },
+    {
+      "subjectId": "demo",
+      "type": "long_answer",
+      "topic": "Algebra and equations",
+      "question": "Consider the quadratic equation $x^2 - 5x + c = 0$, where $c$ is a constant. Determine the value of $c$ for which the equation has one real solution and find that solution.",
+      "acceptedAnswers": [
+        "$c=\\frac{25}{4}$",
+        "$x=\\frac{5}{2}$"
+      ],
+      "marks": 2,
+      "guidance": "Apply the condition for a quadratic to have a single solution.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Find the value of $c$ such that the equation has one real solution.",
+          "marks": 1,
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) What is that solution?",
+          "marks": 1,
+          "placeholder": "Type your answer…"
+        }
+      ]
+    },
+    {
+      "subjectId": "demo",
+      "type": "long_answer",
+      "topic": "Algebra and equations",
+      "question": "Solve the simultaneous equations: $3x + 4y = 24$ and $x - 2y = 1$.",
+      "acceptedAnswers": [
+        "$x=2$",
+        "$y=3$"
+      ],
+      "marks": 3,
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Find $x$.",
+          "marks": 2,
+          "acceptedAnswer": "$x=2$",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) Find $y$.",
+          "marks": 1,
+          "acceptedAnswer": "$y=3$",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Algebra and equations",
+      "question": "Factor the expression $x^2 - 9$ completely.",
+      "acceptedAnswers": [
+        "$(x-3)(x+3)$"
+      ],
+      "marks": 2,
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "mcq",
+      "topic": "Differential calculus",
+      "question": "What is the derivative of the function $f(x) = 3x^4 - 5x^2 + 2$?",
+      "options": [
+        "$12x^3 - 10x$",
+        "$12x^3 - 5$",
+        "$6x^3 - 10x$",
+        "$3x^3 - 5x$"
+      ],
+      "answer": "A",
+      "marks": 1,
+      "guidance": "Use power rule to differentiate each term."
+    },
+    {
+      "subjectId": "demo",
+      "type": "long_answer",
+      "topic": "Differential calculus",
+      "question": "Consider the function $g(x) = x^3 - 6x^2 + 9x + 1$.",
+      "acceptedAnswers": [
+        "$3x^2 - 12x + 9$",
+        "$1$",
+        "$3$"
+      ],
+      "marks": 3,
+      "guidance": "Differentiate the function and evaluate the derivative at $x=2$.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Find $g'(x)$.",
+          "marks": 1,
+          "acceptedAnswer": "$3x^2 - 12x + 9$",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) Evaluate $g'(2)$.",
+          "marks": 1,
+          "acceptedAnswer": "$1$",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "c",
+          "label": "c) Find $g(2)$.",
+          "marks": 1,
+          "acceptedAnswer": "$3$",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": true
+    },
+    {
+      "subjectId": "demo",
+      "type": "mcq",
+      "topic": "Differential calculus",
+      "question": "If $h(x) = e^x \tan(x)$, what is the derivative $h'(x)$?",
+      "options": [
+        "$e^x \tan(x) + e^x \frac{1}{\text{cos}^2(x)}$",
+        "$e^x \tan(x) + e^x \frac{1}{\text{sin}^2(x)}$",
+        "$e^x \tan(x) + e^x \frac{1}{\text{cos}^2(x)} \tan(x)$",
+        "$e^x \tan(x) + e^x \text{sec}^2(x)$"
+      ],
+      "answer": "D",
+      "marks": 1,
+      "guidance": "Apply the product rule and the derivative of $\tan(x)$."
+    },
+    {
+      "subjectId": "demo",
+      "type": "long_answer",
+      "topic": "Differential calculus",
+      "question": "Consider the function $f(x) = -2x^2 + 4x + 1$.",
+      "acceptedAnswers": [
+        "$x = 1$",
+        "$f(1) = 3$"
+      ],
+      "marks": 2,
+      "guidance": "Use the first derivative test to identify the local maximum.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Find the $x$-value at which the local maximum occurs.",
+          "marks": 1,
+          "acceptedAnswer": "$x = 1$",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) Find the maximum value of $f(x)$.",
+          "marks": 1,
+          "acceptedAnswer": "$f(1) = 3$",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "mcq",
+      "topic": "Applications of differentiation",
+      "question": "Given the function $f(x) = 2x^3 - 12x^2 + 18x$, what is the value of $x$ at which a local maximum occurs?",
+      "options": [
+        "A) 1",
+        "B) 2",
+        "C) 3",
+        "D) 4"
+      ],
+      "answer": "B",
+      "acceptedAnswers": [],
+      "marks": 1,
+      "guidance": "Identify critical points and determine the maximum using the first derivative test.",
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "long_answer",
+      "topic": "Applications of differentiation",
+      "question": "The revenue, $R(x)$, generated from selling $x$ units of a product is given by the function $R(x) = 50x - 0.5x^2$. Determine the number of units that should be sold to maximize revenue.",
+      "acceptedAnswers": [
+        "$R'(x) = 50 - x$",
+        "$x=25$"
+      ],
+      "marks": 3,
+      "guidance": "Find the derivative of the revenue function, set it to zero, and solve for $x$.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Find the derivative of the revenue function $R(x)$.",
+          "marks": 1,
+          "acceptedAnswer": "$R'(x) = 50 - x$",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) Determine the value of $x$ that maximizes revenue.",
+          "marks": 2,
+          "acceptedAnswer": "$x=25$",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": true
+    },
+    {
+      "subjectId": "demo",
+      "type": "long_answer",
+      "topic": "Applications of differentiation",
+      "question": "For the function $f(x) = 3x^4 - 8x^3 + 6$,",
+      "acceptedAnswers": [
+        "$f''(x) = 36x^2 - 48x$",
+        "$f''(1) = -12$"
+      ],
+      "marks": 2,
+      "guidance": "Differentiate twice, then substitute $x=1$ into $f''(x)$.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Find $f''(x)$.",
+          "marks": 1,
+          "acceptedAnswer": "$f''(x) = 36x^2 - 48x$",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) Evaluate $f''(x)$ at $x = 1$.",
+          "marks": 1,
+          "acceptedAnswer": "$f''(1) = -12$",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "mcq",
+      "topic": "Applications of differentiation",
+      "question": "The height of a projectile $h(t) = 100t - 5t^2$ gives its height in meters after $t$ seconds. At what time does the projectile reach its maximum height?",
+      "options": [
+        "A) 5s",
+        "B) 10s",
+        "C) 15s",
+        "D) 20s"
+      ],
+      "answer": "B",
+      "acceptedAnswers": [],
+      "marks": 1,
+      "guidance": "Differentiate the height function and find when the derivative is zero.",
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "mcq",
+      "topic": "Integral calculus",
+      "question": "What is the integral of the function $f(x) = 3x^2 + 2x - 1$ with respect to $x$?",
+      "options": [
+        "$x^3 + x^2 - x + C$",
+        "$x^3 + x^2 + x + C$",
+        "$x^3 + x^2 - 2x + C$",
+        "$x^3 + 2x^2 - x + C$"
+      ],
+      "answer": "A",
+      "marks": 1,
+      "guidance": "Evaluate the integral using basic integration rules."
+    },
+    {
+      "subjectId": "demo",
+      "type": "long_answer",
+      "topic": "Integral calculus",
+      "question": "Given the function $f(x) = 2x^3 - 4x^2 + 3$, calculate the definite integral of $f(x)$ from $x=1$ to $x=3$.",
+      "acceptedAnswers": [
+        "$\\frac{1}{2}x^4 - \\frac{4}{3}x^3 + 3x + C$",
+        "$10$"
+      ],
+      "marks": 3,
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Find the indefinite integral of $f(x)$.",
+          "marks": 2,
+          "acceptedAnswer": "$\\frac{1}{2}x^4 - \\frac{4}{3}x^3 + 3x + C$",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) Calculate the definite integral of $f(x)$ from $x=1$ to $x=3$.",
+          "marks": 1,
+          "acceptedAnswer": "$10$",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": true
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Integral calculus",
+      "question": "Find the area under the curve $y = x^2$ from $x = 0$ to $x = 2$ using integration.",
+      "acceptedAnswers": [
+        "$\\frac{8}{3}$"
+      ],
+      "marks": 3,
+      "guidance": "Set up the integral and compute the definite integral."
+    },
+    {
+      "subjectId": "demo",
+      "type": "mcq",
+      "topic": "Applications of integration",
+      "question": "What is the integral of the function $f(x) = 3x^2 + 2x + 1$ with respect to $x$?",
+      "options": [
+        "$x^3 + x^2 + x + C$",
+        "$x^3 + x^2 + C$",
+        "$x^3 + x^2 + x$",
+        "$x^3 + x^2 + 2x + C$"
+      ],
+      "answer": "A",
+      "marks": 1,
+      "guidance": "Evaluate the indefinite integral and include the constant of integration."
+    },
+    {
+      "subjectId": "demo",
+      "type": "long_answer",
+      "topic": "Applications of integration",
+      "question": "A region is bounded by the curves $y = x^2$ and $y = 4$. Find the area of the region between these curves.",
+      "acceptedAnswers": [
+        "$A = \\int_{-2}^{2} (4 - x^2) \\, dx$"
+      ],
+      "marks": 2,
+      "guidance": "Set the limits of integration based on the points of intersection of the curves.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Set up the integral to find the area between the curves $y=x^2$ and $y=4$.",
+          "marks": 2,
+          "acceptedAnswer": "$A = \\int_{-2}^{2} (4 - x^2) \\, dx$",
+          "placeholder": "Type your answer…"
+        }
+      ]
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Applications of integration",
+      "question": "Evaluate the definite integral $\\int_0^2 (6x - x^2) \\, dx$ to find the area under the curve from $x=0$ to $x=2$.",
+      "acceptedAnswers": [
+        "$4$"
+      ],
+      "marks": 3,
+      "guidance": "Use the fundamental theorem of calculus to evaluate the definite integral."
+    },
+    {
+      "subjectId": "demo",
+      "type": "mcq",
+      "topic": "Discrete random variables",
+      "question": "A six-sided die is rolled once. What is the probability of rolling a number greater than 4?",
+      "options": [
+        "A) \\frac{1}{6}",
+        "B) \\frac{1}{3}",
+        "C) \\frac{1}{2}",
+        "D) \\frac{1}{4}"
+      ],
+      "answer": "B",
+      "marks": 1,
+      "guidance": "Count the successful outcomes (5, 6) and divide by total outcomes (6)."
+    },
+    {
+      "subjectId": "demo",
+      "type": "long_answer",
+      "topic": "Discrete random variables",
+      "question": "In a game, a player rolls two six-sided dice. Let the random variable $X$ represent the sum of the numbers shown on the two dice.",
+      "acceptedAnswers": [
+        "$P(X=7)=\\frac{6}{36}=\\frac{1}{6}$",
+        "$E(X)=7$"
+      ],
+      "marks": 3,
+      "guidance": "Part a) count outcomes with sum 7. Part b) use $E(X)=\\sum x\\cdot P(X=x)$ or symmetry.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Find $P(X=7)$.",
+          "marks": 2,
+          "acceptedAnswer": "$P(X=7)=\\frac{6}{36}=\\frac{1}{6}$",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) Calculate the expected value $E(X)$.",
+          "marks": 1,
+          "acceptedAnswer": "$E(X)=7$",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Discrete random variables",
+      "question": "A box contains 3 red and 2 blue balls. A ball is drawn at random. Let Y be the random variable representing the number of blue balls drawn. Find the variance of Y.",
+      "acceptedAnswers": [
+        "\\sigma^2 = \\frac{2}{5}"
+      ],
+      "marks": 3,
+      "guidance": "Use variance formula for discrete random variables: Var(Y) = E(Y^2) - (E(Y))^2."
+    },
+    {
+      "subjectId": "demo",
+      "type": "mcq",
+      "topic": "Continuous random variables",
+      "question": "A continuous random variable $X$ has a probability density function given by $f(x) = k(1 - x^2)$ for $-1 < x < 1$. What is the value of the constant $k$?",
+      "options": [
+        "$\\frac{1}{2}$",
+        "$\\frac{1}{3}$",
+        "$\\frac{1}{4}$",
+        "$\\frac{1}{5}$"
+      ],
+      "answer": "A",
+      "acceptedAnswers": [],
+      "marks": 1,
+      "guidance": "Integrate $f(x)$ over the interval and set equal to 1 to find $k$."
+    },
+    {
+      "subjectId": "demo",
+      "type": "long_answer",
+      "topic": "Continuous random variables",
+      "question": "A continuous random variable $Y$ follows a normal distribution with a mean of $50$ and a standard deviation of $5$.",
+      "acceptedAnswers": [
+        "$0.8413$",
+        "$45$; $55$"
+      ],
+      "marks": 4,
+      "guidance": "Show all calculations clearly.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Calculate the probability that $Y$ is less than $55$.",
+          "marks": 2,
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) Identify the range of values for $Y$ that covers approximately 68% of the distribution.",
+          "marks": 2,
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": true
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Continuous random variables",
+      "question": "The lifetime of a certain type of light bulb is modeled as a continuous random variable $Z$ with a probability density function $f(z) = \\frac{1}{10}e^{-\\frac{z}{10}}$ for $z \\geq 0$. Determine the probability that a randomly chosen light bulb lasts more than 15 hours.",
+      "acceptedAnswers": [
+        "$0.2231$"
+      ],
+      "marks": 3,
+      "guidance": "Use integration of the exponential distribution to find the probability.",
+      "answerParts": [],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "mcq",
+      "topic": "The normal distribution",
+      "question": "A dataset is normally distributed with a mean of 50 and a standard deviation of 5. What is the probability that a randomly selected value from this dataset is less than 45?",
+      "options": [
+        "A) 0.1587",
+        "B) 0.8413",
+        "C) 0.9772",
+        "D) 0.5000"
+      ],
+      "answer": "A",
+      "marks": 1,
+      "guidance": "Use the standard normal distribution table to find the probability.",
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "long_answer",
+      "topic": "The normal distribution",
+      "question": "The heights of a certain species of plant are normally distributed with a mean of 150 cm and a standard deviation of 10 cm. If 100 plants are randomly sampled, determine the following:",
+      "acceptedAnswers": [
+        "$P(X > 160) \\approx 0.1587$",
+        "$P(145 < X < 155) \\approx 0.3829$"
+      ],
+      "marks": 4,
+      "guidance": "Calculate probabilities using the z-scores for each part.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Calculate the probability that a randomly chosen plant is taller than 160 cm.",
+          "marks": 2,
+          "acceptedAnswer": "$P(X > 160) \\approx 0.1587$",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) Calculate the probability that a randomly chosen plant is between 145 cm and 155 cm.",
+          "marks": 2,
+          "acceptedAnswer": "$P(145 < X < 155) \\approx 0.3829$",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": true
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "The normal distribution",
+      "question": "For a normal distribution with a mean of 20 and a standard deviation of 4, find the z-score for a value of 28.",
+      "acceptedAnswers": [
+        "$2$"
+      ],
+      "marks": 2,
+      "guidance": "Use the formula $z = \\frac{X - \\mu}{\\sigma}$.",
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "mcq",
+      "topic": "Sampling and sample proportions",
+      "question": "A survey is conducted in which 100 people were asked if they preferred tea over coffee. If 65 of them indicated a preference for tea, what is the estimated proportion of the population that prefers tea?",
+      "options": [
+        "0.65",
+        "0.70",
+        "0.75",
+        "0.80"
+      ],
+      "answer": "A",
+      "marks": 1,
+      "guidance": "Calculate the proportion as the number of people preferring tea divided by the total number surveyed."
+    },
+    {
+      "subjectId": "demo",
+      "type": "long_answer",
+      "topic": "Sampling and sample proportions",
+      "question": "A researcher wants to estimate the proportion of adults in a city who support a new public transport initiative. They randomly sample 200 adults and find that 120 support the initiative. Based on this data, calculate the following:",
+      "acceptedAnswers": [
+        "$0.6$; $60\\%$",
+        "$\\pm 0.067$; $[0.533, 0.667]$"
+      ],
+      "marks": 4,
+      "guidance": "Calculate the sample proportion and the confidence interval for the proportion.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Calculate the sample proportion of adults who support the initiative.",
+          "marks": 2,
+          "acceptedAnswer": "$0.6$; $60\\%$",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) Calculate the 95% confidence interval for the proportion of adults who support the initiative using $z=1.96$.",
+          "marks": 2,
+          "acceptedAnswer": "$\\pm 0.067$; $[0.533, 0.667]$",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": true
+    },
+    {
+      "subjectId": "demo",
+      "type": "long_answer",
+      "topic": "Sampling and sample proportions",
+      "question": "In a random sample of 150 students, 45 reported that they felt stressed during exams.",
+      "acceptedAnswers": [
+        "$0.30$; $30\\%$",
+        "$[0.25, 0.35]$"
+      ],
+      "marks": 3,
+      "guidance": "Calculate the sample proportion, then the 90% confidence interval.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Estimate the proportion of all students who feel stressed during exams.",
+          "marks": 1,
+          "acceptedAnswer": "$0.30$; $30\\%$",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) Provide a 90% confidence interval for this estimate.",
+          "marks": 2,
+          "acceptedAnswer": "$[0.25, 0.35]$",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "mcq",
+      "topic": "Confidence intervals for proportions",
+      "question": "In a survey of 150 students, 90 indicated that they prefer online classes to in-person classes. What is the approximate 95% confidence interval for the proportion of students who prefer online classes?",
+      "options": [
+        "(0.527, 0.673)",
+        "(0.533, 0.667)",
+        "(0.600, 0.600)",
+        "(0.400, 0.800)"
+      ],
+      "answer": "A",
+      "acceptedAnswers": [],
+      "marks": 1,
+      "guidance": "Use the formula for a confidence interval for proportions: $p \\pm z\\sqrt{\\frac{p(1-p)}{n}}$.",
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "long_answer",
+      "topic": "Confidence intervals for proportions",
+      "question": "A local council conducted a survey to determine the proportion of residents who support the new recycling program. Out of 200 residents surveyed, 120 expressed support for the program. \n\na) Calculate the point estimate for the proportion of residents who support the recycling program.\n\nb) Using a 95% confidence level, calculate the confidence interval for the true proportion of residents who support the program, using $z = 1.96$.",
+      "acceptedAnswers": [
+        "$0.6$",
+        "$(0.548, 0.652)$"
+      ],
+      "marks": 2,
+      "guidance": "Calculate the point estimate as $\\frac{x}{n}$. For the confidence interval, use the formula: $p \\pm z\\sqrt{\\frac{p(1-p)}{n}}$.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Calculate the point estimate for the proportion of residents who support the program.",
+          "marks": 1,
+          "acceptedAnswer": "$0.6$",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) Calculate the 95% confidence interval for the proportion of residents who support the program.",
+          "marks": 1,
+          "acceptedAnswer": "$(0.548, 0.652)$",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": true
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Confidence intervals for proportions",
+      "question": "A company claims that 70% of its customers are satisfied with its service. A random sample of 50 customers is surveyed, and 30 report satisfaction. Using a 95% confidence level, determine if the company's claim is supported by the sample data. Show your calculations.",
+      "acceptedAnswers": [
+        "No, the confidence interval $(0.489, 0.811)$ does not support the claim."
+      ],
+      "marks": 3,
+      "guidance": "Calculate the proportion from the sample, then find the confidence interval and compare with the company's claim.",
+      "useAiMarking": true
+    },
+    {
+      "subjectId": "demo",
+      "type": "long_answer",
+      "topic": "Integral calculus",
+      "question": "Consider the function $f(x) = 4x - x^2$ for $0 \\leq x \\leq 4$.",
+      "acceptedAnswers": [
+        "$\\frac{32}{3}$",
+        "Yes, it is the same."
+      ],
+      "marks": 3,
+      "guidance": "Calculate the definite integral and evaluate the area under the curve.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Find the definite integral $\\int_0^4 (4x - x^2) \\, dx$.",
+          "marks": 2,
+          "acceptedAnswer": "$\\frac{32}{3}$",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) Calculate the area under the curve between $x=0$ and $x=4$. Is the area the same as the integral value?",
+          "marks": 1,
+          "acceptedAnswer": "Yes, it is the same.",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": true
+    }
+  ]
+}

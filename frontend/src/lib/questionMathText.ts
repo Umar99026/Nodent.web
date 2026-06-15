@@ -19,11 +19,34 @@ const GLUED_WORDS: [RegExp, string][] = [
 
 /**
  * Fix inline math segments for remark-math + KaTeX.
+ * - Convert `\(...\)` / `\[...\]` to `$...$` / `$$...$$` (more reliable than paren delimiters).
+ * - Repair bare `( \mathbf{a} ... )` when `\(` delimiters were lost on import.
  * - Collapse OCR newlines inside $...$ (keep spaces so `\sin x` stays valid).
  * - Escape `\pi)` / `\infty)` etc. — remark-math treats `\)` as a math end delimiter.
  */
+export function convertLatexParenDelimiters(text: string): string {
+  let out = String(text ?? "");
+
+  // `\(...\)` inline → $...$
+  out = out.replace(/\\\(([\s\S]*?)\\\)/g, (_, inner: string) => `$${inner.trim()}$`);
+
+  // `\[...\]` display → $$...$$
+  out = out.replace(/\\\[([\s\S]*?)\\\]/g, (_, inner: string) => `$$${inner.trim()}$$`);
+
+  // Bare `( \mathbf{a} ... )` with LaTeX commands but no `\(` opener.
+  out = out.replace(/\(\s*((?:\\[a-zA-Z]+[\s\S]*?))\s*\)/g, (match, inner: string) => {
+    if (!/\\(?:mathbf|vec|langle|rangle|frac|dfrac|tfrac|sqrt|hat|cdot|times|div|pm|mp|pi|theta|alpha|beta|gamma|omega|sin|cos|tan|log|ln|int|sum|prod|lim|leq|geq|neq|approx|operatorname|text|left|right|begin|end)\b/.test(inner)) {
+      return match;
+    }
+    return `$${inner.trim()}$`;
+  });
+
+  return out;
+}
+
 export function fixInlineMathDelimiters(text: string): string {
-  return text.replace(/\$([^$]*)\$/g, (_, inner: string) => {
+  const converted = convertLatexParenDelimiters(text);
+  return converted.replace(/\$([^$]*)\$/g, (_, inner: string) => {
     let fixed = inner.replace(/\s*[\r\n]+\s*/g, "");
     fixed = fixed.replace(
       /\\(pi|infty|theta|phi|alpha|beta|gamma|omega)\s*\)/gi,
@@ -36,7 +59,12 @@ export function fixInlineMathDelimiters(text: string): string {
 function dechunkOcrLines(text: string): string {
   const collapsed = fixInlineMathDelimiters(text);
   // Keep author-written LaTeX intact — OCR dechunking mangles $v(t)=3t^2-2$ etc.
-  if (/\$[^$\n]+\$/.test(collapsed) || /\$\$[\s\S]+?\$\$/.test(collapsed)) {
+  if (
+    /\$[^$\n]+\$/.test(collapsed) ||
+    /\$\$[\s\S]+?\$\$/.test(collapsed) ||
+    /\\\([\s\S]+?\\\)/.test(collapsed) ||
+    /\\\[[\s\S]+?\\\]/.test(collapsed)
+  ) {
     return collapsed;
   }
 

@@ -1,0 +1,493 @@
+{
+  "subject": "specialist-maths",
+  "totalBefore": 219,
+  "removeCount": 50,
+  "totalAfter": 169,
+  "byBucket": {
+    "compute": 2,
+    "compute-short": 10,
+    "graphs": 2,
+    "kinematics": 3,
+    "very-short": 12,
+    "lines-planes": 2,
+    "short": 3,
+    "recall": 3,
+    "proof": 1,
+    "vectors": 3,
+    "de": 1,
+    "calculus": 2,
+    "probability": 1,
+    "integral-apps": 1,
+    "mcq": 1,
+    "complex": 1,
+    "confidence": 1,
+    "manipulate": 1
+  },
+  "byTopic": {
+    "Vectors": 2,
+    "Complex numbers and algebra": 5,
+    "Functions, relations and graphs": 4,
+    "Kinematics": 2,
+    "Vectors in two and three dimensions": 4,
+    "Differential calculus": 5,
+    "Lines and planes in 3D": 4,
+    "Integral calculus": 5,
+    "Vector calculus": 5,
+    "Random variables and sampling": 4,
+    "Logic and proof": 1,
+    "Differential equations": 5,
+    "Confidence intervals": 4
+  },
+  "removed": [
+    {
+      "id": 1426,
+      "type": "short_answer",
+      "topic": "Vectors",
+      "marks": 2,
+      "ease": 76,
+      "bucket": "compute",
+      "preview": "Find a·b for a=(7,-2,4) and b=(8,7,-3)."
+    },
+    {
+      "id": 7010,
+      "type": "short_answer",
+      "topic": "Complex numbers and algebra",
+      "marks": 2,
+      "ease": 60,
+      "bucket": "compute-short",
+      "preview": ". Find ."
+    },
+    {
+      "id": 7011,
+      "type": "short_answer",
+      "topic": "Functions, relations and graphs",
+      "marks": 2,
+      "ease": 66,
+      "bucket": "graphs",
+      "preview": ": vertical asymptote ?"
+    },
+    {
+      "id": 7049,
+      "type": "short_answer",
+      "topic": "Kinematics",
+      "marks": 2,
+      "ease": 66,
+      "bucket": "kinematics",
+      "preview": "Acceleration , . ?"
+    },
+    {
+      "id": 7014,
+      "type": "short_answer",
+      "topic": "Vectors in two and three dimensions",
+      "marks": 2,
+      "ease": 66,
+      "bucket": "very-short",
+      "preview": ", . ?"
+    },
+    {
+      "id": 7040,
+      "type": "short_answer",
+      "topic": "Differential calculus",
+      "marks": 2,
+      "ease": 66,
+      "bucket": "very-short",
+      "preview": "at equals?"
+    },
+    {
+      "id": 7012,
+      "type": "short_answer",
+      "topic": "Differential calculus",
+      "marks": 2,
+      "ease": 60,
+      "bucket": "compute-short",
+      "preview": "For , at find if ."
+    },
+    {
+      "id": 7051,
+      "type": "short_answer",
+      "topic": "Lines and planes in 3D",
+      "marks": 2,
+      "ease": 68,
+      "bucket": "lines-planes",
+      "preview": "Lines and in -plane. Do they intersect? yes or no."
+    },
+    {
+      "id": 7023,
+      "type": "short_answer",
+      "topic": "Integral calculus",
+      "marks": 2,
+      "ease": 66,
+      "bucket": "very-short",
+      "preview": "disk about -axis, on gives ?"
+    },
+    {
+      "id": 7030,
+      "type": "short_answer",
+      "topic": "Functions, relations and graphs",
+      "marks": 2,
+      "ease": 66,
+      "bucket": "very-short",
+      "preview": "has minimum value?"
+    },
+    {
+      "id": 4703,
+      "type": "short_answer",
+      "topic": "Functions, relations and graphs",
+      "marks": 2,
+      "ease": 60,
+      "bucket": "compute-short",
+      "preview": ". Find ."
+    },
+    {
+      "id": 1791,
+      "type": "short_answer",
+      "topic": "Integral calculus",
+      "marks": 2,
+      "ease": 59,
+      "bucket": "short",
+      "preview": "Arc length setup uses . If , integrand simplifies to?"
+    },
+    {
+      "id": 7052,
+      "type": "short_answer",
+      "topic": "Vector calculus",
+      "marks": 2,
+      "ease": 74,
+      "bucket": "recall",
+      "preview": ". Speed at equals — true or false?"
+    },
+    {
+      "id": 7017,
+      "type": "short_answer",
+      "topic": "Random variables and sampling",
+      "marks": 2,
+      "ease": 66,
+      "bucket": "very-short",
+      "preview": "Independent with , . ?"
+    },
+    {
+      "id": 7019,
+      "type": "short_answer",
+      "topic": "Logic and proof",
+      "marks": 2,
+      "ease": 66,
+      "bucket": "proof",
+      "preview": "Contrapositive of is ?"
+    },
+    {
+      "id": 7027,
+      "type": "short_answer",
+      "topic": "Lines and planes in 3D",
+      "marks": 2,
+      "ease": 66,
+      "bucket": "vectors",
+      "preview": "Plane : normal vector -component?"
+    },
+    {
+      "id": 7060,
+      "type": "short_answer",
+      "topic": "Differential equations",
+      "marks": 2,
+      "ease": 65,
+      "bucket": "de",
+      "preview": "Logistic-style: carrying capacity 1000, . Long-term approaches?"
+    },
+    {
+      "id": 7026,
+      "type": "short_answer",
+      "topic": "Vectors in two and three dimensions",
+      "marks": 2,
+      "ease": 60,
+      "bucket": "compute-short",
+      "preview": ". Find ."
+    },
+    {
+      "id": 7028,
+      "type": "short_answer",
+      "topic": "Random variables and sampling",
+      "marks": 2,
+      "ease": 60,
+      "bucket": "compute-short",
+      "preview": ". Find ."
+    },
+    {
+      "id": 7033,
+      "type": "short_answer",
+      "topic": "Differential equations",
+      "marks": 2,
+      "ease": 60,
+      "bucket": "very-short",
+      "preview": ", , . Next at ."
+    },
+    {
+      "id": 7056,
+      "type": "short_answer",
+      "topic": "Complex numbers and algebra",
+      "marks": 2,
+      "ease": 60,
+      "bucket": "very-short",
+      "preview": ". Write ."
+    },
+    {
+      "id": 2096,
+      "type": "short_answer",
+      "topic": "Vector calculus",
+      "marks": 2,
+      "ease": 59,
+      "bucket": "vectors",
+      "preview": "For , the velocity vector at has -component?"
+    },
+    {
+      "id": 4707,
+      "type": "short_answer",
+      "topic": "Vector calculus",
+      "marks": 2,
+      "ease": 59,
+      "bucket": "kinematics",
+      "preview": "Displacement for constant : -component of displacement?"
+    },
+    {
+      "id": 7024,
+      "type": "short_answer",
+      "topic": "Differential equations",
+      "marks": 2,
+      "ease": 68,
+      "bucket": "recall",
+      "preview": "Does satisfy for any constant ? (true or false)"
+    },
+    {
+      "id": 7036,
+      "type": "short_answer",
+      "topic": "Confidence intervals",
+      "marks": 2,
+      "ease": 66,
+      "bucket": "recall",
+      "preview": "Standard error of the mean decreases when increases — true or false?"
+    },
+    {
+      "id": 7031,
+      "type": "short_answer",
+      "topic": "Differential calculus",
+      "marks": 2,
+      "ease": 60,
+      "bucket": "calculus",
+      "preview": "Derivative of at ."
+    },
+    {
+      "id": 6822,
+      "type": "short_answer",
+      "topic": "Vector calculus",
+      "marks": 2,
+      "ease": 59,
+      "bucket": "calculus",
+      "preview": "Differentiate . Speed is constant equal to?"
+    },
+    {
+      "id": 6829,
+      "type": "short_answer",
+      "topic": "Random variables and sampling",
+      "marks": 2,
+      "ease": 59,
+      "bucket": "probability",
+      "preview": "Sample mean has expected value equal to population ?"
+    },
+    {
+      "id": 6849,
+      "type": "short_answer",
+      "topic": "Vectors in two and three dimensions",
+      "marks": 2,
+      "ease": 59,
+      "bucket": "vectors",
+      "preview": "Unit vector in direction of has -component . -component?"
+    },
+    {
+      "id": 7018,
+      "type": "short_answer",
+      "topic": "Confidence intervals",
+      "marks": 2,
+      "ease": 59,
+      "bucket": "very-short",
+      "preview": "95% CI for mean uses ? (2 d.p.)"
+    },
+    {
+      "id": 7044,
+      "type": "short_answer",
+      "topic": "Vector calculus",
+      "marks": 2,
+      "ease": 59,
+      "bucket": "short",
+      "preview": "If and , position at has sum of coordinates?"
+    },
+    {
+      "id": 7054,
+      "type": "short_answer",
+      "topic": "Confidence intervals",
+      "marks": 2,
+      "ease": 59,
+      "bucket": "compute-short",
+      "preview": "Sample , , , 95% CI half-width . Find half-width."
+    },
+    {
+      "id": 7590,
+      "type": "short_answer",
+      "topic": "Integral calculus",
+      "marks": 2,
+      "ease": 59,
+      "bucket": "integral-apps",
+      "preview": "Volume of revolution: disk about -axis, on gives ?"
+    },
+    {
+      "id": 2687,
+      "type": "short_answer",
+      "topic": "Integral calculus",
+      "marks": 3,
+      "ease": 58,
+      "bucket": "compute-short",
+      "preview": "Evaluate exactly."
+    },
+    {
+      "id": 2694,
+      "type": "short_answer",
+      "topic": "Differential equations",
+      "marks": 3,
+      "ease": 58,
+      "bucket": "compute-short",
+      "preview": "Find the general solution of ."
+    },
+    {
+      "id": 2711,
+      "type": "mcq",
+      "topic": "Random variables and sampling",
+      "marks": 1,
+      "ease": 57,
+      "bucket": "mcq",
+      "preview": "If are independent with mean and standard deviation , then the standard deviation of is"
+    },
+    {
+      "id": 2679,
+      "type": "short_answer",
+      "topic": "Complex numbers and algebra",
+      "marks": 3,
+      "ease": 54,
+      "bucket": "complex",
+      "preview": "Find the principal argument of ."
+    },
+    {
+      "id": 1756,
+      "type": "short_answer",
+      "topic": "Differential equations",
+      "marks": 2,
+      "ease": 53,
+      "bucket": "short",
+      "preview": "For , is the solution growth or decay? (one word)"
+    },
+    {
+      "id": 1774,
+      "type": "short_answer",
+      "topic": "Confidence intervals",
+      "marks": 2,
+      "ease": 53,
+      "bucket": "confidence",
+      "preview": "Margin of error . If , , , find ."
+    },
+    {
+      "id": 1795,
+      "type": "short_answer",
+      "topic": "Lines and planes in 3D",
+      "marks": 2,
+      "ease": 53,
+      "bucket": "very-short",
+      "preview": "Parallel planes have normals that are (one word)."
+    },
+    {
+      "id": 2676,
+      "type": "short_answer",
+      "topic": "Complex numbers and algebra",
+      "marks": 2,
+      "ease": 53,
+      "bucket": "manipulate",
+      "preview": "Express in the form , where ."
+    },
+    {
+      "id": 1427,
+      "type": "short_answer",
+      "topic": "Vectors",
+      "marks": 2,
+      "ease": 76,
+      "bucket": "compute",
+      "preview": "Find a·b for a=(8,-1,5) and b=(2,8,-4)."
+    },
+    {
+      "id": 7029,
+      "type": "short_answer",
+      "topic": "Complex numbers and algebra",
+      "marks": 2,
+      "ease": 60,
+      "bucket": "compute-short",
+      "preview": "For , find the real part."
+    },
+    {
+      "id": 7046,
+      "type": "short_answer",
+      "topic": "Functions, relations and graphs",
+      "marks": 2,
+      "ease": 66,
+      "bucket": "graphs",
+      "preview": "Graph . How many vertical asymptotes?"
+    },
+    {
+      "id": 7025,
+      "type": "short_answer",
+      "topic": "Kinematics",
+      "marks": 2,
+      "ease": 60,
+      "bucket": "kinematics",
+      "preview": ". Acceleration at ."
+    },
+    {
+      "id": 7043,
+      "type": "short_answer",
+      "topic": "Vectors in two and three dimensions",
+      "marks": 2,
+      "ease": 66,
+      "bucket": "very-short",
+      "preview": "?"
+    },
+    {
+      "id": 7595,
+      "type": "short_answer",
+      "topic": "Differential calculus",
+      "marks": 2,
+      "ease": 66,
+      "bucket": "very-short",
+      "preview": "Product rule: at equals?"
+    },
+    {
+      "id": 7584,
+      "type": "short_answer",
+      "topic": "Differential calculus",
+      "marks": 2,
+      "ease": 60,
+      "bucket": "compute-short",
+      "preview": "For , at find if ."
+    },
+    {
+      "id": 7015,
+      "type": "short_answer",
+      "topic": "Lines and planes in 3D",
+      "marks": 2,
+      "ease": 66,
+      "bucket": "lines-planes",
+      "preview": "Line : which coordinate stays constant?"
+    },
+    {
+      "id": 7048,
+      "type": "short_answer",
+      "topic": "Integral calculus",
+      "marks": 2,
+      "ease": 66,
+      "bucket": "very-short",
+      "preview": "?"
+    }
+  ]
+}

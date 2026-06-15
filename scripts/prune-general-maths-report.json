@@ -1,0 +1,482 @@
+{
+  "subject": "general-maths",
+  "totalBefore": 286,
+  "removeCount": 50,
+  "totalAfter": 236,
+  "byBucket": {
+    "mcq": 5,
+    "stats-regression": 5,
+    "finance": 5,
+    "matrices": 5,
+    "compute-short": 4,
+    "networks": 4,
+    "short": 4,
+    "very-short": 4,
+    "recall": 4,
+    "recursion": 3,
+    "stats-vocab": 2,
+    "compute": 2,
+    "probability": 2,
+    "graph": 1
+  },
+  "byTopic": {
+    "Data analysis": 13,
+    "Recursion and financial modelling": 11,
+    "Matrices": 13,
+    "Networks and decision mathematics": 9,
+    "Regression": 2,
+    "Recurrence Loans": 2
+  },
+  "removed": [
+    {
+      "id": 6971,
+      "type": "mcq",
+      "topic": "Data analysis",
+      "marks": 1,
+      "ease": 92,
+      "bucket": "mcq",
+      "preview": "Which variable is categorical?"
+    },
+    {
+      "id": 6978,
+      "type": "short_answer",
+      "topic": "Data analysis",
+      "marks": 1,
+      "ease": 73,
+      "bucket": "stats-regression",
+      "preview": "State the correlation r value closest to ‘no linear relationship’."
+    },
+    {
+      "id": 6987,
+      "type": "short_answer",
+      "topic": "Recursion and financial modelling",
+      "marks": 1,
+      "ease": 70,
+      "bucket": "finance",
+      "preview": "Write the compound interest formula."
+    },
+    {
+      "id": 6997,
+      "type": "short_answer",
+      "topic": "Matrices",
+      "marks": 1,
+      "ease": 71,
+      "bucket": "matrices",
+      "preview": "State the order of a matrix with 3 rows and 2 columns."
+    },
+    {
+      "id": 6188,
+      "type": "short_answer",
+      "topic": "Matrices",
+      "marks": 2,
+      "ease": 70,
+      "bucket": "compute-short",
+      "preview": "Find ."
+    },
+    {
+      "id": 7008,
+      "type": "short_answer",
+      "topic": "Networks and decision mathematics",
+      "marks": 1,
+      "ease": 73,
+      "bucket": "networks",
+      "preview": "Name one algorithm for a minimum spanning tree."
+    },
+    {
+      "id": 6191,
+      "type": "short_answer",
+      "topic": "Matrices",
+      "marks": 2,
+      "ease": 53,
+      "bucket": "short",
+      "preview": "Multiply . How many rows does the product have?"
+    },
+    {
+      "id": 6198,
+      "type": "short_answer",
+      "topic": "Matrices",
+      "marks": 2,
+      "ease": 60,
+      "bucket": "very-short",
+      "preview": ""
+    },
+    {
+      "id": 6988,
+      "type": "short_answer",
+      "topic": "Recursion and financial modelling",
+      "marks": 1,
+      "ease": 73,
+      "bucket": "recall",
+      "preview": "Name one difference between arithmetic and geometric growth."
+    },
+    {
+      "id": 6187,
+      "type": "short_answer",
+      "topic": "Recursion and financial modelling",
+      "marks": 2,
+      "ease": 53,
+      "bucket": "recursion",
+      "preview": "An arithmetic sequence has , . Find ."
+    },
+    {
+      "id": 6186,
+      "type": "short_answer",
+      "topic": "Data analysis",
+      "marks": 2,
+      "ease": 53,
+      "bucket": "stats-vocab",
+      "preview": "A five-number summary has , . Find the IQR."
+    },
+    {
+      "id": 6208,
+      "type": "short_answer",
+      "topic": "Recursion and financial modelling",
+      "marks": 2,
+      "ease": 53,
+      "bucket": "compute",
+      "preview": "Steady state for with , . Find (2 d.p.)."
+    },
+    {
+      "id": 5164,
+      "type": "short_answer",
+      "topic": "Data analysis",
+      "marks": 2,
+      "ease": 45,
+      "bucket": "probability",
+      "preview": "hours slept vs reaction time. Expected sign of ? (positive or negative)"
+    },
+    {
+      "id": 6211,
+      "type": "short_answer",
+      "topic": "Networks and decision mathematics",
+      "marks": 2,
+      "ease": 50,
+      "bucket": "graph",
+      "preview": "Graph has vertices of degrees . Can it have an Eulerian **trail** (not necessarily a circuit)? Answe"
+    },
+    {
+      "id": 6985,
+      "type": "mcq",
+      "topic": "Recursion and financial modelling",
+      "marks": 1,
+      "ease": 92,
+      "bucket": "mcq",
+      "preview": "Which sequence is geometric?"
+    },
+    {
+      "id": 6977,
+      "type": "short_answer",
+      "topic": "Data analysis",
+      "marks": 1,
+      "ease": 70,
+      "bucket": "stats-regression",
+      "preview": "Write the formula for a residual."
+    },
+    {
+      "id": 6196,
+      "type": "short_answer",
+      "topic": "Recursion and financial modelling",
+      "marks": 2,
+      "ease": 59,
+      "bucket": "finance",
+      "preview": "Flat-rate depreciation: 18\\,000 \\ per year. Find after three years."
+    },
+    {
+      "id": 6236,
+      "type": "short_answer",
+      "topic": "Matrices",
+      "marks": 1,
+      "ease": 70,
+      "bucket": "matrices",
+      "preview": "Can you add a 2×2 matrix to a 2×3 matrix? Answer yes or no."
+    },
+    {
+      "id": 4770,
+      "type": "short_answer",
+      "topic": "Recursion and financial modelling",
+      "marks": 2,
+      "ease": 60,
+      "bucket": "compute-short",
+      "preview": ", , . Find ."
+    },
+    {
+      "id": 6239,
+      "type": "short_answer",
+      "topic": "Networks and decision mathematics",
+      "marks": 1,
+      "ease": 63,
+      "bucket": "networks",
+      "preview": "What does the critical path determine in a project network?"
+    },
+    {
+      "id": 6201,
+      "type": "short_answer",
+      "topic": "Networks and decision mathematics",
+      "marks": 2,
+      "ease": 53,
+      "bucket": "short",
+      "preview": "A Hamiltonian path visits each exactly once. (one word)"
+    },
+    {
+      "id": 6206,
+      "type": "short_answer",
+      "topic": "Matrices",
+      "marks": 2,
+      "ease": 60,
+      "bucket": "very-short",
+      "preview": "is singular. Its determinant is?"
+    },
+    {
+      "id": 7007,
+      "type": "short_answer",
+      "topic": "Networks and decision mathematics",
+      "marks": 1,
+      "ease": 73,
+      "bucket": "recall",
+      "preview": "State the condition on vertex degrees for an Eulerian circuit."
+    },
+    {
+      "id": 6190,
+      "type": "short_answer",
+      "topic": "Recursion and financial modelling",
+      "marks": 2,
+      "ease": 53,
+      "bucket": "recursion",
+      "preview": "A geometric sequence has , . Find ."
+    },
+    {
+      "id": 6189,
+      "type": "short_answer",
+      "topic": "Data analysis",
+      "marks": 2,
+      "ease": 53,
+      "bucket": "stats-vocab",
+      "preview": "For the data set , find the mean (1 d.p.)."
+    },
+    {
+      "id": 6202,
+      "type": "short_answer",
+      "topic": "Matrices",
+      "marks": 2,
+      "ease": 45,
+      "bucket": "compute",
+      "preview": "For and state , steady state satisfies . Find (2 d.p.)."
+    },
+    {
+      "id": 7581,
+      "type": "short_answer",
+      "topic": "Data analysis",
+      "marks": 2,
+      "ease": 45,
+      "bucket": "probability",
+      "preview": "Two variables: hours slept vs reaction time. Expected sign of ? (positive or negative)"
+    },
+    {
+      "id": 6990,
+      "type": "mcq",
+      "topic": "Matrices",
+      "marks": 1,
+      "ease": 92,
+      "bucket": "mcq",
+      "preview": "Which sum is defined?"
+    },
+    {
+      "id": 6213,
+      "type": "short_answer",
+      "topic": "Data analysis",
+      "marks": 2,
+      "ease": 50,
+      "bucket": "stats-regression",
+      "preview": "Regression for ice-cream sales vs temperature has in winter data only. Reliable for predicting summe"
+    },
+    {
+      "id": 6219,
+      "type": "short_answer",
+      "topic": "Recursion and financial modelling",
+      "marks": 2,
+      "ease": 53,
+      "bucket": "finance",
+      "preview": "A loan follows , . Determine (2 d.p.)."
+    },
+    {
+      "id": 6235,
+      "type": "short_answer",
+      "topic": "Matrices",
+      "marks": 1,
+      "ease": 55,
+      "bucket": "matrices",
+      "preview": "What does a steady state often describe in transition matrix models?"
+    },
+    {
+      "id": 6197,
+      "type": "short_answer",
+      "topic": "Matrices",
+      "marks": 2,
+      "ease": 60,
+      "bucket": "compute-short",
+      "preview": "Compute the entry of ."
+    },
+    {
+      "id": 2762,
+      "type": "short_answer",
+      "topic": "Networks and decision mathematics",
+      "marks": 1,
+      "ease": 45,
+      "bucket": "networks",
+      "preview": "A shortest path from to has edge weights along the selected route. Find the length of this path."
+    },
+    {
+      "id": 6214,
+      "type": "short_answer",
+      "topic": "Recursion and financial modelling",
+      "marks": 2,
+      "ease": 51,
+      "bucket": "short",
+      "preview": "Nominal 12% p.a. compounded **monthly**. Monthly rate as a decimal (4 d.p.)."
+    },
+    {
+      "id": 6199,
+      "type": "short_answer",
+      "topic": "Networks and decision mathematics",
+      "marks": 2,
+      "ease": 53,
+      "bucket": "very-short",
+      "preview": "Kruskal's algorithm builds a minimum tree. (two words)"
+    },
+    {
+      "id": 6225,
+      "type": "short_answer",
+      "topic": "Data analysis",
+      "marks": 1,
+      "ease": 65,
+      "bucket": "recall",
+      "preview": "Name two features you compare when describing boxplots for two groups."
+    },
+    {
+      "id": 6230,
+      "type": "short_answer",
+      "topic": "Recursion and financial modelling",
+      "marks": 1,
+      "ease": 45,
+      "bucket": "recursion",
+      "preview": "A recurrence is A n+1 = A n + 50 with A 1 = 200. Find A 4."
+    },
+    {
+      "id": 6973,
+      "type": "mcq",
+      "topic": "Data analysis",
+      "marks": 1,
+      "ease": 88,
+      "bucket": "mcq",
+      "preview": "Correlation r = −0.91 suggests:"
+    },
+    {
+      "id": 1336,
+      "type": "short_answer",
+      "topic": "Regression",
+      "marks": 2,
+      "ease": 45,
+      "bucket": "stats-regression",
+      "preview": "A least-squares model is price=967000+(-43400)*distance. Find the predicted price for distance 12 km"
+    },
+    {
+      "id": 1311,
+      "type": "short_answer",
+      "topic": "Recurrence Loans",
+      "marks": 3,
+      "ease": 45,
+      "bucket": "finance",
+      "preview": "A loan follows , . Determine (2 d.p.)."
+    },
+    {
+      "id": 6210,
+      "type": "short_answer",
+      "topic": "Matrices",
+      "marks": 2,
+      "ease": 53,
+      "bucket": "matrices",
+      "preview": "If for matrices, then is the of . (one word)"
+    },
+    {
+      "id": 6205,
+      "type": "short_answer",
+      "topic": "Data analysis",
+      "marks": 2,
+      "ease": 60,
+      "bucket": "compute-short",
+      "preview": "and . Find ."
+    },
+    {
+      "id": 2764,
+      "type": "short_answer",
+      "topic": "Networks and decision mathematics",
+      "marks": 1,
+      "ease": 45,
+      "bucket": "networks",
+      "preview": "A cut in a flow network crosses edges with capacities , , and . Find the capacity of the cut."
+    },
+    {
+      "id": 6193,
+      "type": "short_answer",
+      "topic": "Data analysis",
+      "marks": 2,
+      "ease": 45,
+      "bucket": "short",
+      "preview": "A scatterplot has . In one word, is the linear association strong or weak?"
+    },
+    {
+      "id": 6212,
+      "type": "short_answer",
+      "topic": "Networks and decision mathematics",
+      "marks": 2,
+      "ease": 53,
+      "bucket": "very-short",
+      "preview": "Prim's algorithm always grows one tree. (one word)"
+    },
+    {
+      "id": 6200,
+      "type": "short_answer",
+      "topic": "Matrices",
+      "marks": 2,
+      "ease": 53,
+      "bucket": "recall",
+      "preview": "Inverse of : state the entry of ."
+    },
+    {
+      "id": 6975,
+      "type": "mcq",
+      "topic": "Data analysis",
+      "marks": 1,
+      "ease": 85,
+      "bucket": "mcq",
+      "preview": "Which measure of centre is most resistant to outliers?"
+    },
+    {
+      "id": 1337,
+      "type": "short_answer",
+      "topic": "Regression",
+      "marks": 2,
+      "ease": 45,
+      "bucket": "stats-regression",
+      "preview": "A least-squares model is price=981500+(-44300)*distance. Find the predicted price for distance 13 km"
+    },
+    {
+      "id": 1312,
+      "type": "short_answer",
+      "topic": "Recurrence Loans",
+      "marks": 3,
+      "ease": 45,
+      "bucket": "finance",
+      "preview": "A loan follows , . Determine (2 d.p.)."
+    },
+    {
+      "id": 6215,
+      "type": "short_answer",
+      "topic": "Matrices",
+      "marks": 2,
+      "ease": 51,
+      "bucket": "matrices",
+      "preview": "2×2 matrix swaps rows of identity then doubles row 2. Determinant?"
+    }
+  ]
+}

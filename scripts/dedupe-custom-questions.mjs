@@ -46,7 +46,7 @@ const dupes = await sql`
            subject_id,
            LOWER(REGEXP_REPLACE(TRIM(question), '\\s+', ' ', 'g')) AS stem_key,
            ROW_NUMBER() OVER (
-             PARTITION BY subject_id,
+             PARTITION BY LOWER(TRIM(subject_id)),
                           LOWER(REGEXP_REPLACE(TRIM(question), '\\s+', ' ', 'g'))
              ORDER BY
                CASE
@@ -81,6 +81,7 @@ for (const r of dupes) {
 
 if (!apply) {
   console.log("\nDry run only. Re-run with --apply to delete.");
+  console.log("After --apply, run: node scripts/ensure-question-unique-index.mjs");
   process.exit(0);
 }
 
@@ -93,7 +94,7 @@ const deleted = await sql`
   WITH stem AS (
     SELECT id,
            ROW_NUMBER() OVER (
-             PARTITION BY subject_id,
+             PARTITION BY LOWER(TRIM(subject_id)),
                           LOWER(REGEXP_REPLACE(TRIM(question), '\\s+', ' ', 'g'))
              ORDER BY
                CASE
@@ -124,3 +125,5 @@ console.log("\n=== After ===");
 for (const r of after) {
   console.log(`  ${r.subject_id}: ${r.total} rows`);
 }
+
+console.log("\nNext: node scripts/ensure-question-unique-index.mjs");

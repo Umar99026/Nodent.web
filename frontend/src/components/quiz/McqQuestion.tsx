@@ -5,6 +5,7 @@ import {
   collectStimulusFromQuestion,
   displayMarks,
   hasVisibleStimulus,
+  stripMcqOptionPrefix,
   stripQuestionHeadingFromPassage,
   stripQuestionNumberPrefix,
 } from "@/lib/questionDisplay";
@@ -183,7 +184,10 @@ export function McqQuestion({
 
             {/* Option text (render math) */}
             <span className="flex-1 pt-0.5">
-              <RichQuestionContent text={option} className="prose prose-base max-w-none prose-p:my-0" />
+              <RichQuestionContent
+                text={stripMcqOptionPrefix(option, optionLabels[index])}
+                className="prose prose-base max-w-none prose-p:my-0"
+              />
             </span>
 
             {/* Result icon */}

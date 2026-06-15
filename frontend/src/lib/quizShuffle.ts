@@ -1,58 +1,14 @@
 import type { Question } from "@/lib/subjects";
 import { getStableQuestionIndex } from "@/lib/practiceKeys";
 
-function extractMainQuestionNumber(text: unknown): string | null {
-  if (typeof text !== "string") return null;
-  const s = text.trim();
-  if (!s) return null;
-  const withWord = s.match(/^question\s+(\d{1,4})\b/i);
-  if (withWord?.[1]) return withWord[1];
-  const plain = s.match(/^(\d{1,4})\s*[a-z]?(?:\([a-z]\))?[.)]?\b/i);
-  if (plain?.[1]) return plain[1];
-  return null;
-}
-
-function normalizeGroupSeed(text: unknown): string {
-  if (typeof text !== "string") return "";
-  const firstLine = text
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .find(Boolean) ?? "";
-  return firstLine
-    .toLowerCase()
-    .replace(/^question\s+\d{1,4}\s*(?:\(\d+\s*marks?\))?\s*[:.)-]?\s*/i, "")
-    .replace(/\s+/g, " ")
-    .slice(0, 120);
-}
-
 /**
- * Questions with the same `groupId`, or the same non-empty `passage`, are one stimulus group.
- * Others are singletons (stable index + id).
+ * Questions with the same explicit `groupId` are one stimulus group.
+ * Each DB row is otherwise its own item (multipart lives in answerParts on one row).
  */
 export function getQuestionGroupKey(q: Question, bank: Question[]): string {
-  const anyQ = q as unknown as { groupId?: unknown; passage?: unknown; id?: unknown };
+  const anyQ = q as unknown as { groupId?: unknown; id?: unknown };
   if (anyQ.groupId != null && String(anyQ.groupId).trim()) {
     return `gid:${String(anyQ.groupId).trim()}`;
-  }
-  const mainFromPassage = extractMainQuestionNumber(anyQ.passage);
-  if (mainFromPassage) {
-    const seed = normalizeGroupSeed(anyQ.passage);
-    return seed ? `qnum:${mainFromPassage}:${seed}` : `qnum:${mainFromPassage}`;
-  }
-  // Only use question-number fallback when there is no passage text.
-  // Include topic to avoid collapsing unrelated "Question 4" items from different sets.
-  const mainFromQuestion = extractMainQuestionNumber((q as any).question);
-  if (mainFromQuestion) {
-    const topic = String((q as any).topic ?? "").trim().toLowerCase();
-    return `qnumq:${mainFromQuestion}:${topic || "general"}`;
-  }
-  if (typeof anyQ.passage === "string" && anyQ.passage.trim()) {
-    return `passage:${anyQ.passage.trim()}`;
-  }
-  const imgList = (q as { imageUrls?: string[] }).imageUrls;
-  if (Array.isArray(imgList) && imgList.length) {
-    const first = String(imgList[0] ?? "").trim();
-    if (first) return `img:${first}`;
   }
   const idx = getStableQuestionIndex(bank, q);
   const solo = idx >= 0 ? idx : 0;

@@ -6,7 +6,7 @@ import {
   PDF_RENDER_STANDARD,
   renderPageToDataUrl,
 } from "@/lib/pdfQuestionImport";
-import { formatPartDescriptor } from "@/lib/questionDisplay";
+import { formatPartDescriptor, formatSinglePartLabel, partLetterForIndex } from "@/lib/questionDisplay";
 import { normalizeQuestionMathText } from "@/lib/questionMathText";
 
 export type NodentQuestionType = "mcq" | "short_answer" | "long_answer";
@@ -58,10 +58,45 @@ export type NodentParsedQuestion = {
   mcqOptions?: string[];
   correctAnswer?: string;
   useImage: boolean;
+  passage?: string;
   /** 1-based index when multiple ---NODENT--- blocks share one PDF page. */
   pageQuestionIndex?: number;
   pageQuestionCount?: number;
 };
+
+const IMAGE_FLAG_VALUES = new Set([
+  "true",
+  "false",
+  "yes",
+  "no",
+  "0",
+  "1",
+  "none",
+  "off",
+  "on",
+  "without",
+  "with",
+  "text_only",
+  "text-only",
+  "no_image",
+  "with_image",
+]);
+
+function isImageFlagValue(raw: string): boolean {
+  return IMAGE_FLAG_VALUES.has(raw.trim().toLowerCase());
+}
+
+function parsePassageFromFields(fields: Map<string, string>): string | undefined {
+  for (const key of ["passage", "context", "stimulus_text", "stimulus_passage"] as const) {
+    const val = fields.get(key)?.trim();
+    if (val) return normalizeQuestionMathText(val);
+  }
+  const stimulus = fields.get("stimulus")?.trim();
+  if (stimulus && !isImageFlagValue(stimulus)) {
+    return normalizeQuestionMathText(stimulus);
+  }
+  return undefined;
+}
 
 function stripNodentBlocks(text: string): string {
   return normalizeNodentText(text).replace(/---NODENT---[\s\S]*?---END---/gi, "");
@@ -245,13 +280,21 @@ function parseUseImage(fields: Map<string, string>): boolean {
     fields.get("use_image") ??
     fields.get("include_image") ??
     fields.get("image") ??
-    fields.get("stimulus") ??
-    "true"
-  )
-    .trim()
-    .toLowerCase();
-  if (["false", "no", "0", "none", "off", "without", "text_only", "text-only", "no_image"].includes(raw)) {
-    return false;
+    ""
+  ).trim();
+  if (raw) {
+    if (isImageFlagValue(raw)) {
+      return !["false", "no", "0", "none", "off", "without", "text_only", "text-only", "no_image"].includes(
+        raw.toLowerCase(),
+      );
+    }
+    return true;
+  }
+  const stimulus = fields.get("stimulus")?.trim() ?? "";
+  if (stimulus && isImageFlagValue(stimulus)) {
+    return !["false", "no", "0", "none", "off", "without", "text_only", "text-only", "no_image"].includes(
+      stimulus.toLowerCase(),
+    );
   }
   return true;
 }
@@ -292,7 +335,7 @@ function parseNodentMetadataBlock(blockBody: string): NodentPageMeta | null {
   const type = normalizeType(fields.get("type") ?? "short_answer");
   const topic = fields.get("topic") ?? "General";
   const question = normalizeQuestionMathText(fields.get("question") ?? "");
-  const passage = fields.get("passage")?.trim() || undefined;
+  const passage = parsePassageFromFields(fields);
   const useImage = parseUseImage(fields);
 
   const mcqParsed = parseMcqOptionsFromFields(fields);
@@ -564,19 +607,26 @@ function buildQuestionsFromPage(
       crop,
       parts: isMcqRow
         ? []
-        : meta.parts.map((p) => ({
-            label: p.key,
-            descriptor: partDescriptor(p.key, p.label),
-            placeholder: p.placeholder,
-            acceptedAnswer: p.answer,
-            marks: p.marks,
-          })),
+        : meta.parts.map((p, idx) => {
+            const letter = partLetterForIndex(idx);
+            const multi = meta.parts.length >= 2;
+            return {
+              label: letter,
+              descriptor: multi
+                ? partDescriptor(letter, p.label)
+                : formatSinglePartLabel(p.label) || p.label.trim() || "Answer",
+              placeholder: p.placeholder,
+              acceptedAnswer: p.answer,
+              marks: p.marks,
+            };
+          }),
       ...(mcqOptions?.every((o) => o.trim())
         ? {
             mcqOptions,
             correctAnswer,
           }
         : {}),
+      ...(meta.passage ? { passage: meta.passage } : {}),
     });
   }
 

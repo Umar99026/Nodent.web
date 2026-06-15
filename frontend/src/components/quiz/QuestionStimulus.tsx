@@ -6,6 +6,7 @@ import {
   hasVisibleStimulus,
 } from "@/lib/questionDisplay";
 import { normalizeImageUrls, resolveQuestionImageSrc } from "@/lib/practiceQuestions";
+import { convertLatexParenDelimiters } from "@/lib/questionMathText";
 import katex from "katex";
 import "katex/dist/katex.min.css";
 
@@ -13,8 +14,8 @@ function autoMathify(text: string): string {
   // Lightweight helper: upgrade common plain-text math into KaTeX at render time.
   // This keeps already-uploaded questions readable without rewriting DB text.
   //
-  // Users can still write full LaTeX like \(x^2 + 1\) or $$...$$.
-  let out = text;
+  // Users can still write full LaTeX like $x^2 + 1$ or $$...$$.
+  let out = convertLatexParenDelimiters(text);
   // Normalize over-escaped LaTeX pasted from JSON/CSV imports.
   out = out.replace(/\\{2,}(frac|sqrt|begin|end|le|ge|ne|times|div|hat)\b/g, "\\$1");
   out = out.replace(/\\{2,}int\b/g, "\\int");

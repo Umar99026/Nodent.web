@@ -90,6 +90,9 @@ function looksLikePlainMathText(text: string): boolean {
   const t = String(text ?? "");
   // If the author already used markdown/math syntax, keep markdown renderer.
   if (/[`#>|]|!\[[^\]]*\]\([^)]+\)|\$\$?/.test(t)) return false;
+  if (/\\\(|\\\[|\\(?:mathbf|frac|sqrt|langle|rangle|cdot|times|int|sum|hat|vec|operatorname)\b/.test(t)) {
+    return false;
+  }
   // Heuristic math patterns from imports/paste.
   return /(\d+\s*\/\s*\d+)|([0-9A-Za-z]\^[0-9({])|(\b[a-zA-Z]\s*\^\s*\d+)|(\bsqrt\s*\()|([<>]=|!=)|([xX*]\s*\d)|(\d\s*[xX*]\s*\d)|(\[\[.+\],\s*\[.+\]\])|(\[[^\]]+;[^\]]+\])|(\\int|∫)|(\\ln|\\log|\\sin|\\cos|\\tan)|(\bf'\s*\()|(\be\^\{)/.test(
     t,

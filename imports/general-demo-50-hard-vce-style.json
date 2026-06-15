@@ -1,0 +1,1085 @@
+{
+  "questions": [
+    {
+      "subjectId": "general-maths",
+      "type": "mcq",
+      "topic": "Data analysis",
+      "question": "A data set has a mean of $45$ and a standard deviation of $5$. If a value of $55$ is added to the data set, what will be the new mean?",
+      "options": [
+        "$46$",
+        "$47$",
+        "$48$",
+        "$50$"
+      ],
+      "answer": "B",
+      "marks": 1,
+      "guidance": "New mean = (45n + 55)/(n + 1) for large n, approximates 47.",
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "long_answer",
+      "topic": "Data analysis",
+      "question": "In a survey, the following ages of participants were recorded: $22, 25, 25, 30, 30, 30, 35, 40, 45$.",
+      "acceptedAnswers": [
+        "61.11",
+        "7.81"
+      ],
+      "marks": 4,
+      "guidance": "Variance is calculated as the average of the squared differences from the mean. Standard deviation is the square root of the variance.",
+      "answerParts": [
+        {
+          "key": "variance",
+          "label": "Calculate the variance.",
+          "marks": 2,
+          "acceptedAnswer": "61.11",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "stdDev",
+          "label": "Calculate the standard deviation.",
+          "marks": 2,
+          "acceptedAnswer": "7.81",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": true
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "mcq",
+      "topic": "Data analysis",
+      "question": "What is the coefficient of variation for a data set with a mean of $50$ and a standard deviation of $10$?",
+      "options": [
+        "$20\\%$",
+        "$25\\%$",
+        "$15\\%$",
+        "$30\\%$"
+      ],
+      "answer": "B",
+      "marks": 1,
+      "guidance": "CV = (Standard Deviation / Mean) * 100 = (10 / 50) * 100 = 20%.",
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "mcq",
+      "topic": "Data analysis",
+      "question": "The data set $5, 7, 8, 12, 15, 19, 22, 25, 30$ has a standard deviation of approximately",
+      "options": [
+        "$7.12$",
+        "$6.96$",
+        "$8.43$",
+        "$5.5$"
+      ],
+      "answer": "A",
+      "marks": 1,
+      "guidance": "Calculate the mean, then find squared deviations and their average."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "long_answer",
+      "topic": "Data analysis",
+      "question": "For the data set $2, 4, 4, 4, 5, 5, 7, 9$,",
+      "acceptedAnswers": [
+        "4",
+        "7",
+        "3"
+      ],
+      "marks": 4,
+      "guidance": "Median is the middle value; Range is max - min; IQR is Q3 - Q1.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "Find the median.",
+          "marks": 1,
+          "acceptedAnswer": "4",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "Find the range.",
+          "marks": 1,
+          "acceptedAnswer": "7",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "c",
+          "label": "Find the interquartile range (IQR).",
+          "marks": 2,
+          "acceptedAnswer": "3",
+          "placeholder": "Type your answer…"
+        }
+      ]
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "mcq",
+      "topic": "Data analysis",
+      "question": "If a data set has a z-score of $-2$ for a particular value, this indicates that the value is",
+      "options": [
+        "$2$ standard deviations above the mean",
+        "$2$ standard deviations below the mean",
+        "the mean value",
+        "the median value"
+      ],
+      "answer": "B",
+      "marks": 1,
+      "guidance": "A negative z-score indicates the value is below the mean."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "mcq",
+      "topic": "Data analysis",
+      "question": "The 95th percentile of a data set is defined as the value below which 95% of the data falls. If the data set is $[2, 3, 5, 7, 8, 9, 10, 12, 15, 20]$, what is the 95th percentile?",
+      "options": [
+        "$15$",
+        "$20$",
+        "$12$",
+        "$10$"
+      ],
+      "answer": "B",
+      "marks": 1,
+      "guidance": "To find the 95th percentile, calculate $0.95 \\times (10-1) = 8.55$. Round up to the 9th value, which is $20$.",
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "long_answer",
+      "topic": "Data analysis",
+      "question": "A dataset has the following values: $5, 7, 9, 10, 12, 14, 16, 18, 20$.",
+      "acceptedAnswers": [
+        "9",
+        "16",
+        "7"
+      ],
+      "marks": 6,
+      "guidance": "Q1 is the median of the lower half $5,7,9,10$, which is $9$. Q3 is the median of the upper half $12,14,16,18,20$, which is $16$. IQR is $Q3 - Q1 = 16 - 9 = 7$.",
+      "answerParts": [
+        {
+          "key": "Q1",
+          "label": "Find the first quartile ($Q_1$).",
+          "marks": 2,
+          "acceptedAnswer": "9",
+          "placeholder": "Enter Q1"
+        },
+        {
+          "key": "Q3",
+          "label": "Find the third quartile ($Q_3$).",
+          "marks": 2,
+          "acceptedAnswer": "16",
+          "placeholder": "Enter Q3"
+        },
+        {
+          "key": "IQR",
+          "label": "Find the interquartile range (IQR).",
+          "marks": 2,
+          "acceptedAnswer": "7",
+          "placeholder": "Enter IQR"
+        }
+      ],
+      "useAiMarking": true
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "mcq",
+      "topic": "Data analysis",
+      "question": "A box plot displays the following values: minimum $10$, $Q_1=20$, median $30$, $Q_3=40$, maximum $70$. What is the range of the data?",
+      "options": [
+        "$60$",
+        "$70$",
+        "$50$",
+        "$40$"
+      ],
+      "answer": "A",
+      "marks": 1,
+      "guidance": "Range is calculated as maximum - minimum = $70 - 10 = 60$.",
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "mcq",
+      "topic": "Data analysis",
+      "question": "A data set has a mean of $50$ and a standard deviation of $5$. If a score of $60$ is considered an outlier, what is the corresponding z-score?",
+      "options": [
+        "$-2$",
+        "$-1$",
+        "$1$",
+        "$2$"
+      ],
+      "answer": "D",
+      "marks": 1,
+      "guidance": "Calculate $z=\\frac{x-\\bar{x}}{s}=\\frac{60-50}{5}=2$.",
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "long_answer",
+      "topic": "Data analysis",
+      "question": "A researcher collects data on the number of hours studied and corresponding test scores for 10 students. The data is as follows: $(1, 50)$, $(2, 55)$, $(3, 65)$, $(4, 70)$, $(5, 75)$, $(6, 80)$, $(7, 85)$, $(8, 90)$, $(9, 95)$, $(10, 100)$.",
+      "acceptedAnswers": [
+        "1",
+        "strong positive correlation"
+      ],
+      "marks": 4,
+      "guidance": "For part a, use the formula for correlation coefficient. For part b, explain what the correlation means regarding hours studied and test scores.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "Calculate the correlation coefficient $r$.",
+          "marks": 2,
+          "acceptedAnswer": "1",
+          "placeholder": "Correlation coefficient"
+        },
+        {
+          "key": "b",
+          "label": "Interpret the value of $r$ in context.",
+          "marks": 2,
+          "acceptedAnswer": "strong positive correlation",
+          "placeholder": "Interpretation of r"
+        }
+      ],
+      "useAiMarking": true
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "mcq",
+      "topic": "Data analysis",
+      "question": "In a survey of 100 people, the following age data was recorded: $15, 22, 22, 25, 28, 30, 35, 36, 40, 41, 45, 50, 52, 53, 60$. The mean age of the surveyed group is approximately",
+      "options": [
+        "$35$",
+        "$40$",
+        "$37.67$",
+        "$42$"
+      ],
+      "answer": "C",
+      "marks": 1,
+      "guidance": "Mean is calculated as $\\bar x=\\frac{\\sum_{i=1}^{n} x_i}{n}=\\frac{15+22+22+25+28+30+35+36+40+41+45+50+52+53+60}{15}=37.67$.",
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "long_answer",
+      "topic": "Data analysis",
+      "question": "A dataset consists of the following scores: $56, 67, 67, 70, 75, 80, 85, 90, 95$.",
+      "acceptedAnswers": [
+        "$99.44$",
+        "$9.97$"
+      ],
+      "marks": 4,
+      "guidance": "Variance $=\\frac{\\sum (x_i - \\bar x)^2}{n}$; mean $=\\bar x=73$. Calculate $\\sum (x_i - \\bar x)^2$, then divide by 9 (since n=9). Standard deviation is the square root of variance.",
+      "answerParts": [
+        {
+          "key": "variance",
+          "label": "Calculate the variance.",
+          "marks": 2,
+          "acceptedAnswer": "$99.44$",
+          "placeholder": "Enter your answer for variance"
+        },
+        {
+          "key": "std_dev",
+          "label": "Calculate the standard deviation.",
+          "marks": 2,
+          "acceptedAnswer": "$9.97$",
+          "placeholder": "Enter your answer for standard deviation"
+        }
+      ],
+      "useAiMarking": true
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "mcq",
+      "topic": "Recursion and financial modelling",
+      "question": "A savings account has an initial deposit of $2000$ and earns interest at $5\\%$ per annum, compounded quarterly. What is the balance in the account after $2$ years?",
+      "options": [
+        "$2200.00$",
+        "$2204.99$",
+        "$2250.00$",
+        "$2210.00$"
+      ],
+      "answer": "B",
+      "marks": 1,
+      "guidance": "Use the formula for compound interest: $A = P(1 + r/n)^{nt}$. Here, $P=2000$, $r=0.05$, $n=4$, $t=2$. Calculate to find the balance."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "long_answer",
+      "topic": "Recursion and financial modelling",
+      "question": "A business invests $25000$ with a return defined by the recurrence relation $R_0=25000$, $R_{n+1}=1.08R_n-200$.",
+      "acceptedAnswers": [
+        "40886.56",
+        "15886.56"
+      ],
+      "marks": 4,
+      "guidance": "Calculate returns using the recurrence relation: $R_1$, $R_2$, $R_3$, $R_4$. Then find total returns as $R_4 - 25000$.",
+      "answerParts": [
+        {
+          "key": "1",
+          "label": "Find the value of the investment after $4$ years.",
+          "marks": 2,
+          "acceptedAnswer": "40886.56",
+          "placeholder": "Value after 4 years."
+        },
+        {
+          "key": "2",
+          "label": "Find the total return over this period.",
+          "marks": 2,
+          "acceptedAnswer": "15886.56",
+          "placeholder": "Total return over 4 years."
+        }
+      ],
+      "useAiMarking": true
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "mcq",
+      "topic": "Recursion and financial modelling",
+      "question": "A savings account has an initial deposit of $1000$ and earns an interest rate of $5\\%$ per annum, compounded annually. If the account is left untouched for $3$ years, the total amount in the account will be approximately:",
+      "options": [
+        "$1157.63$",
+        "$1200.00$",
+        "$1100.00$",
+        "$1150.00$"
+      ],
+      "answer": "A",
+      "marks": 1,
+      "guidance": "Use the formula $A = P(1 + r)^t$ where $P$ is the principal, $r$ is the rate, and $t$ is time."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "long_answer",
+      "topic": "Recursion and financial modelling",
+      "question": "A loan amounting to $L_0 = 30000$ is taken at an annual interest rate of $7\\%$, with monthly repayments of $400$. The loan balance is given by the recurrence relation $L_{n+1} = 1.005833L_n - 400$, where $1.005833$ is the monthly interest factor.",
+      "acceptedAnswers": [
+        "30100.00",
+        "2400.00",
+        "28500.00"
+      ],
+      "marks": 6,
+      "guidance": "Part a: Calculate $L_1$. Part b: Total payments = $400 \\times 6$. Part c: Calculate $L_6$.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "Find the loan balance after the first month.",
+          "marks": 2,
+          "acceptedAnswer": "30100.00",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "Find the total amount paid after $6$ months.",
+          "marks": 2,
+          "acceptedAnswer": "2400.00",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "c",
+          "label": "Find the remaining loan balance after $6$ months.",
+          "marks": 2,
+          "acceptedAnswer": "28500.00",
+          "placeholder": "Type your answer…"
+        }
+      ]
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "mcq",
+      "topic": "Recursion and financial modelling",
+      "question": "A business invests $8000$ in a project that yields a profit of $10\\%$ in the first year and $15\\%$ in the second year, with the profits reinvested. What is the profit at the end of the second year?",
+      "options": [
+        "$1720$",
+        "$2040$",
+        "$1840$",
+        "$1600$"
+      ],
+      "answer": "C",
+      "marks": 1,
+      "guidance": "Calculate the profit of each year and sum."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "mcq",
+      "topic": "Recursion and financial modelling",
+      "question": "A savings account has an initial deposit of $5000$ and earns interest at $3\\%$ annually, compounded yearly. What will be the balance after $5$ years?",
+      "options": [
+        "$5796.40$",
+        "$5831.00$",
+        "$5805.00$",
+        "$5003.00"
+      ],
+      "answer": "A",
+      "marks": 1,
+      "guidance": "Use the formula for compound interest: $A = P(1 + r)^n$. Here, $P=5000$, $r=0.03$, and $n=5."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "long_answer",
+      "topic": "Recursion and financial modelling",
+      "question": "An investment of $10000$ earns interest at $5\\%$ per annum compounded quarterly. The investment is increased by an additional $1000$ at the end of each year.",
+      "acceptedAnswers": [
+        "$12368.52$",
+        "$368.52$"
+      ],
+      "marks": 4,
+      "guidance": "Calculate using the quarterly compounding: $A = P(1 + r/n)^{nt}$. Add $1000$ at the end of each year.",
+      "answerParts": [
+        {
+          "key": "total_amount",
+          "label": "Find the total amount after $3$ years.",
+          "marks": 2,
+          "acceptedAnswer": "$12368.52$",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "interest_earned",
+          "label": "Find the interest earned over $3$ years.",
+          "marks": 2,
+          "acceptedAnswer": "$368.52$",
+          "placeholder": "Type your answer…"
+        }
+      ]
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "mcq",
+      "topic": "Recursion and financial modelling",
+      "question": "A car's value follows a depreciation model of $V_0=30000$, $V_{n+1}=0.85V_n$. What will be the car's value after $3$ years?",
+      "options": [
+        "$18522.75$",
+        "$20475.00$",
+        "$22000.00$",
+        "$25500.00"
+      ],
+      "answer": "A",
+      "marks": 1,
+      "guidance": "Use the depreciation formula: $V = V_0(0.85)^n$, where $V_0=30000$ and $n=3."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "mcq",
+      "topic": "Recursion and financial modelling",
+      "question": "A savings account offers an interest rate of $8\\%$ per annum, compounded quarterly. What is the quarterly recurrence multiplier?",
+      "options": [
+        "$1.02$",
+        "$1.08$",
+        "$1.02^3$",
+        "$1.04$"
+      ],
+      "answer": "A",
+      "marks": 1,
+      "guidance": "Quarterly interest rate is $0.08/4=0.02$, so the multiplier is $1.02$.",
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "long_answer",
+      "topic": "Recursion and financial modelling",
+      "question": "A loan of $L_0=100000$ is taken with a monthly repayment of $1500$ and an interest rate of $0.5\\%$ per month. The balance follows $L_{n+1}=1.005L_n-1500$.",
+      "acceptedAnswers": [
+        "94613.00",
+        "$94613.00$"
+      ],
+      "marks": 2,
+      "guidance": "Calculate the balance after each month using the formula $L_{n+1}=1.005L_n-1500$. After 1st month: $L_1=1.005(100000)-1500$. After 4th month, use the iterative formula for 4 months.",
+      "answerParts": [
+        {
+          "key": "part_a",
+          "label": "Find the loan balance after $4$ months.",
+          "marks": 2,
+          "acceptedAnswer": "94613.00",
+          "placeholder": "Enter loan balance after 4 months"
+        }
+      ],
+      "useAiMarking": true
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "mcq",
+      "topic": "Recursion and financial modelling",
+      "question": "A company invests $10000$ at an interest rate of $5\\%$ per annum compounded monthly. How many months will it take for the investment to double?",
+      "options": [
+        "$60$",
+        "$120$",
+        "$72$",
+        "$48$"
+      ],
+      "answer": "C",
+      "marks": 1,
+      "guidance": "Using the doubling formula $n = \\frac{log(2)}{log(1 + r)}$ where $r=0.05/12$. Calculate to find $n=72$.",
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "mcq",
+      "topic": "Recursion and financial modelling",
+      "question": "An investment of $P$ dollars is subject to a monthly withdrawal of $150$ and earns interest at $5\\%$ per annum compounded monthly. If the monthly recurrence relationship is given by $I_{n+1} = 1.004167I_n - 150$, what is the value of the monthly interest earned on the initial investment, $I_0=10000$, after the first month?",
+      "options": [
+        "$40.00$",
+        "$50.00$",
+        "$41.67$",
+        "$45.00$"
+      ],
+      "answer": "C",
+      "marks": 1,
+      "guidance": "The interest earned in the first month is $0.05/12 \\times 10000 = 41.67$."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "long_answer",
+      "topic": "Recursion and financial modelling",
+      "question": "A company invests $200{,}000$ in a project that generates a profit according to the recurrence relation $P_{n+1} = 1.08P_n - 15000$.",
+      "acceptedAnswers": [
+        "107000",
+        "20000",
+        "127000"
+      ],
+      "marks": 6,
+      "guidance": "Calculate $P_1=1.08(200000)-15000=107000$. Then, $P_2=1.08(107000)-15000=20000$. Total profit is $P_1 + P_2 = 107000 + 20000 = 127000$.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "Find the profit after the first year.",
+          "marks": 2,
+          "acceptedAnswer": "107000",
+          "placeholder": "Profit after 1 year"
+        },
+        {
+          "key": "b",
+          "label": "Find the profit after the second year.",
+          "marks": 2,
+          "acceptedAnswer": "20000",
+          "placeholder": "Profit after 2 years"
+        },
+        {
+          "key": "c",
+          "label": "Find the total profit generated after two years.",
+          "marks": 2,
+          "acceptedAnswer": "127000",
+          "placeholder": "Total profit after 2 years including investment"
+        }
+      ],
+      "useAiMarking": true
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "mcq",
+      "topic": "Matrices",
+      "question": "If matrices $A=\\begin{bmatrix}1&2\\\\3&4\\end{bmatrix}$ and $B=\\begin{bmatrix}5&6\\\\7&8\\end{bmatrix}$, what is the value of $\\det(AB)$?",
+      "options": [
+        "-2",
+        "2",
+        "-1",
+        "1"
+      ],
+      "answer": "C",
+      "marks": 1,
+      "guidance": "The determinant of the product of two matrices is the product of their determinants. $\\det(A)=1(4)-2(3)=-2$ and $\\det(B)=5(8)-6(7)=-2$, thus $\\det(AB)=\\det(A)\\det(B)=(-2)(-2)=4$."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "long_answer",
+      "topic": "Matrices",
+      "question": "Let $A=\\begin{bmatrix}1&2&3\\\\0&1&4\\\\5&6&0\\end{bmatrix}$ and $B=\\begin{bmatrix}1&0&2\\\\0&1&0\\\\1&1&1\\end{bmatrix}$.",
+      "acceptedAnswers": [
+        "\\begin{bmatrix}1&2&8\\\\5&6&14\\\\5&6&6\\end{bmatrix}",
+        "rank(A)=2; rank(B)=2",
+        "No, A is not invertible because rank(A) < number of rows."
+      ],
+      "marks": 6,
+      "guidance": "For part a), multiply the matrices using the standard matrix multiplication rules. For part b), use row reduction to determine the rank. For part c), state the condition for invertibility.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "Find $AB$.",
+          "marks": 2,
+          "acceptedAnswer": "\\begin{bmatrix}1&2&8\\\\5&6&14\\\\5&6&6\\end{bmatrix}",
+          "placeholder": "Enter the result of AB"
+        },
+        {
+          "key": "b",
+          "label": "Find the ranks of $A$ and $B$.",
+          "marks": 2,
+          "acceptedAnswer": "rank(A)=2; rank(B)=2",
+          "placeholder": "Enter the ranks of A and B"
+        },
+        {
+          "key": "c",
+          "label": "State whether $A$ is invertible, with a reason.",
+          "marks": 2,
+          "acceptedAnswer": "No, A is not invertible because rank(A) < number of rows.",
+          "placeholder": "Is A invertible?"
+        }
+      ]
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "mcq",
+      "topic": "Matrices",
+      "question": "Which of the following statements about the matrix $C=\\begin{bmatrix}0&1\\\\-1&0\\end{bmatrix}$ is true?",
+      "options": [
+        "$C$ is symmetric",
+        "$C$ is orthogonal",
+        "$C$ is singular",
+        "$C$ has an eigenvalue of 1"
+      ],
+      "answer": "B",
+      "marks": 1,
+      "guidance": "A matrix $C$ is orthogonal if $C^TC=I$. Here, $C^TC=\\begin{bmatrix}0&-1\\\\1&0\\end{bmatrix}\\begin{bmatrix}0&1\\\\-1&0\\end{bmatrix}=I$."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "mcq",
+      "topic": "Matrices",
+      "question": "If matrices $A=\\begin{bmatrix}1&2\\\\3&4\\end{bmatrix}$ and $B=\\begin{bmatrix}5&6\\\\7&8\\end{bmatrix}$ are added, what is the resulting matrix $A+B$?",
+      "options": [
+        "$\\begin{bmatrix}6&8\\\\10&12\\end{bmatrix}$",
+        "$\\begin{bmatrix}8&10\\\\12&14\\end{bmatrix}$",
+        "$\\begin{bmatrix}12&14\\\\16&18\\end{bmatrix}$",
+        "$\\begin{bmatrix}4&5\\\\6&7\\end{bmatrix}$"
+      ],
+      "answer": "A",
+      "marks": 1,
+      "guidance": "Adding corresponding elements of two matrices."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "long_answer",
+      "topic": "Matrices",
+      "question": "Let $A=\\begin{bmatrix}1&2&3\\\\0&1&4\\\\5&6&0\\end{bmatrix}$ and $B=\\begin{bmatrix}1&0&2\\\\1&1&1\\\\0&1&0\\end{bmatrix}$.",
+      "acceptedAnswers": [
+        "$\\begin{bmatrix}7&4&10\\\\5&1&6\\\\30&32&16\\end{bmatrix}$",
+        "0"
+      ],
+      "marks": 4,
+      "guidance": "First, calculate the product of matrices $A$ and $B$ using matrix multiplication. Then, find the determinant of the resulting matrix.",
+      "answerParts": [
+        {
+          "key": "1",
+          "label": "Find $AB$.",
+          "marks": 2,
+          "acceptedAnswer": "$\\begin{bmatrix}7&4&10\\\\5&1&6\\\\30&32&16\\end{bmatrix}$",
+          "placeholder": "Enter AB"
+        },
+        {
+          "key": "2",
+          "label": "Find $\\det(AB)$.",
+          "marks": 2,
+          "acceptedAnswer": "0",
+          "placeholder": "Enter det(AB)"
+        }
+      ]
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "mcq",
+      "topic": "Matrices",
+      "question": "The product of two matrices $A$ and $B$ is defined only if the number of columns in matrix $A$ is equal to the number of rows in matrix $B$. This statement is",
+      "options": [
+        "true",
+        "false",
+        "depends on the matrix types",
+        "always true for square matrices"
+      ],
+      "answer": "A",
+      "marks": 1,
+      "guidance": "Matrix multiplication is only defined under this dimensionality condition."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "mcq",
+      "topic": "Matrices",
+      "question": "Given the matrices $A=\\begin{bmatrix}1&2&3\\\\4&5&6\\end{bmatrix}$ and $B=\\begin{bmatrix}7&8\\\\9&10\\\\11&12\\end{bmatrix}$, what is the result of $(A^T B)_{1,2}$?",
+      "options": [
+        "66",
+        "78",
+        "84",
+        "90"
+      ],
+      "answer": "C",
+      "marks": 1,
+      "guidance": "To find $(A^T B)_{1,2}$, compute $A^T=\\begin{bmatrix}1&4\\\\2&5\\\\3&6\\end{bmatrix}$, then multiply with $B$. The element at position (1,2) is 84.",
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "long_answer",
+      "topic": "Matrices",
+      "question": "Consider the matrices $E=\\begin{bmatrix}3&1\\\\2&4\\end{bmatrix}$ and $F=\\begin{bmatrix}1&2\\\\3&0\\end{bmatrix}$.",
+      "acceptedAnswers": [
+        "\\begin{bmatrix}9&8\\\\14&10\\end{bmatrix}",
+        "\\begin{bmatrix}0.4&-0.1\\\\-0.2&0.3\\end{bmatrix}"
+      ],
+      "marks": 4,
+      "guidance": "For part (a), multiply the matrices $E$ and $F$. For part (b), find the inverse of $E$ using the formula for 2x2 matrices, then multiply by $F$.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "Find $EF$.",
+          "marks": 2,
+          "acceptedAnswer": "\\begin{bmatrix}9&8\\\\14&10\\end{bmatrix}",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "Find $E^{-1}F$.",
+          "marks": 2,
+          "acceptedAnswer": "\\begin{bmatrix}0.4&-0.1\\\\-0.2&0.3\\end{bmatrix}",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": true
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "mcq",
+      "topic": "Matrices",
+      "question": "If $G=\\begin{bmatrix}1&2\\\\3&4\\end{bmatrix}$ and $H=\\begin{bmatrix}2&0\\\\1&3\\end{bmatrix}$, what is the result of $G+H$?",
+      "options": [
+        "\\begin{bmatrix}3&2\\\\4&7\\end{bmatrix}",
+        "\\begin{bmatrix}3&4\\\\4&7\\end{bmatrix}",
+        "\\begin{bmatrix}3&2\\\\3&4\\end{bmatrix}",
+        "\\begin{bmatrix}4&6\\\\4&7\\end{bmatrix}"
+      ],
+      "answer": "A",
+      "marks": 1,
+      "guidance": "Add corresponding elements of $G$ and $H$.",
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "mcq",
+      "topic": "Matrices",
+      "question": "Let matrices $A=\\begin{bmatrix}2&3\\\\4&1\\end{bmatrix}$ and $B=\\begin{bmatrix}5&0\\\\-2&3\\end{bmatrix}$. What is the value of $\\det(AB)$?",
+      "options": [
+        "10",
+        "12",
+        "-6",
+        "8"
+      ],
+      "answer": "A",
+      "marks": 1,
+      "guidance": "The determinant of the product of matrices is the product of their determinants."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "long_answer",
+      "topic": "Matrices",
+      "question": "Given the matrices $A=\\begin{bmatrix}1&2&3\\\\4&5&6\\\\7&8&9\\end{bmatrix}$ and $B=\\begin{bmatrix}1&0\\\\0&1\\\\1&1\\end{bmatrix}$,",
+      "acceptedAnswers": [
+        "\\begin{bmatrix}22&28\\\\49&64\\\\76&100\\end{bmatrix}",
+        "0",
+        "A \\text{ is not invertible}"
+      ],
+      "marks": 6,
+      "guidance": "Calculate the matrix product and the determinant.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "Find $AB$.",
+          "marks": 2,
+          "acceptedAnswer": "\\begin{bmatrix}22&28\\\\49&64\\\\76&100\\end{bmatrix}",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "Find $\\det(A)$.",
+          "marks": 2,
+          "acceptedAnswer": "0",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "c",
+          "label": "State whether $A$ is invertible.",
+          "marks": 2,
+          "acceptedAnswer": "A \\text{ is not invertible}",
+          "placeholder": "Type your answer…"
+        }
+      ]
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "long_answer",
+      "topic": "Matrices",
+      "question": "Given matrices $A=\\begin{bmatrix}1&2&3\\\\4&5&6\\end{bmatrix}$ and $B=\\begin{bmatrix}7&8\\\\9&10\\\\11&12\\end{bmatrix}$,",
+      "acceptedAnswers": [
+        "\\begin{bmatrix}58&64\\\\139&154\\end{bmatrix}",
+        "\\begin{bmatrix}58&139\\\\64&154\\end{bmatrix}",
+        "0"
+      ],
+      "marks": 4,
+      "guidance": "Perform matrix multiplication for part a), then transpose the resulting matrix for part b), and check if it's square for part c) before calculating the determinant.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "Find $AB$.",
+          "marks": 1,
+          "acceptedAnswer": "\\begin{bmatrix}58&64\\\\139&154\\end{bmatrix}",
+          "placeholder": "Enter your answer for part a) here."
+        },
+        {
+          "key": "b",
+          "label": "Find $(AB)^T$.",
+          "marks": 1,
+          "acceptedAnswer": "\\begin{bmatrix}58&139\\\\64&154\\end{bmatrix}",
+          "placeholder": "Enter your answer for part b) here."
+        },
+        {
+          "key": "c",
+          "label": "Find $\\det\\big((AB)^T\\big)$.",
+          "marks": 2,
+          "acceptedAnswer": "0",
+          "placeholder": "Enter your answer for part c) here."
+        }
+      ],
+      "useAiMarking": true
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "mcq",
+      "topic": "Networks and decision mathematics",
+      "question": "In a directed graph with 6 vertices, if every vertex has an out-degree of 3, what is the total number of edges in the graph?",
+      "options": [
+        "9",
+        "12",
+        "18",
+        "21"
+      ],
+      "answer": "B",
+      "marks": 1,
+      "guidance": "Each vertex contributes 3 outgoing edges, so total edges = 6 * 3 / 2 = 9. However, since it's directed, total edges = 6 * 3 = 18."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "long_answer",
+      "topic": "Networks and decision mathematics",
+      "question": "A network has 5 vertices with the following connections: Vertex A connects to B, C; Vertex B connects to C, D; Vertex C connects to D, E; Vertex D connects to A; Vertex E connects to A.",
+      "acceptedAnswers": [
+        "7",
+        "A:3; B:2; C:3; D:2; E:2"
+      ],
+      "marks": 4,
+      "guidance": "Count all connections for edges. For degree, count edges incident to each vertex.",
+      "answerParts": [
+        {
+          "key": "part_a",
+          "label": "Find the number of edges in the network.",
+          "marks": 2,
+          "acceptedAnswer": "7",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "part_b",
+          "label": "State the degree of each vertex.",
+          "marks": 2,
+          "acceptedAnswer": "A:3; B:2; C:3; D:2; E:2",
+          "placeholder": "Type your answer…"
+        }
+      ]
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "mcq",
+      "topic": "Networks and decision mathematics",
+      "question": "For a graph to have an Eulerian circuit, which of the following must be true?",
+      "options": [
+        "All vertices must have even degree.",
+        "Exactly two vertices must have odd degree.",
+        "The graph must be connected and acyclic.",
+        "The graph must have at least one vertex of odd degree."
+      ],
+      "answer": "A",
+      "marks": 1,
+      "guidance": "An Eulerian circuit exists only if every vertex has an even degree."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "long_answer",
+      "topic": "Networks and decision mathematics",
+      "question": "A network consists of $6$ vertices connected by $9$ edges with the following weights: $(A, B)=3$, $(A, C)=5$, $(B, C)=2$, $(B, D)=4$, $(C, E)=6$, $(D, E)=1$, $(D, F)=2$, $(E, F)=4$, $(C, F)=3$.",
+      "acceptedAnswers": [
+        "(A,B); (B,C); (C,D); (D,E); (E,F)",
+        "12"
+      ],
+      "marks": 4,
+      "guidance": "Use Prim's algorithm to determine the edges that form the minimum spanning tree. Calculate the total weight by summing the weights of the selected edges.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "List the edges in a minimum spanning tree (Prim's algorithm from $A$).",
+          "marks": 2,
+          "acceptedAnswer": "(A,B); (B,C); (C,D); (D,E); (E,F)",
+          "placeholder": "Minimum spanning tree edges"
+        },
+        {
+          "key": "b",
+          "label": "Find the total weight of the minimum spanning tree.",
+          "marks": 2,
+          "acceptedAnswer": "12",
+          "placeholder": "Total weight of the minimum spanning tree"
+        }
+      ],
+      "useAiMarking": true
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "mcq",
+      "topic": "Networks and decision mathematics",
+      "question": "In a bipartite graph with partitions $X$ and $Y$, where $|X|=4$ and $|Y|=5$, which of the following statements is true?",
+      "options": [
+        "The maximum matching can have at most 4 edges.",
+        "The maximum matching can have at most 5 edges.",
+        "There can be no perfect matching.",
+        "The graph is not bipartite."
+      ],
+      "answer": "A",
+      "marks": 1,
+      "guidance": "In a bipartite graph, the maximum matching cannot exceed the size of the smaller partition, which is $|X|=4$.",
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "mcq",
+      "topic": "Networks and decision mathematics",
+      "question": "In a directed graph with 6 vertices, where every vertex has an out-degree of 3, how many edges does the graph have?",
+      "options": [
+        "6",
+        "9",
+        "12",
+        "18"
+      ],
+      "answer": "C",
+      "marks": 1,
+      "guidance": "The total number of edges is calculated by summing the out-degrees. With 6 vertices each having an out-degree of 3, total edges = 6 × 3 = 18."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "long_answer",
+      "topic": "Networks and decision mathematics",
+      "question": "A company needs to transport goods from 4 warehouses to 3 stores. The costs of transporting goods from each warehouse to each store are given in the matrix $\\begin{bmatrix} 4 & 6 & 8 \\\\ 2 & 3 & 7 \\\\ 5 & 2 & 4 \\\\ 7 & 5 & 6 \\end{bmatrix}$.",
+      "acceptedAnswers": [
+        "17",
+        "Warehouse 1 to Store 1, Warehouse 2 to Store 2, Warehouse 3 to Store 3"
+      ],
+      "marks": 4,
+      "guidance": "Use the transportation problem method; the total cost should be calculated based on the optimal assignments.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "Find the minimum transportation cost.",
+          "marks": 2,
+          "acceptedAnswer": "17",
+          "placeholder": "Minimum cost"
+        },
+        {
+          "key": "b",
+          "label": "State the optimal assignment of warehouses to stores.",
+          "marks": 2,
+          "acceptedAnswer": "Warehouse 1 to Store 1, Warehouse 2 to Store 2, Warehouse 3 to Store 3",
+          "placeholder": "Assignments"
+        }
+      ]
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "mcq",
+      "topic": "Networks and decision mathematics",
+      "question": "In a graph, if the degree of vertex A is 5, and the degree of vertex B is 3, what can be concluded about the edges connecting A and B?",
+      "options": [
+        "There is 1 edge connecting A and B.",
+        "There are at most 5 edges connecting A and B.",
+        "There can be no edges connecting A and B.",
+        "There are exactly 8 edges connecting A and B."
+      ],
+      "answer": "B",
+      "marks": 1,
+      "guidance": "The maximum number of edges between two vertices A and B in a simple graph is the minimum of their degrees, which in this case is 3."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "mcq",
+      "topic": "Networks and decision mathematics",
+      "question": "In a directed graph, if the degree of vertex $A$ is $3$ and the degree of vertex $B$ is $5$, what can be concluded about the number of edges in the graph?",
+      "options": [
+        "There are at least $3$ edges.",
+        "There are at least $5$ edges.",
+        "There are exactly $8$ edges.",
+        "The number of edges cannot be determined."
+      ],
+      "answer": "D",
+      "marks": 1,
+      "guidance": "In a directed graph, the total number of edges is not solely determined by the degrees of individual vertices."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "long_answer",
+      "topic": "Networks and decision mathematics",
+      "question": "A transport network consists of $6$ cities connected by roads. The degrees of cities $A$, $B$, $C$, $D$, $E$, and $F$ are $3$, $2$, $2$, $1$, $1$, and $0$ respectively.",
+      "acceptedAnswers": [
+        "no",
+        "15"
+      ],
+      "marks": 4,
+      "guidance": "a) A network is connected if there is a path between every pair of vertices. b) For a simple graph with $n$ vertices, the maximum number of edges is given by $\\frac{n(n-1)}{2}$.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "Is the network connected?",
+          "marks": 2,
+          "acceptedAnswer": "no",
+          "placeholder": "yes/no"
+        },
+        {
+          "key": "b",
+          "label": "Find the maximum number of edges in a simple graph with $6$ vertices.",
+          "marks": 2,
+          "acceptedAnswer": "15",
+          "placeholder": "Type your answer…"
+        }
+      ]
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "mcq",
+      "topic": "Networks and decision mathematics",
+      "question": "Which of the following statements about bipartite graphs is false?",
+      "options": [
+        "A bipartite graph can have an odd cycle.",
+        "A bipartite graph can be colored with two colors.",
+        "Every bipartite graph is 2-colorable.",
+        "A bipartite graph has no edges between vertices of the same set."
+      ],
+      "answer": "A",
+      "marks": 1,
+      "guidance": "Bipartite graphs cannot have odd cycles."
+    },
+    {
+      "subjectId": "general-maths",
+      "type": "long_answer",
+      "topic": "Networks and decision mathematics",
+      "question": "A project has 6 tasks with the following dependencies: Task A must be completed before Task B and Task C. Task B must be completed before Task D, and Task C must be completed before Task D and Task E. Task D must be completed before Task F. Task durations are: A: 2 days, B: 3 days, C: 1 day, D: 4 days, E: 2 days, F: 1 day.",
+      "acceptedAnswers": [
+        "A -> B -> C -> D -> E -> F",
+        "10 days"
+      ],
+      "marks": 4,
+      "guidance": "Topological sort: A -> B -> C -> D -> E -> F. Critical path: A -> B -> D -> F (total duration = 2 + 3 + 4 + 1 = 10 days).",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "Give a topological sort of the tasks.",
+          "marks": 2,
+          "acceptedAnswer": "A -> B -> C -> D -> E -> F",
+          "placeholder": "Enter the topological sort of the tasks."
+        },
+        {
+          "key": "b",
+          "label": "Find the total duration of the critical path.",
+          "marks": 2,
+          "acceptedAnswer": "10 days",
+          "placeholder": "Enter the total duration of the project."
+        }
+      ],
+      "useAiMarking": true
+    }
+  ]
+}

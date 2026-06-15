@@ -1,0 +1,922 @@
+{
+  "targetPerSubject": 50,
+  "methodsProtectAfter": "2026-06-13T13:45:00",
+  "subjects": [
+    {
+      "subject": "methods",
+      "totalBefore": 1539,
+      "removeCount": 50,
+      "totalAfter": 1489,
+      "removed": [
+        {
+          "id": 1510,
+          "type": "short_answer",
+          "topic": "Polynomial, power and rational functions",
+          "marks": 2,
+          "ease": 66,
+          "bucket": "topic-functions",
+          "preview": "has vertical asymptote ?"
+        },
+        {
+          "id": 1500,
+          "type": "short_answer",
+          "topic": "Differential calculus",
+          "marks": 2,
+          "ease": 70,
+          "bucket": "compute-short",
+          "preview": "Find at ."
+        },
+        {
+          "id": 1526,
+          "type": "short_answer",
+          "topic": "Circular functions",
+          "marks": 2,
+          "ease": 66,
+          "bucket": "topic-functions",
+          "preview": "Ferris wheel height (metres). Minimum height?"
+        },
+        {
+          "id": 1502,
+          "type": "short_answer",
+          "topic": "Integral calculus",
+          "marks": 2,
+          "ease": 70,
+          "bucket": "compute-short",
+          "preview": "Evaluate ."
+        },
+        {
+          "id": 1559,
+          "type": "short_answer",
+          "topic": "Applications of integration",
+          "marks": 2,
+          "ease": 70,
+          "bucket": "compute-short",
+          "preview": "Evaluate ."
+        },
+        {
+          "id": 1562,
+          "type": "short_answer",
+          "topic": "The normal distribution",
+          "marks": 2,
+          "ease": 66,
+          "bucket": "very-short",
+          "preview": ". equals?"
+        },
+        {
+          "id": 1486,
+          "type": "short_answer",
+          "topic": "Differential calculus",
+          "marks": 2,
+          "ease": 60,
+          "bucket": "calculus-derivative",
+          "preview": "Differentiate . Coefficient of in ."
+        },
+        {
+          "id": 1541,
+          "type": "short_answer",
+          "topic": "Algebra and equations",
+          "marks": 2,
+          "ease": 66,
+          "bucket": "very-short",
+          "preview": "Inequality . Smallest **integer** solution?"
+        },
+        {
+          "id": 1567,
+          "type": "short_answer",
+          "topic": "Exponential and logarithmic functions",
+          "marks": 2,
+          "ease": 66,
+          "bucket": "topic-functions",
+          "preview": "?"
+        },
+        {
+          "id": 1532,
+          "type": "short_answer",
+          "topic": "Discrete random variables",
+          "marks": 2,
+          "ease": 68,
+          "bucket": "very-short",
+          "preview": ". Is this allowed? yes or no."
+        },
+        {
+          "id": 1513,
+          "type": "short_answer",
+          "topic": "Algebra and equations",
+          "marks": 2,
+          "ease": 66,
+          "bucket": "compute-short",
+          "preview": "Solve . Smallest integer satisfying it?"
+        },
+        {
+          "id": 1557,
+          "type": "short_answer",
+          "topic": "Applications of differentiation",
+          "marks": 2,
+          "ease": 66,
+          "bucket": "very-short",
+          "preview": ". -coordinate of the stationary point?"
+        },
+        {
+          "id": 1565,
+          "type": "short_answer",
+          "topic": "Functions and transformations",
+          "marks": 2,
+          "ease": 68,
+          "bucket": "functions",
+          "preview": "with domain . Is one-to-one? yes or no."
+        },
+        {
+          "id": 1542,
+          "type": "short_answer",
+          "topic": "Differential calculus",
+          "marks": 2,
+          "ease": 66,
+          "bucket": "topic-calculus",
+          "preview": ". ?"
+        },
+        {
+          "id": 1579,
+          "type": "short_answer",
+          "topic": "Functions and transformations",
+          "marks": 2,
+          "ease": 66,
+          "bucket": "topic-functions",
+          "preview": ". Maximum value of ?"
+        },
+        {
+          "id": 1492,
+          "type": "short_answer",
+          "topic": "The normal distribution",
+          "marks": 2,
+          "ease": 60,
+          "bucket": "compute-short",
+          "preview": ". Find for ."
+        },
+        {
+          "id": 1551,
+          "type": "short_answer",
+          "topic": "Functions and transformations",
+          "marks": 2,
+          "ease": 60,
+          "bucket": "compute-short",
+          "preview": ". If , find ."
+        },
+        {
+          "id": 1572,
+          "type": "short_answer",
+          "topic": "Integral calculus",
+          "marks": 2,
+          "ease": 70,
+          "bucket": "compute",
+          "preview": "Evaluate (2 d.p.)."
+        },
+        {
+          "id": 1613,
+          "type": "short_answer",
+          "topic": "Applications of differentiation",
+          "marks": 2,
+          "ease": 66,
+          "bucket": "calculus-derivative",
+          "preview": "Tangent to at . Gradient?"
+        },
+        {
+          "id": 1571,
+          "type": "short_answer",
+          "topic": "Applications of differentiation",
+          "marks": 2,
+          "ease": 60,
+          "bucket": "compute-short",
+          "preview": ". Find ."
+        },
+        {
+          "id": 1519,
+          "type": "short_answer",
+          "topic": "Continuous random variables",
+          "marks": 2,
+          "ease": 66,
+          "bucket": "very-short",
+          "preview": "for a PDF equals?"
+        },
+        {
+          "id": 1483,
+          "type": "short_answer",
+          "topic": "Exponential and logarithmic functions",
+          "marks": 2,
+          "ease": 70,
+          "bucket": "compute-short",
+          "preview": "Evaluate ."
+        },
+        {
+          "id": 1531,
+          "type": "short_answer",
+          "topic": "Applications of integration",
+          "marks": 2,
+          "ease": 66,
+          "bucket": "very-short",
+          "preview": "Average value of on is?"
+        },
+        {
+          "id": 2626,
+          "type": "mcq",
+          "topic": "Circular functions",
+          "marks": 1,
+          "ease": 78,
+          "bucket": "mcq",
+          "preview": "All solutions of for are"
+        },
+        {
+          "id": 1577,
+          "type": "short_answer",
+          "topic": "Sampling and sample proportions",
+          "marks": 2,
+          "ease": 66,
+          "bucket": "very-short",
+          "preview": ", successes. as decimal?"
+        },
+        {
+          "id": 1490,
+          "type": "short_answer",
+          "topic": "Discrete random variables",
+          "marks": 2,
+          "ease": 60,
+          "bucket": "compute-short",
+          "preview": "with , . Find ."
+        },
+        {
+          "id": 2647,
+          "type": "mcq",
+          "topic": "Continuous random variables",
+          "marks": 1,
+          "ease": 75,
+          "bucket": "mcq",
+          "preview": "Let have probability density function for . The median is"
+        },
+        {
+          "id": 2628,
+          "type": "mcq",
+          "topic": "Algebra and equations",
+          "marks": 1,
+          "ease": 71,
+          "bucket": "mcq",
+          "preview": "The equation has exactly one real solution when"
+        },
+        {
+          "id": 2631,
+          "type": "mcq",
+          "topic": "Polynomial, power and rational functions",
+          "marks": 1,
+          "ease": 71,
+          "bucket": "mcq",
+          "preview": "The rational function has a removable discontinuity at"
+        },
+        {
+          "id": 2637,
+          "type": "mcq",
+          "topic": "Functions and transformations",
+          "marks": 1,
+          "ease": 71,
+          "bucket": "mcq",
+          "preview": "If , then the graph of has domain"
+        },
+        {
+          "id": 1494,
+          "type": "short_answer",
+          "topic": "Confidence intervals for proportions",
+          "marks": 2,
+          "ease": 66,
+          "bucket": "stats",
+          "preview": "95% confidence uses ? (2 d.p.)"
+        },
+        {
+          "id": 1491,
+          "type": "short_answer",
+          "topic": "Continuous random variables",
+          "marks": 2,
+          "ease": 60,
+          "bucket": "compute-short",
+          "preview": "PDF on . Find ."
+        },
+        {
+          "id": 2664,
+          "type": "mcq",
+          "topic": "Differential calculus",
+          "marks": 1,
+          "ease": 82,
+          "bucket": "mcq",
+          "preview": "For , is"
+        },
+        {
+          "id": 1617,
+          "type": "short_answer",
+          "topic": "Continuous random variables",
+          "marks": 2,
+          "ease": 81,
+          "bucket": "recall",
+          "preview": "For PDF, everywhere. True or false?"
+        },
+        {
+          "id": 2644,
+          "type": "mcq",
+          "topic": "Exponential and logarithmic functions",
+          "marks": 1,
+          "ease": 78,
+          "bucket": "mcq",
+          "preview": "If , then has solution"
+        },
+        {
+          "id": 2661,
+          "type": "mcq",
+          "topic": "Discrete random variables",
+          "marks": 1,
+          "ease": 78,
+          "bucket": "mcq",
+          "preview": "If and , then"
+        },
+        {
+          "id": 2670,
+          "type": "mcq",
+          "topic": "Integral calculus",
+          "marks": 1,
+          "ease": 78,
+          "bucket": "mcq",
+          "preview": "An antiderivative of is"
+        },
+        {
+          "id": 1549,
+          "type": "short_answer",
+          "topic": "Sampling and sample proportions",
+          "marks": 2,
+          "ease": 74,
+          "bucket": "short",
+          "preview": "Survey 40% yes from . Is ? yes or no."
+        },
+        {
+          "id": 1620,
+          "type": "short_answer",
+          "topic": "Confidence intervals for proportions",
+          "marks": 2,
+          "ease": 74,
+          "bucket": "recall",
+          "preview": "Margin of error shrinks when increases — true or false?"
+        },
+        {
+          "id": 2650,
+          "type": "mcq",
+          "topic": "Sampling and sample proportions",
+          "marks": 1,
+          "ease": 67,
+          "bucket": "mcq",
+          "preview": "For a sample proportion with population proportion , which sample size gives ?"
+        },
+        {
+          "id": 2656,
+          "type": "mcq",
+          "topic": "Applications of differentiation",
+          "marks": 1,
+          "ease": 67,
+          "bucket": "mcq",
+          "preview": "For , the stationary point at is"
+        },
+        {
+          "id": 1506,
+          "type": "short_answer",
+          "topic": "The normal distribution",
+          "marks": 2,
+          "ease": 66,
+          "bucket": "probability",
+          "preview": "For standard normal , ?"
+        },
+        {
+          "id": 1544,
+          "type": "short_answer",
+          "topic": "Integral calculus",
+          "marks": 2,
+          "ease": 66,
+          "bucket": "topic-calculus",
+          "preview": ". Displacement from to ?"
+        },
+        {
+          "id": 1574,
+          "type": "short_answer",
+          "topic": "Discrete random variables",
+          "marks": 2,
+          "ease": 66,
+          "bucket": "probability",
+          "preview": ". Expected value ?"
+        },
+        {
+          "id": 1592,
+          "type": "short_answer",
+          "topic": "Confidence intervals for proportions",
+          "marks": 2,
+          "ease": 66,
+          "bucket": "short",
+          "preview": "Same and : 99% CI is wider than 95%? yes or no."
+        },
+        {
+          "id": 1548,
+          "type": "short_answer",
+          "topic": "The normal distribution",
+          "marks": 2,
+          "ease": 65,
+          "bucket": "short",
+          "preview": "Exam scores . Pass mark 60. -score for 60?"
+        },
+        {
+          "id": 2054,
+          "type": "short_answer",
+          "topic": "Discrete random variables",
+          "marks": 2,
+          "ease": 65,
+          "bucket": "short",
+          "preview": "You win \\ 0.2 1 otherwise. Expected profit per play?"
+        },
+        {
+          "id": 1511,
+          "type": "short_answer",
+          "topic": "Exponential and logarithmic functions",
+          "marks": 2,
+          "ease": 60,
+          "bucket": "manipulate",
+          "preview": "Simplify ."
+        },
+        {
+          "id": 1516,
+          "type": "short_answer",
+          "topic": "Integral calculus",
+          "marks": 2,
+          "ease": 60,
+          "bucket": "calculus-integral",
+          "preview": "Area under from to ."
+        },
+        {
+          "id": 1530,
+          "type": "short_answer",
+          "topic": "Integral calculus",
+          "marks": 2,
+          "ease": 60,
+          "bucket": "functions",
+          "preview": "includes which function? (one word)"
+        }
+      ]
+    },
+    {
+      "subject": "specialist-maths",
+      "totalBefore": 827,
+      "removeCount": 50,
+      "totalAfter": 777,
+      "removed": [
+        {
+          "id": 1767,
+          "type": "short_answer",
+          "topic": "Integral calculus",
+          "marks": 2,
+          "ease": 66,
+          "bucket": "topic-calculus",
+          "preview": "disk about -axis, on gives ?"
+        },
+        {
+          "id": 1753,
+          "type": "short_answer",
+          "topic": "Functions, relations and graphs",
+          "marks": 2,
+          "ease": 66,
+          "bucket": "graphs",
+          "preview": ": vertical asymptote ?"
+        },
+        {
+          "id": 1790,
+          "type": "short_answer",
+          "topic": "Differential calculus",
+          "marks": 2,
+          "ease": 66,
+          "bucket": "topic-calculus",
+          "preview": "at equals?"
+        },
+        {
+          "id": 2675,
+          "type": "short_answer",
+          "topic": "Complex numbers and algebra",
+          "marks": 2,
+          "ease": 63,
+          "bucket": "compute-short",
+          "preview": "Find all solutions of , where ."
+        },
+        {
+          "id": 1804,
+          "type": "short_answer",
+          "topic": "Differential equations",
+          "marks": 2,
+          "ease": 66,
+          "bucket": "very-short",
+          "preview": ", . nearest litre?"
+        },
+        {
+          "id": 1760,
+          "type": "short_answer",
+          "topic": "Vector calculus",
+          "marks": 2,
+          "ease": 66,
+          "bucket": "vectors",
+          "preview": ". Velocity vector at has -component?"
+        },
+        {
+          "id": 1777,
+          "type": "short_answer",
+          "topic": "Functions, relations and graphs",
+          "marks": 2,
+          "ease": 66,
+          "bucket": "topic-functions",
+          "preview": "has minimum value?"
+        },
+        {
+          "id": 2684,
+          "type": "short_answer",
+          "topic": "Differential calculus",
+          "marks": 3,
+          "ease": 62,
+          "bucket": "compute-short",
+          "preview": "Find ."
+        },
+        {
+          "id": 1765,
+          "type": "short_answer",
+          "topic": "Functions, relations and graphs",
+          "marks": 2,
+          "ease": 60,
+          "bucket": "compute-short",
+          "preview": ". Find ."
+        },
+        {
+          "id": 1784,
+          "type": "short_answer",
+          "topic": "Vector calculus",
+          "marks": 2,
+          "ease": 59,
+          "bucket": "topic-calculus",
+          "preview": "Displacement for constant : -component of displacement?"
+        },
+        {
+          "id": 1808,
+          "type": "short_answer",
+          "topic": "Vector calculus",
+          "marks": 2,
+          "ease": 74,
+          "bucket": "recall",
+          "preview": ". Speed at equals — true or false?"
+        },
+        {
+          "id": 1421,
+          "type": "short_answer",
+          "topic": "Vectors",
+          "marks": 2,
+          "ease": 76,
+          "bucket": "compute",
+          "preview": "Find a·b for a=(2,-1,4) and b=(3,2,-2)."
+        },
+        {
+          "id": 1758,
+          "type": "short_answer",
+          "topic": "Vectors in two and three dimensions",
+          "marks": 2,
+          "ease": 66,
+          "bucket": "very-short",
+          "preview": ", . ?"
+        },
+        {
+          "id": 1805,
+          "type": "short_answer",
+          "topic": "Kinematics",
+          "marks": 2,
+          "ease": 66,
+          "bucket": "very-short",
+          "preview": "Acceleration , . ?"
+        },
+        {
+          "id": 2708,
+          "type": "mcq",
+          "topic": "Vector calculus",
+          "marks": 1,
+          "ease": 82,
+          "bucket": "mcq",
+          "preview": "If for , then is"
+        },
+        {
+          "id": 2677,
+          "type": "mcq",
+          "topic": "Complex numbers and algebra",
+          "marks": 1,
+          "ease": 78,
+          "bucket": "mcq",
+          "preview": "The locus is"
+        },
+        {
+          "id": 2674,
+          "type": "mcq",
+          "topic": "Logic and proof",
+          "marks": 1,
+          "ease": 73,
+          "bucket": "mcq",
+          "preview": "Which statement is a counterexample to ‘For all real , if , then ’?"
+        },
+        {
+          "id": 1761,
+          "type": "short_answer",
+          "topic": "Random variables and sampling",
+          "marks": 2,
+          "ease": 66,
+          "bucket": "very-short",
+          "preview": "Independent with , . ?"
+        },
+        {
+          "id": 2689,
+          "type": "short_answer",
+          "topic": "Integral calculus",
+          "marks": 2,
+          "ease": 66,
+          "bucket": "compute-short",
+          "preview": "Evaluate exactly."
+        },
+        {
+          "id": 2700,
+          "type": "short_answer",
+          "topic": "Vectors in two and three dimensions",
+          "marks": 2,
+          "ease": 66,
+          "bucket": "compute-short",
+          "preview": "Find for and ."
+        },
+        {
+          "id": 2709,
+          "type": "short_answer",
+          "topic": "Vector calculus",
+          "marks": 2,
+          "ease": 63,
+          "bucket": "compute-short",
+          "preview": "Find the arc length of for ."
+        },
+        {
+          "id": 1773,
+          "type": "short_answer",
+          "topic": "Random variables and sampling",
+          "marks": 2,
+          "ease": 60,
+          "bucket": "compute-short",
+          "preview": ". Find ."
+        },
+        {
+          "id": 1812,
+          "type": "short_answer",
+          "topic": "Complex numbers and algebra",
+          "marks": 2,
+          "ease": 60,
+          "bucket": "very-short",
+          "preview": ". Write ."
+        },
+        {
+          "id": 2701,
+          "type": "mcq",
+          "topic": "Vectors in two and three dimensions",
+          "marks": 1,
+          "ease": 82,
+          "bucket": "mcq",
+          "preview": "The projection of onto is"
+        },
+        {
+          "id": 2681,
+          "type": "mcq",
+          "topic": "Functions, relations and graphs",
+          "marks": 1,
+          "ease": 78,
+          "bucket": "mcq",
+          "preview": "The function , where , has"
+        },
+        {
+          "id": 2685,
+          "type": "mcq",
+          "topic": "Differential calculus",
+          "marks": 1,
+          "ease": 78,
+          "bucket": "mcq",
+          "preview": "If and , then at is"
+        },
+        {
+          "id": 2693,
+          "type": "mcq",
+          "topic": "Differential equations",
+          "marks": 1,
+          "ease": 78,
+          "bucket": "mcq",
+          "preview": "The solution of with is"
+        },
+        {
+          "id": 2688,
+          "type": "mcq",
+          "topic": "Integral calculus",
+          "marks": 1,
+          "ease": 74,
+          "bucket": "mcq",
+          "preview": "The substitution transforms into"
+        },
+        {
+          "id": 2704,
+          "type": "mcq",
+          "topic": "Lines and planes in 3D",
+          "marks": 1,
+          "ease": 71,
+          "bucket": "mcq",
+          "preview": "A normal vector to the plane through , and is"
+        },
+        {
+          "id": 1768,
+          "type": "short_answer",
+          "topic": "Differential equations",
+          "marks": 2,
+          "ease": 68,
+          "bucket": "recall",
+          "preview": "Does satisfy for any constant ? (true or false)"
+        },
+        {
+          "id": 1807,
+          "type": "short_answer",
+          "topic": "Lines and planes in 3D",
+          "marks": 2,
+          "ease": 68,
+          "bucket": "short",
+          "preview": "Lines and in -plane. Do they intersect? yes or no."
+        },
+        {
+          "id": 1759,
+          "type": "short_answer",
+          "topic": "Lines and planes in 3D",
+          "marks": 2,
+          "ease": 66,
+          "bucket": "recall",
+          "preview": "Line : which coordinate stays constant?"
+        },
+        {
+          "id": 1763,
+          "type": "short_answer",
+          "topic": "Logic and proof",
+          "marks": 2,
+          "ease": 66,
+          "bucket": "very-short",
+          "preview": "Contrapositive of is ?"
+        },
+        {
+          "id": 1771,
+          "type": "short_answer",
+          "topic": "Lines and planes in 3D",
+          "marks": 2,
+          "ease": 66,
+          "bucket": "vectors",
+          "preview": "Plane : normal vector -component?"
+        },
+        {
+          "id": 1783,
+          "type": "short_answer",
+          "topic": "Lines and planes in 3D",
+          "marks": 2,
+          "ease": 66,
+          "bucket": "very-short",
+          "preview": "Distance from origin to plane equals?"
+        },
+        {
+          "id": 1786,
+          "type": "short_answer",
+          "topic": "Confidence intervals",
+          "marks": 2,
+          "ease": 66,
+          "bucket": "recall",
+          "preview": "Standard error of the mean decreases when increases — true or false?"
+        },
+        {
+          "id": 2696,
+          "type": "mcq",
+          "topic": "Kinematics",
+          "marks": 1,
+          "ease": 63,
+          "bucket": "mcq",
+          "preview": "A particle moves with acceleration and has velocity when . Its velocity when is"
+        },
+        {
+          "id": 2703,
+          "type": "short_answer",
+          "topic": "Lines and planes in 3D",
+          "marks": 2,
+          "ease": 63,
+          "bucket": "compute-short",
+          "preview": "Find the shortest distance from to the plane ."
+        },
+        {
+          "id": 2721,
+          "type": "short_answer",
+          "topic": "Differential equations",
+          "marks": 2,
+          "ease": 63,
+          "bucket": "compute-short",
+          "preview": "Find the time at which first reaches ."
+        },
+        {
+          "id": 1778,
+          "type": "short_answer",
+          "topic": "Differential calculus",
+          "marks": 2,
+          "ease": 60,
+          "bucket": "calculus",
+          "preview": "Derivative of at ."
+        },
+        {
+          "id": 1781,
+          "type": "short_answer",
+          "topic": "Kinematics",
+          "marks": 2,
+          "ease": 60,
+          "bucket": "compute-short",
+          "preview": ". For , find ."
+        },
+        {
+          "id": 1762,
+          "type": "short_answer",
+          "topic": "Confidence intervals",
+          "marks": 2,
+          "ease": 59,
+          "bucket": "very-short",
+          "preview": "95% CI for mean uses ? (2 d.p.)"
+        },
+        {
+          "id": 1772,
+          "type": "short_answer",
+          "topic": "Vector calculus",
+          "marks": 2,
+          "ease": 59,
+          "bucket": "calculus",
+          "preview": "Differentiate . Speed is constant equal to?"
+        },
+        {
+          "id": 1785,
+          "type": "short_answer",
+          "topic": "Random variables and sampling",
+          "marks": 2,
+          "ease": 59,
+          "bucket": "short",
+          "preview": "Sample mean has expected value equal to population ?"
+        },
+        {
+          "id": 1787,
+          "type": "short_answer",
+          "topic": "Logic and proof",
+          "marks": 2,
+          "ease": 59,
+          "bucket": "induction",
+          "preview": "Mathematical induction on usually starts the base step at ?"
+        },
+        {
+          "id": 1810,
+          "type": "short_answer",
+          "topic": "Confidence intervals",
+          "marks": 2,
+          "ease": 59,
+          "bucket": "compute-short",
+          "preview": "Sample , , , 95% CI half-width . Find half-width."
+        },
+        {
+          "id": 1818,
+          "type": "short_answer",
+          "topic": "Vectors in two and three dimensions",
+          "marks": 2,
+          "ease": 59,
+          "bucket": "vectors",
+          "preview": "Unit vector in direction of has -component . -component?"
+        },
+        {
+          "id": 6711,
+          "type": "short_answer",
+          "topic": "Integral calculus",
+          "marks": 2,
+          "ease": 59,
+          "bucket": "calc-apps",
+          "preview": "Volume of revolution: disk about -axis, on gives ?"
+        },
+        {
+          "id": 1803,
+          "type": "short_answer",
+          "topic": "Integral calculus",
+          "marks": 2,
+          "ease": 66,
+          "bucket": "topic-calculus",
+          "preview": "?"
+        },
+        {
+          "id": 1801,
+          "type": "short_answer",
+          "topic": "Functions, relations and graphs",
+          "marks": 2,
+          "ease": 66,
+          "bucket": "graphs",
+          "preview": "Graph . How many vertical asymptotes?"
+        }
+      ]
+    }
+  ]
+}

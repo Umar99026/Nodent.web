@@ -1,7 +1,7 @@
-import { useMemo, useRef, useState, startTransition } from "react";
-import { apiFetchAdmin, ApiError } from "@/lib/api";
+import { useMemo, useRef, useState } from "react";
+import { apiFetchAdmin, ApiError, API_UNREACHABLE_MESSAGE, isFetchTimeoutError } from "@/lib/api";
 import { API_PATHS } from "@/lib/constants";
-import { QuestionImageGrid } from "@/components/quiz/QuestionStimulus";
+import { QuestionImageGrid, PassageBlock } from "@/components/quiz/QuestionStimulus";
 import { RichQuestionContent } from "@/components/quiz/RichQuestionContent";
 import {
   isMeaningfulCrop,
@@ -19,21 +19,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { inferPdfQuestionTopic, topicLabelsForSubject } from "@/lib/pdfTopicInfer";
-import { formatPartDescriptor, normalizePartKey, partLetterForIndex } from "@/lib/questionDisplay";
+import { topicLabelsForSubject } from "@/lib/pdfTopicInfer";
+import { formatPartDescriptor, formatSinglePartLabel, normalizeMcqOptions, partLetterForIndex, stripMainPartPrefix, stripMcqOptionPrefix } from "@/lib/questionDisplay";
 import { cropImageDataUrl, FULL_CROP, type CropRect } from "@/lib/pdfImageCrop";
 import {
   detectLetterSubparts,
   extractMcqOptionsFromText,
-  parsePdfToQuestions,
-  sanitizePdfQuestionText,
   type PdfParsedQuestion,
-  type PdfSplitMode,
 } from "@/lib/pdfQuestionImport";
-import { parseNodentPdfToQuestions, quickDetectNodentPdf } from "@/lib/nodentPdfImport";
+import { parseNodentPdfToQuestions } from "@/lib/nodentPdfImport";
 import { purgeCustomQuestionsForSubject } from "@/lib/questionBankCache";
 import { normalizeQuestionMathText } from "@/lib/questionMathText";
-import { shouldUseAiMarking } from "@/lib/questionAiMarking";
+import { inferUseAiMarkingForImport } from "@/lib/questionAiMarking";
+import { isBrokenMathStem } from "@/lib/questionDisplay";
 import { cn } from "@/lib/utils";
 import { FileUp, Loader2, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -65,9 +63,36 @@ type DraftRow = PdfParsedQuestion & {
   correctAnswer: string;
   cropApplied: boolean;
   useImage: boolean;
+  passage?: string;
+  /** Smart (AI) marking for written questions — toggled per row in preview. */
+  useAiMarking: boolean;
   pageQuestionIndex?: number;
   pageQuestionCount?: number;
 };
+
+function ImportMathPreview({
+  text,
+  className,
+}: {
+  text: string;
+  className?: string;
+}) {
+  const trimmed = text.trim();
+  if (!trimmed || trimmed === "See figure.") return null;
+  return (
+    <div
+      className={cn(
+        "rounded-md border border-black/10 bg-muted/25 px-3 py-2.5",
+        className,
+      )}
+    >
+      <RichQuestionContent
+        text={trimmed}
+        className="prose prose-base max-w-none prose-p:my-1 sm:prose-lg"
+      />
+    </div>
+  );
+}
 
 const MCQ_LETTERS = ["A", "B", "C", "D"] as const;
 
@@ -75,20 +100,40 @@ function defaultMcqOptions(): string[] {
   return ["", "", "", ""];
 }
 
+function aiMarkingForDraft(
+  type: QuestionType,
+  question: string,
+  parts: PartDraft[],
+  subjectId: string,
+): boolean {
+  if (type === "mcq") return false;
+  const stemText = [question, ...parts.map((p) => p.descriptor)].join("\n");
+  const accepted = parts.map((p) => p.acceptedAnswer.trim()).filter(Boolean);
+  return inferUseAiMarkingForImport({
+    type,
+    questionText: stemText,
+    partLabels: parts.map((p) => p.descriptor),
+    acceptedAnswers: accepted,
+    subjectId,
+  });
+}
+
 function draftRowDefaults(
   partial: Omit<
     DraftRow,
-    "selected" | "cropping" | "cropApplied" | "mcqOptions" | "correctAnswer" | "useImage"
+    "selected" | "cropping" | "cropApplied" | "mcqOptions" | "correctAnswer" | "useImage" | "useAiMarking"
   > & {
     selected?: boolean;
     cropping?: boolean;
     cropApplied?: boolean;
     useImage?: boolean;
+    useAiMarking?: boolean;
     mcqOptions?: string[];
     correctAnswer?: string;
   },
+  subjectId: string,
 ): DraftRow {
-  const { mcqOptions, correctAnswer, selected, cropping, cropApplied, useImage, ...rest } =
+  const { mcqOptions, correctAnswer, selected, cropping, cropApplied, useImage, useAiMarking, ...rest } =
     partial;
   return {
     ...rest,
@@ -96,6 +141,8 @@ function draftRowDefaults(
     cropping: cropping ?? false,
     cropApplied: cropApplied ?? false,
     useImage: useImage ?? true,
+    useAiMarking:
+      useAiMarking ?? aiMarkingForDraft(rest.type, rest.question, rest.parts, subjectId),
     mcqOptions: mcqOptions ?? defaultMcqOptions(),
     correctAnswer: correctAnswer ?? "",
   };
@@ -147,7 +194,7 @@ function mcqFieldsFromParsed(
   if (options?.every((o) => o.trim())) {
     return {
       type: "mcq",
-      mcqOptions: options,
+      mcqOptions: normalizeMcqOptions(options),
       correctAnswer,
       question,
     };
@@ -159,7 +206,7 @@ function mcqFieldsFromParsed(
     while (padded.length < 4) padded.push("");
     return {
       type: "mcq",
-      mcqOptions: padded,
+      mcqOptions: normalizeMcqOptions(padded),
       correctAnswer,
       question,
     };
@@ -242,7 +289,7 @@ function defaultPart(index: number, marks = 1): PartDraft {
   const letter = partLetterForIndex(index);
   return {
     label: letter,
-    descriptor: `${letter})`,
+    descriptor: "",
     placeholder: "Type your answer…",
     acceptedAnswer: "",
     marks,
@@ -259,7 +306,7 @@ function partsFromParsed(q: {
 }): PartDraft[] {
   if (q.detectedParts && q.detectedParts.length >= 2) {
     return q.detectedParts.map((p, idx) => {
-      const letter = normalizePartKey(p.label, idx);
+      const letter = partLetterForIndex(idx);
       return {
         label: letter,
         descriptor: formatPartDescriptor(letter, p.descriptor),
@@ -282,33 +329,54 @@ function totalMarksForRow(parts: PartDraft[], fallback: number): number {
 }
 
 function buildImportQuestion(row: DraftRow, imagePrimary: boolean): string {
-  const stem = normalizeQuestionMathText(row.question.trim());
+  const stem = stripMainPartPrefix(normalizeQuestionMathText(row.question.trim()));
   const partLines = row.parts
     .map((p) => p.descriptor.trim())
     .filter(Boolean);
+  const isMultipart = row.parts.length >= 2;
+  const pageFallback = row.questionId
+    ? row.questionId.replace(/_/g, " ")
+    : `Question from page ${row.pageNumber}`;
 
   if (row.fromNodent || row.questionId) {
-    if (stem && partLines.length >= 2) return `${stem}\n\n${partLines.join("\n")}`;
+    if (isMultipart) {
+      if (stem && !isBrokenMathStem(stem)) return stem;
+      if (row.useImage) return "See figure.";
+      if (stem && !isBrokenMathStem(stem)) return stem;
+      return pageFallback;
+    }
     if (stem) return stem;
     if (partLines.length) return partLines.join("\n");
-    return "See figure.";
+    if (row.useImage) return "See figure.";
+    return pageFallback;
   }
 
   if (stem && stem !== "See figure.") return stem;
-  if (imagePrimary) return "See figure.";
+  if (imagePrimary && row.useImage) return "See figure.";
   if (partLines.length >= 2) return partLines.join("\n");
-  return `Question from page ${row.pageNumber}`;
+  return pageFallback;
+}
+
+function partPreviewText(parts: PartDraft[], descriptor: string, index: number): string {
+  if (parts.length >= 2) {
+    return formatPartDescriptor(partLetterForIndex(index), descriptor);
+  }
+  return formatSinglePartLabel(descriptor) || descriptor.trim();
 }
 
 function buildAnswerPartsPayload(parts: PartDraft[]) {
+  const multi = parts.length >= 2;
   return parts.map((p, i) => {
-    const letter = normalizePartKey(p.label, i);
+    const letter = partLetterForIndex(i);
     const rawDescriptor = p.descriptor.trim();
-    const descriptor = rawDescriptor
-      ? formatPartDescriptor(letter, rawDescriptor.replace(/^[a-z]\s*[).:\-–—]\s*/i, ""))
-      : `${letter})`;
+    const body = stripMainPartPrefix(rawDescriptor);
+    const descriptor = multi
+      ? body
+        ? formatPartDescriptor(letter, body)
+        : `${letter})`
+      : body || rawDescriptor || "Answer";
     return {
-      key: letter,
+      key: multi ? letter : "a",
       label: descriptor,
       placeholder: p.placeholder.trim() || "Type your answer…",
       marks: Math.max(1, Math.round(p.marks || 1)),
@@ -330,12 +398,8 @@ export function PdfQuestionImportPanel({
     subjects[0]?.id ||
     "";
   const [subjectId, setSubjectId] = useState(initialSubject);
-  const [importSource, setImportSource] = useState<"nodent" | "pdf">("nodent");
-  const [splitMode, setSplitMode] = useState<PdfSplitMode>("per_page");
   const [imagePrimary, setImagePrimary] = useState(false);
-  const [defaultType, setDefaultType] = useState<QuestionType>("long_answer");
   const [defaultTopic, setDefaultTopic] = useState("General");
-  const defaultMarks = 3;
   const [parsing, setParsing] = useState(false);
   const [parseProgress, setParseProgress] = useState("");
   const [parseDiagnostics, setParseDiagnostics] = useState<string[]>([]);
@@ -383,8 +447,15 @@ export function PdfQuestionImportPanel({
       }
 
       const metaSubject = questions.find((q) => q.subjectId)?.subjectId;
-      if (metaSubject && subjects.some((s) => s.id === metaSubject)) {
-        setSubjectId(metaSubject);
+      if (
+        metaSubject &&
+        metaSubject !== subjectId &&
+        subjects.some((s) => s.id === metaSubject)
+      ) {
+        toast.message(
+          `PDF metadata references "${metaSubject}" — questions will import into "${subjectId}" (your subject selection).`,
+          { duration: 6000 },
+        );
       }
 
       setRows(
@@ -407,6 +478,7 @@ export function PdfQuestionImportPanel({
             pageQuestionIndex: q.pageQuestionIndex,
             pageQuestionCount: q.pageQuestionCount,
             question: mcq.question,
+            passage: q.passage,
             marks:
               mcq.type === "mcq"
                 ? 1
@@ -423,7 +495,7 @@ export function PdfQuestionImportPanel({
             useImage: q.useImage !== false,
             mcqOptions: mcq.mcqOptions,
             correctAnswer: mcq.correctAnswer,
-          });
+          }, subjectId);
         }),
       );
       toast.success(
@@ -433,68 +505,6 @@ export function PdfQuestionImportPanel({
       const msg = e instanceof Error ? e.message : "Could not read NODENT PDF.";
       toast.error(msg);
       console.error("[nodent-import]", e);
-    } finally {
-      setParsing(false);
-      setParseProgress("");
-    }
-  };
-
-  const processPdf = async (file: File) => {
-    setParsing(true);
-    setParseProgress("Loading PDF…");
-    setRows([]);
-    try {
-      if (await quickDetectNodentPdf(file)) {
-        toast.message("NODENT format detected — using structured import.");
-        await processNodentPdf(file);
-        return;
-      }
-      const parsed = await parsePdfToQuestions(file, {
-        splitMode,
-        imagePrimary,
-        onProgress: (done, total) => {
-          setParseProgress(`Processing page ${done + 1} of ${total}…`);
-        },
-      });
-      if (!parsed.length) {
-        toast.error("No pages found in that PDF.");
-        return;
-      }
-      const multiPartCount = parsed.filter((q) => (q.detectedParts?.length ?? 0) >= 2).length;
-      startTransition(() => {
-        setRows(
-          parsed.map((q) => {
-            const parts = partsFromParsed(q);
-            const inferredTopic = inferPdfQuestionTopic(subjectId, q.question);
-            const marks =
-              q.marks ??
-              (parts.length >= 2
-                ? totalMarksForRow(parts, defaultMarks)
-                : defaultMarks);
-            const mcq = mcqFieldsFromParsed(q, defaultType);
-            return draftRowDefaults({
-              ...q,
-              question: mcq.question,
-              topic: topicOptions.includes(inferredTopic) ? inferredTopic : defaultTopic,
-              type: mcq.type,
-              marks: mcq.type === "mcq" ? 1 : marks,
-              crop: FULL_CROP,
-              sourceImageDataUrl: q.imageDataUrl,
-              parts: mcq.type === "mcq" ? emptyPartsForMcq() : parts,
-              mcqOptions: mcq.mcqOptions,
-              correctAnswer: mcq.correctAnswer,
-            });
-          }),
-        );
-      });
-      toast.success(
-        multiPartCount > 0
-          ? `Parsed ${parsed.length} question(s) — ${multiPartCount} with multiple parts (a, b, c…).`
-          : `Parsed ${parsed.length} draft(s). Crop images and set answers before importing.`,
-      );
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Could not read PDF.";
-      toast.error(msg);
     } finally {
       setParsing(false);
       setParseProgress("");
@@ -552,8 +562,26 @@ export function PdfQuestionImportPanel({
       return;
     }
 
+    const invalidRows = chosen
+      .map((r, idx) => {
+        const question = buildImportQuestion(r, imagePrimary).trim();
+        if (!question) {
+          return `Row ${idx + 1}: question text is empty — add a stem or part labels.`;
+        }
+        return null;
+      })
+      .filter((msg): msg is string => msg != null);
+    if (invalidRows.length) {
+      toast.error(invalidRows[0]!, { duration: 8000 });
+      if (invalidRows.length > 1) {
+        console.warn("[pdf-import] validation", invalidRows);
+      }
+      return;
+    }
+
     setImporting(true);
     let imported = 0;
+    let skipped = 0;
     const errors: string[] = [];
     const CHUNK = 2;
 
@@ -561,8 +589,7 @@ export function PdfQuestionImportPanel({
       for (let start = 0; start < chosen.length; start += CHUNK) {
         const chunk = chosen.slice(start, start + CHUNK);
         const payload = {
-          questions: await Promise.all(
-            chunk.map(async (r) => {
+          questions: chunk.map((r) => {
             const question = buildImportQuestion(r, imagePrimary);
 
             const rawImages: string[] = !r.useImage
@@ -582,13 +609,14 @@ export function PdfQuestionImportPanel({
 
             if (r.type === "mcq") {
               return {
-                subjectId: r.metaSubjectId || subjectId,
+                subjectId,
                 type: "mcq" as const,
                 topic: r.topic || "General",
                 question,
+                passage: r.passage?.trim() || undefined,
                 imageUrls,
                 marks: Math.max(1, Math.round(r.marks) || 1),
-                options: r.mcqOptions.map((o) => o.trim()),
+                options: normalizeMcqOptions(r.mcqOptions.map((o) => o.trim())),
                 correctAnswer: r.correctAnswer.trim(),
               };
             }
@@ -608,15 +636,7 @@ export function PdfQuestionImportPanel({
               parts.length > 0 ? buildAnswerPartsPayload(parts) : undefined;
 
             let type = r.type;
-            const stemText = [question, ...parts.map((p) => p.descriptor)].join("\n");
-            const acceptedForInfer = parts.map((p) => p.acceptedAnswer.trim()).filter(Boolean);
-            const wantsAi = shouldUseAiMarking({
-              questionText: stemText,
-              partLabels: parts.map((p) => p.descriptor),
-              acceptedAnswers: acceptedForInfer,
-              questionType: type,
-            });
-            if (wantsAi) {
+            if (r.useAiMarking) {
               type = "long_answer";
             } else if (multi || accepted.length >= 2) {
               if (r.type !== "long_answer") type = "short_answer";
@@ -625,12 +645,14 @@ export function PdfQuestionImportPanel({
             }
 
             return {
-              subjectId: r.metaSubjectId || subjectId,
+              subjectId,
               type,
               topic: r.topic || "General",
               question,
+              passage: r.passage?.trim() || undefined,
               imageUrls,
               marks: questionMarks,
+              useAiMarking: r.useAiMarking,
               acceptedAnswers:
                 accepted.length > 0
                   ? accepted
@@ -640,18 +662,19 @@ export function PdfQuestionImportPanel({
               answerParts,
             };
           }),
-          ),
         };
 
         try {
           const res = await apiFetchAdmin<{
             imported: number;
+            skipped?: number;
             errors?: { index: number; message: string }[];
           }>(API_PATHS.admin.questionsBulk, {
             method: "POST",
             body: JSON.stringify(payload),
           });
           imported += Number(res?.imported ?? 0);
+          skipped += Number(res?.skipped ?? 0);
           if (res?.errors?.length) {
             errors.push(
               ...res.errors.map(
@@ -660,22 +683,46 @@ export function PdfQuestionImportPanel({
             );
           }
         } catch (e) {
-          const msg = e instanceof ApiError ? e.message : "Import failed.";
-          errors.push(`Chunk at ${start + 1}: ${msg}`);
+          const msg =
+            e instanceof ApiError
+              ? e.message
+              : isFetchTimeoutError(e)
+                ? API_UNREACHABLE_MESSAGE
+                : "Import failed.";
+          errors.push(`Batch at row ${start + 1}: ${msg}`);
         }
       }
 
-      if (errors.length) {
-        toast.error(`Imported ${imported}. Some failed — see console.`);
-        console.error("[pdf-import]", errors);
-      } else {
-        toast.success(`Imported ${imported} question(s).`);
+      if (imported > 0) {
+        purgeCustomQuestionsForSubject(subjectId);
+        await onImported?.();
         setRows([]);
         if (fileRef.current) fileRef.current.value = "";
-        const importedSubject =
-          chosen.find((r) => r.metaSubjectId)?.metaSubjectId || subjectId;
-        if (importedSubject) purgeCustomQuestionsForSubject(importedSubject);
-        await onImported?.();
+      }
+
+      if (errors.length) {
+        toast.error(
+          imported > 0
+            ? `Imported ${imported}, but ${errors.length} failed. See console for details.`
+            : errors[0] ?? "Import failed.",
+          { duration: 10000 },
+        );
+        console.error("[pdf-import]", errors);
+      } else if (imported === 0 && skipped > 0) {
+        toast.error(
+          `No new questions imported — ${skipped} already exist in "${subjectId}" (duplicate text). Clear the subject or edit the question text.`,
+          { duration: 12000 },
+        );
+      } else if (imported === 0) {
+        toast.error("No questions were imported. Check that rows are selected and the API is running.", {
+          duration: 10000,
+        });
+      } else if (skipped > 0) {
+        toast.success(
+          `Imported ${imported} question(s) into "${subjectId}" (${skipped} duplicate(s) skipped).`,
+        );
+      } else {
+        toast.success(`Imported ${imported} question(s) into "${subjectId}".`);
       }
     } finally {
       setImporting(false);
@@ -731,45 +778,11 @@ export function PdfQuestionImportPanel({
       <CardHeader>
         <CardTitle className="font-display text-lg">Import questions</CardTitle>
         <p className="text-sm text-muted-foreground">
-          Upload a PDF, crop each figure, set parts and answers, then import. Best for Demo
-          multipart questions with image stimulus.
+          Upload a PDF, crop figures, set answers, then import.
         </p>
       </CardHeader>
       <CardContent className="space-y-5">
-        <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            size="sm"
-            variant={importSource === "nodent" ? "accent" : "outline"}
-            onClick={() => setImportSource("nodent")}
-          >
-            NODENT PDF (recommended)
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={importSource === "pdf" ? "accent" : "outline"}
-            onClick={() => setImportSource("pdf")}
-          >
-            PDF auto-detect (legacy)
-          </Button>
-        </div>
-
-        {importSource === "nodent" ? (
-          <p className="text-sm text-muted-foreground">
-            Upload a PDF with one or more{" "}
-            <code className="rounded bg-black/10 px-1">---NODENT---</code> blocks per page.
-            Multiple questions on the same page share the page stimulus figure. Set{" "}
-            <code className="rounded bg-black/10 px-1">use_image: false</code> for text-only
-            questions, or toggle <strong>No stimulus image</strong> in the preview.
-          </p>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            Upload a raw exam PDF and auto-detect questions. Use NODENT PDF format when you have it.
-          </p>
-        )}
-
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <div className="space-y-1.5">
             <Label>Subject</Label>
             <Select value={subjectId} onValueChange={(v) => v && setSubjectId(v)}>
@@ -784,47 +797,13 @@ export function PdfQuestionImportPanel({
                 ))}
               </SelectContent>
             </Select>
-          </div>
-
-          {importSource === "pdf" ? (
-            <div className="space-y-1.5">
-              <Label>Split mode</Label>
-              <Select value={splitMode} onValueChange={(v) => setSplitMode(v as PdfSplitMode)}>
-                <SelectTrigger className="bg-white/60">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="per_page">One question per page (default)</SelectItem>
-                  <SelectItem value="per_question">
-                    One question per exam number (merge continuation pages)
-                  </SelectItem>
-                  <SelectItem value="by_marker">
-                    Split by “Question 1”, “Q2”, … on each page
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          ) : (
-            <div className="space-y-1.5">
-              <Label>Source</Label>
-              <p className="rounded-md border border-black/10 bg-white/50 px-3 py-2 text-sm text-muted-foreground">
-                NODENT per-page metadata
+            {rows.some((r) => r.metaSubjectId && r.metaSubjectId !== subjectId) ? (
+              <p className="text-xs text-amber-800">
+                PDF metadata says{" "}
+                <span className="font-medium">{rows.find((r) => r.metaSubjectId)?.metaSubjectId}</span>
+                {" — "}importing into <span className="font-medium">{subjectId}</span> (your selection).
               </p>
-            </div>
-          )}
-
-          <div className="space-y-1.5">
-            <Label>Default type</Label>
-            <Select value={defaultType} onValueChange={(v) => setDefaultType(v as QuestionType)}>
-              <SelectTrigger className="bg-white/60">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="long_answer">Long answer</SelectItem>
-                <SelectItem value="short_answer">Short answer</SelectItem>
-                <SelectItem value="mcq">Multiple choice</SelectItem>
-              </SelectContent>
-            </Select>
+            ) : null}
           </div>
 
           <div className="space-y-1.5">
@@ -864,7 +843,7 @@ export function PdfQuestionImportPanel({
               const f = e.target.files?.[0];
               if (!f) return;
               toast.message(`Reading ${f.name}…`);
-              void (importSource === "nodent" ? processNodentPdf(f) : processPdf(f));
+              void processNodentPdf(f);
               e.currentTarget.value = "";
             }}
           />
@@ -876,11 +855,7 @@ export function PdfQuestionImportPanel({
             onClick={() => fileRef.current?.click()}
           >
             {parsing ? <Loader2 className="size-4 animate-spin" /> : <FileUp className="size-4" />}
-            {parsing
-              ? parseProgress || "Processing…"
-              : importSource === "nodent"
-                ? "Choose NODENT PDF"
-                : "Choose PDF"}
+            {parsing ? parseProgress || "Processing…" : "Choose PDF"}
           </Button>
 
           {rows.length > 0 ? (
@@ -963,6 +938,11 @@ export function PdfQuestionImportPanel({
                         Shared figure
                       </span>
                     ) : null}
+                    {row.type !== "mcq" && row.useAiMarking ? (
+                      <span className="ml-1 rounded bg-violet-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-violet-800 dark:text-violet-200">
+                        AI marking
+                      </span>
+                    ) : null}
                     {row.parts.length >= 2 ? (
                       <span className="ml-2 text-xs font-normal text-muted-foreground">
                         ({row.parts.length} parts · {totalMarksForRow(row.parts, row.marks)} marks)
@@ -987,6 +967,18 @@ export function PdfQuestionImportPanel({
                     >
                       {row.useImage ? "No stimulus image" : "Include image"}
                     </Button>
+                    {row.type !== "mcq" ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={row.useAiMarking ? "default" : "outline"}
+                        onClick={() =>
+                          updateRow(row.id, { useAiMarking: !row.useAiMarking })
+                        }
+                      >
+                        {row.useAiMarking ? "Smart marking on" : "Smart marking off"}
+                      </Button>
+                    ) : null}
                     {row.useImage ? (
                     <Button
                       type="button"
@@ -1099,6 +1091,7 @@ export function PdfQuestionImportPanel({
                             type: "mcq",
                             marks: 1,
                             parts: emptyPartsForMcq(),
+                            useAiMarking: false,
                             ...(hasOptions
                               ? {
                                   mcqOptions: [...extracted.options!],
@@ -1115,7 +1108,15 @@ export function PdfQuestionImportPanel({
                           });
                           return;
                         }
-                        updateRow(row.id, { type: nextType });
+                        updateRow(row.id, {
+                          type: nextType,
+                          useAiMarking: aiMarkingForDraft(
+                            nextType,
+                            row.question,
+                            row.parts,
+                            subjectId,
+                          ),
+                        });
                       }}
                     >
                       <SelectTrigger className="bg-white/60">
@@ -1147,17 +1148,25 @@ export function PdfQuestionImportPanel({
                 </div>
 
                 <div className="mt-4 space-y-2">
+                  <Label>Stimulus / passage (shared context, LaTeX ok)</Label>
+                  <Textarea
+                    value={row.passage ?? ""}
+                    onChange={(e) => updateRow(row.id, { passage: e.target.value })}
+                    rows={4}
+                    className="bg-white text-sm font-mono"
+                    placeholder="e.g. The function $f$ is defined by $f(x)=x^2+1$ for $x\in\mathbb{R}$."
+                  />
+                  <ImportMathPreview text={row.passage ?? ""} />
+                </div>
+
+                <div className="mt-4 space-y-2">
                   <Label>Question text (optional if image-first)</Label>
                   <Textarea
                     value={row.question}
                     onChange={(e) => updateRow(row.id, { question: e.target.value })}
                     onBlur={() => {
-                      if (row.fromNodent) return;
-                      const next = sanitizePdfQuestionText(row.question, imagePrimary);
-                      const question = next !== row.question ? next || "See figure." : row.question;
+                      const question = row.question;
                       const patch: Partial<DraftRow> = {};
-                      if (next !== row.question) patch.question = question;
-
                       const mcq = extractMcqOptionsFromText(question);
                       if (mcq.options?.every((o) => o.trim())) {
                         patch.type = "mcq";
@@ -1175,30 +1184,34 @@ export function PdfQuestionImportPanel({
                       if (Object.keys(patch).length) updateRow(row.id, patch);
                     }}
                     rows={4}
-                    className="bg-white text-sm"
+                    className="bg-white text-sm font-mono"
                     placeholder="Leave as “See figure.” or add LaTeX, e.g. $f(x)=x^2$"
                   />
+                  <ImportMathPreview text={row.question} />
                 </div>
 
                 {row.type === "mcq" ? (
                   <div className="mt-4 space-y-3">
                     <Label>Options</Label>
                     {MCQ_LETTERS.map((letter, i) => (
-                      <div key={letter} className="flex items-center gap-2">
-                        <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-xs font-medium">
-                          {letter}
-                        </span>
-                        <Input
-                          placeholder={`Option ${letter}`}
-                          value={row.mcqOptions[i] ?? ""}
-                          onChange={(e) => {
-                            const next = [...row.mcqOptions];
-                            while (next.length < 4) next.push("");
-                            next[i] = e.target.value;
-                            updateRow(row.id, { mcqOptions: next });
-                          }}
-                          className="bg-white/80 text-sm"
-                        />
+                      <div key={letter} className="space-y-1.5">
+                        <div className="flex items-center gap-2">
+                          <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-xs font-medium">
+                            {letter}
+                          </span>
+                          <Input
+                            placeholder={`Option ${letter}`}
+                            value={row.mcqOptions[i] ?? ""}
+                            onChange={(e) => {
+                              const next = [...row.mcqOptions];
+                              while (next.length < 4) next.push("");
+                              next[i] = e.target.value;
+                              updateRow(row.id, { mcqOptions: next });
+                            }}
+                            className="bg-white/80 text-sm font-mono"
+                          />
+                        </div>
+                        <ImportMathPreview text={stripMcqOptionPrefix(row.mcqOptions[i] ?? "", letter)} className="ml-9" />
                       </div>
                     ))}
                     <div className="space-y-1.5">
@@ -1263,7 +1276,7 @@ export function PdfQuestionImportPanel({
                           </p>
                         </div>
                       ) : null}
-                      <div className="space-y-1.5">
+                      <div className="space-y-1.5 sm:col-span-2">
                         <Label className="text-xs">Part label (shown to student)</Label>
                         <Input
                           value={part.descriptor}
@@ -1278,7 +1291,10 @@ export function PdfQuestionImportPanel({
                             }
                           }}
                           placeholder="e.g. a) Find the mean"
-                          className="bg-white/80 text-sm"
+                          className="bg-white/80 text-sm font-mono"
+                        />
+                        <ImportMathPreview
+                          text={partPreviewText(row.parts, part.descriptor, pi)}
                         />
                       </div>
                       {row.parts.length >= 2 ? (
@@ -1346,8 +1362,16 @@ export function PdfQuestionImportPanel({
                       How students will see it
                     </p>
                     <div className="rounded-lg border border-black/10 bg-white p-4">
+                      {row.passage?.trim() ? (
+                        <PassageBlock passage={row.passage} />
+                      ) : null}
                       {row.question.trim() && row.question !== "See figure." ? (
-                        <RichQuestionContent text={row.question} />
+                        <div className={row.passage?.trim() ? "mt-4" : undefined}>
+                          <RichQuestionContent
+                            text={row.question}
+                            className="prose prose-base max-w-none sm:prose-lg"
+                          />
+                        </div>
                       ) : null}
                       {isPrimaryStimulusRow(row, rows) ? (
                         <QuestionImageGrid
@@ -1373,7 +1397,15 @@ export function PdfQuestionImportPanel({
                                 )}
                               >
                                 <span className="font-medium">{letter}.</span>{" "}
-                                {row.mcqOptions[i]?.trim() || `Option ${letter}`}
+                                <RichQuestionContent
+                                  text={
+                                    stripMcqOptionPrefix(
+                                      row.mcqOptions[i]?.trim() || `Option ${letter}`,
+                                      letter,
+                                    )
+                                  }
+                                  className="prose prose-sm inline max-w-none prose-p:my-0"
+                                />
                               </div>
                             ))}
                           </div>
@@ -1389,7 +1421,12 @@ export function PdfQuestionImportPanel({
                             {part.imageDataUrl ? (
                               <QuestionImageGrid urls={[part.imageDataUrl]} />
                             ) : null}
-                            <p className="text-sm text-muted-foreground">{part.descriptor}</p>
+                            <div className="font-display text-[1.18rem] leading-relaxed text-foreground sm:text-[1.45rem]">
+                              <RichQuestionContent
+                                text={partPreviewText(row.parts, part.descriptor, pi)}
+                                className="prose prose-base max-w-none prose-p:my-0 sm:prose-lg"
+                              />
+                            </div>
                             <Input
                               disabled
                               placeholder={part.placeholder || "Type your answer…"}

@@ -1,20 +1,22 @@
 import { useState, useEffect } from "react";
-import { cn, getQuestionTypeLabel, inferDpHintFromAccepted, isAnswerCorrect } from "@/lib/utils";
+import { cn, getQuestionTypeLabel, isAnswerCorrect } from "@/lib/utils";
 import type { ShortQuestion as ShortQuestionType } from "@/lib/subjects";
 import {
   buildSmartMarkPayload,
   requestSmartMark,
-  shouldUseAiMarking,
+  resolveAiMarking,
 } from "@/lib/questionAiMarking";
 import {
   collectStimulusFromQuestion,
   displayMarks,
   formatPartDescriptor,
+  formatSinglePartLabel,
   hasVisibleStimulus,
   marksEarnedFromPartResults,
   normalizePartKey,
   resolvePartMarks,
   resolveMultipartPartDisplay,
+  multipartSharedStem,
   stripQuestionHeadingFromPassage,
   stripQuestionNumberPrefix,
   type AnswerScoreDetail,
@@ -252,23 +254,22 @@ export function ShortQuestion({
         .map(formatExpectedAnswer)
         .map(cleanAcceptedCandidate)
     : (question.acceptedAnswers ?? []).map(formatExpectedAnswer);
-  const partDpHints = isMultipart
-    ? partLabels.map((_, idx) =>
-        inferDpHintFromAccepted([expectedAnswersForDisplay[idx] ?? ""]),
-      )
-    : [];
-  const singleDpHint = !isMultipart
-    ? inferDpHintFromAccepted([expectedAnswersForDisplay[0] ?? ""])
-    : null;
 
-  const useSmartMarking = shouldUseAiMarking({
+  const useSmartMarking = resolveAiMarking({
+    useAiMarking: question.useAiMarking,
     questionText: question.question,
     partLabels: partDescriptors,
     acceptedAnswers: question.acceptedAnswers,
     questionType: question.type,
+    subjectId,
   });
 
   const useTextArea = useSmartMarking && !isMultipart;
+
+  const displayStem =
+    isMultipart && configuredParts.length >= 2
+      ? multipartSharedStem(question)
+      : stripQuestionNumberPrefix(question.question);
 
   useEffect(() => {
     onStateChange?.({
@@ -427,22 +428,16 @@ export function ShortQuestion({
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           {effectiveTotalMarks}{" "}
           {effectiveTotalMarks === 1 ? "mark" : "marks"}
-          {dpHint != null && dpHint > 0 ? ` (${dpHint} d.p.)` : ""}
         </p>
       ) : null}
+      {displayStem.trim() ? (
       <div className="font-display text-[1.18rem] leading-relaxed text-foreground sm:text-[1.45rem]">
         <RichQuestionContent
-          text={stripQuestionNumberPrefix(question.question)}
+          text={displayStem}
           className="prose prose-base max-w-none prose-p:my-0"
         />
       </div>
-
-      {/* Guidance */}
-      {question.guidance && (
-        <div className="rounded-lg bg-amber/10 px-4 py-3 text-sm text-amber">
-          <RichQuestionContent text={question.guidance} className="prose prose-sm max-w-none prose-p:my-0" />
-        </div>
-      )}
+      ) : null}
 
       {/* Answer input */}
       <div className="space-y-3">
@@ -471,7 +466,12 @@ export function ShortQuestion({
                     <QuestionImageGrid urls={[partImageUrls[idx]!]} />
                   ) : null}
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs font-medium text-muted-foreground">{partDescriptors[idx]}</p>
+                    <div className="min-w-0 flex-1 font-display text-[1.18rem] leading-relaxed text-foreground sm:text-[1.45rem]">
+                      <RichQuestionContent
+                        text={partDescriptors[idx] ?? ""}
+                        className="prose prose-base max-w-none prose-p:my-0 sm:prose-lg"
+                      />
+                    </div>
                     <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                       {partMarks[idx]} {partMarks[idx] === 1 ? "mark" : "marks"}
                     </span>
@@ -492,10 +492,12 @@ export function ShortQuestion({
                         {partUnit}
                       </span>
                     ) : null}
-                    {shouldUseAiMarking({
+                    {resolveAiMarking({
+                      useAiMarking: question.useAiMarking,
                       questionText: partDescriptors[idx] ?? "",
                       acceptedAnswers: [expectedAnswersForDisplay[idx] ?? ""],
                       questionType: "short",
+                      subjectId,
                     }) ? (
                       <Textarea
                         value={parts[idx] ?? ""}
@@ -537,15 +539,6 @@ export function ShortQuestion({
                       />
                     )}
                   </div>
-                  <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                    <span>
-                      {partDpHints[idx] === 2
-                        ? "Answer to 2 d.p."
-                        : partDpHints[idx] === 0
-                          ? "Whole number (no decimals)"
-                          : "Any valid format"}
-                    </span>
-                  </div>
                   {submitted && partResults[idx] === false && (
                     <p className="text-[11px] text-muted-foreground">
                       Correct answer:{" "}
@@ -562,11 +555,20 @@ export function ShortQuestion({
             </div>
           ) : (
             <div className="space-y-1">
-              {configuredParts.length === 1 && configuredParts[0]!.label.trim() ? (
-                <p className="text-xs font-medium text-muted-foreground">
-                  {configuredParts[0]!.label.trim()}
-                </p>
-              ) : null}
+              {(() => {
+                const singlePartLabel =
+                  configuredParts.length === 1
+                    ? formatSinglePartLabel(configuredParts[0]!.label)
+                    : "";
+                return singlePartLabel ? (
+                  <div className="font-display text-[1.05rem] leading-relaxed text-foreground sm:text-[1.2rem]">
+                    <RichQuestionContent
+                      text={singlePartLabel}
+                      className="prose prose-base max-w-none prose-p:my-0"
+                    />
+                  </div>
+                ) : null;
+              })()}
               <div className={cn("flex gap-2", useTextArea ? "flex-col" : "items-stretch")}>
                 <div className={cn("flex flex-1 items-stretch", useTextArea && "w-full")}>
                   {!useTextArea && inferPartUnitHint("", expectedAnswersForDisplay[0]) ? (
@@ -623,17 +625,6 @@ export function ShortQuestion({
                       : "Submit"}
                 </Button>
               </div>
-              {!useTextArea ? (
-              <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                <span>
-                  {singleDpHint === 2
-                    ? "Answer to 2 d.p."
-                    : singleDpHint === 0
-                      ? "Whole number (no decimals)"
-                      : "Any valid format"}
-                </span>
-              </div>
-              ) : null}
               {submitted && !isCorrect && allowRetry && !useSmartMarking && (
                 <p className="text-[11px] text-muted-foreground">
                   Correct answer:{" "}

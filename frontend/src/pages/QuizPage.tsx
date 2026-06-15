@@ -206,8 +206,6 @@ export default function QuizPage() {
     const visible = subjectsForUser({ isAdmin });
     return visible.find((s) => s.id === subjectId);
   }, [subjectId, isAdmin]);
-  const isMathSubject = /math/i.test(subject?.name ?? "");
-
   // Demo subject is admin-only (guard direct URL access).
   useEffect(() => {
     if (String(subjectId) === "demo" && !isAdmin) {
@@ -1036,7 +1034,6 @@ export default function QuizPage() {
                               disabled={lockAfterSubmit}
                               practiceOnly={isWrongReview}
                               classFullyCorrectPercent={partClass ?? null}
-                              submitLabel={isMathSubject ? "Submit Answer" : "Save Answer"}
                               persistedState={questionUiState[qk]}
                               onStateChange={(state) => updateQuestionUiState(qk, state)}
                             />

@@ -21,6 +21,8 @@ export interface BaseQuestion {
   answerImageUrls?: string[];
   marks?: number;
   guidance?: string;
+  /** When set, overrides auto-detection for smart (AI) marking on written questions. */
+  useAiMarking?: boolean;
   passage?: string;
   /** Same id = multi-part question: shown together with one shared stimulus (`passage`). */
   groupId?: string;

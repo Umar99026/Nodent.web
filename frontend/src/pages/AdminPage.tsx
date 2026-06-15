@@ -483,7 +483,7 @@ export default function AdminPage() {
 
   /* ------ fetch existing questions ------ */
 
-  const fetchQuestions = useCallback(async (): Promise<AdminQuestion[]> => {
+  const fetchQuestions = useCallback(async (): Promise<AdminQuestion[] | null> => {
     try {
       setQuestionsLoading(true);
       const data = await apiFetchAdmin<
@@ -508,7 +508,7 @@ export default function AdminPage() {
       return flat;
     } catch {
       setQuestions([]);
-      return [];
+      return null;
     } finally {
       setQuestionsLoading(false);
     }
@@ -617,31 +617,42 @@ export default function AdminPage() {
           }
         }
       }
-      // Dedupe by question stem globally so admin subject moves are not re-seeded elsewhere.
       const stemSet = new Set(
-        current.map((q) => questionStemKey(q.question)).filter(Boolean),
+        current
+          .map((q) => {
+            const sid = canonicalSubjectId(q.subjectId);
+            const stem = questionStemKey(q.question);
+            return stem ? `${sid}::${stem}` : "";
+          })
+          .filter(Boolean),
       );
       const missing = seedRows.filter((r) => {
+        const sid = canonicalSubjectId(String(r.subjectId ?? ""));
         const stem = questionStemKey(String(r.question ?? ""));
-        return stem && !stemSet.has(stem);
+        const key = stem ? `${sid}::${stem}` : "";
+        return key && !stemSet.has(key);
       });
       if (!missing.length) return;
 
       const CHUNK = 25;
       let imported = 0;
+      let skipped = 0;
       for (let i = 0; i < missing.length; i += CHUNK) {
         const chunk = missing.slice(i, i + CHUNK);
-        const res = await apiFetchAdmin<{ imported?: number }>(
+        const res = await apiFetchAdmin<{ imported?: number; skipped?: number }>(
           API_PATHS.admin.questionsBulk,
           {
             method: "POST",
             body: JSON.stringify({ questions: chunk }),
           },
         );
-        imported += Number(res?.imported ?? chunk.length);
+        imported += Number(res?.imported ?? 0);
+        skipped += Number(res?.skipped ?? 0);
       }
       if (imported > 0) {
-        toast.success(`Synced ${imported} question(s) into the bank.`);
+        toast.success(`Synced ${imported} built-in question(s) into the bank.`);
+      } else if (skipped > 0) {
+        toast.message(`${skipped} built-in question(s) already in the bank (skipped).`);
       }
     } catch (e) {
       const msg = e instanceof ApiError ? e.message : "Built-in sync failed.";
@@ -723,7 +734,7 @@ export default function AdminPage() {
         fetchEnglishPrompts(),
         fetchRecentUsers(),
       ]);
-      if (cancelled) return;
+      if (cancelled || current === null) return;
       await applyStemRepairs(current);
       if (cancelled) return;
       await applyBankCorrections(current);

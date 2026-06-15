@@ -5,6 +5,28 @@ export function displayMarks(marks: number | undefined, type: "mcq" | "short" | 
   return type === "mcq" ? 1 : 2;
 }
 
+/** Remove leading A/B/C/D label — the quiz UI shows letters on each tile. */
+export function stripMcqOptionPrefix(option: string, letter?: string): string {
+  let t = String(option ?? "").trim();
+  if (!t) return t;
+
+  if (letter) {
+    const L = letter.toUpperCase();
+    const exact = new RegExp(`^\\(?\\[?${L}\\]?\\)?\\s*[\\).:\\-–—]?\\s*`, "i");
+    if (exact.test(t)) return t.replace(exact, "").trim();
+  }
+
+  return t.replace(/^\(?\[?[A-H]\]?\)?\s*[\).:\-–—]?\s*/i, "").trim();
+}
+
+export function normalizeMcqOptions(options: string[]): string[] {
+  return options.map((opt, i) => {
+    const letter = String.fromCharCode(65 + (i % 26));
+    const stripped = stripMcqOptionPrefix(opt, letter);
+    return stripped || stripMcqOptionPrefix(opt);
+  });
+}
+
 /** Per-part marks from answerParts, or split total evenly when not set. */
 export function resolvePartMarks(
   configuredParts: { marks?: number }[],
@@ -75,23 +97,43 @@ export function normalizePartKey(key: string | undefined, index: number): string
   return partLetterForIndex(index);
 }
 
-/** Student-facing part heading, e.g. "a) Find the mean". */
+/** Strip leading part letter markers (a) / a. / a:) from stored labels. */
+export function stripMainPartPrefix(label: string): string {
+  let out = String(label ?? "").trim();
+  if (!out) return "";
+  out = out.replace(/^(?:[a-z])\s*[).:\-–—]\s*/i, "");
+  return out.trim();
+}
+
+/** Student-facing part heading, e.g. "a) Find the mean" or "b) i. Find f'(x)". */
 export function formatPartDescriptor(letter: string, label: string): string {
   const L = letter.trim().toLowerCase();
-  const clean = label.trim();
+  const clean = stripMainPartPrefix(label);
   if (!clean || /^answer$/i.test(clean)) return `${L})`;
-  if (/^[a-z]\s*[).:\-–—]/i.test(clean)) return clean;
+
+  // Sub-parts (i. / ii. / iii. / iv.) — prefix with main part letter.
+  if (/^(?:i{1,3}|iv)\.\s+/i.test(clean)) {
+    return `${L}) ${clean}`;
+  }
+
   return `${L}) ${clean}`;
 }
 
 export function resolveMultipartPartDisplay(
   answerParts: Array<{ key?: string; label?: string }>,
 ): { letters: string[]; descriptors: string[] } {
-  const letters = answerParts.map((p, idx) => normalizePartKey(p.key, idx));
+  const letters = answerParts.map((_, idx) => partLetterForIndex(idx));
   const descriptors = answerParts.map((p, idx) =>
     formatPartDescriptor(letters[idx]!, p.label ?? ""),
   );
   return { letters, descriptors };
+}
+
+/** Label for a single answer part — no a)/b) prefix. */
+export function formatSinglePartLabel(label: string): string {
+  const clean = stripMainPartPrefix(label);
+  if (!clean || /^answer$/i.test(clean)) return "";
+  return clean;
 }
 
 /** Remove scenario/topic labels duplicated in the stem (topic already shows in the badge). */
@@ -128,7 +170,7 @@ export function stripMarksAnnotations(text: string): string {
 export function stripQuestionNumberPrefix(text: string): string {
   const src = stripMarksAnnotations(stripScenarioLabelPrefix(String(text ?? "").trim()));
   if (!src) return "";
-  return src
+  const stripped = src
     // Remove placeholder test labels sometimes injected by imports.
     .replace(/^(?:test(?:\s*pdf)?|pdf\s*test)\s*[:.)-]?\s*/i, "")
     // Question 7 / Q7 / Question 7 (6 marks) / Q7(a): etc.
@@ -139,6 +181,69 @@ export function stripQuestionNumberPrefix(text: string): string {
     // 7 / 7a / 7(a) / 7a) / 7. / 7: etc.
     .replace(/^\d{1,4}\s*[a-z]?(?:\([a-z0-9]+\))?\s*[:.)-]\s*/i, "")
     .trim();
+  return stripMainPartPrefix(stripped);
+}
+
+/** True when stem ends with an unclosed $…$ (common PDF import glitch). */
+export function isBrokenMathStem(text: string): boolean {
+  const t = String(text ?? "").trim();
+  if (!t) return false;
+  if (/\$\s*$/.test(t)) return true;
+  const dollars = (t.match(/(?<!\\)\$/g) ?? []).length;
+  return dollars % 2 === 1;
+}
+
+function splitStemBeforeParts(text: string): string {
+  let stem = String(text ?? "").trim();
+  const firstPart = stem.search(/(?:^|\n)\s*(?:[a-z][.)]|[a-z]\.\s*i{1,3}\.)/i);
+  if (firstPart < 0) return stem;
+  if (firstPart === 0) return "";
+  return stem.slice(0, firstPart).trim();
+}
+
+/** Shared stem for multipart — part prompts live in answerParts, not the main stem. */
+export function multipartSharedStem(q: {
+  question: string;
+  passage?: string;
+  imageUrls?: string[];
+  answerParts?: Array<{ label?: string }>;
+}): string {
+  const parts = q.answerParts?.filter((p) => p?.label?.trim()) ?? [];
+  if (parts.length < 2) return stripQuestionNumberPrefix(q.question);
+
+  let stem = stripQuestionNumberPrefix(splitStemBeforeParts(q.question));
+
+  if (/^question\s*\d*$/i.test(stem.replace(/\s+/g, " ").trim())) {
+    stem = "";
+  }
+
+  if (isBrokenMathStem(stem)) stem = "";
+
+  if (!stem.trim()) {
+    const passage = q.passage?.trim();
+    if (passage) return stripQuestionHeadingFromPassage(passage) ?? passage;
+    if (q.imageUrls?.length) return "See figure.";
+    return "";
+  }
+
+  return stem;
+}
+
+/** Repair stored question text after bad multipart import (stem + parts duplicated). */
+export function repairMultipartQuestionStem(
+  question: string,
+  answerParts?: Array<{ label?: string }>,
+): string {
+  const parts = answerParts?.filter((p) => p?.label?.trim()) ?? [];
+  if (parts.length < 2) {
+    const stem = stripQuestionNumberPrefix(question);
+    return isBrokenMathStem(stem) ? "" : stem;
+  }
+
+  let stem = stripQuestionNumberPrefix(splitStemBeforeParts(question));
+  if (/^question\s*\d*$/i.test(stem.replace(/\s+/g, " ").trim())) stem = "";
+  if (isBrokenMathStem(stem)) stem = "";
+  return stem;
 }
 
 const MARKDOWN_IMAGE_RE = /!\[([^\]]*)\]\(([^)\s]+)\)/g;

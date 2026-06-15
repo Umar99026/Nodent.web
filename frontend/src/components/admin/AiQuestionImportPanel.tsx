@@ -178,7 +178,7 @@ export function AiQuestionImportPanel({
           })),
         })),
       };
-      const result = await apiFetchAdmin<{ imported: number; errors: { index: number; message: string }[] }>(
+      const result = await apiFetchAdmin<{ imported: number; skipped?: number; errors: { index: number; message: string }[] }>(
         API_PATHS.admin.questionsBulk,
         { method: "POST", body: JSON.stringify(payload) },
       );
@@ -186,7 +186,17 @@ export function AiQuestionImportPanel({
       for (const sid of subjectsTouched) purgeCustomQuestionsForSubject(sid);
       await onImported?.();
       const errCount = result.errors?.length ?? 0;
-      toast.success(`Imported ${result.imported ?? 0} question(s).${errCount ? ` ${errCount} failed.` : ""}`);
+      const skipped = Number(result.skipped ?? 0);
+      const imported = Number(result.imported ?? 0);
+      if (imported > 0 && skipped > 0) {
+        toast.success(`Imported ${imported} question(s). ${skipped} duplicate(s) skipped.`);
+      } else if (imported > 0) {
+        toast.success(`Imported ${imported} question(s).`);
+      } else if (skipped > 0) {
+        toast.error(`No new questions — ${skipped} duplicate(s) already in the bank.`);
+      } else {
+        toast.error("No questions were imported.");
+      }
       if (errCount === 0) {
         setDraft((prev) => prev.filter((r) => !r.selected));
       }
