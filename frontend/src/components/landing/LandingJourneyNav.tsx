@@ -10,7 +10,7 @@ type LandingJourneyNavProps = {
 export function LandingJourneyNav({ activeIndex, onSelect }: LandingJourneyNavProps) {
   return (
     <div
-      className="flex flex-wrap items-center justify-center gap-2 sm:gap-3"
+      className="flex flex-wrap items-center justify-start gap-2 sm:gap-3"
       role="tablist"
       aria-label="Product journey"
     >
@@ -23,7 +23,7 @@ export function LandingJourneyNav({ activeIndex, onSelect }: LandingJourneyNavPr
             aria-controls="demo-animation-panel"
             onClick={() => onSelect(i)}
             className={cn(
-              "min-h-11 rounded-full border px-3 py-2.5 text-xs font-medium shadow-sm transition-all sm:px-4 sm:py-2.5 sm:text-sm",
+              "min-h-11 rounded-full border px-3 py-2.5 text-xs font-medium transition-all sm:px-4 sm:py-2.5 sm:text-sm",
               activeIndex === i
                 ? "border-brand bg-brand/10 text-brand-dark ring-2 ring-brand/25"
                 : "border-slate-200 bg-white text-slate-700 hover:border-brand/30 hover:bg-brand/5",
