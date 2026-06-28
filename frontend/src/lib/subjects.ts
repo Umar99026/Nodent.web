@@ -1,3 +1,5 @@
+import type { DiagramLabelPart, InlineInputBox } from "@/lib/diagramLabels";
+
 export type QuestionType = "mcq" | "short" | "long";
 
 export interface AnswerPart {
@@ -10,6 +12,15 @@ export interface AnswerPart {
   imageUrl?: string;
   /** Marks for this subpart (PDF import / multipart). */
   marks?: number;
+  /** Position on a diagram image (percent 0–100). When set, input is overlaid on the figure. */
+  overlayX?: number;
+  overlayY?: number;
+  overlayW?: number;
+  overlayH?: number;
+  /** Multiple input boxes on this part's figure image (legacy). */
+  labelOverlays?: DiagramLabelPart[];
+  /** Horizontal inline answer boxes for this subquestion. */
+  inlineInputs?: InlineInputBox[];
 }
 
 export interface BaseQuestion {

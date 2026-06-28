@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useParams, useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, BOOTSTRAP_FETCH_TIMEOUT_MS } from "@/lib/api";
 import { API_PATHS, STORAGE_KEYS } from "@/lib/constants";
 import {
   loadPracticeBank,
@@ -48,6 +48,7 @@ import { McqQuestion } from "@/components/quiz/McqQuestion";
 import { ShortQuestion } from "@/components/quiz/ShortQuestion";
 import { LongQuestion } from "@/components/quiz/LongQuestion";
 import { CommentThread } from "@/components/quiz/CommentThread";
+import { AdminQuestionEditLink } from "@/components/admin/AdminQuestionEditLink";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -71,6 +72,7 @@ import {
   AlertDialogCancel,
 } from "@/components/ui/alert-dialog";
 import { useInactivity } from "@/hooks/useInactivity";
+import { useHandwritingMode } from "@/context/HandwritingModeContext";
 import {
   ChevronLeft,
   ChevronRight,
@@ -183,7 +185,14 @@ export default function QuizPage() {
   const wrongOnlyKeyParam = searchParams.get("key");
   const { user } = useAuth();
   const isAdmin = isAdminUser(user);
+  /** Demo sandbox: keep the same question(s) available after every submit. */
+  const isDemoSandbox = subjectId === "demo";
+  const { setEnabled: setHandwritingMode } = useHandwritingMode();
   const { isInactive, resetInactivity } = useInactivity();
+
+  useEffect(() => {
+    if (isDemoSandbox && !isWrongReview) setHandwritingMode(true);
+  }, [isDemoSandbox, isWrongReview, setHandwritingMode]);
 
   const [showInactivityDialog, setShowInactivityDialog] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -191,6 +200,7 @@ export default function QuizPage() {
   const [initialized, setInitialized] = useState(false);
   const [questionsLoading, setQuestionsLoading] = useState(true);
   const [questions, setQuestions] = useState<Question[]>([]);
+  const [bankRefreshKey, setBankRefreshKey] = useState(0);
   const [questionUiState, setQuestionUiState] = useState<Record<string, QuestionUiState>>({});
   const initialTopicParam = String(searchParams.get("topic") ?? "").trim();
   const [topicFilter, setTopicFilter] = useState<string>(initialTopicParam || "all");
@@ -200,6 +210,7 @@ export default function QuizPage() {
   const [classByKey, setClassByKey] = useState<Record<string, number>>({});
   const saveTimerRef = useRef<number | null>(null);
   const pendingSaveRef = useRef<PracticeState | null>(null);
+  const bankInitializedRef = useRef<string | null>(null);
 
   // Find subject (used for display metadata only)
   const subject: Subject | undefined = useMemo(() => {
@@ -218,7 +229,47 @@ export default function QuizPage() {
     setPinnedGroupKey(null);
     setQuestionUiState({});
     setAnsweredAtSessionStart(new Set());
+    bankInitializedRef.current = null;
   }, [subjectId, user?.id, isWrongReview]);
+
+  const reloadBankAfterEdit = useCallback(
+    (editedQuestionId: number | string) => {
+      if (!subjectId || !user) return;
+      const bank = loadPracticeBank(subjectId);
+      setQuestions(bank);
+      setBankRefreshKey((k) => k + 1);
+
+      const edited = bank.find((q) => String(q.id) === String(editedQuestionId));
+      if (!edited) return;
+
+      const groupKey = getQuestionGroupKey(edited, bank);
+      setPinnedGroupKey(groupKey);
+
+      const rand = randomizedQuestionsForSubject(bank, user.id, subjectId);
+      const filtered =
+        topicFilter === "all"
+          ? rand
+          : rand.filter((q) => questionMatchesPracticeTopic(subjectId, q, topicFilter));
+      const groups = buildGroupsFromOrderedFlat(filtered, bank);
+      const isAnswered = (qk: string) =>
+        answeredAtSessionStart.has(qk) || answers[qk] !== undefined;
+      const visible = groups.filter(
+        (g) =>
+          g.key === groupKey ||
+          !g.parts.every((p) => {
+            const qk = questionKeyStable(
+              subjectId,
+              p,
+              Math.max(0, getStableQuestionIndex(bank, p)),
+            );
+            return isAnswered(qk);
+          }),
+      );
+      const idx = visible.findIndex((g) => g.key === groupKey);
+      if (idx >= 0) setCurrentIndex(idx);
+    },
+    [subjectId, user, topicFilter, answers, answeredAtSessionStart],
+  );
 
   // If the setup page passes ?topic=..., keep the UI in sync.
   useEffect(() => {
@@ -299,12 +350,20 @@ export default function QuizPage() {
       return;
     }
     let cancelled = false;
-    setQuestionsLoading(true);
+
+    const cached = loadPracticeBank(subjectId);
+    if (cached.length > 0) {
+      setQuestions(cached);
+      setQuestionsLoading(false);
+    } else {
+      setQuestionsLoading(true);
+    }
+
     (async () => {
       try {
         const data = await apiFetch<{
           customQuestions?: Record<string, unknown[]>;
-        }>(API_PATHS.bootstrap);
+        }>(API_PATHS.bootstrap, { timeoutMs: BOOTSTRAP_FETCH_TIMEOUT_MS });
         if (cancelled) return;
         if (data?.customQuestions) {
           localStorage.setItem(
@@ -325,7 +384,7 @@ export default function QuizPage() {
           setQuestions(
             stored.length
               ? stored
-              : practiceQuestionsForSubject([], subjectId),
+              : loadPracticeBank(subjectId),
           );
         }
       } finally {
@@ -341,13 +400,14 @@ export default function QuizPage() {
     if (!user || !subjectId) return;
     const onBankUpdated = () => {
       setQuestions(loadPracticeBank(subjectId));
+      setBankRefreshKey((k) => k + 1);
     };
     window.addEventListener(QUESTIONS_UPDATED_EVENT, onBankUpdated);
     return () => window.removeEventListener(QUESTIONS_UPDATED_EVENT, onBankUpdated);
   }, [user, subjectId]);
 
   const availableTopics = useMemo(() => {
-    if (subjectId === "general-maths") {
+    if (subjectId === "general-maths" || subjectId === "demo") {
       return generalMathsPracticeTopicOptions().filter((t) => t !== "all");
     }
     if (subjectId === "specialist-maths") {
@@ -486,6 +546,7 @@ export default function QuizPage() {
   /** Main quiz: once you answer a question, you should not see it again (except in wrong-answer review). */
   const activeGroups = useMemo(() => {
     if (!subjectId) return allGroupsFlat;
+    if (isDemoSandbox) return allGroupsFlat;
     const isAnswered = (qk: string) =>
       answeredAtSessionStart.has(qk) || answers[qk] !== undefined;
     return allGroupsFlat.filter((g) =>
@@ -499,21 +560,26 @@ export default function QuizPage() {
         return isAnswered(qk);
       }),
     );
-  }, [allGroupsFlat, subjectId, questions, pinnedGroupKey, answeredAtSessionStart, answers]);
+  }, [allGroupsFlat, subjectId, questions, pinnedGroupKey, answeredAtSessionStart, answers, isDemoSandbox]);
 
   const displayGroups: QuestionStimulusGroup[] = isWrongReview
     ? wrongReviewGroups ?? []
     : activeGroups;
 
-  // Load persisted state after questions are known; normalize keys to stable bank indices.
+  // Load persisted state once per subject session — not on every bank refresh.
   useEffect(() => {
     if (!user || !subjectId || questionsLoading) return;
+    const sessionKey = `${user.id}:${subjectId}:${isWrongReview ? "wrong" : "quiz"}`;
+    if (bankInitializedRef.current === sessionKey) return;
+
     // If there are no questions, still mark initialized so we can render the
     // “No questions available” empty state instead of spinning forever.
     if (questions.length === 0) {
+      if (questionsLoading) return;
       setCurrentIndex(0);
       setAnswers({});
       setInitialized(true);
+      bankInitializedRef.current = sessionKey;
       return;
     }
 
@@ -522,6 +588,17 @@ export default function QuizPage() {
       setAnswers({});
       setAnsweredAtSessionStart(new Set());
       setInitialized(true);
+      bankInitializedRef.current = sessionKey;
+      return;
+    }
+
+    if (isDemoSandbox) {
+      setCurrentIndex(0);
+      setAnswers({});
+      setAnsweredAtSessionStart(new Set());
+      setPinnedGroupKey(null);
+      setInitialized(true);
+      bankInitializedRef.current = sessionKey;
       return;
     }
 
@@ -539,6 +616,7 @@ export default function QuizPage() {
     setAnsweredAtSessionStart(new Set(Object.keys(localNorm)));
     setPinnedGroupKey(null);
     setInitialized(true);
+    bankInitializedRef.current = sessionKey;
 
     // Merge server attempts in the background — never block the quiz UI on this.
     let cancelled = false;
@@ -573,14 +651,7 @@ export default function QuizPage() {
     return () => {
       cancelled = true;
     };
-  }, [
-    user?.id,
-    subjectId,
-    questionsLoading,
-    questions,
-    randomizedQuestions,
-    isWrongReview,
-  ]);
+  }, [user?.id, subjectId, questionsLoading, isWrongReview, isDemoSandbox, questions.length]);
 
   // Show inactivity dialog
   useEffect(() => {
@@ -600,14 +671,13 @@ export default function QuizPage() {
     ) => {
       const earned =
         marksEarned ?? (isCorrect ? marks : 0);
-      setAnswers((prev) => {
-        const next = { ...prev, [qKey]: isCorrect };
-        // Wrong-answer review must never overwrite the user's long-term practice history.
-        if (!isWrongReview) {
+      if (!isWrongReview && !isDemoSandbox) {
+        setAnswers((prev) => {
+          const next = { ...prev, [qKey]: isCorrect };
           schedulePracticeSave({ currentIndex, answers: next });
-        }
-        return next;
-      });
+          return next;
+        });
+      }
 
       if (!isWrongReview && subjectId) {
         const answeredGroup = allGroupsFlat.find((g) =>
@@ -644,7 +714,7 @@ export default function QuizPage() {
           });
       }
     },
-    [currentIndex, subjectId, isWrongReview, schedulePracticeSave, allGroupsFlat, questions]
+    [currentIndex, subjectId, isWrongReview, isDemoSandbox, schedulePracticeSave, allGroupsFlat, questions]
   );
 
   // Navigation (index = stimulus group)
@@ -859,6 +929,11 @@ export default function QuizPage() {
             Wrong-answer review: answers here are not sent to the competition and do not change your rank or marks.
           </p>
         )}
+        {isDemoSandbox && !isWrongReview && (
+          <p className="rounded-lg border border-brand/25 bg-brand/5 px-4 py-3 text-sm text-foreground">
+            Demo sandbox — VCE-style layout with dotted ruled answer lines (draw or type). Submit as many times as you like.
+          </p>
+        )}
 
         <div className="practice-toolbar">
           <div className="flex min-w-0 flex-1 items-center">
@@ -953,7 +1028,9 @@ export default function QuizPage() {
                       const ans = answers[qk];
                       const alreadySubmitted = ans !== undefined;
                       const markedCorrect = ans === true;
-                      const lockAfterSubmit = !isWrongReview && alreadySubmitted;
+                      const lockAfterSubmit =
+                        !isWrongReview && !isDemoSandbox && alreadySubmitted;
+                      const sandboxRepeat = isDemoSandbox;
                       const hidePassage = Boolean(
                         currentGroupStimulus && hasVisibleStimulus(currentGroupStimulus),
                       );
@@ -962,7 +1039,7 @@ export default function QuizPage() {
                       const partClass = classByKey[qk];
                       return (
                         <div
-                          key={qk}
+                          key={`${qk}-${bankRefreshKey}`}
                           className={cn(
                             "rounded-xl border p-3 sm:p-4",
                             markedCorrect
@@ -970,6 +1047,19 @@ export default function QuizPage() {
                               : "border-black/10 border-l-4 border-l-brand-light/60 bg-white",
                           )}
                         >
+                          {isAdmin && part.id ? (
+                            <div className="mb-3 flex justify-end">
+                              <AdminQuestionEditLink
+                                question={part}
+                                subjectId={subjectId}
+                                onSaved={() => {
+                                  if (part.id != null) {
+                                    reloadBankAfterEdit(part.id);
+                                  }
+                                }}
+                              />
+                            </div>
+                          ) : null}
                           {part.type === "mcq" && (
                             <McqQuestion
                               question={part}
@@ -985,7 +1075,8 @@ export default function QuizPage() {
                                 )
                               }
                               disabled={lockAfterSubmit}
-                              allowRetry={isWrongReview}
+                              allowRetry={isWrongReview || sandboxRepeat}
+                              repeatSandbox={sandboxRepeat}
                               classFullyCorrectPercent={partClass ?? null}
                               persistedState={questionUiState[qk]}
                               onStateChange={(state) => updateQuestionUiState(qk, state)}
@@ -998,6 +1089,7 @@ export default function QuizPage() {
                               questionKey={qk}
                               hidePassage={hidePassage}
                               lockedCorrect={false}
+                              questionDisplayNumber={currentIndex + 1}
                               onAnswer={(correct, detail?: AnswerScoreDetail) =>
                                 handleAnswer(
                                   qk,
@@ -1008,8 +1100,9 @@ export default function QuizPage() {
                                 )
                               }
                               disabled={lockAfterSubmit}
-                              allowRetry={isWrongReview}
-                              practiceOnly={isWrongReview}
+                              allowRetry={isWrongReview || sandboxRepeat}
+                              repeatSandbox={sandboxRepeat}
+                              practiceOnly={isWrongReview || sandboxRepeat}
                               classFullyCorrectPercent={partClass ?? null}
                               persistedState={questionUiState[qk]}
                               onStateChange={(state) => updateQuestionUiState(qk, state)}
@@ -1022,6 +1115,7 @@ export default function QuizPage() {
                               questionKey={qk}
                               hidePassage={hidePassage}
                               lockedCorrect={false}
+                              questionDisplayNumber={currentIndex + 1}
                               onAnswer={(correct, detail?: AnswerScoreDetail) =>
                                 handleAnswer(
                                   qk,
@@ -1032,7 +1126,8 @@ export default function QuizPage() {
                                 )
                               }
                               disabled={lockAfterSubmit}
-                              practiceOnly={isWrongReview}
+                              practiceOnly={isWrongReview || sandboxRepeat}
+                              repeatSandbox={sandboxRepeat}
                               classFullyCorrectPercent={partClass ?? null}
                               persistedState={questionUiState[qk]}
                               onStateChange={(state) => updateQuestionUiState(qk, state)}

@@ -1,5 +1,4 @@
-import { BookOpen } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { RichQuestionContent } from "@/components/quiz/RichQuestionContent";
 import {
   collectStimulusFromText,
@@ -7,6 +6,8 @@ import {
 } from "@/lib/questionDisplay";
 import { normalizeImageUrls, resolveQuestionImageSrc } from "@/lib/practiceQuestions";
 import { convertLatexParenDelimiters } from "@/lib/questionMathText";
+import { plainSqrtToLatex } from "@/lib/typedMathDisplay";
+import { cn } from "@/lib/utils";
 import katex from "katex";
 import "katex/dist/katex.min.css";
 
@@ -81,8 +82,8 @@ function autoMathify(text: string): string {
   );
   // Recurrence notation only — not "t = 1" in kinematics (would break v(t) questions).
   out = out.replace(/\b([ABLPablp])\s+(\d+)\b/g, "$1_{$2}");
-  // sqrt(...)
-  out = out.replace(/\bsqrt\s*\(\s*([^)]+?)\s*\)/gi, "\\sqrt{$1}");
+  // sqrt(...) — vinculum spans the full radicand
+  out = out.replace(/\bsqrt\s*\(\s*([^)]+?)\s*\)/gi, (_m, inner) => plainSqrtToLatex(inner));
   // Common fractions like 3/4 or x/y -> \frac{3}{4}
   out = out.replace(
     /\b([A-Za-z]?\d+(?:\.\d+)?|[A-Za-z])\s*\/\s*([A-Za-z]?\d+(?:\.\d+)?|[A-Za-z])\b/g,
@@ -207,7 +208,7 @@ function renderTextWithMath(text: string): React.ReactNode {
 
 export function RichMathText({ text, className }: { text: string; className?: string }) {
   return (
-    <div className={(className ?? "") + " whitespace-pre-wrap"}>
+    <div className={cn(className, "whitespace-normal")}>
       {renderTextWithMath(text)}
     </div>
   );
@@ -229,22 +230,16 @@ export function PassageBlock({
 
   return (
     <Card className="border-l-4 border-l-brand/40 bg-muted/60">
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-base font-semibold text-muted-foreground">
-          <BookOpen className="size-5 shrink-0" />
-          Stimulus / passage
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4 pt-4">
         {stimulusImages?.length ? (
-          <QuestionImageGrid urls={stimulusImages} title="Source material" />
+          <QuestionImageGrid urls={stimulusImages} title="" />
         ) : null}
         {prose ? (
-          <blockquote className="text-lg leading-relaxed text-foreground/90 sm:text-xl">
+          <blockquote className="text-xl font-semibold leading-relaxed text-foreground sm:text-2xl">
             <RichQuestionContent
               text={prose}
               preferMarkdown
-              className="max-w-none leading-relaxed"
+              className="max-w-none leading-relaxed [&_p]:font-semibold"
             />
           </blockquote>
         ) : null}
@@ -271,9 +266,11 @@ export function QuestionImageGrid({
 
   return (
     <div className="space-y-2">
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        {title}
-      </p>
+      {title ? (
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          {title}
+        </p>
+      ) : null}
       <div className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
           {list.map((src, i) => {
@@ -290,7 +287,7 @@ export function QuestionImageGrid({
               <img
                 src={resolved}
                 alt="Question figure"
-                className="min-h-24 max-h-72 w-full bg-muted/20 object-contain object-center sm:max-h-80"
+                className="w-full bg-muted/20 object-contain object-center"
                 loading="lazy"
                 decoding="async"
                 onError={(e) => {

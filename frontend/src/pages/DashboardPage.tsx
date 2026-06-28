@@ -178,7 +178,6 @@ export default function DashboardPage() {
   const [scoreCardOpen, setScoreCardOpen] = useState(false);
   const [scoreCardLoading, setScoreCardLoading] = useState(false);
   const [scoreCard, setScoreCard] = useState<ScorecardData | null>(null);
-
   const avgDailyStudyMinutes = useMemo(() => {
     if (!user) return 0;
     const uid = String(user.id);

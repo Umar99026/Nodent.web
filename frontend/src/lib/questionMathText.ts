@@ -34,7 +34,11 @@ export function convertLatexParenDelimiters(text: string): string {
   out = out.replace(/\\\[([\s\S]*?)\\\]/g, (_, inner: string) => `$$${inner.trim()}$$`);
 
   // Bare `( \mathbf{a} ... )` with LaTeX commands but no `\(` opener.
-  out = out.replace(/\(\s*((?:\\[a-zA-Z]+[\s\S]*?))\s*\)/g, (match, inner: string) => {
+  out = out.replace(/\(\s*((?:\\[a-zA-Z]+[\s\S]*?))\s*\)/g, (match, inner: string, offset: number, full: string) => {
+    if (offset >= 5 && full.slice(offset - 5, offset) === "\\left") return match;
+    if (/\\right\b/.test(inner)) return match;
+    // Skip `( \sqrt{x} )` glued to a preceding exponent/subscript — part of one expression.
+    if (offset > 0 && /[}\d)\]]$/.test(full.slice(offset - 1, offset))) return match;
     if (!/\\(?:mathbf|vec|langle|rangle|frac|dfrac|tfrac|sqrt|hat|cdot|times|div|pm|mp|pi|theta|alpha|beta|gamma|omega|sin|cos|tan|log|ln|int|sum|prod|lim|leq|geq|neq|approx|operatorname|text|left|right|begin|end)\b/.test(inner)) {
       return match;
     }
@@ -48,15 +52,73 @@ export function fixInlineMathDelimiters(text: string): string {
   const converted = convertLatexParenDelimiters(text);
   return converted.replace(/\$([^$]*)\$/g, (_, inner: string) => {
     let fixed = inner.replace(/\s*[\r\n]+\s*/g, "");
-    fixed = fixed.replace(
-      /\\(pi|infty|theta|phi|alpha|beta|gamma|omega)\s*\)/gi,
-      "\\$1\\text{)}",
-    );
+    // remark-math can treat `\)` as a delimiter; skip `\left...\right` and interval endpoints.
+    if (!/\\left[\s\S]*\\right/.test(fixed)) {
+      fixed = fixed.replace(
+        /\\(pi|infty|theta|phi|alpha|beta|gamma|omega)\s*\)(?!\\right)/gi,
+        "\\$1\\text{)}",
+      );
+    }
     return `$${fixed}$`;
   });
 }
 
+function looksLikeOcrCharLines(text: string): boolean {
+  if (!String(text ?? "").includes("\n")) return false;
+  const lines = String(text ?? "")
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+  if (lines.length < 4) return false;
+  const tiny = lines.filter((l) => l.length <= 2).length;
+  return tiny / lines.length >= 0.3;
+}
+
+function dechunkProseSegment(segment: string): string {
+  const t = String(segment ?? "");
+  if (!t.includes("\n")) return t;
+  if (!looksLikeOcrCharLines(t)) return t.replace(/\s*[\r\n]+\s*/g, " ");
+  const lines = t.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  let out = lines.join("");
+  for (const [re, rep] of GLUED_WORDS) out = out.replace(re, rep);
+  return out
+    .replace(/\s+/g, " ")
+    .replace(/\s*([,.;:!?])\s*/g, "$1 ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/(\d),([A-Za-z])/g, "$1, $2")
+    .replace(/([A-Za-z])(\d)/g, "$1 $2")
+    .replace(/(\d)([A-Za-z])/g, "$1 $2")
+    .replace(/p\.a\.compoundedannually/gi, "p.a. compounded annually")
+    .replace(/compoundedannually/gi, "compounded annually")
+    .replace(/earns(\d)/gi, "earns $1")
+    .trim();
+}
+
+const INLINE_MATH_SEGMENT_RE = /\$\$[\s\S]*?\$\$|\$(?:(?!\$).)*?\$/g;
+
+/** Dechunk OCR letter-per-line text while preserving $...$ math segments. */
+function dechunkAroundMath(text: string): string {
+  const src = String(text ?? "");
+  if (!src.includes("\n")) return fixInlineMathDelimiters(src);
+
+  const parts: string[] = [];
+  let last = 0;
+  const re = new RegExp(INLINE_MATH_SEGMENT_RE.source, INLINE_MATH_SEGMENT_RE.flags);
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(src)) !== null) {
+    if (m.index > last) parts.push(dechunkProseSegment(src.slice(last, m.index)));
+    parts.push(m[0]);
+    last = m.index + m[0].length;
+  }
+  if (last < src.length) parts.push(dechunkProseSegment(src.slice(last)));
+  return fixInlineMathDelimiters(parts.join(""));
+}
+
 function dechunkOcrLines(text: string): string {
+  if (looksLikeOcrCharLines(text)) {
+    return dechunkAroundMath(text);
+  }
+
   const collapsed = fixInlineMathDelimiters(text);
   // Keep author-written LaTeX intact — OCR dechunking mangles $v(t)=3t^2-2$ etc.
   if (
@@ -102,7 +164,7 @@ function dechunkOcrLines(text: string): string {
 
 /** Rewrite common mangled probability / stats stems into clean LaTeX. */
 function repairBareMathStems(text: string): string {
-  let out = text;
+  let out = repairTrigFunctionModels(text);
 
   out = out.replace(
     /\b(?:Binomial:\s*)?n\s*=\s*(\d+)\s*,?\s*p\s*=\s*([0-9.]+)\s*\.?\s*P\s*\(\s*X\s*=\s*(\d+)\s*\)\s*(?:as\s+fraction)?/gi,
@@ -119,6 +181,16 @@ function repairBareMathStems(text: string): string {
   out = out.replace(
     /Smallest positive solution to\s*\\?sin\s*x\s*=\s*(?:\\?dfrac\s*\{)?\\?sqrt\s*\{?\s*2\s*\}?\s*\}?\s*\{?\s*2\s*\}?\s*\.?\s*on\s*\[?\s*0\s*,\s*2\s*\\?pi\s*\)?[^.]*(?:\\?dfrac\s*\{)?\\?pi\s*\}?\s*\{?\s*k\s*\}?/gi,
     "Find the smallest positive solution to $\\sin x = \\frac{\\sqrt{2}}{2}$ on $[0,2\\pi)$. The answer is $\\frac{\\pi}{k}$. Find $k$.",
+  );
+
+  out = out.replace(
+    /\bFor sample proportion\s+p-hat\s*=\s*([0-9.]+)\s+with\s+n\s*=\s*(\d+)/gi,
+    "For sample proportion $\\hat{p}=$1$ with $n=$2$",
+  );
+
+  out = out.replace(
+    /\bExpress\s+([0-9.]+)\s*\/\s*\(\s*([0-9.]+)\s*\+\s*([0-9.]+)i\s*\)\s+in the form p\+qi/gi,
+    "Express $\\frac{$1}{$2+$3i}$ in the form $p+qi$",
   );
 
   return out;
@@ -234,11 +306,104 @@ function normalizeRecurrenceNotation(text: string): string {
   return out;
 }
 
+/**
+ * remark-math breaks on patterns like $\\$12\\,000$ and $4.5\\%$ — use plain text instead.
+ */
+export function simplifyFragileLatexDollars(text: string): string {
+  let out = String(text ?? "");
+
+  out = out.replace(/\$\\?\$([0-9][0-9,\\{}]*)\$/g, (_, raw) => {
+    const n = raw.replace(/\\,/g, ",").replace(/\{,\}/g, ",").replace(/[{}\\]/g, "");
+    return `$${n}`;
+  });
+
+  out = out.replace(/\$([0-9]+(?:\.[0-9]+)?)\s*\\?%\s*\$/g, "$1%");
+
+  out = out.replace(/p\.a\.compoundedannually/gi, "p.a. compounded annually");
+  out = out.replace(/compoundedannually/gi, "compounded annually");
+  out = out.replace(/([a-z])(\d+(?:\.\d+)?%)/gi, "$1 $2");
+  out = out.replace(/earns(\d)/gi, "earns $1");
+
+  return out;
+}
+
+/** Repair common import / authoring glitches that break remark-math $ pairing. */
+export function repairCommonMathGlitches(text: string): string {
+  let out = String(text ?? "");
+
+  // VCE shorthand "($, 2 d.p.)" — lone $ before comma leaves an odd $ count.
+  out = out.replace(/\(\s*\\?\$\s*,\s*/g, "(in dollars, ");
+
+  // Unclosed money amount: "$2000 invested" → "$2000$ invested"
+  out = out.replace(/\$([0-9][0-9,]*(?:\.\d+)?)(?=\s+[A-Za-z])/g, "$$$1$");
+
+  // Trailing incomplete math: "... then $z=$" with dangling delimiter.
+  out = out.replace(
+    /\b(?:then|hence)\s+\$([A-Za-z][A-Za-z0-9_]*)\s*=\s*\$/g,
+    (_m, v) => `find $${v}$.`,
+  );
+  out = out.replace(
+    /\b(?:find|determine|calculate|compute|evaluate)\s+\$([A-Za-z][A-Za-z0-9_]*)\s*=\s*$/gi,
+    (_m, v) => `find $${v}$.`,
+  );
+  out = out.replace(
+    /\$([A-Za-z][A-Za-z0-9_]*)\s*=\s*\$(?!\s*\?)/g,
+    (_m, v: string) => `find $${v}$.`,
+  );
+  out = out.replace(
+    /\$([A-Za-z][A-Za-z0-9_]*)\s*=\s*$/g,
+    (_m, v: string) => `find $${v}$.`,
+  );
+
+  return out;
+}
+
+/** Repair \\left missing its opening parenthesis before dfrac/trig tokens. */
+function repairLeftRightDelimiters(text: string): string {
+  let out = String(text ?? "");
+  out = out.replace(/\\left\\(dfrac|tfrac|frac|sin|cos|tan)/g, "\\left(\\$1");
+  out = out.replace(/\\left\s+(\\(?:dfrac|tfrac|frac|sin|cos|tan))/g, "\\left($1");
+  return out;
+}
+
+function collapseTrigModelExpression(expr: string): string {
+  let e = expr.replace(/\s*[\r\n]+\s*/g, " ").replace(/\s+/g, " ").trim();
+  e = repairLeftRightDelimiters(e);
+  // OCR duplicate offset: \right)+4+4. → \right)+4.
+  e = e.replace(/(\\right\s*\)\s*\+\s*(\d+))\s*\+\s*\2(?=[.\s,?]|$)/g, "$1");
+  return e;
+}
+
+function wrapTrigTimeFunctionExpr(expr: string): string {
+  const e = collapseTrigModelExpression(expr);
+  if (e.startsWith("$") && e.endsWith("$")) return e;
+  return `$${e}$`;
+}
+
+/** Tide / Ferris wheel style d(t)=A\cos(...)+k stems broken by OCR newlines or missing $. */
+function repairTrigFunctionModels(text: string): string {
+  let out = String(text ?? "");
+
+  out = out.replace(/\\right\s*\)\s*[\r\n]+\s*\+(\d+)/g, "\\right)+$1");
+
+  out = out.replace(
+    /\b(Tide model|Ferris wheel height|Wave (?:height|model)|Depth model)\s+([a-z]\(\s*t\s*\)\s*=[\s\S]+?)(?=\.\s*(?:Amplitude|Minimum|Maximum|Period|Midline|mean\s+height))/gi,
+    (_m, label: string, expr: string) => `${label} ${wrapTrigTimeFunctionExpr(expr)}`,
+  );
+
+  out = out.replace(
+    /(?<![$A-Za-z0-9])([a-z])\(\s*t\s*\)\s*=\s*((?:[\d.]+\s*)?\\(?:sin|cos|tan)[\s\S]*?\\right\s*\)\s*(?:\+\s*[\d.]+)?)(?=[.\s]|$|\?)/gi,
+    (_m, fn: string, expr: string) => `$${fn}(t)=${collapseTrigModelExpression(expr)}$`,
+  );
+
+  return out;
+}
+
 /** Wrap recurrence / formula fragments in $...$ for remark-math when not already delimited. */
 function wrapMathSegments(text: string): string {
   const parts: string[] = [];
   const re =
-    /(\$[^$\n]+\$|A_{n\+1}\s*=\s*A_n\(1\+r\)(?:\s*\+\s*D)?|B_{n\+1}\s*=\s*B_n\(1\+r\)\s*[−-]\s*R|L_{n\+1}\s*=\s*[+-]?\d+(?:\.\d+)?\s*L_n\s*[−-]\s*[+-]?\d+(?:\.\d+)?|L_0\s*=\s*[+-]?\d[\d,]*(?:\.\d+)?|A_{n\+1}\s*=\s*A_n\s*\+\s*D)/g;
+    /(\$(?:(?!\$).)*?\$|A_{n\+1}\s*=\s*A_n\(1\+r\)(?:\s*\+\s*D)?|B_{n\+1}\s*=\s*B_n\(1\+r\)\s*[−-]\s*R|L_{n\+1}\s*=\s*[+-]?\d+(?:\.\d+)?\s*L_n\s*[−-]\s*[+-]?\d+(?:\.\d+)?|L_0\s*=\s*[+-]?\d[\d,]*(?:\.\d+)?|A_{n\+1}\s*=\s*A_n\s*\+\s*D)/g;
 
   let last = 0;
   let m: RegExpExecArray | null;
@@ -270,6 +435,9 @@ export function normalizeQuestionMathText(raw: unknown): string {
   // Do not flatten newlines / tables in study overviews or other markdown notes.
   if (looksLikeStructuredMarkdown(out)) return out;
 
+  out = repairCommonMathGlitches(out);
+  out = repairLeftRightDelimiters(out);
+  out = simplifyFragileLatexDollars(out);
   out = fixInlineMathDelimiters(out);
   out = dechunkOcrLines(out);
   out = repairBareMathStems(out);
@@ -288,7 +456,8 @@ export function normalizeQuestionMathText(raw: unknown): string {
   out = normalizeRecurrenceNotation(out);
   out = wrapMathSegments(out);
   out = mathifyQuestionText(out);
+  out = simplifyFragileLatexDollars(out);
   out = fixInlineMathDelimiters(out);
 
-  return out;
+  return out.replace(/\s*[\r\n]+\s*/g, " ").replace(/\s+/g, " ").trim();
 }

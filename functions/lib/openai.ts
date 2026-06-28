@@ -2,17 +2,28 @@
  * OpenAI Chat Completions for Cloudflare Workers / Pages Functions.
  * Server-side only — never expose OPENAI_API_KEY to the browser.
  *
+ * Active in production:
+ *   - English essay scoring (scoreEnglishResponse)
+ *   - Handwriting / drawing marking (markHandwritingAnswer)
+ *   - Long-answer text marking (markLongAnswer)
+ *
+ * Admin import helpers (questionGenerationChat, parseQuestionsFromText,
+ * fillDraftQuestionAnswers) remain in this module but API routes return 503.
+ *
  * Env:
  *   OPENAI_API_KEY  (required for AI features)
- *   OPENAI_MODEL    (optional, default gpt-4o-mini)
+ *   OPENAI_MODEL         (optional, default gpt-4o-mini — text marking)
+ *   OPENAI_VISION_MODEL  (optional, default gpt-4o — handwriting / images)
  */
 
 export type OpenAiEnv = {
   OPENAI_API_KEY?: string;
   OPENAI_MODEL?: string;
+  OPENAI_VISION_MODEL?: string;
 };
 
 const DEFAULT_MODEL = "gpt-4o-mini";
+const DEFAULT_VISION_MODEL = "gpt-4o";
 
 function trim(s: string | undefined): string {
   return String(s ?? "").trim();
@@ -32,7 +43,21 @@ export function openAiModel(env: OpenAiEnv): string {
   return trim(env.OPENAI_MODEL) || DEFAULT_MODEL;
 }
 
+/** Stronger model for reading handwritten images (ChatGPT-class vision). */
+export function openAiVisionModel(env: OpenAiEnv): string {
+  return trim(env.OPENAI_VISION_MODEL) || DEFAULT_VISION_MODEL;
+}
+
 type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
+
+type VisionContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string; detail?: "low" | "high" | "auto" } };
+
+type VisionChatMessage = {
+  role: "system" | "user" | "assistant";
+  content: string | VisionContentPart[];
+};
 
 async function chatJson(
   apiKey: string,
@@ -69,6 +94,97 @@ async function chatJson(
   } catch {
     throw new Error("OpenAI returned invalid JSON.");
   }
+}
+
+async function chatJsonWithVision(
+  apiKey: string,
+  model: string,
+  messages: VisionChatMessage[],
+): Promise<Record<string, unknown>> {
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      messages,
+      temperature: 0.2,
+      response_format: { type: "json_object" },
+    }),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`OpenAI error (${res.status}): ${errText.slice(0, 600)}`);
+  }
+
+  const data = (await res.json()) as {
+    choices?: { message?: { content?: string } }[];
+  };
+  const content = data?.choices?.[0]?.message?.content;
+  if (!content) throw new Error("OpenAI returned an empty response.");
+
+  try {
+    return JSON.parse(content) as Record<string, unknown>;
+  } catch {
+    throw new Error("OpenAI returned invalid JSON.");
+  }
+}
+
+function parseLongAnswerMarkResult(
+  parsed: Record<string, unknown>,
+  defaultMarks: number,
+  opts?: { maxFeedbackChars?: number },
+): LongAnswerMarkResult {
+  const maxMarks = Math.max(1, Math.round(Number(parsed.maxMarks ?? defaultMarks) || defaultMarks));
+  const marksAwarded = Math.min(
+    maxMarks,
+    Math.max(0, Number(parsed.marksAwarded ?? 0)),
+  );
+  const scorePercent = Math.min(
+    100,
+    Math.max(0, Math.round(Number(parsed.scorePercent ?? (marksAwarded / maxMarks) * 100))),
+  );
+  const partResults: LongAnswerMarkResult["partResults"] = Array.isArray(parsed.partResults)
+    ? (parsed.partResults as Record<string, unknown>[]).map((p, idx) => ({
+        index: Number.isFinite(Number(p.index)) ? Number(p.index) : idx,
+        correct: Boolean(p.correct),
+        marksAwarded: Math.max(0, Number(p.marksAwarded ?? 0)),
+        studentAnswerRead:
+          p.studentAnswerRead != null
+            ? String(p.studentAnswerRead).trim().slice(0, 500)
+            : p.studentAnswer != null
+              ? String(p.studentAnswer).trim().slice(0, 500)
+              : undefined,
+        correctAnswer:
+          p.correctAnswer != null
+            ? String(p.correctAnswer).trim().slice(0, 500)
+            : undefined,
+        partFeedback:
+          p.partFeedback != null ? String(p.partFeedback).trim().slice(0, 2000) : undefined,
+      }))
+    : [];
+
+  const correctAnswersRaw = parsed.correctAnswers ?? parsed.correct_answers;
+  const correctAnswers = Array.isArray(correctAnswersRaw)
+    ? correctAnswersRaw.map((a) => String(a ?? "").trim()).filter(Boolean).slice(0, 12)
+    : parsed.correctAnswer != null
+      ? [String(parsed.correctAnswer).trim()].filter(Boolean)
+      : undefined;
+
+  const feedbackLimit = opts?.maxFeedbackChars ?? 2000;
+
+  return {
+    correct: Boolean(parsed.correct ?? marksAwarded >= maxMarks * 0.5),
+    scorePercent,
+    marksAwarded,
+    maxMarks,
+    feedback: String(parsed.feedback ?? "").trim().slice(0, feedbackLimit),
+    correctAnswers,
+    partResults,
+  };
 }
 
 export type ParsedImportQuestion = {
@@ -307,7 +423,16 @@ export type LongAnswerMarkResult = {
   marksAwarded: number;
   maxMarks: number;
   feedback: string;
-  partResults: { index: number; correct: boolean; marksAwarded: number }[];
+  /** Authoritative model answer(s) — especially when the student is wrong. */
+  correctAnswers?: string[];
+  partResults: {
+    index: number;
+    correct: boolean;
+    marksAwarded: number;
+    studentAnswerRead?: string;
+    correctAnswer?: string;
+    partFeedback?: string;
+  }[];
 };
 
 export async function markLongAnswer(
@@ -352,31 +477,116 @@ Use guidance and acceptedAnswers as the rubric when provided.`,
     },
   ]);
 
-  const maxMarks = Math.max(1, Math.round(Number(parsed.maxMarks ?? input.marks) || input.marks));
-  const marksAwarded = Math.min(
-    maxMarks,
-    Math.max(0, Number(parsed.marksAwarded ?? 0)),
-  );
-  const scorePercent = Math.min(
-    100,
-    Math.max(0, Math.round(Number(parsed.scorePercent ?? (marksAwarded / maxMarks) * 100))),
-  );
-  const partResults = Array.isArray(parsed.partResults)
-    ? (parsed.partResults as Record<string, unknown>[]).map((p, idx) => ({
-        index: Number.isFinite(Number(p.index)) ? Number(p.index) : idx,
-        correct: Boolean(p.correct),
-        marksAwarded: Math.max(0, Number(p.marksAwarded ?? 0)),
-      }))
-    : [];
+  return parseLongAnswerMarkResult(parsed, input.marks);
+}
 
-  return {
-    correct: Boolean(parsed.correct ?? marksAwarded >= maxMarks * 0.5),
-    scorePercent,
-    marksAwarded,
-    maxMarks,
-    feedback: String(parsed.feedback ?? "").trim().slice(0, 2000),
-    partResults,
+export type HandwritingMarkInput = {
+  questionText: string;
+  questionType: string;
+  topic?: string;
+  marks: number;
+  guidance?: string;
+  acceptedAnswers?: string[];
+  answerParts?: { label: string; marks?: number; acceptedAnswer?: string }[];
+  images: string[];
+};
+
+export async function markHandwritingAnswer(
+  env: OpenAiEnv,
+  input: HandwritingMarkInput,
+): Promise<LongAnswerMarkResult> {
+  const apiKey = requireOpenAiKey(env);
+  const model = openAiVisionModel(env);
+  const images = input.images
+    .map((img) => String(img ?? "").trim())
+    .filter((img) => /^data:image\//i.test(img))
+    .slice(0, 12);
+  if (!images.length) throw new Error("At least one handwriting image is required.");
+
+  const rubric = {
+    questionText: input.questionText.slice(0, 4000),
+    questionType: input.questionType,
+    topic: input.topic ?? "",
+    maxMarks: input.marks,
+    guidance: input.guidance ?? "",
+    acceptedAnswers: (input.acceptedAnswers ?? []).slice(0, 20),
+    answerParts: (input.answerParts ?? []).slice(0, 12),
+    imageCount: images.length,
   };
+
+  const userContent: VisionContentPart[] = [
+    {
+      type: "text",
+      text: `Mark this handwritten student response. JSON rubric:\n${JSON.stringify(rubric)}`,
+    },
+    ...images.map((url) => ({
+      type: "image_url" as const,
+      image_url: { url, detail: "high" as const },
+    })),
+  ];
+  if (images.length > 1 && (input.answerParts ?? []).length > 0) {
+    const labels = (input.answerParts ?? [])
+      .map((p, i) => `Image ${i + 1} — ${p.label}`)
+      .join("\n");
+    userContent.push({
+      type: "text",
+      text: `Multipart: ${images.length} images in order (one per subpart):\n${labels}`,
+    });
+  } else if (images.length > 1) {
+    userContent.push({
+      type: "text",
+      text: `There are ${images.length} images in order — image 1 is the first subpart, etc.`,
+    });
+  }
+
+  const parsed = await chatJsonWithVision(apiKey, model, [
+    {
+      role: "system",
+      content: `You mark handwritten student responses on ruled paper for VCE-style maths questions.
+Carefully READ every stroke in each image — numbers, operators, graphs, lists of edges, and working lines.
+The final answer is usually on the last line of each image.
+
+Return JSON only:
+{
+  "correct": boolean (true only if fully correct for full credit),
+  "scorePercent": 0-100,
+  "marksAwarded": number (0 to maxMarks, can be fractional 0.5),
+  "maxMarks": number,
+  "feedback": "optional brief overall summary (1-2 bullets) for multipart; omit if partResults cover everything",
+  "correctAnswers": ["one authoritative answer per part in order"],
+  "partResults": [{
+    "index": 0,
+    "correct": true,
+    "marksAwarded": 1,
+    "studentAnswerRead": "REQUIRED — transcribe the final answer and main working you can read from their drawing",
+    "correctAnswer": "authoritative correct answer for this part",
+    "partFeedback": "3-5 bullet points for THIS part only — each bullet on its own line, starting with • "
+  }]
+}
+
+For EACH part in partResults, partFeedback MUST include:
+• A line starting with "• We read your drawing as: …" (same content as studentAnswerRead)
+• Step-by-step model solution for this part
+• If wrong: the specific mistake; if right: what they did well
+
+studentAnswerRead is REQUIRED for every part — never leave it empty if anything is legible in the image.
+
+Global "feedback" is optional for multipart — put the detailed walkthrough in each part's partFeedback.
+
+When the student is WRONG:
+- correctAnswers must list every part's model answer in order.
+- Each partResults entry must include correctAnswer and partFeedback even when partially correct.
+
+When fully correct: partFeedback still has 2-3 bullets on what they did well.
+
+Be fair: accept equivalent methods and reasonable rounding.
+For multipart, one image per part in order (image 1 = index 0).
+Use guidance and acceptedAnswers as the rubric; prefer those over inventing answers.`,
+    },
+    { role: "user", content: userContent },
+  ]);
+
+  return parseLongAnswerMarkResult(parsed, input.marks, { maxFeedbackChars: 800 });
 }
 
 export type EnglishScoreInput = {
@@ -491,5 +701,147 @@ ${ENGLISH_SMART_MARKING_RUBRIC}`,
   return {
     score,
     feedback: String(parsed.feedback ?? "").trim().slice(0, 2000),
+  };
+}
+
+export type FillDraftAnswerSlot = {
+  slotId: string;
+  index: number;
+  key?: string;
+  label: string;
+  marks?: number;
+  overlaySlots?: { index: number; label?: string }[];
+};
+
+export type FillDraftAnswersInput = {
+  type: string;
+  question: string;
+  passage?: string;
+  options?: string[];
+  sharedStem?: string;
+  slots: FillDraftAnswerSlot[];
+  solutionsText: string;
+};
+
+export type FillDraftAnswersPartResult = {
+  slotId?: string;
+  index: number;
+  acceptedAnswer?: string;
+  overlays?: { index: number; acceptedAnswer?: string }[];
+};
+
+export type FillDraftAnswersResult = {
+  correctAnswer?: string;
+  acceptedAnswers?: string;
+  parts: FillDraftAnswersPartResult[];
+  message?: string;
+};
+
+export async function fillDraftQuestionAnswers(
+  env: OpenAiEnv,
+  input: FillDraftAnswersInput,
+): Promise<FillDraftAnswersResult> {
+  const apiKey = requireOpenAiKey(env);
+  const model = openAiModel(env);
+  const solutionsText = String(input.solutionsText ?? "").trim().slice(0, 80000);
+  if (!solutionsText) throw new Error("Solutions text is empty.");
+
+  const payload = {
+    type: input.type,
+    question: String(input.question ?? "").slice(0, 8000),
+    passage: String(input.passage ?? "").slice(0, 4000),
+    sharedStem: String(input.sharedStem ?? "").slice(0, 4000),
+    options: (input.options ?? []).slice(0, 6),
+    slots: (input.slots ?? []).slice(0, 30).map((slot) => ({
+      slotId: String(slot.slotId ?? slot.index),
+      index: slot.index,
+      key: slot.key ?? "",
+      label: String(slot.label ?? "").slice(0, 2000),
+      marks: slot.marks,
+      overlaySlots: (slot.overlaySlots ?? []).slice(0, 12).map((overlay) => ({
+        index: overlay.index,
+        label: String(overlay.label ?? "").slice(0, 200),
+      })),
+    })),
+    solutionsText,
+  };
+
+  const parsed = await chatJson(apiKey, model, [
+    {
+      role: "system",
+      content: `You extract FINAL accepted answers from official exam solutions for ONE question.
+
+INPUT:
+- sharedStem + slots[].label = exact wording students see per answer box
+- slotId on each slot — you MUST echo it back unchanged
+- solutionsText = messy VCAA / teacher solutions (may use 1a, b.i, d.iv, etc.)
+
+Return JSON only:
+{
+  "parts": [
+    { "slotId": "0", "acceptedAnswer": "2" },
+    { "slotId": "1", "acceptedAnswer": "11.42 g" }
+  ],
+  "correctAnswer": "B" (MCQ only),
+  "message": "optional"
+}
+
+Rules:
+- One "parts" entry per input slot, same slotId. Never skip or reorder slotIds.
+- Match by part LETTER (a,b,c…) AND question meaning — not by position in solutions alone.
+- Sub-parts in solutions (b.i, b.ii, d.i–d.iv) map to consecutive slots with that letter, in order.
+- Short final answer only — no working, headers, or "2023 VCE".
+- If a slot has overlaySlots, use "overlays": [{ "index": 0, "acceptedAnswer": "..." }] instead of part acceptedAnswer.
+- Do NOT copy the question text into acceptedAnswer.`,
+    },
+    {
+      role: "user",
+      content: JSON.stringify(payload),
+    },
+  ]);
+
+  const parts = Array.isArray(parsed.parts)
+    ? (parsed.parts as Record<string, unknown>[])
+        .map((row) => {
+          const slotId = String(row.slotId ?? row.slot_id ?? "").trim();
+          const index = Number(row.index);
+          const resolvedIndex = Number.isFinite(index) && index >= 0 ? index : -1;
+          if (!slotId && resolvedIndex < 0) return null;
+          const overlays = Array.isArray(row.overlays)
+            ? (row.overlays as Record<string, unknown>[])
+                .map((overlay) => {
+                  const overlayIndex = Number(overlay.index);
+                  if (!Number.isFinite(overlayIndex) || overlayIndex < 0) return null;
+                  const acceptedAnswer = String(
+                    overlay.acceptedAnswer ?? overlay.accepted_answer ?? "",
+                  ).trim();
+                  if (!acceptedAnswer) return null;
+                  return { index: overlayIndex, acceptedAnswer };
+                })
+                .filter((overlay): overlay is { index: number; acceptedAnswer: string } => overlay != null)
+            : undefined;
+          const acceptedAnswer = String(row.acceptedAnswer ?? row.accepted_answer ?? "").trim();
+          if (!acceptedAnswer && !overlays?.length) return null;
+          return {
+            ...(slotId ? { slotId } : {}),
+            index: resolvedIndex,
+            ...(acceptedAnswer ? { acceptedAnswer } : {}),
+            ...(overlays?.length ? { overlays } : {}),
+          };
+        })
+        .filter((row): row is FillDraftAnswersPartResult => row != null)
+    : [];
+
+  const correctAnswer = String(parsed.correctAnswer ?? parsed.correct_answer ?? "")
+    .trim()
+    .toUpperCase()
+    .slice(0, 1);
+  const acceptedAnswers = String(parsed.acceptedAnswers ?? parsed.accepted_answers ?? "").trim();
+
+  return {
+    ...(correctAnswer && /^[A-D]$/.test(correctAnswer) ? { correctAnswer } : {}),
+    ...(acceptedAnswers ? { acceptedAnswers } : {}),
+    parts,
+    message: String(parsed.message ?? "").trim().slice(0, 500) || undefined,
   };
 }

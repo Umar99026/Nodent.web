@@ -1,20 +1,25 @@
 import type { AnswerPart, Question } from "@/lib/subjects";
+import { legacyOverlaysToInlineInputs, readOverlayFromPart, coalesceAnswerPartsForInlineInputs, questionUsesInlineInputs, flattenPartAcceptedAnswers } from "@/lib/diagramLabels";
+import { inferUseAiMarkingForImport } from "@/lib/questionAiMarking";
 import { inferGeneralMathsAreaOfStudy } from "@/lib/generalMathsAreaTopic";
 import { inferMethodsAreaOfStudy } from "@/lib/methodsAreaTopic";
 import { inferSpecialistMathsAreaOfStudy } from "@/lib/specialistMathsAreaTopic";
 import {
   extractMarkdownImageUrls,
   formatPartDescriptor,
-  formatSinglePartLabel,
+  isRomanPartKey,
+  normalizePartKey,
+  normalizeMultipartAcceptedAnswers,
   normalizeMcqOptions,
   partLetterForIndex,
+  repairMultipartQuestionStem,
+  stripQuestionNumberPrefix,
 } from "@/lib/questionDisplay";
-import { GOOGLE_SHEETS_TOPIC_LABELS } from "@/lib/mathSubjectTopics";
+import { GOOGLE_SHEETS_TOPIC_LABELS, topicTaxonomySubjectId } from "@/lib/mathSubjectTopics";
 import { normalizeQuestionMathText } from "@/lib/questionMathText";
 
 function topicLabelListForSubject(subjectId: string): readonly string[] | undefined {
-  const sid = canonicalSubjectId(subjectId);
-  const key = sid === "demo" ? "general-maths" : sid;
+  const key = topicTaxonomySubjectId(canonicalSubjectId(subjectId));
   return GOOGLE_SHEETS_TOPIC_LABELS[key];
 }
 
@@ -37,10 +42,10 @@ function inferPracticeTopic(
   if (sid === "methods") {
     return inferMethodsAreaOfStudy(topicLabel, questionText, passage);
   }
-  if (sid === "general-maths" || sid === "demo") {
+  if (sid === "general-maths") {
     return inferGeneralMathsAreaOfStudy(topicLabel, questionText, passage);
   }
-  if (sid === "specialist-maths") {
+  if (sid === "specialist-maths" || sid === "demo") {
     return inferSpecialistMathsAreaOfStudy(topicLabel, questionText, passage);
   }
   return topicLabel;
@@ -206,14 +211,64 @@ function parseStringArray(val: unknown): string[] {
   return [];
 }
 
-function parseAnswerParts(val: unknown): AnswerPart[] | undefined {
+function parseInlineInputs(raw: unknown): AnswerPart["inlineInputs"] {
+  if (!Array.isArray(raw)) return undefined;
+  const boxes = raw
+    .map((it, idx) => {
+      if (!it || typeof it !== "object") return null;
+      const row = it as Record<string, unknown>;
+      const placeholder = String(row.placeholder ?? "").trim() || undefined;
+      const acceptedAnswer = String(row.acceptedAnswer ?? row.accepted_answer ?? "").trim() || undefined;
+      const unit = String(row.unit ?? "").trim() || undefined;
+      const marksRaw = Number(row.marks);
+      const marks =
+        Number.isFinite(marksRaw) && marksRaw > 0 ? Math.round(marksRaw) : undefined;
+      return {
+        key: String(row.key ?? idx + 1).trim() || String(idx + 1),
+        label: String(row.label ?? idx + 1).trim() || String(idx + 1),
+        ...(placeholder ? { placeholder } : {}),
+        ...(acceptedAnswer ? { acceptedAnswer } : {}),
+        ...(unit ? { unit } : {}),
+        ...(marks ? { marks } : {}),
+      };
+    })
+    .filter((box): box is NonNullable<typeof box> => box != null);
+  return boxes.length ? boxes : undefined;
+}
+
+function parseLabelOverlays(raw: unknown): AnswerPart["labelOverlays"] {
+  if (!Array.isArray(raw)) return undefined;
+  const overlays = raw
+    .map((it, idx) => {
+      if (!it || typeof it !== "object") return null;
+      const row = it as Record<string, unknown>;
+      const overlay = readOverlayFromPart(row);
+      if (!overlay) return null;
+      const placeholder = String(row.placeholder ?? "").trim() || undefined;
+      const acceptedAnswer = String(row.acceptedAnswer ?? row.accepted_answer ?? "").trim() || undefined;
+      const marksRaw = Number(row.marks);
+      const marks =
+        Number.isFinite(marksRaw) && marksRaw > 0 ? Math.round(marksRaw) : undefined;
+      return {
+        key: String(row.key ?? idx + 1).trim() || String(idx + 1),
+        label: String(row.label ?? idx + 1).trim() || String(idx + 1),
+        ...(placeholder ? { placeholder } : {}),
+        ...(acceptedAnswer ? { acceptedAnswer } : {}),
+        ...(marks ? { marks } : {}),
+        ...overlay,
+      };
+    })
+    .filter((overlay): overlay is NonNullable<typeof overlay> => overlay != null);
+  return overlays.length ? overlays : undefined;
+}
+
+function parseAnswerParts(val: unknown, stemHint?: string): AnswerPart[] | undefined {
   const toParts = (arr: unknown[]): AnswerPart[] =>
     arr
       .map((it, idx) => {
         if (!it || typeof it !== "object") return null;
         const row = it as Record<string, unknown>;
-        const labelRaw = String(row.label ?? "").trim();
-        if (!labelRaw) return null;
+        const labelRaw = cleanQuestionText(row.label);
         const typeRaw = String(row.type ?? "").trim().toLowerCase();
         const type =
           typeRaw === "number" || typeRaw === "text"
@@ -225,13 +280,32 @@ function parseAnswerParts(val: unknown): AnswerPart[] | undefined {
         const marksRaw = Number(row.marks);
         const marks =
           Number.isFinite(marksRaw) && marksRaw > 0 ? Math.round(marksRaw) : undefined;
+        const overlay = readOverlayFromPart(row);
+        const labelOverlays =
+          parseLabelOverlays(row.labelOverlays ?? row.label_overlays) ??
+          undefined;
+        const inlineInputs =
+          parseInlineInputs(row.inlineInputs ?? row.inline_inputs) ??
+          legacyOverlaysToInlineInputs(labelOverlays) ??
+          undefined;
+        if (!labelRaw && !inlineInputs?.length && !labelOverlays?.length && !overlay) {
+          return null;
+        }
+        const keyRaw = String(row.key ?? "").trim().toLowerCase();
+        const key =
+          keyRaw && (/^[a-z]$/.test(keyRaw) || isRomanPartKey(keyRaw))
+            ? keyRaw
+            : partLetterForIndex(idx);
         return {
-          key: partLetterForIndex(idx),
-          label: labelRaw,
+          key,
+          label: labelRaw || "Answer",
           ...(type ? { type } : {}),
           ...(placeholder ? { placeholder } : {}),
           ...(imageUrl ? { imageUrl } : {}),
           ...(marks ? { marks } : {}),
+          ...(overlay ?? {}),
+          ...(inlineInputs ? { inlineInputs } : {}),
+          ...(labelOverlays && !inlineInputs ? { labelOverlays } : {}),
         };
       })
       .filter((p): p is AnswerPart => p != null);
@@ -253,16 +327,21 @@ function parseAnswerParts(val: unknown): AnswerPart[] | undefined {
   }
 
   if (!parts?.length) return undefined;
+  parts = coalesceAnswerPartsForInlineInputs(parts);
   if (parts.length === 1) {
     const only = parts[0]!;
-    const label = formatSinglePartLabel(only.label);
-    return label ? [{ ...only, key: "a", label }] : [{ ...only, key: "a", label: only.label }];
+    const key = normalizePartKey(only.key, 0);
+    const label = formatPartDescriptor(key, only.label ?? "");
+    return [{ ...only, key, label }];
   }
-  return parts.map((p, idx) => ({
-    ...p,
-    key: partLetterForIndex(idx),
-    label: formatPartDescriptor(partLetterForIndex(idx), p.label),
-  }));
+  return parts.map((p, idx) => {
+    const key = normalizePartKey(p.key, idx);
+    const base = String(p.label ?? "").trim();
+    const label = base
+      ? formatPartDescriptor(key, base)
+      : `${key}${isRomanPartKey(key) ? "." : ")"}`;
+    return { ...p, key, label };
+  });
 }
 
 function inferAnswerPartsFromQuestion(
@@ -308,6 +387,45 @@ function parseDirectiveParts(questionText: string): string[] {
   return chunks;
 }
 
+function applyMultipartAcceptedAnswers<
+  T extends { acceptedAnswers?: string[]; answerParts?: AnswerPart[] },
+>(row: T): T {
+  const parts = row.answerParts?.filter((p) => p?.label?.trim()) ?? [];
+  if (parts.length < 2 || !row.acceptedAnswers?.length) return row;
+  return {
+    ...row,
+    acceptedAnswers: normalizeMultipartAcceptedAnswers(row.acceptedAnswers, parts.length),
+  };
+}
+
+function resolveUseAiMarkingForLoad(
+  explicit: boolean | undefined,
+  input: {
+    hasInlineInputBoxes: boolean;
+    typeRaw: string;
+    questionText: string;
+    answerParts?: AnswerPart[];
+    acceptedAnswers?: string[];
+    subjectId: string;
+  },
+): { useAiMarking: boolean } {
+  if (input.hasInlineInputBoxes) return { useAiMarking: false };
+  if (explicit !== undefined) return { useAiMarking: explicit };
+  const partLabels =
+    input.answerParts?.map((p) => String(p.label ?? "").trim()).filter(Boolean) ?? [];
+  const accepted =
+    input.acceptedAnswers?.map((a) => String(a ?? "").trim()).filter(Boolean) ?? [];
+  return {
+    useAiMarking: inferUseAiMarkingForImport({
+      type: input.typeRaw,
+      questionText: input.questionText,
+      partLabels,
+      acceptedAnswers: accepted,
+      subjectId: input.subjectId,
+    }),
+  };
+}
+
 /**
  * Bootstrap groups questions by `subject_id`. URLs use canonical ids (`methods`,
  * `general-maths`, `specialist-maths`); sheet rows sometimes use different casing.
@@ -335,8 +453,6 @@ export function normalizeCustomQuestion(raw: unknown, subjectIdHint?: string): Q
   const q = raw as Record<string, unknown>;
 
   const topicLabel = normalizeTopicLabel(q.topic);
-  const questionText = cleanQuestionText(q.question);
-  if (!questionText) return null;
 
   let imageUrls: string[] | undefined;
   if (Array.isArray(q.imageUrls)) {
@@ -348,6 +464,21 @@ export function normalizeCustomQuestion(raw: unknown, subjectIdHint?: string): Q
     const b = parseStringArray(q.imageUrls);
     imageUrls = normalizeImageUrls(a.length ? a : b.length ? b : undefined);
   }
+
+  const passageRaw = cleanQuestionText(q.passage);
+  const passageEarly = passageRaw ? passageRaw : undefined;
+  if (passageEarly) {
+    const fromPassage = extractMarkdownImageUrls(passageEarly);
+    if (fromPassage.length) {
+      imageUrls = normalizeImageUrls([...(imageUrls ?? []), ...fromPassage]);
+    }
+  }
+
+  const questionTextRaw = cleanQuestionText(q.question);
+  let questionText =
+    questionTextRaw ||
+    (imageUrls?.length || passageEarly ? "See figure." : "");
+  if (!questionText) return null;
 
   let answerImageUrls: string[] | undefined;
   if (Array.isArray((q as any).answerImageUrls)) {
@@ -368,9 +499,8 @@ export function normalizeCustomQuestion(raw: unknown, subjectIdHint?: string): Q
       ? groupIdRaw.trim()
       : undefined;
   const marks = typeof q.marks === "number" ? q.marks : undefined;
-  const passageRaw = cleanQuestionText(q.passage);
   const guidanceRaw = cleanQuestionText(q.guidance);
-  let passage = passageRaw ? passageRaw : undefined;
+  let passage = passageEarly;
   const guidance = guidanceRaw ? guidanceRaw : undefined;
   const useAiMarkingRaw = (q as { useAiMarking?: unknown; use_ai_marking?: unknown })
     .useAiMarking ?? (q as { use_ai_marking?: unknown }).use_ai_marking;
@@ -380,13 +510,6 @@ export function normalizeCustomQuestion(raw: unknown, subjectIdHint?: string): Q
       : useAiMarkingRaw === true || useAiMarkingRaw === 1
         ? true
         : undefined;
-  const useAiMarkingExtra = useAiMarking !== undefined ? { useAiMarking } : {};
-  if (passage) {
-    const fromPassage = extractMarkdownImageUrls(passage);
-    if (fromPassage.length) {
-      imageUrls = normalizeImageUrls([...(imageUrls ?? []), ...fromPassage]);
-    }
-  }
 
   const sid = canonicalSubjectId(
     String(subjectIdHint ?? q.subject_id ?? q.subjectId ?? ""),
@@ -399,15 +522,34 @@ export function normalizeCustomQuestion(raw: unknown, subjectIdHint?: string): Q
         ? Number(q.id)
         : undefined;
   const answerParts =
-    parseAnswerParts((q as any).answerParts) ??
-    parseAnswerParts((q as any).answer_parts) ??
-    parseAnswerParts((q as any).answer_parts_json);
+    parseAnswerParts((q as any).answerParts, questionText) ??
+    parseAnswerParts((q as any).answer_parts, questionText) ??
+    parseAnswerParts((q as any).answer_parts_json, questionText);
   const inferredAnswerParts = inferAnswerPartsFromQuestion(
     questionText,
     parseStringArray(q.acceptedAnswers).length ||
       parseStringArray(q.accepted_answers).length ||
       (String(q.answer ?? "").trim() ? 1 : 0),
   );
+  const resolvedAnswerParts = answerParts ?? inferredAnswerParts;
+  if (resolvedAnswerParts && resolvedAnswerParts.length >= 2) {
+    questionText = repairMultipartQuestionStem(questionText, resolvedAnswerParts);
+    if (!questionText.trim()) {
+      questionText =
+        questionTextRaw ||
+        (imageUrls?.length || passageEarly ? "See figure." : "");
+    }
+  } else {
+    questionText = stripQuestionNumberPrefix(questionText);
+  }
+  const hasInlineInputBoxes = questionUsesInlineInputs(resolvedAnswerParts);
+
+  const aiMarkingCtx = {
+    hasInlineInputBoxes,
+    questionText,
+    answerParts: resolvedAnswerParts,
+    subjectId: sid,
+  };
 
   const typeRaw = String(q.type ?? "")
     .trim()
@@ -448,7 +590,11 @@ export function normalizeCustomQuestion(raw: unknown, subjectIdHint?: string): Q
         ? { answerParts: answerParts ?? inferredAnswerParts }
         : {}),
       ...(groupId ? { groupId } : {}),
-      ...useAiMarkingExtra,
+      ...resolveUseAiMarkingForLoad(useAiMarking, {
+        ...aiMarkingCtx,
+        typeRaw,
+        acceptedAnswers,
+      }),
     };
   }
 
@@ -479,7 +625,6 @@ export function normalizeCustomQuestion(raw: unknown, subjectIdHint?: string): Q
         ? { answerParts: answerParts ?? inferredAnswerParts }
         : {}),
       ...(groupId ? { groupId } : {}),
-      ...useAiMarkingExtra,
     };
   }
 
@@ -508,10 +653,14 @@ export function normalizeCustomQuestion(raw: unknown, subjectIdHint?: string): Q
           ? { answerParts: answerParts ?? inferredAnswerParts }
           : {}),
         ...(groupId ? { groupId } : {}),
-      ...useAiMarkingExtra,
+        ...resolveUseAiMarkingForLoad(useAiMarking, {
+          ...aiMarkingCtx,
+          typeRaw,
+          acceptedAnswers: [],
+        }),
       };
     }
-    return {
+    return applyMultipartAcceptedAnswers({
       type: "short",
       topic,
       question: questionText,
@@ -525,8 +674,12 @@ export function normalizeCustomQuestion(raw: unknown, subjectIdHint?: string): Q
         ? { answerParts: answerParts ?? inferredAnswerParts }
         : {}),
       ...(groupId ? { groupId } : {}),
-      ...useAiMarkingExtra,
-    };
+      ...resolveUseAiMarkingForLoad(useAiMarking, {
+        ...aiMarkingCtx,
+        typeRaw,
+        acceptedAnswers,
+      }),
+    });
   }
 
   if (typeRaw === "long" || typeRaw === "long_answer") {
@@ -538,7 +691,24 @@ export function normalizeCustomQuestion(raw: unknown, subjectIdHint?: string): Q
     if (!acceptedAnswers?.length) acceptedAnswers = undefined;
     const answer =
       typeof q.answer === "string" && q.answer.trim() ? q.answer : undefined;
-    return {
+    if (hasInlineInputBoxes && resolvedAnswerParts?.length) {
+      const fromParts = flattenPartAcceptedAnswers(resolvedAnswerParts);
+      return applyMultipartAcceptedAnswers({
+        type: "short",
+        topic,
+        question: questionText,
+        acceptedAnswers: fromParts.length ? fromParts : acceptedAnswers ?? [],
+        imageUrls,
+        answerImageUrls,
+        marks,
+        passage,
+        id,
+        answerParts: resolvedAnswerParts,
+        ...(groupId ? { groupId } : {}),
+        useAiMarking: false,
+      });
+    }
+    return applyMultipartAcceptedAnswers({
       type: "long",
       topic,
       question: questionText,
@@ -554,8 +724,12 @@ export function normalizeCustomQuestion(raw: unknown, subjectIdHint?: string): Q
         ? { answerParts: answerParts ?? inferredAnswerParts }
         : {}),
       ...(groupId ? { groupId } : {}),
-      ...useAiMarkingExtra,
-    };
+      ...resolveUseAiMarkingForLoad(useAiMarking, {
+        ...aiMarkingCtx,
+        typeRaw,
+        acceptedAnswers: acceptedAnswers ?? (answer ? [answer] : []),
+      }),
+    });
   }
 
   return null;
@@ -572,8 +746,11 @@ function dedupeQuestionsByStem(questions: Question[]): Question[] {
   const seen = new Set<string>();
   const out: Question[] = [];
   for (const q of questions) {
-    const key = questionStemKey(q);
-    if (!key || seen.has(key)) continue;
+    const key =
+      q.id != null
+        ? `id:${q.id}`
+        : `stem:${questionStemKey(q) || `row:${out.length}`}`;
+    if (seen.has(key)) continue;
     seen.add(key);
     out.push(q);
   }

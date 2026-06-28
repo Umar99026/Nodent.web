@@ -1,0 +1,134 @@
+{
+  "questions": [
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Applications of differentiation",
+      "question": "A conical storage vessel stands vertex-down with a fixed height of $6\\,\\text{m}$ and a top radius of $3\\,\\text{m}$. Water is pumped in so that the volume of water increases at a constant rate of $8\\pi\\,\\text{m}^3\\text{/min}$. At any instant the water surface forms a similar cone. Let $h$ metres be the depth of the water.",
+      "acceptedAnswers": ["2", "1.28"],
+      "marks": 4,
+      "guidance": "Use $V=\\frac{\\pi h^3}{12}$ from similar triangles ($r=h/2$). Then $\\frac{dV}{dt}=\\frac{\\pi h^2}{4}\\frac{dh}{dt}$.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Find $\\frac{dh}{dt}$ when the water depth is $4\\,\\text{m}$.",
+          "marks": 2,
+          "acceptedAnswer": "2",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) Hence find $\\frac{dh}{dt}$ when the depth is $5\\,\\text{m}$, with the inflow rate unchanged.",
+          "marks": 2,
+          "acceptedAnswer": "1.28",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Applications of differentiation",
+      "question": "A drone's height above a flat runway (in metres) is modelled by $h(t)=t^3-9t^2+24t$ for $0\\le t\\le 6$, where $t$ is the time in seconds after take-off.",
+      "acceptedAnswers": ["2", "3"],
+      "marks": 4,
+      "guidance": "$h'(t)=3(t-2)(t-4)$. The first local maximum on $(0,6)$ occurs at $t=2$. After that, solve $h(t)=18$ for the first time on the descent.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Find the value of $t$ at the first local maximum of $h$ on the interval $(0,6)$.",
+          "marks": 2,
+          "acceptedAnswer": "2",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) After reaching this local maximum, the drone descends. Find the first time (in seconds) when its height is again $18\\,\\text{m}$.",
+          "marks": 2,
+          "acceptedAnswer": "3",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Discrete random variables",
+      "question": "In a manufacturing line, the number of defective items in a random batch of $25$ units is modelled by $D\\sim B(25,0.08)$. Each batch is independent.",
+      "acceptedAnswers": ["2", "1.84"],
+      "marks": 4,
+      "guidance": "For $X\\sim B(n,p)$: $E(X)=np$ and $\\text{Var}(X)=np(1-p)$.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Find $E(D)$.",
+          "marks": 2,
+          "acceptedAnswer": "2",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) Find $\\text{Var}(D)$.",
+          "marks": 2,
+          "acceptedAnswer": "1.84",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Circular functions",
+      "question": "The outside temperature (in $^\\circ\\text{C}$) at a remote station $t$ hours after midnight is modelled by $T(t)=-5+12\\cos\\!\\left(\\frac{\\pi(t-4)}{12}\\right)$ for $0\\le t\\le 24$.",
+      "acceptedAnswers": ["-5", "16"],
+      "marks": 4,
+      "guidance": "At $t=10$ the cosine argument is $\\pi/2$. The minimum occurs when $\\cos(\\cdot)=-1$, giving $\\frac{\\pi(t-4)}{12}=\\pi$.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Find the temperature at $10\\,\\text{am}$.",
+          "marks": 2,
+          "acceptedAnswer": "-5",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) Find the time of day (hours after midnight) of the first minimum temperature after midnight.",
+          "marks": 2,
+          "acceptedAnswer": "16",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Applications of integration",
+      "question": "A rail-mounted sensor moves in a straight line. Its velocity is $v(t)=3t^2-24t+45\\,\\text{m/s}$ for $0\\le t\\le 6$, where $t$ is in seconds. The sensor starts at the origin, so its displacement $s(t)$ satisfies $s(0)=0$.",
+      "acceptedAnswers": ["54", "50"],
+      "marks": 4,
+      "guidance": "$s(t)=t^3-12t^2+45t$. Solve $v(t)=0$ to find when the sensor is momentarily at rest, then evaluate $s(t)$ at those times.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Find the displacement (in metres) at the first instant when the sensor is at rest.",
+          "marks": 2,
+          "acceptedAnswer": "54",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) Find the displacement at the next instant when the sensor is at rest.",
+          "marks": 2,
+          "acceptedAnswer": "50",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": false
+    }
+  ]
+}

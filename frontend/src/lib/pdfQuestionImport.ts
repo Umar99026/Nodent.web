@@ -168,16 +168,16 @@ export type RenderPageOptions = {
 
 /** Default render for PDF import previews and cropping. */
 export const PDF_RENDER_STANDARD: RenderPageOptions = {
-  maxWidth: 2200,
-  maxScale: 2.5,
-  quality: 0.88,
+  maxWidth: 2400,
+  maxScale: 2.75,
+  quality: 0.93,
 };
 
 /** High-resolution render for NODENT figures (cropped from a large source). */
 export const PDF_RENDER_HIGH_RES: RenderPageOptions = {
-  maxWidth: 3200,
+  maxWidth: 2800,
   maxScale: 3,
-  quality: 0.93,
+  quality: 0.94,
 };
 
 export async function renderPageToDataUrl(
@@ -202,6 +202,8 @@ export async function renderPageToDataUrl(
   canvas.height = Math.floor(viewport.height);
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Canvas is not supported in this browser.");
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
 
   await page.render({ canvasContext: ctx, viewport }).promise;
   return canvas.toDataURL("image/jpeg", quality);
@@ -291,10 +293,7 @@ export function detectLetterSubparts(text: string): {
     const body = cleaned.slice(bodyStart, bodyEnd).trim();
     const marks = extractPartMarks(body);
     const cleanBody = stripMarksAnnotations(body);
-    const firstLine = stripMarksAnnotations(cleanBody.split(/\n/)[0]?.trim() ?? "");
-    const descriptor = firstLine
-      ? `${label}) ${firstLine}`.slice(0, 160)
-      : `${label})`;
+    const descriptor = cleanBody ? `${label}) ${cleanBody}` : `${label})`;
     parts.push({ label, descriptor, body: cleanBody, ...(marks ? { marks } : {}) });
   }
   return { stem, parts };
@@ -304,7 +303,7 @@ const MCQ_OPTION_MARKER_RE =
   /(?:^|\n)\s*(?:\(([A-D])\)|\(([a-d])\)|([A-Da-d])\s*[.)]\s*)\s*/g;
 
 const MCQ_OPTION_INLINE_RE =
-  /(?<![A-Za-z0-9])(?:\(([A-D])\)|\(([a-d])\)|([A-Da-d])\s*[.)])\s+/g;
+  /(?<![A-Za-z0-9])(?:\(([A-D])\)|\(([a-d])\)|([A-Da-d])\s*[.)]|([A-Da-d])\s+)(?=\S)/g;
 
 const MCQ_OPTION_SPACED_RE = /(?:^|\n)\s*([A-Da-d])\s{2,}/g;
 
@@ -326,7 +325,7 @@ function collectMcqMarkers(text: string, re: RegExp): McqMarker[] {
   const regex = new RegExp(re.source, re.flags);
   let m: RegExpExecArray | null;
   while ((m = regex.exec(text)) !== null) {
-    const letter = (m[1] || m[2] || m[3] || "").toUpperCase();
+    const letter = (m[1] || m[2] || m[3] || m[4] || "").toUpperCase();
     if (!letter || letter < "A" || letter > "D") continue;
     markers.push({ letter, index: m.index, matchLen: m[0].length });
   }
@@ -480,6 +479,7 @@ function tryExtractMcqFromLines(text: string, correctAnswer: string): McqExtract
     const patterns = [
       /^\[([A-D])\]\s*\[([^\]]+)\]$/i,
       /^\[([A-D])\]\s*(.+)$/i,
+      /^([A-D])\s+(.+)$/i,
       /^([A-D])\s*(?:[\s.)-–—]+|\s{2,})(.+)$/i,
       /^([A-D])\s*[.)]\s*(.+)$/i,
       /^\(([A-D])\)\s*(.+)$/i,

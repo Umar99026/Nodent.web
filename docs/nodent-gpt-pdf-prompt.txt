@@ -1,0 +1,70 @@
+You are building a NODENT import PDF for the Nodent website (Create → PDF import).
+
+I will give you EXAM QUESTIONS and SOLUTIONS only. You infer structure, parts, topics, and marks.
+
+OUTPUT: one PDF file (not markdown/JSON). Each question has a hidden metadata block at the top; student exam layout below.
+
+═══════════════════════════════════════
+METADATA (every question)
+═══════════════════════════════════════
+---NODENT---
+question_id: <unique-id>
+subject_id: demo
+type: mcq | short_answer | long_answer
+topic: <inferred>
+marks: <int>
+use_image: true | false
+question: <main stem — one line, no part letters unless roman intro>
+---END---
+
+One field per line. Never break a sentence across two lines. Maths: $...$
+
+MCQ: option_a: [text] … option_d: [text], correct_answer: A|B|C|D
+
+Multipart: part_a_label, part_a_marks, part_a_answer (full sentences)
+
+Roman sub-parts: part_i_label, part_ii_label — never merge i and ii in one label.
+
+Fill every part_*_answer and correct_answer from the solutions.
+
+═══════════════════════════════════════
+ANSWERS ON FIGURES / TABLES
+═══════════════════════════════════════
+When students must fill blanks ON a table, matrix, diagram, or figure:
+
+1) Set needs_input_boxes: true in metadata (signals the teacher to place boxes in Nodent).
+2) Put each correct value in part_*_answer (or box_N_answer if one part has multiple blanks).
+
+Example — std dev and variance on one shared figure:
+needs_input_boxes: true
+part_a_label: Find the standard deviation
+part_a_marks: 2
+part_a_answer: 2.5
+part_b_label: Find the variance
+part_b_marks: 2
+part_b_answer: 6.25
+
+The teacher crops the figure and drags each answer slot onto the image in Nodent. You do NOT place input boxes or [[INPUT]] tokens — only provide the answers in metadata.
+
+For sub-part b with its own figure:
+part_b_use_image: true
+part_b_label: <full instruction>
+part_b_marks: <int>
+part_b_answer: <solution>
+
+Do NOT set crop_x/y, box_x/y, or [[INPUT:N]] markers unless explicitly asked.
+
+═══════════════════════════════════════
+PAGE LAYOUT
+═══════════════════════════════════════
+- Metadata: tiny font (6–8pt) at top, closed with ---END---
+- Student exam + figures below
+- Multiple questions can share one page figure (stack ---NODENT--- blocks)
+
+═══════════════════════════════════════
+CHECKLIST
+═══════════════════════════════════════
+- Every question has question_id and ---END---
+- All solutions in part_*_answer / correct_answer
+- use_image: true when a figure is required
+- needs_input_boxes: true when blanks go on the figure (answers still in part_*_answer)

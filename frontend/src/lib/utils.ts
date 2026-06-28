@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { mathAnswersEquivalent, answerCandidatesFromWorking } from "@/lib/mathAnswerNormalize";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -7,14 +8,79 @@ export function cn(...inputs: ClassValue[]) {
 
 /** Trim, lowercase, and strip trailing punctuation from an answer string. */
 export function normalizeAnswer(text: string): string {
-  return text
+  const base = /\d/.test(text) ? stripAnswerUnits(text) : text;
+  return base
     .trim()
     .toLowerCase()
     .replace(/[.,;:!?]+$/, "");
 }
 
+/** Strip LaTeX wrappers and trailing unit suffixes (g, kg, cm³, %, …) — case-insensitive. */
+export function stripAnswerUnits(raw: string): string {
+  let t = String(raw ?? "").trim();
+  t = t.replace(/\$([^$]*)\$/g, (_, inner: string) => inner.trim());
+  if (!/\d/.test(t)) return t;
+
+  const unit =
+    "(?:grams?|kilograms?|kg|g|cm³|cm\\^?3|m³|m\\^?3|mm|cm|km|ml|litres?|liters?|l|minutes?|mins?|hours?|hrs?|days?|weeks?|months?|years?|yrs?|percent|%)";
+
+  let prev = "";
+  while (prev !== t) {
+    prev = t;
+    t = t
+      .replace(new RegExp(`(\\d(?:[\\d.,]*\\d)?)\\s*${unit}\\s*$`, "i"), "$1")
+      .replace(new RegExp(`\\s+${unit}\\s*$`, "i"), "")
+      .trim();
+  }
+  return t;
+}
+
+const ANSWER_UNIT_PATTERN =
+  "(?:grams?|kilograms?|kg|g|cm³|cm\\^?3|m³|m\\^?3|mm|cm|km|ml|litres?|liters?|l|minutes?|mins?|hours?|hrs?|days?|weeks?|months?|years?|yrs?|percent|%)";
+
+/** Split a numeric answer into value + display unit (for inline input boxes). */
+export function splitAnswerValueAndUnit(raw: string): { value: string; unit: string } {
+  let t = String(raw ?? "").trim();
+  t = t.replace(/\$([^$]*)\$/g, (_, inner: string) => inner.trim());
+  if (!t) return { value: "", unit: "" };
+  if (!/\d/.test(t)) return { value: t, unit: "" };
+
+  if (/^%\s*/.test(t)) return { value: t.replace(/^%\s*/, "").trim(), unit: "%" };
+  if (/\$/.test(t) && !/%/.test(t)) {
+    const m = t.match(/^\$\s*(.+)$/);
+    if (m) return { value: m[1]!.trim(), unit: "$" };
+  }
+
+  const unitRe = new RegExp(`^(.*?)\\s*(${ANSWER_UNIT_PATTERN})\\s*$`, "i");
+  const match = t.match(unitRe);
+  if (match?.[1] != null && match[2]) {
+    return { value: match[1].trim(), unit: match[2].trim() };
+  }
+
+  return { value: t, unit: "" };
+}
+
+/** Normalize a correct answer for storage — strips trailing units from numeric answers. */
+export function normalizeAcceptedAnswerForStorage(raw: string): string {
+  const trimmed = String(raw ?? "").trim();
+  if (!trimmed) return "";
+  return stripAnswerUnits(trimmed);
+}
+
+/** Normalize each line of a multiline accepted-answers field (preserves blank lines). */
+export function normalizeAcceptedAnswersText(multiline: string): string {
+  return multiline
+    .split("\n")
+    .map((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return line;
+      return normalizeAcceptedAnswerForStorage(trimmed);
+    })
+    .join("\n");
+}
+
 function parseNumericAnswer(raw: string): number | null {
-  const t = raw
+  const t = stripAnswerUnits(raw)
     .trim()
     .toLowerCase()
     .replace(/[−–—]/g, "-")
@@ -125,12 +191,12 @@ export function inferMathTypingHint(acceptedAnswers: string[]): string | null {
   if (!hasSqrt && !hasPower) return null;
 
   if (hasSqrt && hasPower) {
-    return "Type square roots as sqrt() and powers with ^ (e.g. sqrt(2), x^2, e^(-x)).";
+    return "Use ^ for powers (x^2) and sqrt() for roots (sqrt(2)). LaTeX like $\\sqrt{2}$ also works.";
   }
   if (hasSqrt) {
-    return "Type square roots as sqrt() (e.g. sqrt(2) or sqrt(x+1)).";
+    return "Type square roots as sqrt(2) or $\\sqrt{2}$.";
   }
-  return "Type powers with ^ (e.g. x^2, e^(-3), (x+1)^4).";
+  return "Type powers with ^ (e.g. x^2, e^(-3)).";
 }
 
 const EXPLANATION_STOPWORDS = new Set([
@@ -199,6 +265,89 @@ function looksLikeExplanationRubric(accepted: string): boolean {
   return /[a-z]{3,}/i.test(t);
 }
 
+function looksLikeProseAnswer(accepted: string): boolean {
+  const t = String(accepted ?? "").trim();
+  if (!t || /see marking guide/i.test(t)) return false;
+  if (/^[a-d]$/i.test(t)) return false;
+  if (parseNumericAnswer(t) != null && !/[a-z]{4,}/i.test(t)) return false;
+  return /[a-z]{2,}/i.test(t);
+}
+
+function normalizeProse(text: string): string {
+  return normalizeAnswer(text)
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function proseTokens(text: string): string[] {
+  return normalizeProse(text)
+    .split(/\s+/)
+    .filter((w) => w.length >= 2 && !EXPLANATION_STOPWORDS.has(w));
+}
+
+function looseTokenMatch(a: string, b: string): boolean {
+  if (a === b) return true;
+  if (a.length >= 4 && b.length >= 4) {
+    const [shorter, longer] = a.length <= b.length ? [a, b] : [b, a];
+    if (longer.includes(shorter)) return true;
+    const root = shorter.slice(0, Math.min(5, shorter.length));
+    if (root.length >= 4 && longer.startsWith(root)) return true;
+  }
+  return false;
+}
+
+function levenshteinDistance(a: string, b: string): number {
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+  const row = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    let prev = row[0]!;
+    row[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const temp = row[j]!;
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      row[j] = Math.min(row[j - 1]! + 1, row[j]! + 1, prev + cost);
+      prev = temp;
+    }
+  }
+  return row[b.length]!;
+}
+
+function levenshteinRatio(a: string, b: string): number {
+  const maxLen = Math.max(a.length, b.length);
+  if (!maxLen) return 1;
+  return 1 - levenshteinDistance(a, b) / maxLen;
+}
+
+/** Fuzzy match for short prose answers (state / explain / define style). */
+export function proseAnswersSimilar(studentAnswer: string, acceptedAnswer: string): boolean {
+  if (!looksLikeProseAnswer(acceptedAnswer)) return false;
+  const student = normalizeProse(studentAnswer);
+  const accepted = normalizeProse(acceptedAnswer);
+  if (!student || !accepted) return false;
+  if (student === accepted) return true;
+
+  if (accepted.length <= 80 && student.includes(accepted)) return true;
+  if (student.length <= 48 && accepted.includes(student)) return true;
+
+  const sTokens = proseTokens(studentAnswer);
+  const aTokens = proseTokens(acceptedAnswer);
+  if (aTokens.length > 0) {
+    const matched = aTokens.filter((at) => sTokens.some((st) => looseTokenMatch(st, at)));
+    const coverage = matched.length / aTokens.length;
+    if (coverage >= 0.75) return true;
+    if (aTokens.length <= 3 && coverage >= 0.5 && matched.length >= 1) return true;
+  }
+
+  if (student.length <= 64 && accepted.length <= 64) {
+    if (levenshteinRatio(student, accepted) >= 0.84) return true;
+  }
+
+  return false;
+}
+
 /** Pull 1–6 keyword phrases from a model explanation answer. */
 export function extractExplanationKeywords(accepted: string): string[] {
   const raw = String(accepted ?? "").trim();
@@ -251,6 +400,26 @@ export function isAnswerCorrect(
   studentAnswer: string,
   acceptedAnswers: string[],
 ): { correct: boolean; dpHint: number | null } {
+  const candidates = answerCandidatesFromWorking(studentAnswer);
+  if (!candidates.length) {
+    return { correct: false, dpHint: inferDpHintFromAccepted(acceptedAnswers) };
+  }
+
+  let last: { correct: boolean; dpHint: number | null } = {
+    correct: false,
+    dpHint: inferDpHintFromAccepted(acceptedAnswers),
+  };
+  for (const candidate of candidates) {
+    last = isAnswerCorrectSingle(candidate, acceptedAnswers);
+    if (last.correct) return last;
+  }
+  return last;
+}
+
+function isAnswerCorrectSingle(
+  studentAnswer: string,
+  acceptedAnswers: string[],
+): { correct: boolean; dpHint: number | null } {
   const dpHint = inferDpHintFromAccepted(acceptedAnswers);
   const studentDp = studentDecimalPlaces(studentAnswer);
 
@@ -278,7 +447,13 @@ export function isAnswerCorrect(
     if (normalizeAnswer(acceptedStr) === normalized) {
       return { correct: true, dpHint };
     }
+    if (mathAnswersEquivalent(studentAnswer, acceptedStr)) {
+      return { correct: true, dpHint };
+    }
     if (matchesExplanationKeywords(studentAnswer, acceptedStr)) {
+      return { correct: true, dpHint };
+    }
+    if (proseAnswersSimilar(studentAnswer, acceptedStr)) {
       return { correct: true, dpHint };
     }
   }

@@ -9,13 +9,19 @@ import {
   UserRound,
   Camera,
   Shield,
+  GraduationCap,
+  Pencil,
+  Users,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
-import { ADMIN_EMAIL } from "@/lib/constants";
+import { useHandwritingMode } from "@/context/HandwritingModeContext";
+import { canAccessExamsAndClassFeatures, isAdminUser } from "@/lib/constants";
+import { fetchClassMembership } from "@/lib/teacherClass";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuCheckboxItem,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -42,6 +48,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
   { label: "Track My Study", icon: Clock, path: "/track" },
+  { label: "Teacher", icon: GraduationCap, path: "/teacher", adminOnly: true },
   { label: "Admin", icon: Shield, path: "/admin", adminOnly: true },
 ];
 
@@ -49,12 +56,25 @@ export function AppSidebar() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout, updateAccount, setProfilePhoto } = useAuth();
+  const { enabled: handwritingMode, setEnabled: setHandwritingMode } = useHandwritingMode();
+  const handwritingAvailable = /\/(practice|quiz)\/demo(\/|$)/.test(location.pathname);
+
+  useEffect(() => {
+    if (!handwritingAvailable && handwritingMode) {
+      setHandwritingMode(false);
+    }
+  }, [handwritingAvailable, handwritingMode, setHandwritingMode]);
   const [accountOpen, setAccountOpen] = useState(false);
   const [username, setUsername] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [classMembership, setClassMembership] = useState<{
+    enrolled: boolean;
+    className?: string;
+    teacherName?: string;
+  }>({ enrolled: false });
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const initials = user?.username
@@ -81,6 +101,27 @@ export function AppSidebar() {
     setNewPassword("");
     setPhotoPreview(user?.profilePhoto ?? null);
   }, [user, accountOpen]);
+
+  const showClassFeatures = canAccessExamsAndClassFeatures(user);
+
+  useEffect(() => {
+    if (!user || !showClassFeatures) return;
+    let cancelled = false;
+    void fetchClassMembership()
+      .then((data) => {
+        if (!cancelled) setClassMembership(data);
+      })
+      .catch(() => {
+        if (!cancelled) setClassMembership({ enrolled: false });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user, accountOpen, showClassFeatures]);
+
+  const openJoinClass = () => {
+    navigate("/join-class");
+  };
 
   const handlePhotoSelect = async (
     event: React.ChangeEvent<HTMLInputElement>,
@@ -163,10 +204,7 @@ export function AppSidebar() {
         <div className="order-3 flex w-full justify-center sm:order-2 sm:flex-1">
           <div className="flex w-full max-w-xl items-center gap-1 overflow-x-auto rounded-full border border-white/12 bg-white/6 p-1">
             {navItems.map((item) => {
-              if (
-                item.adminOnly &&
-                user?.email?.toLowerCase() !== ADMIN_EMAIL.toLowerCase()
-              ) {
+              if (item.adminOnly && !isAdminUser(user)) {
                 return null;
               }
 
@@ -221,6 +259,32 @@ export function AppSidebar() {
                 </div>
               </div>
               <DropdownMenuSeparator />
+              {handwritingAvailable ? (
+              <DropdownMenuCheckboxItem
+                checked={handwritingMode}
+                onCheckedChange={(checked) => setHandwritingMode(checked === true)}
+                className="cursor-pointer rounded-lg px-3 py-2"
+              >
+                <Pencil className="size-4" />
+                <span>Handwriting answers</span>
+                <span className="ml-auto text-[10px] font-medium uppercase tracking-wide text-black/40">
+                  Demo
+                </span>
+              </DropdownMenuCheckboxItem>
+              ) : null}
+              {showClassFeatures ? (
+              <DropdownMenuItem
+                onClick={openJoinClass}
+                className="cursor-pointer rounded-lg px-3 py-2"
+              >
+                <Users className="size-4" />
+                <span>
+                  {classMembership.enrolled
+                    ? `My class · ${classMembership.className ?? "Class"}`
+                    : "Join a class"}
+                </span>
+              </DropdownMenuItem>
+              ) : null}
               <DropdownMenuItem
                 onClick={() => setAccountOpen(true)}
                 className="cursor-pointer rounded-lg px-3 py-2"
@@ -301,6 +365,34 @@ export function AppSidebar() {
                 className="h-11 border-black/10"
               />
             </div>
+
+            {showClassFeatures ? (
+            <div className="space-y-3 rounded-2xl border border-black/10 bg-[#f8fafc] p-4">
+              <div>
+                <p className="text-sm font-semibold text-[#0b0f19]">Class</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {classMembership.enrolled
+                    ? `You're in ${classMembership.className ?? "a class"}${classMembership.teacherName ? ` with ${classMembership.teacherName}` : ""}.`
+                    : "Join your teacher's class with their code so they can see your stats."}
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant={classMembership.enrolled ? "outline" : "default"}
+                className={
+                  classMembership.enrolled
+                    ? "w-full border-black/10"
+                    : "w-full bg-[#0b0f19] text-white hover:bg-[#0b0f19]/90"
+                }
+                onClick={() => {
+                  setAccountOpen(false);
+                  openJoinClass();
+                }}
+              >
+                {classMembership.enrolled ? "View class" : "Join a class"}
+              </Button>
+            </div>
+            ) : null}
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">

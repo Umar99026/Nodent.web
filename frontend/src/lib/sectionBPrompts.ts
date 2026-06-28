@@ -6,7 +6,7 @@ export type SectionBCuratedVariant = {
   stimulus: string;
 };
 
-/** One practice page per title + stimulus (6 prompts total). */
+/** One practice page per title + stimulus (16 prompts total). */
 export const SECTION_B_CURATED_VARIANTS: SectionBCuratedVariant[] = [
   {
     framework: "Writing about country",
@@ -84,6 +84,130 @@ export const SECTION_B_CURATED_VARIANTS: SectionBCuratedVariant[] = [
     stimulus:
       "In the midst of my journey through life I found myself in a dark forest, where the clear way forward was lost.",
   },
+  {
+    framework: "Writing about country",
+    title: "Borderlines",
+    promptLine:
+      "Using at least one stimulus, write a crafted text exploring ideas about country, place and belonging.",
+    instructions: [
+      "Write a text that explores ideas about country.",
+      "Use the provided title.",
+      "Use at least one stimulus.",
+    ],
+    stimulus: "Home is not a place on a map. It is the language you dream in.",
+  },
+  {
+    framework: "Writing about country",
+    title: "Borderlines",
+    promptLine:
+      "Using at least one stimulus, write a crafted text exploring ideas about country, place and belonging.",
+    instructions: [
+      "Write a text that explores ideas about country.",
+      "Use the provided title.",
+      "Use at least one stimulus.",
+    ],
+    stimulus: "The soil remembers what the headlines forget.",
+  },
+  {
+    framework: "Writing about protest",
+    title: "Unmuted",
+    promptLine:
+      "Using at least one stimulus, write a crafted text exploring ideas about protest, voice and collective action.",
+    instructions: [
+      "Write a text that explores ideas about protest.",
+      "Use the provided title.",
+      "Use at least one stimulus.",
+    ],
+    stimulus:
+      "They told us to be quiet. We learned to whisper until our whispers sounded like thunder.",
+  },
+  {
+    framework: "Writing about protest",
+    title: "Unmuted",
+    promptLine:
+      "Using at least one stimulus, write a crafted text exploring ideas about protest, voice and collective action.",
+    instructions: [
+      "Write a text that explores ideas about protest.",
+      "Use the provided title.",
+      "Use at least one stimulus.",
+    ],
+    stimulus:
+      "A sign is only cardboard until someone decides to stand in the rain and hold it.",
+  },
+  {
+    framework: "Writing about personal journeys",
+    title: "Halfway",
+    promptLine:
+      "Using at least one stimulus, write a crafted text exploring ideas about personal journeys and transformation.",
+    instructions: [
+      "Write a text that explores ideas about personal journeys.",
+      "Use the provided title.",
+      "Use at least one stimulus.",
+    ],
+    stimulus: "I am not who I was, and not yet who I mean to become.",
+  },
+  {
+    framework: "Writing about personal journeys",
+    title: "Halfway",
+    promptLine:
+      "Using at least one stimulus, write a crafted text exploring ideas about personal journeys and transformation.",
+    instructions: [
+      "Write a text that explores ideas about personal journeys.",
+      "Use the provided title.",
+      "Use at least one stimulus.",
+    ],
+    stimulus: "Sometimes the hardest step is the one that looks like standing still.",
+  },
+  {
+    framework: "Writing about personal journeys",
+    title: "The Long Way Round",
+    promptLine:
+      "Using at least one stimulus, write a crafted text exploring ideas about personal journeys and transformation.",
+    instructions: [
+      "Write a text that explores ideas about personal journeys.",
+      "Use the provided title.",
+      "Use at least one stimulus.",
+    ],
+    stimulus: "What if the detour was not a mistake, but the point of the journey?",
+  },
+  {
+    framework: "Writing about personal journeys",
+    title: "The Long Way Round",
+    promptLine:
+      "Using at least one stimulus, write a crafted text exploring ideas about personal journeys and transformation.",
+    instructions: [
+      "Write a text that explores ideas about personal journeys.",
+      "Use the provided title.",
+      "Use at least one stimulus.",
+    ],
+    stimulus:
+      "You cannot return to the beginning, but you can choose what you carry forward.",
+  },
+  {
+    framework: "Writing about play",
+    title: "Second Chance",
+    promptLine:
+      "Using at least one stimulus, write a crafted text exploring ideas about play, rules and imagination.",
+    instructions: [
+      "Write a text that explores ideas about play.",
+      "Use the provided title.",
+      "Use at least one stimulus.",
+    ],
+    stimulus: "Every game has rules. The interesting ones are the rules no one wrote down.",
+  },
+  {
+    framework: "Writing about play",
+    title: "Second Chance",
+    promptLine:
+      "Using at least one stimulus, write a crafted text exploring ideas about play, rules and imagination.",
+    instructions: [
+      "Write a text that explores ideas about play.",
+      "Use the provided title.",
+      "Use at least one stimulus.",
+    ],
+    stimulus:
+      "We pretended the creek was an ocean because nobody had told us how small our suburb was.",
+  },
 ];
 
 /** @deprecated Use SECTION_B_CURATED_VARIANTS — kept for any legacy imports. */
@@ -102,7 +226,16 @@ export const SECTION_B_BLOCKED_TITLES = new Set(
 );
 
 const CURATED_TITLES = new Set(
-  ["Origins", "Small Acts, Big Wins", "Changing Direction"].map(normalizeSectionBTitle),
+  [
+    "Origins",
+    "Small Acts, Big Wins",
+    "Changing Direction",
+    "Borderlines",
+    "Unmuted",
+    "Halfway",
+    "The Long Way Round",
+    "Second Chance",
+  ].map(normalizeSectionBTitle),
 );
 
 export function normalizeSectionBTitle(title: string) {

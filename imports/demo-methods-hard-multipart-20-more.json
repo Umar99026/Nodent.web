@@ -1,0 +1,524 @@
+{
+  "questions": [
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Functions and transformations",
+      "question": "The graph of $y=f(x)$ is a parabola with $x$-intercepts at $0$ and $4$ and vertex $(2,4)$. A new graph is defined by $g(x)=f(x-2)+3$.",
+      "acceptedAnswers": ["4", "7"],
+      "marks": 4,
+      "guidance": "First find $f(x)=-(x-2)^2+4$. Then $g(x)=f(x-2)+3$.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Find $f(2)$.",
+          "marks": 2,
+          "acceptedAnswer": "4",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) Find $g(4)$.",
+          "marks": 2,
+          "acceptedAnswer": "7",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Continuous random variables",
+      "question": "The waiting time $W$ (in minutes) for an express bus is modelled as a continuous uniform random variable on the interval $[4,16]$.",
+      "acceptedAnswers": ["10", "12"],
+      "marks": 4,
+      "guidance": "For $X\\sim U(a,b)$: $E(X)=\\frac{a+b}{2}$ and $\\text{Var}(X)=\\frac{(b-a)^2}{12}$.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Find $E(W)$.",
+          "marks": 2,
+          "acceptedAnswer": "10",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) Find $\\text{Var}(W)$.",
+          "marks": 2,
+          "acceptedAnswer": "12",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "The normal distribution",
+      "question": "Exam scores on a state-wide test are modelled by a normal distribution with mean $58$ and standard deviation $3$. Let $W$ be a randomly selected score.",
+      "acceptedAnswers": ["2", "0.159"],
+      "marks": 4,
+      "guidance": "Standardise with $Z=\\frac{W-58}{3}$. Use symmetry or tables for tail probabilities.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Find the $z$-score for a score of $64$.",
+          "marks": 2,
+          "acceptedAnswer": "2",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) Find $P(W<55)$, correct to three decimal places.",
+          "marks": 2,
+          "acceptedAnswer": "0.159",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Sampling and sample proportions",
+      "question": "In a random sample of $180$ voters, exactly $72$ say they support a proposed policy. Let $\\hat{p}$ be the sample proportion of support.",
+      "acceptedAnswers": ["0.4", "0.037"],
+      "marks": 4,
+      "guidance": "$\\hat{p}=\\frac{72}{180}$. The standard error is $\\sqrt{\\frac{\\hat{p}(1-\\hat{p})}{n}}$.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Find $\\hat{p}$.",
+          "marks": 2,
+          "acceptedAnswer": "0.4",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) Find the standard error of $\\hat{p}$, correct to three decimal places.",
+          "marks": 2,
+          "acceptedAnswer": "0.037",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Confidence intervals for proportions",
+      "question": "A market researcher surveys $500$ customers and finds $260$ prefer Product A. Let $\\hat{p}$ be the sample proportion preferring Product A. Assume a $95\\%$ confidence level with critical value $1.96$.",
+      "acceptedAnswers": ["0.022", "0.044"],
+      "marks": 4,
+      "guidance": "Margin of error $=1.96\\times SE$, where $SE=\\sqrt{\\frac{\\hat{p}(1-\\hat{p})}{n}}$.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Find the standard error of $\\hat{p}$, correct to three decimal places.",
+          "marks": 2,
+          "acceptedAnswer": "0.022",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) Find the margin of error for a $95\\%$ confidence interval, correct to three decimal places.",
+          "marks": 2,
+          "acceptedAnswer": "0.044",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Applications of differentiation",
+      "question": "A $13\\,\\text{ft}$ ladder leans against a vertical wall. The bottom of the ladder is pulled away from the wall at $3\\,\\text{ft/s}$. At the instant when the bottom is $5\\,\\text{ft}$ from the wall, the top is $12\\,\\text{ft}$ above the ground.",
+      "acceptedAnswers": ["-1.25", "-2.88"],
+      "marks": 4,
+      "guidance": "Use $x^2+y^2=169$ and implicit differentiation with respect to time.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Find the rate at which the top is sliding down the wall at that instant.",
+          "marks": 2,
+          "acceptedAnswer": "-1.25",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) Find the rate at which the top is sliding down when the bottom is $9\\,\\text{ft}$ from the wall, with the pulling speed unchanged.",
+          "marks": 2,
+          "acceptedAnswer": "-2.88",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Applications of differentiation",
+      "question": "A farmer builds a rectangular pen using $60\\,\\text{m}$ of fencing for three sides; the fourth side is an existing barn wall. The pen has width $x$ metres along the barn and length $60-2x$ metres perpendicular to the barn, for $0<x<30$.",
+      "acceptedAnswers": ["15", "450"],
+      "marks": 4,
+      "guidance": "Maximise $A(x)=x(60-2x)$ on the valid domain.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Find the width $x$ that maximises the area.",
+          "marks": 2,
+          "acceptedAnswer": "15",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) Hence find the maximum possible area.",
+          "marks": 2,
+          "acceptedAnswer": "450",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Integral calculus",
+      "question": "A curve has equation $y=6x-x^2$ for $0\\le x\\le 6$. A region is bounded by the curve, the $x$-axis, and the lines $x=0$ and $x=3$.",
+      "acceptedAnswers": ["9", "18"],
+      "marks": 4,
+      "guidance": "The maximum of $6x-x^2$ on $[0,6]$ occurs at $x=3$. Area is $\\int_0^3(6x-x^2)\\,dx$.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Find the maximum value of $y$ on the interval $[0,6]$.",
+          "marks": 2,
+          "acceptedAnswer": "9",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) Find the area of the bounded region.",
+          "marks": 2,
+          "acceptedAnswer": "18",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Applications of integration",
+      "question": "Water flows into an empty tank at a rate of $R(t)=60-6t$ litres per minute, where $t$ is the time in minutes after filling begins. The tank contains no water at $t=0$.",
+      "acceptedAnswers": ["300", "15"],
+      "marks": 4,
+      "guidance": "Volume is $V(t)=\\int_0^t (60-6u)\\,du=60t-3t^2$.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Find the maximum volume of water in the tank.",
+          "marks": 2,
+          "acceptedAnswer": "300",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) After the maximum, the volume decreases. Find the next time when the volume is $225$ litres.",
+          "marks": 2,
+          "acceptedAnswer": "15",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Polynomial, power and rational functions",
+      "question": "A packaging error is modelled by the cubic $P(x)=x^3-12x^2+45x-28$, where $x$ is a coded batch number. The polynomial factors completely over the reals.",
+      "acceptedAnswers": ["1", "7"],
+      "marks": 4,
+      "guidance": "$P(x)=(x-1)(x-4)(x-7)$.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Find the smallest real root of $P(x)=0$.",
+          "marks": 2,
+          "acceptedAnswer": "1",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) Find the largest real root of $P(x)=0$.",
+          "marks": 2,
+          "acceptedAnswer": "7",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Exponential and logarithmic functions",
+      "question": "A startup's active users (in hundreds) after $t$ weeks is modelled by $N(t)=1200\\times 0.88^t$.",
+      "acceptedAnswers": ["818", "-154"],
+      "marks": 4,
+      "guidance": "$N'(t)=1200\\times 0.88^t\\ln(0.88)$.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Find $N(3)$, correct to the nearest whole number.",
+          "marks": 2,
+          "acceptedAnswer": "818",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) Find the initial rate of change $N'(0)$, correct to the nearest whole number.",
+          "marks": 2,
+          "acceptedAnswer": "-154",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Circular functions",
+      "question": "A Ferris wheel passenger's height above ground (in metres) is $h(t)=12+10\\sin\\!\\left(\\frac{\\pi t}{15}\\right)$, where $t$ is the time in minutes after the ride starts at the lowest point.",
+      "acceptedAnswers": ["20.7", "7.5"],
+      "marks": 4,
+      "guidance": "The first maximum after $t=0$ occurs when $\\sin(\\cdot)=1$.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Find $h(5)$, correct to one decimal place.",
+          "marks": 2,
+          "acceptedAnswer": "20.7",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) Find the time of the first maximum height after the ride starts.",
+          "marks": 2,
+          "acceptedAnswer": "7.5",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Algebra and equations",
+      "question": "A chemist solves $\\ln(x)+\\ln(x+2)=\\ln(8)$ for $x>0$ when mixing two solutions.",
+      "acceptedAnswers": ["2", "8"],
+      "marks": 4,
+      "guidance": "Combine logs to get $x(x+2)=8$.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Find the valid solution for $x$.",
+          "marks": 2,
+          "acceptedAnswer": "2",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) Hence verify the product $x(x+2)$.",
+          "marks": 2,
+          "acceptedAnswer": "8",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Differential calculus",
+      "question": "A particle moves along a line with displacement $s(t)=t^3-6t^2+9t$ metres, where $t\\ge 0$ is in seconds.",
+      "acceptedAnswers": ["-3", "0"],
+      "marks": 4,
+      "guidance": "$v(t)=s'(t)$ and $a(t)=v'(t)$.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Find the velocity at $t=2$ seconds.",
+          "marks": 2,
+          "acceptedAnswer": "-3",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) Find the acceleration at $t=2$ seconds.",
+          "marks": 2,
+          "acceptedAnswer": "0",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Functions and transformations",
+      "question": "A rational function is defined by $f(x)=\\frac{1}{x-2}+1$ for $x\\ne 2$.",
+      "acceptedAnswers": ["2.5", "1.5"],
+      "marks": 4,
+      "guidance": "Solve $f(x)=3$ for part (a). Evaluate $f(4)$ for part (b).",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Find the value of $x$ such that $f(x)=3$.",
+          "marks": 2,
+          "acceptedAnswer": "2.5",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) Find $f(4)$.",
+          "marks": 2,
+          "acceptedAnswer": "1.5",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Discrete random variables",
+      "question": "A quality score $X$ takes values $0,1,2,3$ with probabilities $0.1,0.2,0.4,0.3$ respectively.",
+      "acceptedAnswers": ["1.9", "0.89"],
+      "marks": 4,
+      "guidance": "Use $E(X)=\\sum xP(X=x)$ and $\\text{Var}(X)=E(X^2)-[E(X)]^2$.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Find $E(X)$.",
+          "marks": 2,
+          "acceptedAnswer": "1.9",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) Find $\\text{Var}(X)$.",
+          "marks": 2,
+          "acceptedAnswer": "0.89",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Continuous random variables",
+      "question": "The lifetime $T$ (in years) of a component is exponential with rate $\\lambda=0.25$. Thus $P(T>t)=e^{-0.25t}$ for $t\\ge 0$.",
+      "acceptedAnswers": ["4", "0.135"],
+      "marks": 4,
+      "guidance": "Mean is $\\frac{1}{\\lambda}$. Use $P(T>8)=e^{-0.25\\times 8}$.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Find $E(T)$.",
+          "marks": 2,
+          "acceptedAnswer": "4",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) Find $P(T>8)$, correct to three decimal places.",
+          "marks": 2,
+          "acceptedAnswer": "0.135",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "The normal distribution",
+      "question": "A machine fills bottles so that the volume $X$ (in mL) is normally distributed with mean $100$ and variance $25$.",
+      "acceptedAnswers": ["2", "0.023"],
+      "marks": 4,
+      "guidance": "Standard deviation is $5$. Use $Z=\\frac{X-100}{5}$.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Find the $z$-score for a volume of $110$ mL.",
+          "marks": 2,
+          "acceptedAnswer": "2",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) Find $P(X>110)$, correct to three decimal places.",
+          "marks": 2,
+          "acceptedAnswer": "0.023",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Confidence intervals for proportions",
+      "question": "In a clinical trial, $64$ out of $256$ patients respond to a treatment. Let $\\hat{p}$ be the sample response rate. Use a $99\\%$ critical value of $2.58$.",
+      "acceptedAnswers": ["0.027", "0.07"],
+      "marks": 4,
+      "guidance": "$\\hat{p}=\\frac{1}{4}$. Margin of error $=2.58\\times SE$.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Find the standard error of $\\hat{p}$, correct to three decimal places.",
+          "marks": 2,
+          "acceptedAnswer": "0.027",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) Find the margin of error for a $99\\%$ confidence interval, correct to two decimal places.",
+          "marks": 2,
+          "acceptedAnswer": "0.07",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Sampling and sample proportions",
+      "question": "A pollster wants the standard error of a sample proportion to be at most $0.02$ when the true proportion is $0.5$. The standard error formula $\\sqrt{\\frac{p(1-p)}{n}}$ is used.",
+      "acceptedAnswers": ["625", "0.02"],
+      "marks": 4,
+      "guidance": "Solve $\\sqrt{\\frac{0.25}{n}}\\le 0.02$ for the minimum integer $n$.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Find the minimum sample size required.",
+          "marks": 2,
+          "acceptedAnswer": "625",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) For $n=625$ and $p=0.5$, state the standard error.",
+          "marks": 2,
+          "acceptedAnswer": "0.02",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": false
+    }
+  ]
+}

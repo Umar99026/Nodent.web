@@ -1,0 +1,30 @@
+{
+  "questions": [
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Data analysis",
+      "question": "The dot plot below shows the number of books read by $20$ students in a month.",
+      "acceptedAnswers": ["4", "3"],
+      "marks": 3,
+      "guidance": "Mode is the most frequent value. Range = max − min.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) State the mode.",
+          "marks": 1,
+          "acceptedAnswer": "4",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) Find the range.",
+          "marks": 2,
+          "acceptedAnswer": "3",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": false
+    }
+  ]
+}

@@ -1,0 +1,229 @@
+You are preparing a NODENT import PDF for Nodent Admin. This is for VCE General Mathematics Units 3 and 4.
+
+Read the attached exam PDF carefully. Your job is to return a new PDF that Nodent can import. Every question must have a hidden metadata block at the top of its page. The student-facing exam content goes below the metadata.
+
+IMPORTANT RULE ABOUT TEXT
+Every metadata value must be a complete sentence or complete answer on a single line. Do not break a sentence across two lines. If a question is long, keep the full question on one line after "question:". Never stop mid-sentence.
+
+SUBJECT SETTINGS
+The subject_id must always be general-maths.
+Use LaTeX for maths inside single dollar signs. Examples: $Q_1$, $z=2.5$, $IQR=10.5$.
+Keep the original exam wording, marks, and part labels.
+Write hard VCE-style questions: multi-step, scenario-based, not one-line recall.
+
+VALID TOPICS
+Pick exactly one of these four topic names (copy the spelling exactly):
+Data analysis
+Recursion and financial modelling
+Matrices
+Networks and decision mathematics
+
+PAGE LAYOUT
+Each PDF page can hold one question or several questions.
+Put every ---NODENT--- metadata block at the top of the page, stacked in order.
+If any question on the page needs a diagram, table, graph, or network, put one shared figure below all the metadata blocks.
+All questions on the same page share that one figure when imported.
+Use small font for metadata at the top. Put the normal exam layout and figures below.
+
+QUESTION TYPES
+Use type mcq for multiple choice (usually 1 mark).
+Use type short_answer for a single written answer.
+Use type long_answer for questions with two or more parts (a, b, c, etc.).
+
+METADATA BLOCK FORMAT
+Every question needs its own block. Start with ---NODENT--- and end with ---END---.
+
+Required fields in every block:
+question_id: a unique id for the whole PDF, for example gm-2024-exam-q7
+subject_id: general-maths
+type: mcq OR short_answer OR long_answer
+topic: one of the four valid topics listed above
+marks: total marks as an integer
+use_image: true if the page figure is needed, or false for text-only
+question: the full student-facing stem as one complete line
+
+FOR MCQ QUESTIONS (type mcq)
+Also include these fields on single lines:
+option_a: [full text of option A in square brackets]
+option_b: [full text of option B in square brackets]
+option_c: [full text of option C in square brackets]
+option_d: [full text of option D in square brackets]
+correct_answer: A or B or C or D (one letter only)
+
+Do not use part_a_label or any part_ fields on MCQ questions.
+The option_a to option_d fields are the source of truth. Do not rely only on visible A) B) C) D) labels in the PDF body.
+
+FOR MULTIPART QUESTIONS (type short_answer or long_answer)
+Put the scenario or context in the question field only. Do not put part letters like a) or b) in the question field, except when a letter part has roman sub-parts (see below).
+For each part, use these fields (one complete line each):
+part_a_label: a full instruction, for example "Find the first quartile (Q1)."
+part_a_marks: marks for part a as an integer
+part_a_answer: the model answer for part a
+part_b_label: full instruction for part b
+part_b_marks: marks for part b
+part_b_answer: model answer for part b
+(continue with part_c, part_d, etc. if needed)
+
+ROMAN SUB-PARTS (i. / ii. / iii. / iv.) — IMPORTANT
+When a letter part has roman sub-parts, NEVER put i. and ii. inside one part_b_label line.
+Instead, use separate roman keys: part_i_label, part_ii_label, part_iii_label, part_iv_label (with matching _marks and _answer fields).
+Put the letter-part intro in the question field, including the letter label if it appears on the exam.
+
+Example (oyster weights):
+question: b) Determine, in grams:
+part_i_label: the mean weight of all the oysters in this sample
+part_i_marks: 1
+part_i_answer: 85
+part_ii_label: the median weight of the large oysters in this sample
+part_ii_marks: 1
+part_ii_answer: 92
+
+Another example (regression under part c):
+question: c) When a least squares line is used to model the association between oyster weight and volume, the equation is volume = 0.780 + 0.953 × weight.
+part_i_label: Name the response variable in this equation.
+part_i_marks: 1
+part_i_answer: volume
+part_ii_label: Complete the following sentence: each 10 g increase in weight is associated with a ___ cm³ increase in volume.
+part_ii_marks: 1
+part_ii_answer: 9.53
+
+Do NOT write: part_b_label: Determine, in grams: i. the mean ... ii. the median ... (this breaks import).
+Do NOT use part_i alone — always part_i_label, part_i_marks, part_i_answer.
+
+Part labels must be full sentences or instructions, not just "a)" or "i." alone.
+Part marks should add up to the total marks field where possible.
+
+EXAMPLE 1: MCQ (text only, one question per page)
+
+---NODENT---
+question_id: gm-exam-q1
+subject_id: general-maths
+type: mcq
+topic: Data analysis
+marks: 1
+use_image: false
+question: The ordered data set 12, 15, 18, 18, 21, 24, 30, 34 has an interquartile range of
+option_a: [6]
+option_b: [9]
+option_c: [10.5]
+option_d: [16]
+correct_answer: C
+---END---
+
+Below the block, show the question stem and options A to D as a normal exam layout.
+
+EXAMPLE 5: Roman sub-parts (inline i. / ii. on the exam — split in metadata)
+
+---NODENT---
+question_id: gm-exam-q5
+subject_id: general-maths
+type: long_answer
+topic: Data analysis
+marks: 2
+use_image: false
+question: b) Determine, in grams:
+part_i_label: the mean weight of all the oysters in this sample
+part_i_marks: 1
+part_i_answer: 85
+part_ii_label: the median weight of the large oysters in this sample
+part_ii_marks: 1
+part_ii_answer: 92
+---END---
+
+Below the block, show the exam layout: "b) Determine, in grams: i. the mean … ii. the median …" as students would see it.
+
+EXAMPLE 2: Multipart long answer (text only)
+
+---NODENT---
+question_id: gm-exam-q2
+subject_id: general-maths
+type: long_answer
+topic: Data analysis
+marks: 6
+use_image: false
+question: A dataset has the following values: 5, 7, 9, 10, 12, 14, 16, 18, 20.
+part_a_label: Find the first quartile (Q1).
+part_a_marks: 2
+part_a_answer: 9
+part_b_label: Find the third quartile (Q3).
+part_b_marks: 2
+part_b_answer: 16
+part_c_label: Find the interquartile range (IQR).
+part_c_marks: 2
+part_c_answer: 7
+---END---
+
+Below the block, show the stem and parts a, b, c as a normal exam layout.
+
+EXAMPLE 3: Two questions sharing one table on the same page
+
+---NODENT---
+question_id: gm-exam-q3a
+subject_id: general-maths
+type: mcq
+topic: Recursion and financial modelling
+marks: 1
+use_image: true
+question: From the amortisation table below, the balance after 12 months is closest to
+option_a: [241500]
+option_b: [238400]
+option_c: [235200]
+option_d: [232100]
+correct_answer: B
+---END---
+
+---NODENT---
+question_id: gm-exam-q3b
+subject_id: general-maths
+type: short_answer
+topic: Recursion and financial modelling
+marks: 2
+use_image: true
+question: Using the same amortisation table, find the total interest paid in the first 12 months.
+part_a_label: State the total interest in dollars, rounded to the nearest dollar.
+part_a_marks: 2
+part_a_answer: 8640
+---END---
+
+Below both blocks, show one shared amortisation table that both questions refer to.
+
+EXAMPLE 4: Networks question with a diagram
+
+---NODENT---
+question_id: gm-exam-q4
+subject_id: general-maths
+type: long_answer
+topic: Networks and decision mathematics
+marks: 4
+use_image: true
+question: The weighted network below shows travel times between towns in minutes.
+part_a_label: Write the weight of the edge from A to C.
+part_a_marks: 1
+part_a_answer: 12
+part_b_label: Find the shortest path from A to E and state the total travel time in minutes.
+part_b_marks: 3
+part_b_answer: A-B-D-E, 27
+---END---
+
+Below the block, show the network diagram.
+
+FORMATTING RULES (follow all of these)
+1. Every question gets its own ---NODENT--- block closed with ---END---.
+2. Every question_id must be unique across the entire PDF.
+3. Write one field per line in the format field_name: value
+4. Never put two fields on the same line.
+5. Never break a sentence across two lines inside a field value.
+6. MCQ options must use square brackets, for example option_a: [6]
+7. For MCQ, correct_answer must be a single letter A, B, C, or D.
+8. Set use_image to false for text-only questions. Set use_image to true when a figure, table, or graph is required.
+9. Do not use placeholder fields on MCQ questions.
+10. For multipart questions, use part_a_label (not part_a alone). Labels must be full instructions.
+11. For roman sub-parts use part_i_label, part_ii_label, etc. Never combine i. and ii. in one part_b_label.
+12. Keep the ---NODENT--- and ---END--- markers exactly as shown.
+13. If a marking guide is attached, fill every part_a_answer and correct_answer from the marking guide.
+14. Do not skip any exam question. Every question needs a metadata block.
+
+OUTPUT
+Return a PDF file only.
+Do not return JSON, TSV, markdown, or plain text.
+Each page should have one or more metadata blocks at the top, then the exam content and any shared figure below.

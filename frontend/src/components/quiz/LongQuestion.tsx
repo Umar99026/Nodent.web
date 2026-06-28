@@ -4,31 +4,62 @@ import type { LongQuestion as LongQuestionType } from "@/lib/subjects";
 import { apiFetch } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { PassageBlock, QuestionImageGrid } from "@/components/quiz/QuestionStimulus";
 import { RichQuestionContent } from "@/components/quiz/RichQuestionContent";
+import { HorizontalInputFields } from "@/components/quiz/HorizontalInputFields";
+import { QuizAnswerField } from "@/components/quiz/QuizAnswerField";
+import { useHandwritingModeActive } from "@/context/HandwritingModeContext";
+import {
+  collectHandwritingImages,
+  hasAnswerContent,
+  handwritingResponseSummary,
+  usesHandwritingMarking,
+} from "@/lib/handwritingMode";
+import {
+  partHasOverlay,
+  partUsesFigureLabels,
+  partUsesInlineInputs,
+  inlineInputsForPart,
+  slotsForPart,
+  slotIndexForPartOverlay,
+} from "@/lib/diagramLabels";
 import { writtenApiPath } from "@/lib/writtenAnswerUpload";
 import {
   buildSmartMarkPayload,
+  buildFallbackHandwritingMark,
+  enrichHandwritingMarkResult,
+  partMarkAt,
+  requestHandwritingMark,
   requestSmartMark,
   resolveAiMarking,
+  type SmartMarkResult,
 } from "@/lib/questionAiMarking";
+import { handwritingMarkUserError } from "@/lib/userFacingErrors";
 import {
-  collectStimulusFromQuestion,
+  collectFullQuestionStimulus,
+  cleanAcceptedPartAnswer,
   displayMarks,
   formatPartDescriptor,
   hasVisibleStimulus,
   marksEarnedFromPartResults,
   normalizePartKey,
+  normalizeMultipartAcceptedAnswers,
   resolvePartMarks,
   resolveMultipartPartDisplay,
   multipartSharedStem,
+  partSubmitLabel,
   stripQuestionHeadingFromPassage,
   stripQuestionNumberPrefix,
   type AnswerScoreDetail,
 } from "@/lib/questionDisplay";
 import { toast } from "sonner";
+import { AiMarkingFeedbackPanel, AiMarkingPartFeedback } from "@/components/quiz/AiMarkingFeedbackPanel";
+import {
+  ExamPaperPartPrompt,
+  ExamPaperQuestionHeading,
+  ExamPaperStem,
+} from "@/components/quiz/ExamPaperQuestionChrome";
+import { isExamPaperLayoutSubject } from "@/lib/examPaperLayout";
 import {
   Save,
   Loader2,
@@ -48,6 +79,11 @@ interface LongQuestionProps {
   submitLabel?: string;
   /** Practice-only mode (no API save). Used for wrong-answer review. */
   practiceOnly?: boolean;
+  /** Demo sandbox — unlimited resubmits with smart marking still enabled. */
+  repeatSandbox?: boolean;
+  /** VCE exam booklet layout (demo preview). */
+  examPaperLayout?: boolean;
+  questionDisplayNumber?: number;
   persistedState?: {
     response?: string;
     parts?: string[];
@@ -68,31 +104,6 @@ interface LongQuestionProps {
   }) => void;
 }
 
-function expandAcceptedForMultipart(acceptedPool: string[]): string[] {
-  if (acceptedPool.length !== 1) return acceptedPool;
-  const raw = String(acceptedPool[0] ?? "").trim();
-  if (!raw) return acceptedPool;
-  const labelled = raw.match(/(?:^|[;\n])\s*(?:\(?i+\)?|[a-z]|\d+)\)\s*([^;\n]+)/gi);
-  if (labelled && labelled.length >= 2) {
-    return labelled
-      .map((x) => x.replace(/^(?:^|[;\n])\s*(?:\(?i+\)?|[a-z]|\d+)\)\s*/i, "").trim())
-      .filter(Boolean);
-  }
-  const split = raw.split(/\s*;\s*|\s*\n+\s*/).map((x) => x.trim()).filter(Boolean);
-  if (split.length >= 2) return split;
-  const splitCommaAndAnd = raw
-    .split(/\s*,\s*|\s+\band\b\s+/i)
-    .map((x) => x.trim())
-    .filter(Boolean);
-  return splitCommaAndAnd.length >= 2 ? splitCommaAndAnd : acceptedPool;
-}
-
-function cleanAcceptedCandidate(raw: string): string {
-  return String(raw ?? "")
-    .replace(/^\s*(?:\(?i+\)?|[a-z]|\d+)\)\s*/i, "")
-    .trim();
-}
-
 function formatExpectedAnswer(value: unknown): string {
   if (typeof value === "string") return value;
   if (typeof value === "number" || typeof value === "boolean") return String(value);
@@ -110,30 +121,11 @@ function formatExpectedAnswer(value: unknown): string {
   return String(value ?? "");
 }
 
-function inferUnitHint(text: string): string | null {
-  const t = String(text ?? "").toLowerCase();
-  if (/%/.test(t) || /\b(percent|percentage|rate|ear|effective annual rate)\b/i.test(t)) return "%";
-  if (/\bkm\b/i.test(t) || /\bdistance\b/i.test(t)) return "km";
-  if (/\bdays?\b/i.test(t)) return "days";
-  if (/\bweeks?\b/i.test(t)) return "weeks";
-  if (/\bmonths?\b/i.test(t)) return "months";
-  if (/\$(?!\s*%)/.test(t) || /\b(price|cost|balance|residual|repayment|loan|dollar)\b/i.test(t)) return "$";
-  return null;
-}
-
-function inferPartUnitHint(
-  descriptor: string,
-  expectedAnswer: string | undefined,
-): string | null {
-  const fromDescriptor = inferUnitHint(descriptor);
-  if (fromDescriptor) return fromDescriptor;
-  const fromExpected = inferUnitHint(expectedAnswer ?? "");
-  if (fromExpected) return fromExpected;
-  return null;
-}
-
 function gradeMultipartIndividually(parts: string[], acceptedPool: string[]) {
-  const expandedAccepted = expandAcceptedForMultipart(acceptedPool).map(cleanAcceptedCandidate);
+  const expandedAccepted = normalizeMultipartAcceptedAnswers(
+    acceptedPool,
+    parts.length,
+  ).map(cleanAcceptedPartAnswer);
   const byPosition =
     expandedAccepted.length >= parts.length
       ? parts.map((part, idx) => isAnswerCorrect((part ?? "").trim(), [expandedAccepted[idx]]))
@@ -215,26 +207,39 @@ export function LongQuestion({
   classFullyCorrectPercent,
   submitLabel = "Submit Answer",
   practiceOnly = false,
+  repeatSandbox = false,
+  examPaperLayout: examPaperLayoutProp,
+  questionDisplayNumber = 1,
   persistedState,
   onStateChange,
 }: LongQuestionProps) {
   const configuredParts: LongQuestionType["answerParts"] =
-    question.answerParts?.filter((p) => p?.label?.trim()) ?? [];
+    question.answerParts?.filter(
+      (p) =>
+        p?.label?.trim() ||
+        partHasOverlay(p) ||
+        partUsesFigureLabels(p) ||
+        partUsesInlineInputs(p),
+    ) ?? [];
   const configuredDisplay =
-    configuredParts.length >= 2 ? resolveMultipartPartDisplay(configuredParts) : null;
+    configuredParts.length >= 1
+      ? resolveMultipartPartDisplay(configuredParts, {
+          stemHint: question.question,
+        })
+      : null;
   const partLabels = configuredDisplay
     ? configuredDisplay.letters
     : detectMultipartLabels(question.question);
-  const isMultipart = configuredParts.length >= 2 || partLabels.length >= 2;
+  const isMultipart = configuredParts.length >= 1 || partLabels.length >= 2;
   const partDescriptors = configuredDisplay
     ? configuredDisplay.descriptors
     : detectMultipartDescriptors(question.question, partLabels);
   const partPlaceholders =
-    configuredParts.length >= 2
+    configuredParts.length >= 1
       ? configuredParts.map((p) => p.placeholder?.trim() || "")
       : [];
   const partImageUrls =
-    configuredParts.length >= 2
+    configuredParts.length >= 1
       ? configuredParts.map((p) => p.imageUrl?.trim() || "")
       : [];
   const baseMarks = displayMarks(question.marks, question.type);
@@ -246,17 +251,18 @@ export function LongQuestion({
     : baseMarks;
   const hasExplicitPartMarks =
     isMultipart &&
-    configuredParts.length >= 2 &&
+    configuredParts.length >= 1 &&
     configuredParts.every((p) => typeof p.marks === "number" && (p.marks ?? 0) > 0);
   const expectedAnswersForDisplay = isMultipart
-    ? expandAcceptedForMultipart(
+    ? normalizeMultipartAcceptedAnswers(
         [
           ...(Array.isArray(question.acceptedAnswers) ? question.acceptedAnswers : []),
           ...(question.answer ? [question.answer] : []),
         ]
           .map((s) => formatExpectedAnswer(s).trim())
           .filter(Boolean),
-      ).map(cleanAcceptedCandidate)
+        partLabels.length,
+      )
     : [
         ...(
           Array.isArray(question.acceptedAnswers)
@@ -282,8 +288,10 @@ export function LongQuestion({
     average: number | null;
     count: number;
   }>({ average: null, count: 0 });
-  const [aiFeedback, setAiFeedback] = useState<string | null>(null);
+  const [aiMark, setAiMark] = useState<SmartMarkResult | null>(null);
   const [aiMarking, setAiMarking] = useState(false);
+  const handwritingMode = useHandwritingModeActive(subjectId);
+  const examPaper = examPaperLayoutProp ?? isExamPaperLayoutSubject(subjectId);
 
   useEffect(() => {
     onStateChange?.({
@@ -315,7 +323,11 @@ export function LongQuestion({
           });
         }
         if (data?.aiMark?.feedback) {
-          setAiFeedback(data.aiMark.feedback);
+          setAiMark({
+            correct: Boolean(data.aiMark.correct),
+            scorePercent: Number(data.aiMark.scorePercent ?? 0),
+            feedback: data.aiMark.feedback,
+          });
         }
         if (data?.response) {
           const t = data.response.text?.trim();
@@ -359,10 +371,19 @@ export function LongQuestion({
   }, [subjectId, questionKey, isMultipart, partLabels, practiceOnly]);
 
   const handleSave = async () => {
+    const usesHandwritingAi = usesHandwritingMarking(subjectId, response, parts, isMultipart);
+    const handwritingImages = collectHandwritingImages(response, parts, isMultipart);
+    const hasContent = isMultipart
+      ? parts.every((part) => hasAnswerContent(part))
+      : hasAnswerContent(response);
     const effectiveResponse = isMultipart
-      ? partLabels.map((label, idx) => `${label}) ${parts[idx] ?? ""}`.trim()).join("\n")
+      ? partLabels.map((label, idx) => `${partSubmitLabel(label)} ${parts[idx] ?? ""}`.trim()).join("\n")
       : response;
-    if (!effectiveResponse.trim() || saving || disabled || (!practiceOnly && saved)) return;
+    const responseToStore = usesHandwritingAi
+      ? handwritingResponseSummary(handwritingImages.length)
+      : effectiveResponse;
+
+    if (!hasContent || saving || disabled || (!practiceOnly && saved)) return;
 
     setSaving(true);
     try {
@@ -370,7 +391,7 @@ export function LongQuestion({
         await apiFetch(writtenApiPath(subjectId, questionKey), {
           method: "PUT",
           body: JSON.stringify({
-            responseText: effectiveResponse,
+            responseText: responseToStore,
           }),
         });
         setSaved(true);
@@ -384,7 +405,8 @@ export function LongQuestion({
         .filter(Boolean);
       let result: boolean | null = null;
       let partCorrectFlags: boolean[] = [];
-      if (effectiveResponse.trim() && acceptedPool.length > 0) {
+
+      if (!usesHandwritingAi && effectiveResponse.trim() && acceptedPool.length > 0) {
         if (isMultipart) {
           const gradedParts = gradeMultipartIndividually(parts, acceptedPool);
           partCorrectFlags = gradedParts.map((g) => g.correct);
@@ -410,12 +432,53 @@ export function LongQuestion({
       });
 
       const shouldAiMark =
-        !practiceOnly &&
+        !usesHandwritingAi &&
+        (!practiceOnly || repeatSandbox) &&
         effectiveResponse.trim() &&
         useAi &&
         result !== true;
 
-      if (shouldAiMark) {
+      if (usesHandwritingAi) {
+        setAiMark(null);
+        setAiMarking(true);
+        try {
+          const ai = await requestHandwritingMark(subjectId, questionKey, {
+            answer: effectiveResponse,
+            parts,
+            isMultipart,
+            question: buildSmartMarkPayload(question, {
+              marks: effectiveTotalMarks,
+              partDescriptors,
+              partMarks,
+              expectedAnswers: expectedAnswersForDisplay,
+              configuredParts,
+            }),
+          });
+          const enriched = enrichHandwritingMarkResult(
+            ai ?? buildFallbackHandwritingMark(expectedAnswersForDisplay),
+            expectedAnswersForDisplay,
+          );
+          finalResult = enriched.correct;
+          setAutoMarkResult(finalResult);
+          setAiMark(enriched);
+          if (enriched.partResults?.length) {
+            partCorrectFlags = partLabels.map((_, idx) => {
+              const hit = enriched.partResults?.find((p) => p.index === idx);
+              return hit ? hit.correct : false;
+            });
+            setPartResults(partCorrectFlags);
+          }
+        } catch (err) {
+          const msg = handwritingMarkUserError(err);
+          toast.error(msg);
+          const fallback = buildFallbackHandwritingMark(expectedAnswersForDisplay);
+          finalResult = false;
+          setAutoMarkResult(false);
+          setAiMark(fallback);
+        } finally {
+          setAiMarking(false);
+        }
+      } else if (shouldAiMark) {
         setAiMarking(true);
         try {
           const ai = await requestSmartMark(subjectId, questionKey, {
@@ -432,7 +495,7 @@ export function LongQuestion({
           if (ai) {
             finalResult = ai.correct;
             setAutoMarkResult(finalResult);
-            setAiFeedback(ai.feedback || null);
+            setAiMark(ai);
             if (ai.partResults?.length) {
               partCorrectFlags = partLabels.map((_, idx) => {
                 const hit = ai.partResults?.find((p) => p.index === idx);
@@ -453,6 +516,15 @@ export function LongQuestion({
         : finalResult
           ? effectiveTotalMarks
           : 0;
+      if (repeatSandbox && finalResult === false) {
+        setAiMark((prev) =>
+          enrichHandwritingMarkResult(
+            prev ?? buildFallbackHandwritingMark(expectedAnswersForDisplay),
+            expectedAnswersForDisplay,
+          ),
+        );
+      }
+      setAutoMarkResult(finalResult);
       onAnswer(finalResult, { marksEarned: earned, marksTotal: effectiveTotalMarks });
       if (finalResult === true) toast.success("Answer submitted. Marked correct.");
       else if (finalResult === false) toast.error("Answer submitted. Not quite right yet.");
@@ -467,8 +539,9 @@ export function LongQuestion({
   };
 
   return (
-    <div className="space-y-5">
+    <div className={cn("space-y-5", examPaper && "vce-question-paper")}>
       {/* Question header */}
+      {!examPaper ? (
       <div className="space-y-2">
         <div className="flex items-center gap-2">
           <Badge variant="secondary" className="text-xs font-normal">
@@ -487,9 +560,15 @@ export function LongQuestion({
           </p>
         )}
       </div>
+      ) : (
+        <ExamPaperQuestionHeading
+          questionNumber={questionDisplayNumber}
+          marks={effectiveTotalMarks}
+        />
+      )}
 
       {!hidePassage && (() => {
-        const stimulus = collectStimulusFromQuestion(question);
+        const stimulus = collectFullQuestionStimulus(question);
         if (hasVisibleStimulus(stimulus)) {
           return (
             <PassageBlock
@@ -500,31 +579,40 @@ export function LongQuestion({
         }
         if (question.imageUrls?.length) {
           return (
-            <QuestionImageGrid urls={question.imageUrls} title="Source material" />
+            <QuestionImageGrid urls={question.imageUrls} title="" />
           );
         }
         return null;
       })()}
 
-      {!isMultipart || !hasExplicitPartMarks ? (
+      {!examPaper && (!isMultipart || !hasExplicitPartMarks) ? (
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           {effectiveTotalMarks}{" "}
           {effectiveTotalMarks === 1 ? "mark" : "marks"}
         </p>
       ) : null}
       {displayStem.trim() ? (
-      <div className="font-display text-[1.18rem] leading-relaxed text-foreground sm:text-[1.45rem]">
+      examPaper ? (
+        <ExamPaperStem text={displayStem} />
+      ) : (
+      <div
+        className={cn(
+          "font-display leading-relaxed text-foreground",
+          isMultipart
+            ? "text-[1.35rem] font-semibold sm:text-[1.65rem]"
+            : "text-[1.18rem] sm:text-[1.45rem]",
+        )}
+      >
         <RichQuestionContent
           text={displayStem}
-          className="prose prose-base max-w-none prose-p:my-0"
+          className={cn(
+            "prose max-w-none prose-p:my-0",
+            isMultipart ? "prose-lg prose-p:font-semibold" : "prose-base",
+          )}
         />
       </div>
+      )
       ) : null}
-
-      <QuestionImageGrid
-        urls={question.answerImageUrls}
-        title="Solution / marking scheme"
-      />
 
       {yourPeerRating.count > 0 && yourPeerRating.average != null ? (
         <p className="text-sm text-muted-foreground">
@@ -548,37 +636,54 @@ export function LongQuestion({
       ) : (
       <Fragment>
       <div className="space-y-3">
-        {isMultipart ? (
+        {handwritingMode && !examPaper ? (
+          <p className="text-xs text-muted-foreground">
+            Handwriting mode — draw your working and answer. Smart marking will read your full working and mark the final answer.
+          </p>
+        ) : null}
+        {isMultipart && !examPaper ? (
           <p className="text-xs text-muted-foreground">
             Answer each part below, then submit once to mark all parts.
           </p>
         ) : null}
         {isMultipart ? (
-          <div className="flex flex-col gap-3">
+          <div className={cn("flex flex-col gap-4", !examPaper && "border-t border-black/8 pt-4")}>
             {partLabels.map((label, idx) => (
               <div key={`${label}-${idx}`} className="space-y-1">
                 {(() => {
-                  const partUnit = inferPartUnitHint(
-                    partDescriptors[idx] ?? "",
-                    expectedAnswersForDisplay[idx],
-                  );
+                  const part = configuredParts[idx];
+                  const hasInlineInputs = partUsesInlineInputs(part);
+                  const slotBaseIndex = configuredParts
+                    .slice(0, idx)
+                    .reduce((sum, configuredPart) => sum + slotsForPart(configuredPart), 0);
+                  const slotCount = slotsForPart(part);
                   return (
                     <>
                 {partImageUrls[idx] ? (
                   <QuestionImageGrid urls={[partImageUrls[idx]!]} />
                 ) : null}
-                <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0 flex-1 font-display text-[1.18rem] leading-relaxed text-foreground sm:text-[1.45rem]">
+                <div className="flex items-start justify-between gap-2">
+                  {examPaper ? (
+                    <ExamPaperPartPrompt
+                      text={partDescriptors[idx] ?? ""}
+                      className="min-w-0 flex-1"
+                    />
+                  ) : (
+                  <div className="min-w-0 flex-1 font-display text-[0.98rem] font-normal leading-relaxed text-foreground/90 sm:text-[1.06rem]">
                     <RichQuestionContent
                       text={partDescriptors[idx] ?? ""}
-                      className="prose prose-base max-w-none prose-p:my-0 sm:prose-lg"
+                      preferMarkdown
+                      className="prose prose-sm max-w-none prose-p:my-0 prose-p:font-normal"
                     />
                   </div>
+                  )}
+                  {!examPaper ? (
                   <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                     {partMarks[idx]} {partMarks[idx] === 1 ? "mark" : "marks"}
                   </span>
+                  ) : null}
                 </div>
-                {(practiceOnly ? submitted : saved) && (
+                {(practiceOnly ? submitted : saved) && !hasInlineInputs ? (
                   <p
                     className={cn(
                       "text-[11px] font-semibold",
@@ -587,39 +692,64 @@ export function LongQuestion({
                   >
                     {partResults[idx] === true ? "Correct" : "Incorrect"}
                   </p>
-                )}
-                <div className="flex items-stretch">
-                  {partUnit ? (
-                    <span className="inline-flex items-center rounded-l-md border border-r-0 border-black/15 bg-muted px-2 text-xs font-semibold text-muted-foreground">
-                      {partUnit}
-                    </span>
-                  ) : null}
-                  <Input
-                    value={parts[idx] ?? ""}
-                    onChange={(e) =>
+                ) : null}
+                {hasInlineInputs ? (
+                  <HorizontalInputFields
+                    boxes={inlineInputsForPart(part)}
+                    values={parts.slice(slotBaseIndex, slotBaseIndex + slotCount)}
+                    subjectId={subjectId}
+                    examPaperMode={examPaper}
+                    onChange={(boxIdx, value) => {
+                      const globalIdx = slotIndexForPartOverlay(configuredParts, idx, boxIdx);
                       setParts((prev) => {
                         const next = [...prev];
-                        next[idx] = e.target.value;
+                        next[globalIdx] = value;
                         return next;
+                      });
+                    }}
+                    disabled={disabled || (!practiceOnly && saved)}
+                    submitted={submitted}
+                    partResults={partResults.slice(slotBaseIndex, slotBaseIndex + slotCount)}
+                  />
+                ) : (
+                <div className="flex items-stretch">
+                  <QuizAnswerField
+                    value={parts[idx] ?? ""}
+                    onChange={(next) =>
+                      setParts((prev) => {
+                        const updated = [...prev];
+                        updated[idx] = next;
+                        return updated;
                       })
                     }
-                    placeholder={partPlaceholders[idx] || "Type your answer…"}
+                    placeholder={partPlaceholders[idx] || "Write your answer…"}
                     disabled={disabled || (!practiceOnly && saved)}
-                    className={cn(
-                      "bg-white/60",
-                      partUnit && "rounded-l-none",
-                      saved && "border-success/40",
-                    )}
+                    handwritingSize={examPaper ? "lg" : "md"}
+                    subjectId={subjectId}
+                    examPaperMode={examPaper}
+                    multiline={examPaper}
+                    rows={examPaper ? 12 : undefined}
+                    className={cn(saved && !examPaper && "border-success/40")}
                   />
                 </div>
-                {practiceOnly && submitted && partResults[idx] === false && (
+                )}
+                {(practiceOnly ? submitted : saved) && handwritingMode && aiMark && !hasInlineInputs ? (
+                  <AiMarkingPartFeedback
+                    partResult={partMarkAt(aiMark, idx)}
+                    expectedAnswer={expectedAnswersForDisplay[idx]}
+                  />
+                ) : submitted &&
+                  !hasInlineInputs &&
+                  partResults[idx] === false &&
+                  expectedAnswersForDisplay[idx] &&
+                  !handwritingMode ? (
                   <p className="text-[11px] text-muted-foreground">
                     Correct answer:{" "}
                     <span className="text-[13px] font-semibold text-foreground">
-                      {expectedAnswersForDisplay[idx] ?? "—"}
+                      {expectedAnswersForDisplay[idx]}
                     </span>
                   </p>
-                )}
+                ) : null}
                     </>
                   );
                 })()}
@@ -628,32 +758,30 @@ export function LongQuestion({
           </div>
         ) : (
           <div className="space-y-2">
-            <Textarea
+            <QuizAnswerField
               value={response}
-              onChange={(e) => setResponse(e.target.value)}
+              onChange={setResponse}
               placeholder={
                 configuredParts.length === 1 && configuredParts[0]?.placeholder
                   ? configuredParts[0].placeholder
                   : "Write your response here…"
               }
-              rows={12}
+              multiline
+              rows={examPaper ? 14 : handwritingMode ? 10 : 12}
+              handwritingSize="lg"
               disabled={disabled || (!practiceOnly && saved)}
-              className={cn(
-                "bg-white/60 text-sm leading-relaxed resize-y",
-                saved && "border-success/40"
-              )}
+              subjectId={subjectId}
+              examPaperMode={examPaper}
+              className={cn("w-full min-w-0 resize-y", saved && !examPaper && "border-success/40")}
             />
-            {practiceOnly &&
-              submitted &&
-              autoMarkResult === false &&
-              expectedAnswersForDisplay.length > 0 && (
+            {submitted && autoMarkResult === false && expectedAnswersForDisplay[0] ? (
                 <p className="text-[11px] text-muted-foreground">
                   Correct answer:{" "}
                   <span className="text-[13px] font-semibold text-foreground">
                     {expectedAnswersForDisplay[0]}
                   </span>
                 </p>
-              )}
+              ) : null}
           </div>
         )}
 
@@ -663,7 +791,9 @@ export function LongQuestion({
             variant="accent"
             onClick={handleSave}
             disabled={
-              !(isMultipart ? parts.join("").trim() : response.trim()) ||
+              !(isMultipart
+                ? parts.every((p) => hasAnswerContent(p))
+                : hasAnswerContent(response)) ||
               saving ||
               aiMarking ||
               disabled ||
@@ -677,7 +807,7 @@ export function LongQuestion({
               <Save className="size-4" />
             )}
             {aiMarking
-              ? "AI marking…"
+              ? "Smart marking…"
               : !practiceOnly && saved
                 ? "Submitted"
                 : isMultipart
@@ -729,12 +859,15 @@ export function LongQuestion({
             )}
           </div>
         )}
-        {aiFeedback && (practiceOnly ? submitted : saved) && (
-          <div className="rounded-lg border border-black/10 bg-black/[0.02] px-4 py-3 text-sm text-muted-foreground">
-            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-foreground">AI feedback</p>
-            <p className="leading-relaxed">{aiFeedback}</p>
-          </div>
-        )}
+        {aiMark && (practiceOnly ? submitted : saved) && !(isMultipart && handwritingMode) ? (
+          <AiMarkingFeedbackPanel
+            feedback={aiMark.feedback}
+            correct={aiMark.correct}
+            correctAnswers={aiMark.correctAnswers}
+            partResults={aiMark.partResults}
+            partLabels={partDescriptors}
+          />
+        ) : null}
       </div>
       </Fragment>
       )}

@@ -9,9 +9,9 @@ export function LandingHeroPoster() {
       id="top"
       className="landing-hero-poster landing-section relative min-h-[100dvh] overflow-hidden"
     >
-      <div className="relative z-10 mx-auto flex min-h-[100dvh] max-w-7xl flex-col px-5 pb-10 pt-[5.5rem] sm:px-8 sm:pb-12">
+      <div className="relative z-10 mx-auto flex min-h-[100dvh] max-w-7xl flex-col px-5 pb-10 pt-[calc(env(safe-area-inset-top,0px)+6.25rem)] sm:px-8 sm:pb-12 sm:pt-[calc(env(safe-area-inset-top,0px)+6.75rem)]">
         <div className="grid flex-1 items-center gap-10 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.15fr)] lg:gap-8">
-          <div className="max-w-md lg:max-w-lg">
+          <div className="max-w-md pl-1 sm:max-w-lg sm:pl-0">
             <h1 className="font-display text-[clamp(2rem,5.5vw,3.25rem)] font-bold uppercase leading-[1.05] tracking-tight text-white">
               Know your rank before results land
             </h1>

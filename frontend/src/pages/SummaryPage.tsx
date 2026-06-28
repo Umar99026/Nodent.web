@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, BOOTSTRAP_FETCH_TIMEOUT_MS } from "@/lib/api";
 import { API_PATHS, STORAGE_KEYS } from "@/lib/constants";
 import {
   getRawCustomQuestionsForSubject,
@@ -314,7 +314,7 @@ export default function SummaryPage() {
       try {
         const data = await apiFetch<{
           customQuestions?: Record<string, unknown[]>;
-        }>(API_PATHS.bootstrap);
+        }>(API_PATHS.bootstrap, { timeoutMs: BOOTSTRAP_FETCH_TIMEOUT_MS });
         if (cancelled) return;
         if (data?.customQuestions) {
           localStorage.setItem(

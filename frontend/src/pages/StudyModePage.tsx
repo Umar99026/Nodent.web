@@ -1,12 +1,16 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
-import { apiFetch } from "@/lib/api";
-import { API_PATHS, STORAGE_KEYS } from "@/lib/constants";
+import { apiFetch, BOOTSTRAP_FETCH_TIMEOUT_MS } from "@/lib/api";
+import { API_PATHS, STORAGE_KEYS, isAdminUser } from "@/lib/constants";
 import {
   getRawCustomQuestionsForSubject,
   practiceQuestionsForSubject,
 } from "@/lib/practiceQuestions";
+import {
+  loadPracticeBank,
+  QUESTIONS_UPDATED_EVENT,
+} from "@/lib/questionBankCache";
 import type { Question } from "@/lib/subjects";
 import { questionKeyStable, getStableQuestionIndex } from "@/lib/practiceKeys";
 import { randomizedQuestionsForSubject } from "@/lib/quizShuffle";
@@ -14,6 +18,7 @@ import { buildGroupsFromOrderedFlat } from "@/lib/questionGroups";
 import { McqQuestion } from "@/components/quiz/McqQuestion";
 import { ShortQuestion } from "@/components/quiz/ShortQuestion";
 import { LongQuestion } from "@/components/quiz/LongQuestion";
+import { AdminQuestionEditLink } from "@/components/admin/AdminQuestionEditLink";
 import {
   collectStimulusFromParts,
   hasVisibleStimulus,
@@ -174,6 +179,7 @@ export default function StudyModePage() {
   const { subjectId } = useParams<{ subjectId: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const isAdmin = isAdminUser(user);
 
   const [questions, setQuestions] = useState<Question[]>([]);
   const [questionsLoading, setQuestionsLoading] = useState(true);
@@ -200,7 +206,7 @@ export default function StudyModePage() {
       try {
         const data = await apiFetch<{
           customQuestions?: Record<string, unknown[]>;
-        }>(API_PATHS.bootstrap);
+        }>(API_PATHS.bootstrap, { timeoutMs: BOOTSTRAP_FETCH_TIMEOUT_MS });
         if (cancelled) return;
         if (data?.customQuestions) {
           localStorage.setItem(
@@ -225,6 +231,15 @@ export default function StudyModePage() {
       cancelled = true;
     };
   }, [user, subjectId]);
+
+  useEffect(() => {
+    if (!subjectId) return;
+    const onBankUpdated = () => {
+      setQuestions(loadPracticeBank(subjectId));
+    };
+    window.addEventListener(QUESTIONS_UPDATED_EVENT, onBankUpdated);
+    return () => window.removeEventListener(QUESTIONS_UPDATED_EVENT, onBankUpdated);
+  }, [subjectId]);
 
   const randomizedQuestions = useMemo(() => {
     if (!subjectId) return questions;
@@ -449,6 +464,15 @@ export default function StudyModePage() {
           key={qk}
           className="rounded-xl border border-white/10 bg-white/[0.97] p-4 text-[#0b0f19] shadow-lg sm:p-5 [&_.text-muted-foreground]:text-neutral-600"
         >
+          {isAdmin && part.id ? (
+            <div className="mb-3 flex justify-end">
+              <AdminQuestionEditLink
+                question={part}
+                subjectId={subjectId}
+                onSaved={() => setQuestions(loadPracticeBank(subjectId))}
+              />
+            </div>
+          ) : null}
           {part.type === "mcq" && (
             <McqQuestion
               question={part}
@@ -496,7 +520,7 @@ export default function StudyModePage() {
         </div>
       );
     },
-    [subjectId, questions, hidePassageForParts, markQuestionCompleted, recordAttempt],
+    [subjectId, questions, hidePassageForParts, markQuestionCompleted, recordAttempt, isAdmin],
   );
 
   return (
@@ -768,13 +792,10 @@ export default function StudyModePage() {
 
                 {currentGroupStimulus && hasVisibleStimulus(currentGroupStimulus) && (
                   <div className="space-y-4 rounded-lg border border-white/10 bg-white/5 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-white/40">
-                      Passage
-                    </p>
                     {normalizeImageUrls(currentGroupStimulus.imageUrls)?.length ? (
                       <QuestionImageGrid
                         urls={currentGroupStimulus.imageUrls}
-                        title="Source material"
+                        title=""
                       />
                     ) : null}
                     {currentGroupStimulus.passage ? (

@@ -1,0 +1,14 @@
+{
+  "questions": [
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "General",
+      "question": "Evaluate $2 + 3 \\times 4$. Show one line of working, then state the final answer.",
+      "acceptedAnswers": ["14", "14.0"],
+      "marks": 2,
+      "guidance": "Order of operations: multiply before add.",
+      "useAiMarking": false
+    }
+  ]
+}

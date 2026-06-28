@@ -4,8 +4,9 @@ import { normalizeQuestionMathText } from "@/lib/questionMathText";
 /** Canonical question text keyed by normalized stem (fixes DB rows on admin load). */
 export const ADMIN_STEM_CANONICAL: Record<string, string> = {
   [questionStemKey(
-    "For $n=4$, $p=0.5$, find $P(X=2)$ as a fraction.",
-  )]: "For $n=4$, $p=0.5$, find $P(X=2)$ as a fraction.",
+    "Tide model $d(t)=2.5\\cos\\!\\left(\\dfrac{\\pi t}{6}\\right)+4$. Amplitude (metres)?",
+  )]:
+    "Tide model $d(t)=2.5\\cos\\!\\left(\\dfrac{\\pi t}{6}\\right)+4$. Amplitude (metres)?",
   [questionStemKey(
     "In a sample, $18$ successes in $80$ trials. Find $\\hat{p}$ (3 d.p.).",
   )]: "In a sample, $18$ successes in $80$ trials. Find $\\hat{p}$ (3 d.p.).",
@@ -16,10 +17,23 @@ export const ADMIN_STEM_CANONICAL: Record<string, string> = {
     "Find the smallest positive solution to $\\sin x = \\frac{\\sqrt{2}}{2}$ on $[0,2\\pi)$. The answer is $\\frac{\\pi}{k}$. Find $k$.",
   )]:
     "Find the smallest positive solution to $\\sin x = \\frac{\\sqrt{2}}{2}$ on $[0,2\\pi)$. The answer is $\\frac{\\pi}{k}$. Find $k$.",
+  [questionStemKey(
+    "For $n=4$, $p=0.5$, find $P(X=2)$ as a fraction.",
+  )]: "For $n=4$, $p=0.5$, find $P(X=2)$ as a fraction.",
 };
 
 /** Match legacy / mangled stems to their canonical replacement text. */
 const ADMIN_STEM_REPAIR_RULES: Array<{ includes: string; question: string }> = [
+  {
+    includes: "tide model",
+    question:
+      "Tide model $d(t)=2.5\\cos\\!\\left(\\dfrac{\\pi t}{6}\\right)+4$. Amplitude (metres)?",
+  },
+  {
+    includes: "ferris wheel height",
+    question:
+      "Ferris wheel height $h(t)=10\\sin\\!\\left(\\dfrac{\\pi t}{6}\\right)+12$ (metres). Minimum height?",
+  },
   {
     includes: "p(x=2) as fraction",
     question: "For $n=4$, $p=0.5$, find $P(X=2)$ as a fraction.",

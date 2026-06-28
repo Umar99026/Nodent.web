@@ -3,6 +3,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 
+import { overlayToPayload, type DiagramLabelPart, type InlineInputBox } from "@/lib/diagramLabels";
+import { splitAnswerValueAndUnit } from "@/lib/utils";
+
 export type MultipartPartDraft = {
   key: string;
   label: string;
@@ -10,6 +13,13 @@ export type MultipartPartDraft = {
   marks?: number;
   imageUrl?: string;
   acceptedAnswer?: string;
+  overlayX?: number;
+  overlayY?: number;
+  overlayW?: number;
+  overlayH?: number;
+  /** Input boxes placed on this part's figure image (legacy). */
+  labelOverlays?: DiagramLabelPart[];
+  inlineInputs?: InlineInputBox[];
 };
 
 type MultipartAnswerPartsEditorProps = {
@@ -41,6 +51,40 @@ export function buildAnswerPartsPayload(parts: MultipartPartDraft[]) {
     ...(p.placeholder?.trim() ? { placeholder: p.placeholder.trim() } : {}),
     ...(typeof p.marks === "number" && p.marks > 0 ? { marks: p.marks } : {}),
     ...(p.imageUrl?.trim() ? { imageUrl: p.imageUrl.trim() } : {}),
+    ...(overlayToPayload(p) ?? {}),
+    ...(p.inlineInputs?.length
+      ? {
+          inlineInputs: p.inlineInputs.map((box, boxIdx) => {
+            const raw = box.acceptedAnswer?.trim() ?? "";
+            const { value, unit } = splitAnswerValueAndUnit(raw);
+            const storedUnit = box.unit?.trim() || unit;
+            return {
+              key: box.key?.trim() || String(boxIdx + 1),
+              label: box.label?.trim() || String(boxIdx + 1),
+              ...(box.placeholder?.trim() ? { placeholder: box.placeholder.trim() } : {}),
+              ...(typeof box.marks === "number" && box.marks > 0 ? { marks: box.marks } : {}),
+              ...(value ? { acceptedAnswer: value } : {}),
+              ...(storedUnit ? { unit: storedUnit } : {}),
+            };
+          }),
+        }
+      : {}),
+    ...(p.labelOverlays?.length
+      ? {
+          labelOverlays: p.labelOverlays.map((overlay, overlayIdx) => ({
+            key: overlay.key?.trim() || String(overlayIdx + 1),
+            label: overlay.label?.trim() || String(overlayIdx + 1),
+            ...(overlay.placeholder?.trim() ? { placeholder: overlay.placeholder.trim() } : {}),
+            ...(typeof overlay.marks === "number" && overlay.marks > 0
+              ? { marks: overlay.marks }
+              : {}),
+            ...(overlay.acceptedAnswer?.trim()
+              ? { acceptedAnswer: overlay.acceptedAnswer.trim() }
+              : {}),
+            ...(overlayToPayload(overlay) ?? {}),
+          })),
+        }
+      : {}),
   }));
 }
 

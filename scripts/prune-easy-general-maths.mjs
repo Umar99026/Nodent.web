@@ -10,7 +10,11 @@ import { resolve } from "node:path";
 import { neon } from "@neondatabase/serverless";
 
 const SUBJECT = "general-maths";
-const TARGET_REMOVE = 50;
+const countIdx = process.argv.indexOf("--count");
+const TARGET_REMOVE =
+  countIdx >= 0 && process.argv[countIdx + 1]
+    ? Math.max(1, Number(process.argv[countIdx + 1]) || 30)
+    : 50;
 const APPLY = process.argv.includes("--apply");
 
 function loadDatabaseUrl() {

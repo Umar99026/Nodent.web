@@ -1,9 +1,11 @@
 import { Routes, Route, Navigate, useSearchParams } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { Toaster } from "@/components/ui/sonner";
 import { lazy, Suspense, type ReactNode } from "react";
 import { StudyTimerProvider } from "@/context/StudyTimerContext";
-import { ADMIN_EMAIL, STORAGE_KEYS } from "@/lib/constants";
+import { HandwritingModeProvider } from "@/context/HandwritingModeContext";
+import { isAdminUser, STORAGE_KEYS } from "@/lib/constants";
 import LandingPage from "@/pages/LandingPage";
 import FeedbackPage from "@/pages/FeedbackPage";
 
@@ -22,8 +24,14 @@ const EnglishPromptResponsesPage = lazy(
   () => import("@/pages/EnglishPromptResponsesPage"),
 );
 const AdminPage = lazy(() => import("@/pages/AdminPage"));
+const CreatePage = lazy(() => import("@/pages/CreatePage"));
+const TeacherPage = lazy(() => import("@/pages/TeacherPage"));
+const JoinClassPage = lazy(() => import("@/pages/JoinClassPage"));
 const UploadWrittenImagesPage = lazy(() => import("@/pages/UploadWrittenImagesPage"));
 const PracticeSetupPage = lazy(() => import("@/pages/PracticeSetupPage"));
+const PracticeExamsPage = lazy(() => import("@/pages/PracticeExamsPage"));
+const PracticeExamPapersPage = lazy(() => import("@/pages/PracticeExamPapersPage"));
+const PracticeExamDetailPage = lazy(() => import("@/pages/PracticeExamDetailPage"));
 
 function LoadingFallback() {
   return (
@@ -67,8 +75,7 @@ function AdminOnlyRoute({ children }: { children: ReactNode }) {
 
   if (isLoading && hasStoredAuthToken()) return <LoadingFallback />;
 
-  const isAdminEmail = user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
-  const isAdmin = isAdminEmail;
+  const isAdmin = isAdminUser(user);
   if (!isAdmin) return <Navigate to="/dashboard" replace />;
 
   return <>{children}</>;
@@ -164,6 +171,39 @@ function AppRoutes() {
         />
 
         <Route
+          path="/practice/:subjectId/exams"
+          element={
+            <ProtectedRoute>
+              <AdminOnlyRoute>
+                <PracticeExamsPage />
+              </AdminOnlyRoute>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/practice/:subjectId/exams/:year"
+          element={
+            <ProtectedRoute>
+              <AdminOnlyRoute>
+                <PracticeExamPapersPage />
+              </AdminOnlyRoute>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/practice/:subjectId/exams/:year/:examNumber"
+          element={
+            <ProtectedRoute>
+              <AdminOnlyRoute>
+                <PracticeExamDetailPage />
+              </AdminOnlyRoute>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
           path="/quiz/:subjectId"
           element={
             <ProtectedRoute>
@@ -218,6 +258,41 @@ function AppRoutes() {
         />
 
         <Route
+          path="/teacher"
+          element={
+            <ProtectedRoute>
+              <AdminOnlyRoute>
+                <TeacherPage />
+              </AdminOnlyRoute>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/teacher/create"
+          element={
+            <ProtectedRoute>
+              <AdminOnlyRoute>
+                <CreatePage />
+              </AdminOnlyRoute>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route path="/create" element={<Navigate to="/teacher/create" replace />} />
+
+        <Route
+          path="/join-class"
+          element={
+            <ProtectedRoute>
+              <AdminOnlyRoute>
+                <JoinClassPage />
+              </AdminOnlyRoute>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
           path="/admin"
           element={
             <ProtectedRoute>
@@ -241,11 +316,14 @@ function AppRoutes() {
 export default function App() {
   return (
     <AuthProvider>
-      <TooltipProvider>
-        <StudyTimerProvider>
-          <AppRoutes />
-        </StudyTimerProvider>
-      </TooltipProvider>
+      <HandwritingModeProvider>
+        <TooltipProvider>
+          <StudyTimerProvider>
+            <AppRoutes />
+            <Toaster richColors closeButton position="top-center" />
+          </StudyTimerProvider>
+        </TooltipProvider>
+      </HandwritingModeProvider>
     </AuthProvider>
   );
 }

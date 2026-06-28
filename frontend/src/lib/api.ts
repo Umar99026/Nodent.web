@@ -1,4 +1,5 @@
 import { STORAGE_KEYS } from "@/lib/constants";
+import { sanitizeUserFacingError } from "@/lib/userFacingErrors";
 
 function resolveApiBase(): string {
   const raw = (import.meta.env.VITE_API_URL || "").trim();
@@ -11,7 +12,12 @@ function resolveApiBase(): string {
 
   if (typeof window !== "undefined") {
     const host = window.location.hostname.toLowerCase();
-    if (host === "nodent.pages.dev" || host.endsWith(".pages.dev")) {
+    if (
+      host === "nodent.pages.dev" ||
+      host.endsWith(".pages.dev") ||
+      host === "nodentlearning.com" ||
+      host === "www.nodentlearning.com"
+    ) {
       return "";
     }
     // Vite dev: use proxy in vite.config.ts (same-origin /api → :8787)
@@ -27,8 +33,36 @@ function resolveApiBase(): string {
 
 const API_BASE = resolveApiBase();
 
-/** Avoid hanging forever when the local API is not running (Vite proxy → :8787). */
-const DEFAULT_FETCH_TIMEOUT_MS = 20_000;
+/** Avoid hanging forever when the API is slow (cold start) or unreachable. */
+const DEFAULT_FETCH_TIMEOUT_MS = 45_000;
+/** Bootstrap returns the full question bank — allow extra time on cold starts. */
+export const BOOTSTRAP_FETCH_TIMEOUT_MS = 90_000;
+export const AI_FETCH_TIMEOUT_MS = 90_000;
+
+function isLocalDevHost(): boolean {
+  if (typeof window === "undefined") return import.meta.env.DEV;
+  const host = window.location.hostname.toLowerCase();
+  return import.meta.env.DEV || host === "localhost" || host === "127.0.0.1";
+}
+
+/** User-facing message when fetch fails or times out (dev vs production). */
+export function apiUnreachableMessage(): string {
+  if (isLocalDevHost()) {
+    return "Could not reach the server. For local dev, run npm run dev:all (frontend + API on port 8787).";
+  }
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname.toLowerCase();
+    if (host === "nodentlearning.com") {
+      return "Could not reach the server. Use https://www.nodentlearning.com — the root domain is not connected to Nodent yet.";
+    }
+  }
+  return "Could not reach the server. The connection timed out — wait a moment and refresh, or try again.";
+}
+
+/** @deprecated use apiUnreachableMessage() — kept for existing imports */
+export const API_UNREACHABLE_MESSAGE = apiUnreachableMessage();
+
+export type ApiFetchOptions = RequestInit & { timeoutMs?: number };
 
 function mergeAbortSignals(
   timeoutMs: number,
@@ -57,8 +91,9 @@ export function isFetchTimeoutError(err: unknown): boolean {
   );
 }
 
-export const API_UNREACHABLE_MESSAGE =
-  "Could not reach the server. For local dev, run npm run dev:all (frontend + API on port 8787).";
+function isNetworkFetchError(err: unknown): boolean {
+  return err instanceof TypeError;
+}
 
 /** Use for bare `fetch()` calls that must hit the Worker in production (e.g. token upload). */
 export function getApiBase(): string {
@@ -78,16 +113,17 @@ export class ApiError extends Error {
 async function fetchWithTimeout(
   url: string,
   init: RequestInit,
+  timeoutMs = DEFAULT_FETCH_TIMEOUT_MS,
 ): Promise<Response> {
   const { signal, clear } = mergeAbortSignals(
-    DEFAULT_FETCH_TIMEOUT_MS,
+    timeoutMs,
     init.signal ?? null,
   );
   try {
     return await fetch(url, { ...init, signal });
   } catch (err) {
-    if (isFetchTimeoutError(err)) {
-      throw new ApiError(0, API_UNREACHABLE_MESSAGE);
+    if (isFetchTimeoutError(err) || isNetworkFetchError(err)) {
+      throw new ApiError(0, apiUnreachableMessage());
     }
     throw err;
   } finally {
@@ -97,19 +133,21 @@ async function fetchWithTimeout(
 
 export async function apiFetch<T>(
   path: string,
-  options?: RequestInit,
+  options?: ApiFetchOptions,
 ): Promise<T> {
   const token = localStorage.getItem(STORAGE_KEYS.authToken);
   const method = options?.method?.toUpperCase() ?? "GET";
+  const timeoutMs = options?.timeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS;
+  const { timeoutMs: _omit, ...fetchOptions } = options ?? {};
 
-  const headers = new Headers(options?.headers);
+  const headers = new Headers(fetchOptions?.headers);
 
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
   }
 
   const isFormData =
-    typeof FormData !== "undefined" && options?.body instanceof FormData;
+    typeof FormData !== "undefined" && fetchOptions?.body instanceof FormData;
   if (
     (method === "POST" || method === "PUT" || method === "PATCH") &&
     !headers.has("Content-Type") &&
@@ -119,9 +157,9 @@ export async function apiFetch<T>(
   }
 
   const response = await fetchWithTimeout(`${API_BASE}${path}`, {
-    ...options,
+    ...fetchOptions,
     headers,
-  });
+  }, timeoutMs);
 
   if (response.status === 401) {
     // Don't auto-redirect — let the caller handle it.
@@ -131,7 +169,7 @@ export async function apiFetch<T>(
       (body as Record<string, unknown>).error ??
       (body as Record<string, unknown>).message ??
       "Session expired";
-    throw new ApiError(401, String(message));
+    throw new ApiError(401, sanitizeUserFacingError(String(message), "Session expired"));
   }
 
   if (!response.ok) {
@@ -140,7 +178,10 @@ export async function apiFetch<T>(
       (body as Record<string, unknown>).error ??
       (body as Record<string, unknown>).message ??
       response.statusText;
-    throw new ApiError(response.status, String(message));
+    throw new ApiError(
+      response.status,
+      sanitizeUserFacingError(String(message), "Something went wrong. Please try again."),
+    );
   }
 
   if (response.status === 204) {
@@ -166,7 +207,15 @@ export async function apiFetchAdmin<T>(
 
   // Legacy: x-admin-key (optional). New default is admin-email auth.
   const adminKey = localStorage.getItem(STORAGE_KEYS.adminKey)?.trim() ?? "";
-  if (adminKey && !headers.has("x-admin-key")) headers.set("x-admin-key", adminKey);
+  if (adminKey && !headers.has("x-admin-key")) {
+    headers.set("x-admin-key", adminKey);
+  } else if (
+    import.meta.env.DEV &&
+    isLocalDevHost() &&
+    !headers.has("x-admin-key")
+  ) {
+    headers.set("x-admin-key", "localdev");
+  }
 
   const isFormData =
     typeof FormData !== "undefined" && options?.body instanceof FormData;
