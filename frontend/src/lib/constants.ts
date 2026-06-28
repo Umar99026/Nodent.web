@@ -14,6 +14,9 @@ export const STORAGE_KEYS = {
   studyModePrefix: "nodent_study_mode_",
   studyModeAnswers: "nodent_study_mode_answers",
   adminKey: "nodent_admin_key",
+  createDraft: "nodent_create_draft",
+  /** Auto-saved PDF import rows on the Admin page (survives refresh). */
+  pdfImportDraft: "nodent_pdf_import_draft",
 } as const;
 
 // Hardcoded admin credentials (requested).
@@ -74,6 +77,15 @@ export const API_PATHS = {
     answerAssignment: (assignmentId: number | string) =>
       `/api/friends/assignments/${assignmentId}/answer`,
   },
+  teacher: {
+    class: "/api/teacher/class",
+    classMembers: "/api/teacher/class/members",
+    classStats: "/api/teacher/class/stats",
+    join: "/api/class/join",
+    membership: "/api/class/membership",
+    preview: (code: string) =>
+      `/api/class/preview?code=${encodeURIComponent(code)}`,
+  },
   admin: {
     subjects: "/api/admin/subjects",
     questions: "/api/admin/questions",
@@ -96,7 +108,9 @@ export const API_PATHS = {
     englishPrompts: "/api/admin/english/prompts",
     aiStatus: "/api/admin/ai/status",
     aiParseQuestions: "/api/admin/ai/parse-questions",
+    aiFillAnswers: "/api/admin/ai/fill-answers",
     aiQuestionChat: "/api/admin/ai/question-chat",
+    feedback: "/api/admin/feedback",
   },
   written: {
     mark: (subjectId: string, questionKey: string) =>

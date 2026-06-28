@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, BOOTSTRAP_FETCH_TIMEOUT_MS } from "@/lib/api";
 import { API_PATHS, STORAGE_KEYS } from "@/lib/constants";
 
 export interface Subject {
@@ -30,7 +30,9 @@ export function useSubjects() {
 
     async function load() {
       try {
-        const data = await apiFetch<BootstrapData>(API_PATHS.bootstrap);
+        const data = await apiFetch<BootstrapData>(API_PATHS.bootstrap, {
+          timeoutMs: BOOTSTRAP_FETCH_TIMEOUT_MS,
+        });
 
         if (cancelled) return;
 

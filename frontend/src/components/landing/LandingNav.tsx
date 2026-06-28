@@ -25,7 +25,7 @@ export function LandingNav() {
 
   return (
     <>
-      <div className="safe-top pointer-events-none fixed left-0 top-0 z-50 p-5 sm:p-8">
+      <div className="pointer-events-none fixed left-0 top-0 z-50 pl-5 pr-3 pt-[calc(env(safe-area-inset-top,0px)+1.25rem)] sm:pl-8 sm:pr-4 sm:pt-[calc(env(safe-area-inset-top,0px)+2rem)]">
         <button
           type="button"
           onClick={() => scrollToSection("top")}
@@ -38,35 +38,33 @@ export function LandingNav() {
         </button>
       </div>
 
-      <header className="safe-top pointer-events-none fixed inset-x-0 top-0 z-40 bg-transparent">
-        <div className="mx-auto flex max-w-7xl justify-end gap-2 px-5 py-4 sm:px-8 sm:py-5">
-          <Link
-            to="/login"
-            className={cn(
-              buttonVariants({ size: "sm" }),
-              "pointer-events-auto",
-              onHero
-                ? "rounded-full border border-white/50 bg-white/10 px-4 text-white backdrop-blur-sm hover:bg-white/20 sm:px-5"
-                : "rounded-full bg-brand px-4 text-white hover:bg-brand-dark sm:px-5",
-            )}
-          >
-            Get started
-          </Link>
-          <button
-            type="button"
-            onClick={() => setMenuOpen(true)}
-            className={cn(
-              "touch-target pointer-events-auto inline-flex size-10 items-center justify-center rounded-full transition-colors sm:size-11",
-              onHero
-                ? "border border-white/50 bg-white/10 text-white backdrop-blur-sm hover:bg-white/20"
-                : "border border-black/10 bg-white/80 text-[#0b0f19] shadow-sm hover:bg-white",
-            )}
-            aria-label="Open menu"
-          >
-            <Menu className="size-5" />
-          </button>
-        </div>
-      </header>
+      <div className="pointer-events-none fixed right-0 top-0 z-50 flex items-center gap-2 pr-5 pl-3 pt-[calc(env(safe-area-inset-top,0px)+1.75rem)] sm:gap-3 sm:pr-8 sm:pl-4 sm:pt-[calc(env(safe-area-inset-top,0px)+2.5rem)]">
+        <Link
+          to="/login"
+          className={cn(
+            buttonVariants({ size: "sm" }),
+            "pointer-events-auto",
+            onHero
+              ? "rounded-full border border-white/50 bg-white/10 px-4 text-white backdrop-blur-sm hover:bg-white/20 sm:px-5"
+              : "rounded-full bg-brand px-4 text-white hover:bg-brand-dark sm:px-5",
+          )}
+        >
+          Get started
+        </Link>
+        <button
+          type="button"
+          onClick={() => setMenuOpen(true)}
+          className={cn(
+            "touch-target pointer-events-auto inline-flex size-10 items-center justify-center rounded-full transition-colors sm:size-11",
+            onHero
+              ? "border border-white/50 bg-white/10 text-white backdrop-blur-sm hover:bg-white/20"
+              : "border border-black/10 bg-white/80 text-[#0b0f19] shadow-sm hover:bg-white",
+          )}
+          aria-label="Open menu"
+        >
+          <Menu className="size-5" />
+        </button>
+      </div>
 
       <LandingMenuSheet open={menuOpen} onOpenChange={setMenuOpen} />
     </>

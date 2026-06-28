@@ -16,10 +16,9 @@ import {
 } from "../lib/googleSheets";
 import {
   markLongAnswer,
+  markHandwritingAnswer,
   openAiConfigured,
   openAiModel,
-  parseQuestionsFromText,
-  questionGenerationChat,
   scoreEnglishResponse,
 } from "../lib/openai";
 
@@ -78,6 +77,7 @@ const customQuestions = pgTable("custom_questions", {
   topic: text("topic").notNull().default("General"),
   question: text("question").notNull(),
   imageUrls: text("image_urls"),
+  answerImageUrls: text("answer_image_urls"),
   options: text("options"),
   answer: text("answer"),
   acceptedAnswers: text("accepted_answers"),
@@ -246,6 +246,8 @@ const userFeedback = pgTable("user_feedback", {
   authorEmail: text("author_email"),
   message: text("message").notNull(),
   rating: integer("rating"),
+  vceStudent: text("vce_student"),
+  featuresStandOut: text("features_stand_out"),
   createdAt: text("created_at").notNull(),
 });
 
@@ -258,6 +260,65 @@ const SIGNUP_NOTIFY_EMAIL_DEFAULT = "ua99026@gmail.com";
 function cleanText(value: unknown, maxLength = 1000): string {
   if (typeof value !== "string") return "";
   return value.replace(/\0/g, "").trim().slice(0, maxLength);
+}
+
+const MAX_STORED_DATA_URL_CHARS = 52_000;
+/** Full practice-exam pages (one per API request) — must match PRACTICE_EXAM_PAGE_DATA_URL_CHARS in frontend. */
+const MAX_PRACTICE_EXAM_PAGE_DATA_URL_CHARS = 900_000;
+const MAX_MARKING_DATA_URL_CHARS = 220_000;
+
+function isDataImageUrl(value: string): boolean {
+  return /^data:image\/(png|jpe?g|webp);base64,/i.test(String(value ?? "").trim());
+}
+
+function collectHandwritingImages(body: Record<string, unknown>): string[] {
+  const seen = new Set<string>();
+  const images: string[] = [];
+  const push = (raw: unknown) => {
+    const s = String(raw ?? "").trim();
+    if (!isDataImageUrl(s) || seen.has(s)) return;
+    seen.add(s);
+    images.push(s);
+  };
+  if (Array.isArray(body.responseImages)) {
+    for (const img of body.responseImages) push(img);
+  }
+  if (Array.isArray(body.studentParts)) {
+    for (const part of body.studentParts) push(part);
+  }
+  push(body.responseText);
+  return images.slice(0, 12);
+}
+
+function validateMarkingImageUrls(urls: string[]): string | null {
+  for (const raw of urls) {
+    const u = String(raw ?? "").trim();
+    if (!u) continue;
+    if (/^data:/i.test(u) && u.length > MAX_MARKING_DATA_URL_CHARS) {
+      return "Handwriting image is too large to mark. Try a smaller drawing area.";
+    }
+  }
+  return null;
+}
+
+function validateStorableImageUrls(urls: string[]): string | null {
+  for (const raw of urls) {
+    const u = String(raw ?? "").trim();
+    if (!u) continue;
+    if (/^data:/i.test(u) && u.length > MAX_STORED_DATA_URL_CHARS) {
+      return "Image is too large to store. Crop tighter or use a smaller screenshot.";
+    }
+  }
+  return null;
+}
+
+function validatePracticeExamPageImageUrl(url: string): string | null {
+  const u = String(url ?? "").trim();
+  if (!u) return "imageDataUrl is required.";
+  if (/^data:/i.test(u) && u.length > MAX_PRACTICE_EXAM_PAGE_DATA_URL_CHARS) {
+    return "Exam page image is too large. Re-import the PDF at a lower page count or contact support.";
+  }
+  return null;
 }
 
 function canonicalSubjectId(raw: unknown): string {
@@ -281,6 +342,23 @@ function canonicalSubjectId(raw: unknown): string {
 /** Match `frontend/src/lib/builtinQuestionsSeed.ts` — dedupe by subject + question stem. */
 function questionStemKey(text: string): string {
   return String(text ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+/** Image-only / PDF imports often share these — not meaningful for duplicate blocking. */
+const GENERIC_QUESTION_STEMS = new Set([
+  "see figure.",
+  "see figure",
+  "see the figure.",
+  "see the figure",
+  "refer to the figure.",
+  "see diagram.",
+  "see graph.",
+  "see table.",
+]);
+
+function isGenericQuestionStem(stem: string): boolean {
+  const s = questionStemKey(stem);
+  return !s || GENERIC_QUESTION_STEMS.has(s);
 }
 
 class DuplicateQuestionError extends Error {
@@ -385,6 +463,16 @@ function normalizeEnglishSection(raw: unknown): "A" | "B" | "C" {
   return first === "B" ? "B" : first === "C" ? "C" : "A";
 }
 
+/** Keep in sync with `frontend/src/pages/EnglishPracticePage.tsx` dedupePrompts. */
+function normalizeEnglishPromptKey(text: unknown): string {
+  return String(text ?? "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .replace(/[""]/g, '"')
+    .replace(/['']/g, "'")
+    .trim();
+}
+
 /** Keep in sync with `frontend/src/lib/sectionBPrompts.ts` — one DB row per title + stimulus. */
 const SECTION_B_CURATED_BOOK = "Section B Curated Prompts";
 const SECTION_B_CURATED_PROMPT_TEXTS = [
@@ -442,6 +530,96 @@ Use at least one stimulus.
 
 Stimulus
 In the midst of my journey through life I found myself in a dark forest, where the clear way forward was lost.`,
+  `Title: Borderlines.
+Using at least one stimulus, write a crafted text exploring ideas about country, place and belonging.
+
+Write a text that explores ideas about country.
+Use the provided title.
+Use at least one stimulus.
+
+Stimulus
+Home is not a place on a map. It is the language you dream in.`,
+  `Title: Borderlines.
+Using at least one stimulus, write a crafted text exploring ideas about country, place and belonging.
+
+Write a text that explores ideas about country.
+Use the provided title.
+Use at least one stimulus.
+
+Stimulus
+The soil remembers what the headlines forget.`,
+  `Title: Unmuted.
+Using at least one stimulus, write a crafted text exploring ideas about protest, voice and collective action.
+
+Write a text that explores ideas about protest.
+Use the provided title.
+Use at least one stimulus.
+
+Stimulus
+They told us to be quiet. We learned to whisper until our whispers sounded like thunder.`,
+  `Title: Unmuted.
+Using at least one stimulus, write a crafted text exploring ideas about protest, voice and collective action.
+
+Write a text that explores ideas about protest.
+Use the provided title.
+Use at least one stimulus.
+
+Stimulus
+A sign is only cardboard until someone decides to stand in the rain and hold it.`,
+  `Title: Halfway.
+Using at least one stimulus, write a crafted text exploring ideas about personal journeys and transformation.
+
+Write a text that explores ideas about personal journeys.
+Use the provided title.
+Use at least one stimulus.
+
+Stimulus
+I am not who I was, and not yet who I mean to become.`,
+  `Title: Halfway.
+Using at least one stimulus, write a crafted text exploring ideas about personal journeys and transformation.
+
+Write a text that explores ideas about personal journeys.
+Use the provided title.
+Use at least one stimulus.
+
+Stimulus
+Sometimes the hardest step is the one that looks like standing still.`,
+  `Title: The Long Way Round.
+Using at least one stimulus, write a crafted text exploring ideas about personal journeys and transformation.
+
+Write a text that explores ideas about personal journeys.
+Use the provided title.
+Use at least one stimulus.
+
+Stimulus
+What if the detour was not a mistake, but the point of the journey?`,
+  `Title: The Long Way Round.
+Using at least one stimulus, write a crafted text exploring ideas about personal journeys and transformation.
+
+Write a text that explores ideas about personal journeys.
+Use the provided title.
+Use at least one stimulus.
+
+Stimulus
+You cannot return to the beginning, but you can choose what you carry forward.`,
+  `Title: Second Chance.
+Using at least one stimulus, write a crafted text exploring ideas about play, rules and imagination.
+
+Write a text that explores ideas about play.
+Use the provided title.
+Use at least one stimulus.
+
+Stimulus
+Every game has rules. The interesting ones are the rules no one wrote down.`,
+  `Title: Second Chance.
+Using at least one stimulus, write a crafted text exploring ideas about play, rules and imagination.
+
+Write a text that explores ideas about play.
+Use the provided title.
+Use at least one stimulus.
+
+Stimulus
+We pretended the creek was an ocean because nobody had told us how small our suburb was.`,
 ];
 
 async function ensureSectionBCuratedPrompts(db: ReturnType<typeof drizzle>) {
@@ -855,9 +1033,273 @@ function errorChain(e: unknown): string {
   }
   return parts.filter(Boolean).join(" — ");
 }
+
+/** Safe student-facing message for written-answer / handwriting marking failures. */
+function userFacingMarkError(e: unknown, handwriting = false): string {
+  const raw = errorChain(e);
+  const lower = raw.toLowerCase();
+  const fallback = handwriting
+    ? "Could not read your drawing. Try again in a moment."
+    : "Could not mark your answer. Try again.";
+
+  if (
+    lower.includes("insufficient_quota") ||
+    lower.includes("exceeded your current quota") ||
+    lower.includes("billing")
+  ) {
+    return "AI marking is temporarily unavailable. Try again later.";
+  }
+  if (lower.includes("rate limit") || /\b429\b/.test(lower)) {
+    return "Too many requests. Wait a moment and try again.";
+  }
+  if (lower.includes("openai_api_key") || lower.includes("not configured")) {
+    return "AI marking is not available right now.";
+  }
+  if (lower.includes("handwriting image is too large") || lower.includes("too large to mark")) {
+    return "Your drawing is too large. Use a smaller area or less ink.";
+  }
+  if (lower.includes("openai error") || raw.includes("{")) {
+    return fallback;
+  }
+  if (raw.length > 140) return fallback;
+  return raw || fallback;
+}
 function createToken(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
   return Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+function phoneUploadSessionExpiry(): string {
+  const d = new Date();
+  d.setMinutes(d.getMinutes() + 20);
+  return d.toISOString();
+}
+function parseImageUrlList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((u) => String(u ?? "").trim())
+    .filter((u) => u.startsWith("data:image/") || /^https?:\/\//i.test(u))
+    .slice(0, 8);
+}
+
+type PracticeExamSlotRow = {
+  id: string;
+  pageNumber: number;
+  key: string;
+  label?: string;
+  acceptedAnswer: string;
+  marks?: number;
+  overlayX: number;
+  overlayY: number;
+  overlayW: number;
+  overlayH: number;
+  transparentInput?: boolean;
+};
+
+type PracticeExamMcqRow = {
+  id: string;
+  questionNumber: number;
+  pageNumber?: number;
+  question?: string;
+  options?: string[];
+  stimulusImageUrl?: string;
+  stimulusCrop?: { x: number; y: number; w: number; h: number };
+  showStimulus?: boolean;
+  optionOverlays?: Record<
+    string,
+    { overlayX: number; overlayY: number; overlayW: number; overlayH: number }
+  >;
+  mcqGroupBounds?: { overlayX: number; overlayY: number; overlayW: number; overlayH: number };
+  mcqButtonsSeparated?: boolean;
+  mcqGroupLayout?: "row" | "column";
+  mcqButtonSizePct?: number;
+  acceptedAnswer: string;
+  marks?: number;
+};
+
+const MAX_MCQ_STIMULUS_DATA_URL_CHARS = 400_000;
+
+function parseCropRect(raw: unknown): PracticeExamMcqRow["stimulusCrop"] | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const row = raw as Record<string, unknown>;
+  const x = Number(row.x);
+  const y = Number(row.y);
+  const w = Number(row.w);
+  const h = Number(row.h);
+  if (![x, y, w, h].every((n) => Number.isFinite(n))) return undefined;
+  return {
+    x: Math.min(1, Math.max(0, x)),
+    y: Math.min(1, Math.max(0, y)),
+    w: Math.min(1, Math.max(0.01, w)),
+    h: Math.min(1, Math.max(0.01, h)),
+  };
+}
+
+function validateMcqStimulusImageUrl(url: string): string | null {
+  const u = String(url ?? "").trim();
+  if (!u) return null;
+  if (/^data:/i.test(u) && u.length > MAX_MCQ_STIMULUS_DATA_URL_CHARS) {
+    return `MCQ stimulus image is too large (max ~${Math.round(MAX_MCQ_STIMULUS_DATA_URL_CHARS / 1000)}KB per question).`;
+  }
+  return null;
+}
+
+function parseOverlayRect(
+  raw: unknown,
+): { overlayX: number; overlayY: number; overlayW: number; overlayH: number } | null {
+  if (!raw || typeof raw !== "object") return null;
+  const row = raw as Record<string, unknown>;
+  const overlayX = Number(row.overlayX);
+  const overlayY = Number(row.overlayY);
+  const overlayW = Number(row.overlayW);
+  const overlayH = Number(row.overlayH);
+  if (![overlayX, overlayY, overlayW, overlayH].every((n) => Number.isFinite(n))) return null;
+  return {
+    overlayX: Math.min(100, Math.max(0, overlayX)),
+    overlayY: Math.min(100, Math.max(0, overlayY)),
+    overlayW: Math.min(100, Math.max(1, overlayW)),
+    overlayH: Math.min(100, Math.max(1, overlayH)),
+  };
+}
+
+function parseMcqOptionOverlays(
+  raw: unknown,
+): PracticeExamMcqRow["optionOverlays"] | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const out: NonNullable<PracticeExamMcqRow["optionOverlays"]> = {};
+  for (const letter of ["A", "B", "C", "D"]) {
+    const rect = parseOverlayRect((raw as Record<string, unknown>)[letter]);
+    if (rect) out[letter] = rect;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
+function parsePracticeExamLayout(value: unknown): "written" | "mcq_then_written" {
+  return String(value ?? "").trim() === "mcq_then_written" ? "mcq_then_written" : "written";
+}
+
+function parsePracticeExamMcqCount(value: unknown, layout: "written" | "mcq_then_written"): number {
+  const n = Math.round(Number(value));
+  if (layout !== "mcq_then_written") return 0;
+  if (!Number.isFinite(n) || n < 1) return 20;
+  return Math.min(60, n);
+}
+
+function parsePracticeExamMcqItems(value: unknown): PracticeExamMcqRow[] {
+  if (!Array.isArray(value)) return [];
+  const out: PracticeExamMcqRow[] = [];
+  for (const raw of value) {
+    if (!raw || typeof raw !== "object") continue;
+    const row = raw as Record<string, unknown>;
+    const id = cleanText(row.id, 80);
+    const questionNumber = Math.round(Number(row.questionNumber));
+    const acceptedAnswer = cleanText(row.acceptedAnswer, 500);
+    if (!id || !questionNumber || questionNumber < 1 || questionNumber > 60) continue;
+    if (!acceptedAnswer) continue;
+    const pageNumber = Math.round(Number(row.pageNumber));
+    const optionOverlays = parseMcqOptionOverlays(row.optionOverlays);
+    const mcqGroupBounds = parseOverlayRect(row.mcqGroupBounds);
+    const mcqButtonsSeparated =
+      row.mcqButtonsSeparated === true || row.mcqButtonsSeparated === "true";
+    const mcqGroupLayout =
+      row.mcqGroupLayout === "column" || row.mcqGroupLayout === "row"
+        ? row.mcqGroupLayout
+        : undefined;
+    const mcqButtonSizePct = Number(row.mcqButtonSizePct);
+    const question = cleanText(row.question, 12_000);
+    const optionsRaw = Array.isArray(row.options) ? row.options : [];
+    const options = optionsRaw
+      .slice(0, 4)
+      .map((o) => cleanText(o, 4000))
+      .filter(Boolean);
+    const stimulusImageUrl = cleanText(row.stimulusImageUrl, MAX_MCQ_STIMULUS_DATA_URL_CHARS + 20);
+    const stimulusErr = stimulusImageUrl ? validateMcqStimulusImageUrl(stimulusImageUrl) : null;
+    if (stimulusErr) continue;
+    const stimulusCrop = parseCropRect(row.stimulusCrop);
+    const showStimulus =
+      row.showStimulus === false || row.showStimulus === "false" ? false : undefined;
+    out.push({
+      id,
+      questionNumber,
+      ...(pageNumber > 0 ? { pageNumber } : {}),
+      ...(question ? { question } : {}),
+      ...(options.length === 4 ? { options } : {}),
+      ...(stimulusImageUrl ? { stimulusImageUrl } : {}),
+      ...(stimulusCrop ? { stimulusCrop } : {}),
+      ...(showStimulus === false ? { showStimulus: false } : {}),
+      ...(optionOverlays ? { optionOverlays } : {}),
+      ...(mcqGroupBounds ? { mcqGroupBounds } : {}),
+      ...(mcqButtonsSeparated ? { mcqButtonsSeparated: true } : {}),
+      ...(mcqGroupLayout ? { mcqGroupLayout } : {}),
+      ...(Number.isFinite(mcqButtonSizePct) &&
+      mcqButtonSizePct >= 0.5 &&
+      mcqButtonSizePct <= 12
+        ? { mcqButtonSizePct }
+        : {}),
+      acceptedAnswer,
+      marks: row.marks != null ? Math.max(1, Math.round(Number(row.marks))) : 1,
+    });
+  }
+  out.sort((a, b) => a.questionNumber - b.questionNumber);
+  return out.slice(0, 60);
+}
+
+function parsePracticeExamSlots(value: unknown): PracticeExamSlotRow[] {
+  if (!Array.isArray(value)) return [];
+  const out: PracticeExamSlotRow[] = [];
+  for (const raw of value) {
+    if (!raw || typeof raw !== "object") continue;
+    const row = raw as Record<string, unknown>;
+    const id = cleanText(row.id, 80);
+    const pageNumber = Math.round(Number(row.pageNumber));
+    const key = cleanText(row.key, 40);
+    const acceptedAnswer = cleanText(row.acceptedAnswer, 500);
+    const overlayX = Number(row.overlayX);
+    const overlayY = Number(row.overlayY);
+    const overlayW = Number(row.overlayW);
+    const overlayH = Number(row.overlayH);
+    if (!id || !pageNumber || pageNumber < 1 || !key) continue;
+    if (![overlayX, overlayY, overlayW, overlayH].every((n) => Number.isFinite(n))) continue;
+    out.push({
+      id,
+      pageNumber,
+      key,
+      label: row.label ? cleanText(row.label, 200) : undefined,
+      acceptedAnswer,
+      marks: row.marks != null ? Math.max(1, Math.round(Number(row.marks))) : 1,
+      overlayX: Math.min(100, Math.max(0, overlayX)),
+      overlayY: Math.min(100, Math.max(0, overlayY)),
+      overlayW: Math.min(100, Math.max(1, overlayW)),
+      overlayH: Math.min(100, Math.max(1, overlayH)),
+      ...(row.transparentInput === true || row.transparentInput === 1
+        ? { transparentInput: true }
+        : {}),
+    });
+  }
+  return out.slice(0, 500);
+}
+
+async function upsertPracticeExamRow(
+  db: ReturnType<typeof createDb>,
+  subjectId: string,
+  year: number,
+  examNumber: number,
+): Promise<number> {
+  const sid = canonicalSubjectId(subjectId);
+  const examNum = Math.round(Number(examNumber)) === 2 ? 2 : 1;
+  const now = nowIso();
+  const existing = await db.execute(sql`
+    SELECT id FROM practice_exams
+    WHERE subject_id = ${sid} AND year = ${year} AND exam_number = ${examNum}
+    LIMIT 1
+  `);
+  const row = (existing.rows as Record<string, unknown>[])[0];
+  if (row?.id != null) return Number(row.id);
+  const inserted = await db.execute(sql`
+    INSERT INTO practice_exams (subject_id, year, exam_number, slots_json, published, created_at, updated_at)
+    VALUES (${sid}, ${year}, ${examNum}, '[]', 0, ${now}, ${now})
+    RETURNING id
+  `);
+  return Number((inserted.rows as Record<string, unknown>[])[0]?.id);
 }
 // Session duration: 30 days when "remember me" is checked, otherwise 1 day.
 function sessionExpiry(rememberMe = true): string {
@@ -1079,6 +1521,7 @@ async function sendFeedbackNotificationEmail(
   author: { id?: number | null; name: string; email?: string | null },
   message: string,
   rating: number | null,
+  extras?: { vceStudent?: string | null; featuresStandOut?: string | null },
 ): Promise<boolean> {
   const notifyTo = signupNotifyEmail(env);
   if (!notifyTo) return false;
@@ -1086,6 +1529,12 @@ async function sendFeedbackNotificationEmail(
     rating != null && rating >= 1 && rating <= 5
       ? `<li><strong>Rating:</strong> ${rating}/5</li>`
       : "";
+  const vceLine = extras?.vceStudent
+    ? `<li><strong>VCE student:</strong> ${escapeHtml(extras.vceStudent)}</li>`
+    : "";
+  const featuresLine = extras?.featuresStandOut
+    ? `<li><strong>Features that stand out:</strong> ${escapeHtml(extras.featuresStandOut).replace(/\n/g, "<br/>")}</li>`
+    : "";
   const userIdLine =
     author.id != null ? `<li><strong>User ID:</strong> ${author.id}</li>` : "";
   const emailLine = author.email
@@ -1097,7 +1546,10 @@ async function sendFeedbackNotificationEmail(
   ${emailLine}
   ${userIdLine}
   ${ratingLine}
+  ${vceLine}
 </ul>
+${featuresLine ? `<p>${featuresLine}</p>` : ""}
+<p><strong>Feedback:</strong></p>
 <p>${escapeHtml(message).replace(/\n/g, "<br/>")}</p>`;
   return sendHtmlEmail(
     env,
@@ -1171,16 +1623,41 @@ let usersTablePatched = false;
 let performanceIndexesPatched = false;
 let studyTablesPatched = false;
 let coreTablesPatched = false;
+let uniqueStemIndexPatched = false;
 let lastSessionCleanupAt = 0;
 /** One migration at a time — parallel requests must not each run ensureCoreTables. */
 let dbInitPromise: Promise<void> | null = null;
 
+const DB_INIT_TIMEOUT_MS = 45_000;
+
+async function isDatabaseProvisioned(db: ReturnType<typeof createDb>): Promise<boolean> {
+  try {
+    const result = await db.execute(sql`
+      SELECT 1 AS ok
+      FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name = 'users'
+      LIMIT 1
+    `);
+    const rows = Array.isArray(result) ? result : (result.rows ?? []);
+    return rows.length > 0;
+  } catch {
+    return false;
+  }
+}
+
 async function runDbMigrations(db: ReturnType<typeof createDb>): Promise<void> {
   if (!coreTablesPatched) {
     try {
-      await ensureCoreTables(db);
+      const provisioned = await isDatabaseProvisioned(db);
+      if (!provisioned) {
+        await ensureCoreTables(db);
+      }
     } catch {
-      /* ignore */
+      try {
+        await ensureCoreTables(db);
+      } catch {
+        /* ignore */
+      }
     } finally {
       coreTablesPatched = true;
     }
@@ -1272,6 +1749,21 @@ async function runDbMigrations(db: ReturnType<typeof createDb>): Promise<void> {
       /* ignore */
     } finally {
       studyTablesPatched = true;
+    }
+  }
+  if (!uniqueStemIndexPatched) {
+    try {
+      await db.execute(sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS custom_questions_subject_stem_unique
+        ON custom_questions (
+          LOWER(TRIM(subject_id)),
+          LOWER(REGEXP_REPLACE(TRIM(question), '\\s+', ' ', 'g'))
+        )
+      `);
+    } catch {
+      /* duplicates may still exist — run scripts/dedupe-custom-questions.mjs --apply */
+    } finally {
+      uniqueStemIndexPatched = true;
     }
   }
   const nowMs = Date.now();
@@ -1392,10 +1884,10 @@ async function ensureCoreTables(db: any) {
     ALTER TABLE custom_questions ADD COLUMN IF NOT EXISTS answer_parts_json text
   `);
   await db.execute(sql`
-    ALTER TABLE custom_questions ADD COLUMN IF NOT EXISTS ai_marking_enabled integer
+    ALTER TABLE custom_questions ADD COLUMN IF NOT EXISTS answer_image_urls text
   `);
   await db.execute(sql`
-    ALTER TABLE question_attempts ADD COLUMN IF NOT EXISTS marks_earned integer
+    ALTER TABLE custom_questions ADD COLUMN IF NOT EXISTS ai_marking_enabled integer
   `);
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS english_books (
@@ -1478,6 +1970,9 @@ async function ensureCoreTables(db: any) {
       is_correct integer NOT NULL,
       answered_at text NOT NULL
     )
+  `);
+  await db.execute(sql`
+    ALTER TABLE question_attempts ADD COLUMN IF NOT EXISTS marks_earned integer
   `);
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS forum_posts (
@@ -1592,6 +2087,149 @@ async function ensureCoreTables(db: any) {
   await db.execute(sql`
     ALTER TABLE user_feedback ALTER COLUMN user_id DROP NOT NULL
   `);
+  await db.execute(sql`
+    ALTER TABLE user_feedback ADD COLUMN IF NOT EXISTS vce_student text
+  `);
+  await db.execute(sql`
+    ALTER TABLE user_feedback ADD COLUMN IF NOT EXISTS features_stand_out text
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS phone_upload_sessions (
+      token text PRIMARY KEY,
+      user_id integer NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+      purpose text NOT NULL DEFAULT 'create',
+      subject_id text,
+      question_key text,
+      pending_images text NOT NULL DEFAULT '[]',
+      created_at text NOT NULL,
+      expires_at text NOT NULL
+    )
+  `);
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS phone_upload_sessions_user_idx
+    ON phone_upload_sessions (user_id, created_at DESC)
+  `);
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS phone_upload_sessions_expires_idx
+    ON phone_upload_sessions (expires_at)
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS practice_exams (
+      id serial PRIMARY KEY,
+      subject_id text NOT NULL,
+      year integer NOT NULL,
+      slots_json text NOT NULL DEFAULT '[]',
+      published integer NOT NULL DEFAULT 0,
+      created_at text NOT NULL,
+      updated_at text NOT NULL,
+      UNIQUE(subject_id, year)
+    )
+  `);
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS practice_exams_subject_idx
+    ON practice_exams (subject_id, year DESC)
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS practice_exam_pages (
+      exam_id integer NOT NULL REFERENCES practice_exams (id) ON DELETE CASCADE,
+      page_number integer NOT NULL,
+      image_data_url text NOT NULL,
+      PRIMARY KEY (exam_id, page_number)
+    )
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS teacher_classes (
+      id serial PRIMARY KEY,
+      teacher_id integer NOT NULL UNIQUE REFERENCES users (id) ON DELETE CASCADE,
+      join_code text NOT NULL UNIQUE,
+      class_name text NOT NULL DEFAULT 'My class',
+      created_at text NOT NULL
+    )
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS class_members (
+      class_id integer NOT NULL REFERENCES teacher_classes (id) ON DELETE CASCADE,
+      user_id integer NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+      joined_at text NOT NULL,
+      PRIMARY KEY (class_id, user_id)
+    )
+  `);
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS class_members_user_idx
+    ON class_members (user_id)
+  `);
+}
+
+async function ensurePracticeExamTables(db: ReturnType<typeof createDb>) {
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS practice_exams (
+      id serial PRIMARY KEY,
+      subject_id text NOT NULL,
+      year integer NOT NULL,
+      slots_json text NOT NULL DEFAULT '[]',
+      published integer NOT NULL DEFAULT 0,
+      created_at text NOT NULL,
+      updated_at text NOT NULL,
+      UNIQUE(subject_id, year)
+    )
+  `);
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS practice_exams_subject_idx
+    ON practice_exams (subject_id, year DESC)
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS practice_exam_pages (
+      exam_id integer NOT NULL REFERENCES practice_exams (id) ON DELETE CASCADE,
+      page_number integer NOT NULL,
+      image_data_url text NOT NULL,
+      PRIMARY KEY (exam_id, page_number)
+    )
+  `);
+  await db.execute(sql`
+    ALTER TABLE practice_exams ADD COLUMN IF NOT EXISTS transparent_inputs integer NOT NULL DEFAULT 0
+  `);
+  await db.execute(sql`
+    ALTER TABLE practice_exams ADD COLUMN IF NOT EXISTS exam_number integer NOT NULL DEFAULT 1
+  `);
+  await db.execute(sql`
+    ALTER TABLE practice_exams ADD COLUMN IF NOT EXISTS layout text NOT NULL DEFAULT 'written'
+  `);
+  await db.execute(sql`
+    ALTER TABLE practice_exams ADD COLUMN IF NOT EXISTS mcq_count integer NOT NULL DEFAULT 0
+  `);
+  await db.execute(sql`
+    ALTER TABLE practice_exams ADD COLUMN IF NOT EXISTS mcq_json text NOT NULL DEFAULT '[]'
+  `);
+  await db.execute(sql`
+    ALTER TABLE practice_exams DROP CONSTRAINT IF EXISTS practice_exams_subject_id_year_key
+  `);
+  await db.execute(sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS practice_exams_subject_year_exam_idx
+    ON practice_exams (subject_id, year, exam_number)
+  `);
+}
+
+async function ensurePhoneUploadSessionsTable(db: ReturnType<typeof createDb>) {
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS phone_upload_sessions (
+      token text PRIMARY KEY,
+      user_id integer NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+      purpose text NOT NULL DEFAULT 'create',
+      subject_id text,
+      question_key text,
+      pending_images text NOT NULL DEFAULT '[]',
+      created_at text NOT NULL,
+      expires_at text NOT NULL
+    )
+  `);
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS phone_upload_sessions_user_idx
+    ON phone_upload_sessions (user_id, created_at DESC)
+  `);
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS phone_upload_sessions_expires_idx
+    ON phone_upload_sessions (expires_at)
+  `);
 }
 
 // CORS
@@ -1605,6 +2243,7 @@ app.use("/api/*", cors({
       return origin;
     }
     if (origin.includes(".pages.dev")) return origin;
+    if (/^https:\/\/([a-z0-9-]+\.)?nodentlearning\.com$/i.test(origin)) return origin;
     const fe = String(c.env.FRONTEND_URL || "").trim().replace(/\/$/, "");
     if (fe && origin === fe) return origin;
     return undefined;
@@ -1641,7 +2280,7 @@ app.use("/api/*", async (c, next) => {
                 "Database connection timed out. Check DATABASE_URL in .dev.vars and your network.",
               ),
             ),
-          25_000,
+          DB_INIT_TIMEOUT_MS,
         );
       }),
     ]);
@@ -1748,6 +2387,211 @@ async function adminAccessMiddleware(c: any, next: any) {
     token,
   });
   await next();
+}
+
+const TEACHER_JOIN_CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+function randomTeacherJoinCode(length = 6): string {
+  let out = "";
+  for (let i = 0; i < length; i++) {
+    out += TEACHER_JOIN_CODE_CHARS[Math.floor(Math.random() * TEACHER_JOIN_CODE_CHARS.length)]!;
+  }
+  return out;
+}
+
+async function ensureUniqueJoinCode(db: any): Promise<string> {
+  for (let attempt = 0; attempt < 24; attempt++) {
+    const code = randomTeacherJoinCode(attempt > 12 ? 8 : 6);
+    const existing = await db.execute(sql`
+      SELECT 1 FROM teacher_classes WHERE join_code = ${code} LIMIT 1
+    `);
+    if (!(existing.rows as any[]).length) return code;
+  }
+  return `${randomTeacherJoinCode(4)}${Date.now().toString(36).slice(-4).toUpperCase()}`;
+}
+
+function teacherEmailDenied(c: any): Response | null {
+  const user = c.get("user");
+  if (String(user?.email ?? "").toLowerCase() !== ADMIN_EMAIL_LC) {
+    return c.json({ error: "Teacher access denied." }, 403);
+  }
+  return null;
+}
+
+async function getOrCreateTeacherClassRow(db: any, teacherId: number) {
+  const existing = await db.execute(sql`
+    SELECT id, join_code, class_name, created_at
+    FROM teacher_classes
+    WHERE teacher_id = ${teacherId}
+    LIMIT 1
+  `);
+  if ((existing.rows as any[]).length) {
+    return (existing.rows as any[])[0] as {
+      id: number;
+      join_code: string;
+      class_name: string;
+      created_at: string;
+    };
+  }
+  const joinCode = await ensureUniqueJoinCode(db);
+  const createdAt = nowIso();
+  const inserted = await db.execute(sql`
+    INSERT INTO teacher_classes (teacher_id, join_code, class_name, created_at)
+    VALUES (${teacherId}, ${joinCode}, 'My class', ${createdAt})
+    RETURNING id, join_code, class_name, created_at
+  `);
+  return (inserted.rows as any[])[0] as {
+    id: number;
+    join_code: string;
+    class_name: string;
+    created_at: string;
+  };
+}
+
+async function getClassMemberIds(db: any, classId: number): Promise<number[]> {
+  const rows = await db.execute(sql`
+    SELECT user_id FROM class_members WHERE class_id = ${classId}
+  `);
+  return (rows.rows as any[]).map((r) => Number(r.user_id)).filter((id) => id > 0);
+}
+
+function pctFromMarks(correct: number, attempted: number): number {
+  if (attempted <= 0) return 0;
+  return Math.round((correct / attempted) * 100);
+}
+
+async function buildClassTopicStats(
+  db: any,
+  memberIds: number[],
+  subjectId?: string,
+) {
+  if (!memberIds.length) {
+    return { topicStats: [] as any[], weakTopics: [] as any[], avgPercent: null as number | null };
+  }
+
+  const subjectFilter = subjectId ? sql` AND qa.subject_id = ${subjectId} ` : sql``;
+  const topicRows = await db.execute(sql`
+    SELECT qa.topic,
+           qa.subject_id,
+           SUM(COALESCE(qa.marks_earned, CASE WHEN qa.is_correct = 1 THEN qa.marks ELSE 0 END))::int AS marks_correct,
+           SUM(qa.marks)::int AS marks_attempted,
+           COUNT(DISTINCT qa.user_id)::int AS students_attempted
+    FROM question_attempts qa
+    WHERE qa.user_id = ANY(${memberIds}::int[])
+    ${subjectFilter}
+    GROUP BY qa.topic, qa.subject_id
+    HAVING SUM(qa.marks) > 0
+  `);
+
+  const topicStats = (topicRows.rows as any[]).map((r) => {
+    const marksCorrect = Number(r.marks_correct ?? 0);
+    const marksAttempted = Number(r.marks_attempted ?? 0);
+    return {
+      topic: String(r.topic ?? "General"),
+      subjectId: String(r.subject_id ?? ""),
+      marksCorrect,
+      marksAttempted,
+      percent: pctFromMarks(marksCorrect, marksAttempted),
+      studentsAttempted: Number(r.students_attempted ?? 0),
+    };
+  });
+
+  topicStats.sort((a, b) => a.percent - b.percent);
+  const weakTopics = topicStats
+    .filter((t) => t.marksAttempted >= 5)
+    .slice(0, 8)
+    .map((t) => ({
+      topic: t.topic,
+      subjectId: t.subjectId,
+      percent: t.percent,
+      marksAttempted: t.marksAttempted,
+    }));
+
+  const totalCorrect = topicStats.reduce((sum, t) => sum + t.marksCorrect, 0);
+  const totalAttempted = topicStats.reduce((sum, t) => sum + t.marksAttempted, 0);
+  const avgPercent = totalAttempted > 0 ? pctFromMarks(totalCorrect, totalAttempted) : null;
+
+  const topicStatsSorted = [...topicStats].sort((a, b) => b.percent - a.percent);
+
+  return { topicStats: topicStatsSorted, weakTopics, avgPercent };
+}
+
+async function buildStudentStats(
+  db: any,
+  studentId: number,
+  subjectId?: string,
+) {
+  const subjectFilter = subjectId ? sql` AND subject_id = ${subjectId} ` : sql``;
+  const totals = await db.execute(sql`
+    SELECT
+      COALESCE(SUM(COALESCE(marks_earned, CASE WHEN is_correct = 1 THEN marks ELSE 0 END)), 0)::int AS marks_correct,
+      COALESCE(SUM(marks), 0)::int AS marks_attempted,
+      COUNT(*)::int AS question_count
+    FROM question_attempts
+    WHERE user_id = ${studentId}
+    ${subjectFilter}
+  `);
+  const marksCorrect = Number((totals.rows as any[])[0]?.marks_correct ?? 0);
+  const marksAttempted = Number((totals.rows as any[])[0]?.marks_attempted ?? 0);
+  const questionCount = Number((totals.rows as any[])[0]?.question_count ?? 0);
+
+  const topicRows = await db.execute(sql`
+    SELECT topic, subject_id,
+           SUM(COALESCE(marks_earned, CASE WHEN is_correct = 1 THEN marks ELSE 0 END))::int AS marks_correct,
+           SUM(marks)::int AS marks_attempted
+    FROM question_attempts
+    WHERE user_id = ${studentId}
+    ${subjectFilter}
+    GROUP BY topic, subject_id
+    HAVING SUM(marks) > 0
+    ORDER BY (SUM(COALESCE(marks_earned, CASE WHEN is_correct = 1 THEN marks ELSE 0 END))::float / NULLIF(SUM(marks), 0)) ASC
+  `);
+
+  const topicStats = (topicRows.rows as any[]).map((r) => {
+    const mc = Number(r.marks_correct ?? 0);
+    const ma = Number(r.marks_attempted ?? 0);
+    return {
+      topic: String(r.topic ?? "General"),
+      subjectId: String(r.subject_id ?? ""),
+      marksCorrect: mc,
+      marksAttempted: ma,
+      percent: pctFromMarks(mc, ma),
+    };
+  });
+
+  const weakTopics = topicStats.filter((t) => t.marksAttempted >= 3).slice(0, 6);
+
+  const subjectRows = await db.execute(sql`
+    SELECT subject_id,
+           SUM(COALESCE(marks_earned, CASE WHEN is_correct = 1 THEN marks ELSE 0 END))::int AS marks_correct,
+           SUM(marks)::int AS marks_attempted
+    FROM question_attempts
+    WHERE user_id = ${studentId}
+    GROUP BY subject_id
+    HAVING SUM(marks) > 0
+    ORDER BY subject_id ASC
+  `);
+
+  const subjects = (subjectRows.rows as any[]).map((r) => {
+    const mc = Number(r.marks_correct ?? 0);
+    const ma = Number(r.marks_attempted ?? 0);
+    return {
+      subjectId: String(r.subject_id ?? ""),
+      marksCorrect: mc,
+      marksAttempted: ma,
+      percent: pctFromMarks(mc, ma),
+    };
+  });
+
+  return {
+    marksCorrect,
+    marksAttempted,
+    percent: pctFromMarks(marksCorrect, marksAttempted),
+    questionCount,
+    topicStats,
+    weakTopics,
+    subjects,
+  };
 }
 
 // ---- Health ----
@@ -1877,8 +2721,18 @@ app.post("/api/feedback", async (c) => {
     ratingRaw == null || ratingRaw === ""
       ? null
       : Math.min(5, Math.max(1, Math.round(Number(ratingRaw))));
-  if (rating != null && !Number.isFinite(rating)) {
-    return c.json({ error: "Rating must be between 1 and 5." }, 400);
+  if (rating == null || !Number.isFinite(rating)) {
+    return c.json({ error: "Please choose a rating from 1 to 5." }, 400);
+  }
+  const vceStudentRaw = cleanText(body.vceStudent, 20).toLowerCase();
+  const vceStudent =
+    vceStudentRaw === "yes" || vceStudentRaw === "no" ? vceStudentRaw : null;
+  if (!vceStudent) {
+    return c.json({ error: "Please tell us whether you are a VCE student." }, 400);
+  }
+  const featuresStandOut = cleanText(body.featuresStandOut, 2000);
+  if (featuresStandOut.length < 3) {
+    return c.json({ error: "Please mention at least one feature that stands out." }, 400);
   }
   const sessionUser = await resolveOptionalUser(c);
   const authorName = sessionUser
@@ -1894,6 +2748,8 @@ app.post("/api/feedback", async (c) => {
     authorEmail,
     message,
     rating,
+    vceStudent,
+    featuresStandOut,
     createdAt,
   });
   try {
@@ -1902,6 +2758,7 @@ app.post("/api/feedback", async (c) => {
       { id: sessionUser?.id ?? null, name: authorName, email: authorEmail },
       message,
       rating,
+      { vceStudent, featuresStandOut },
     );
   } catch (e) {
     console.error("[feedback-notify] failed:", errorChain(e));
@@ -2102,6 +2959,9 @@ app.get("/api/bootstrap", authMiddleware, async (c: any) => {
       (safeJsonParse(row.acceptedAnswers) as unknown) ?? row.acceptedAnswers,
     ) ?? undefined;
     const imgs = safeJsonParse(row.imageUrls) as string[] | undefined;
+    const answerImgs = safeJsonParse(
+      (row as { answerImageUrls?: string | null }).answerImageUrls ?? null,
+    ) as string[] | undefined;
     const t = String(row.type || "");
     const marksNum = Number(row.marks);
     const marks =
@@ -2116,6 +2976,7 @@ app.get("/api/bootstrap", authMiddleware, async (c: any) => {
       topic: row.topic ?? "General",
       question: row.question,
       imageUrls: imgs,
+      answerImageUrls: answerImgs,
       options: opts,
       answer: row.answer || undefined,
       acceptedAnswers: acc,
@@ -2573,6 +3434,294 @@ app.get("/api/scorecard", authMiddleware, async (c: any) => {
     weakestSubjectId,
     studyStreak: streak,
     reportSubjects,
+  });
+});
+
+// ---- Teacher / class ----
+app.get("/api/teacher/class", authMiddleware, async (c: any) => {
+  const denied = teacherEmailDenied(c);
+  if (denied) return denied;
+  const user = c.get("user");
+  const db = c.get("db");
+  const classRow = await getOrCreateTeacherClassRow(db, user.id);
+  const memberIds = await getClassMemberIds(db, classRow.id);
+  return c.json({
+    classId: classRow.id,
+    className: classRow.class_name,
+    joinCode: classRow.join_code,
+    memberCount: memberIds.length,
+    createdAt: classRow.created_at,
+  });
+});
+
+app.patch("/api/teacher/class", authMiddleware, async (c: any) => {
+  const denied = teacherEmailDenied(c);
+  if (denied) return denied;
+  const user = c.get("user");
+  const db = c.get("db");
+  const body = await c.req.json().catch(() => ({}));
+  const className = String(body?.className ?? "").trim().slice(0, 80);
+  if (!className) return c.json({ error: "Class name is required." }, 400);
+  const classRow = await getOrCreateTeacherClassRow(db, user.id);
+  await db.execute(sql`
+    UPDATE teacher_classes SET class_name = ${className} WHERE id = ${classRow.id}
+  `);
+  return c.json({ ok: true, className });
+});
+
+app.get("/api/teacher/class/members", authMiddleware, async (c: any) => {
+  const denied = teacherEmailDenied(c);
+  if (denied) return denied;
+  const user = c.get("user");
+  const db = c.get("db");
+  const subjectId = String(c.req.query("subjectId") ?? "").trim();
+  const classRow = await getOrCreateTeacherClassRow(db, user.id);
+  const subjectFilter = subjectId ? sql` AND qa.subject_id = ${subjectId} ` : sql``;
+
+  const rows = await db.execute(sql`
+    SELECT u.id AS user_id,
+           u.username,
+           u.email,
+           cm.joined_at,
+           COALESCE(SUM(COALESCE(qa.marks_earned, CASE WHEN qa.is_correct = 1 THEN qa.marks ELSE 0 END)), 0)::int AS marks_correct,
+           COALESCE(SUM(qa.marks), 0)::int AS marks_attempted,
+           COUNT(qa.question_key)::int AS question_count
+    FROM class_members cm
+    JOIN users u ON u.id = cm.user_id
+    LEFT JOIN question_attempts qa ON qa.user_id = u.id ${subjectFilter}
+    WHERE cm.class_id = ${classRow.id}
+    GROUP BY u.id, u.username, u.email, cm.joined_at
+    ORDER BY LOWER(u.username) ASC, u.id ASC
+  `);
+
+  const members = (rows.rows as any[]).map((r) => {
+    const marksCorrect = Number(r.marks_correct ?? 0);
+    const marksAttempted = Number(r.marks_attempted ?? 0);
+    return {
+      userId: Number(r.user_id),
+      username: String(r.username ?? ""),
+      email: String(r.email ?? ""),
+      joinedAt: String(r.joined_at ?? ""),
+      marksCorrect,
+      marksAttempted,
+      percent: pctFromMarks(marksCorrect, marksAttempted),
+      questionCount: Number(r.question_count ?? 0),
+    };
+  });
+
+  return c.json({ members });
+});
+
+app.get("/api/teacher/class/stats", authMiddleware, async (c: any) => {
+  const denied = teacherEmailDenied(c);
+  if (denied) return denied;
+  const user = c.get("user");
+  const db = c.get("db");
+  const subjectId = String(c.req.query("subjectId") ?? "").trim() || undefined;
+  const classRow = await getOrCreateTeacherClassRow(db, user.id);
+  const memberIds = await getClassMemberIds(db, classRow.id);
+  const { topicStats, weakTopics, avgPercent } = await buildClassTopicStats(
+    db,
+    memberIds,
+    subjectId,
+  );
+
+  const subjectFilter = subjectId ? sql` AND qa.subject_id = ${subjectId} ` : sql``;
+  const activeRows = memberIds.length
+    ? await db.execute(sql`
+        SELECT COUNT(DISTINCT qa.user_id)::int AS active_students,
+               COALESCE(SUM(COALESCE(qa.marks_earned, CASE WHEN qa.is_correct = 1 THEN qa.marks ELSE 0 END)), 0)::int AS marks_correct,
+               COALESCE(SUM(qa.marks), 0)::int AS marks_attempted,
+               COUNT(*)::int AS question_count
+        FROM question_attempts qa
+        WHERE qa.user_id = ANY(${memberIds}::int[])
+        ${subjectFilter}
+      `)
+    : { rows: [{ active_students: 0, marks_correct: 0, marks_attempted: 0, question_count: 0 }] };
+
+  const active = (activeRows.rows as any[])[0] ?? {};
+  const marksCorrect = Number(active.marks_correct ?? 0);
+  const marksAttempted = Number(active.marks_attempted ?? 0);
+
+  return c.json({
+    classId: classRow.id,
+    className: classRow.class_name,
+    memberCount: memberIds.length,
+    activeStudents: Number(active.active_students ?? 0),
+    questionCount: Number(active.question_count ?? 0),
+    marksCorrect,
+    marksAttempted,
+    avgPercent: marksAttempted > 0 ? pctFromMarks(marksCorrect, marksAttempted) : avgPercent,
+    topicStats,
+    weakTopics,
+  });
+});
+
+app.get("/api/teacher/class/students/:studentId/stats", authMiddleware, async (c: any) => {
+  const denied = teacherEmailDenied(c);
+  if (denied) return denied;
+  const user = c.get("user");
+  const db = c.get("db");
+  const studentId = Number(c.req.param("studentId"));
+  if (!studentId) return c.json({ error: "Invalid student." }, 400);
+  const subjectId = String(c.req.query("subjectId") ?? "").trim() || undefined;
+  const classRow = await getOrCreateTeacherClassRow(db, user.id);
+  const memberCheck = await db.execute(sql`
+    SELECT 1 FROM class_members
+    WHERE class_id = ${classRow.id} AND user_id = ${studentId}
+    LIMIT 1
+  `);
+  if (!(memberCheck.rows as any[]).length) {
+    return c.json({ error: "Student is not in your class." }, 404);
+  }
+
+  const profile = await db.execute(sql`
+    SELECT id, username, email FROM users WHERE id = ${studentId} LIMIT 1
+  `);
+  if (!(profile.rows as any[]).length) return c.json({ error: "Student not found." }, 404);
+  const p = (profile.rows as any[])[0];
+  const stats = await buildStudentStats(db, studentId, subjectId);
+
+  return c.json({
+    userId: studentId,
+    username: String(p.username ?? ""),
+    email: String(p.email ?? ""),
+    ...stats,
+  });
+});
+
+app.post("/api/class/join", authMiddleware, async (c: any) => {
+  const user = c.get("user");
+  const db = c.get("db");
+  const body = await c.req.json().catch(() => ({}));
+  const joinCode = String(body?.joinCode ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
+  if (joinCode.length < 4) {
+    return c.json({ error: "Enter a valid class code." }, 400);
+  }
+
+  const classRows = await db.execute(sql`
+    SELECT tc.id, tc.class_name, tc.join_code, u.username AS teacher_name
+    FROM teacher_classes tc
+    JOIN users u ON u.id = tc.teacher_id
+    WHERE tc.join_code = ${joinCode}
+    LIMIT 1
+  `);
+  if (!(classRows.rows as any[]).length) {
+    return c.json({ error: "Class code not found." }, 404);
+  }
+  const classRow = (classRows.rows as any[])[0];
+  const classId = Number(classRow.id);
+
+  if (String(user.email ?? "").toLowerCase() === ADMIN_EMAIL_LC) {
+    const teacherRow = await db.execute(sql`
+      SELECT teacher_id FROM teacher_classes WHERE id = ${classId} LIMIT 1
+    `);
+    const teacherId = Number((teacherRow.rows as any[])[0]?.teacher_id ?? 0);
+    if (teacherId === user.id) {
+      return c.json({ error: "You cannot join your own class." }, 400);
+    }
+  }
+
+  const existingMembership = await db.execute(sql`
+    SELECT cm.class_id, tc.class_name, tc.join_code, u.username AS teacher_name
+    FROM class_members cm
+    JOIN teacher_classes tc ON tc.id = cm.class_id
+    JOIN users u ON u.id = tc.teacher_id
+    WHERE cm.user_id = ${user.id}
+    LIMIT 1
+  `);
+  if ((existingMembership.rows as any[]).length) {
+    const existing = (existingMembership.rows as any[])[0];
+    const existingClassId = Number(existing.class_id);
+    if (existingClassId === classId) {
+      return c.json({
+        ok: true,
+        alreadyMember: true,
+        classId,
+        className: String(existing.class_name ?? "Class"),
+        joinCode: String(existing.join_code ?? joinCode),
+        teacherName: String(existing.teacher_name ?? "Teacher"),
+      });
+    }
+    return c.json(
+      {
+        error: `You're already in ${String(existing.class_name ?? "a class")}. Ask your teacher if you need to switch.`,
+      },
+      400,
+    );
+  }
+
+  await db.execute(sql`
+    INSERT INTO class_members (class_id, user_id, joined_at)
+    VALUES (${classId}, ${user.id}, ${nowIso()})
+    ON CONFLICT (class_id, user_id) DO NOTHING
+  `);
+
+  return c.json({
+    ok: true,
+    classId,
+    className: String(classRow.class_name ?? "Class"),
+    joinCode: String(classRow.join_code ?? joinCode),
+    teacherName: String(classRow.teacher_name ?? "Teacher"),
+  });
+});
+
+app.get("/api/class/preview", authMiddleware, async (c: any) => {
+  const db = c.get("db");
+  const joinCode = String(c.req.query("code") ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
+  if (joinCode.length < 4) {
+    return c.json({ error: "Enter a valid class code." }, 400);
+  }
+
+  const rows = await db.execute(sql`
+    SELECT tc.class_name, tc.join_code, u.username AS teacher_name,
+           (SELECT COUNT(*)::int FROM class_members cm WHERE cm.class_id = tc.id) AS member_count
+    FROM teacher_classes tc
+    JOIN users u ON u.id = tc.teacher_id
+    WHERE tc.join_code = ${joinCode}
+    LIMIT 1
+  `);
+  if (!(rows.rows as any[]).length) {
+    return c.json({ error: "Class code not found." }, 404);
+  }
+  const r = (rows.rows as any[])[0];
+  return c.json({
+    className: String(r.class_name ?? "Class"),
+    teacherName: String(r.teacher_name ?? "Teacher"),
+    joinCode: String(r.join_code ?? joinCode),
+    memberCount: Number(r.member_count ?? 0),
+  });
+});
+
+app.get("/api/class/membership", authMiddleware, async (c: any) => {
+  const user = c.get("user");
+  const db = c.get("db");
+  const rows = await db.execute(sql`
+    SELECT tc.id AS class_id, tc.class_name, tc.join_code, u.username AS teacher_name, cm.joined_at
+    FROM class_members cm
+    JOIN teacher_classes tc ON tc.id = cm.class_id
+    JOIN users u ON u.id = tc.teacher_id
+    WHERE cm.user_id = ${user.id}
+    ORDER BY cm.joined_at DESC
+    LIMIT 1
+  `);
+  if (!(rows.rows as any[]).length) {
+    return c.json({ enrolled: false });
+  }
+  const r = (rows.rows as any[])[0];
+  return c.json({
+    enrolled: true,
+    classId: Number(r.class_id),
+    className: String(r.class_name ?? ""),
+    joinCode: String(r.join_code ?? ""),
+    teacherName: String(r.teacher_name ?? ""),
+    joinedAt: String(r.joined_at ?? ""),
   });
 });
 
@@ -3182,6 +4331,403 @@ async function runEnglishAiScore(
   return result;
 }
 
+// ---- Phone QR upload (Create / quiz answer images) ----
+app.post("/api/written/upload-token", authMiddleware, async (c: any) => {
+  try {
+    const user = c.get("user");
+    const db = c.get("db");
+    await ensurePhoneUploadSessionsTable(db);
+    const body = await c.req.json().catch(() => ({}));
+    const purpose = cleanText(body?.purpose, 40) || "create";
+    const subjectId = body?.subjectId ? cleanText(body.subjectId, 80) : null;
+    const questionKey = body?.questionKey ? cleanText(body.questionKey, 120) : null;
+    const token = createToken();
+    const now = nowIso();
+    await db.execute(sql`
+      INSERT INTO phone_upload_sessions (token, user_id, purpose, subject_id, question_key, pending_images, created_at, expires_at)
+      VALUES (${token}, ${user.id}, ${purpose}, ${subjectId}, ${questionKey}, '[]', ${now}, ${phoneUploadSessionExpiry()})
+    `);
+    return c.json({ token });
+  } catch (e) {
+    return c.json({ error: errorChain(e) }, 500);
+  }
+});
+
+app.post("/api/written/upload/:token", async (c: any) => {
+  try {
+    const db = c.get("db");
+    await ensurePhoneUploadSessionsTable(db);
+    const token = cleanText(c.req.param("token"), 80);
+    if (!token) return c.json({ error: "Invalid upload link." }, 400);
+
+    const rows = await db.execute(sql`
+      SELECT user_id, pending_images, expires_at
+      FROM phone_upload_sessions
+      WHERE token = ${token}
+      LIMIT 1
+    `);
+    const row = (rows.rows as Record<string, unknown>[])[0];
+    if (!row) return c.json({ error: "Upload link not found or expired." }, 404);
+    if (new Date(String(row.expires_at)) < new Date()) {
+      await db.execute(sql`DELETE FROM phone_upload_sessions WHERE token = ${token}`);
+      return c.json({ error: "Upload link expired. Generate a new QR on your computer." }, 410);
+    }
+
+    const body = await c.req.json().catch(() => ({}));
+    const incoming = parseImageUrlList(body?.imageUrls);
+    if (!incoming.length) return c.json({ error: "No valid images provided." }, 400);
+    const sizeErr = validateStorableImageUrls(incoming);
+    if (sizeErr) return c.json({ error: sizeErr }, 400);
+
+    const existing = parseImageUrlList(safeJsonParse(String(row.pending_images ?? "[]")));
+    const merged = [...existing, ...incoming].slice(-24);
+    await db.execute(sql`
+      UPDATE phone_upload_sessions
+      SET pending_images = ${JSON.stringify(merged)}
+      WHERE token = ${token}
+    `);
+    return c.json({ ok: true, count: incoming.length });
+  } catch (e) {
+    return c.json({ error: errorChain(e) }, 500);
+  }
+});
+
+app.get("/api/written/upload-session/:token", authMiddleware, async (c: any) => {
+  try {
+    const user = c.get("user");
+    const db = c.get("db");
+    await ensurePhoneUploadSessionsTable(db);
+    const token = cleanText(c.req.param("token"), 80);
+    if (!token) return c.json({ error: "Invalid session." }, 400);
+
+    const rows = await db.execute(sql`
+      SELECT pending_images, expires_at
+      FROM phone_upload_sessions
+      WHERE token = ${token} AND user_id = ${user.id}
+      LIMIT 1
+    `);
+    const row = (rows.rows as Record<string, unknown>[])[0];
+    if (!row) return c.json({ error: "Upload session not found." }, 404);
+    if (new Date(String(row.expires_at)) < new Date()) {
+      await db.execute(sql`DELETE FROM phone_upload_sessions WHERE token = ${token}`);
+      return c.json({ imageUrls: [] });
+    }
+
+    const imageUrls = parseImageUrlList(safeJsonParse(String(row.pending_images ?? "[]")));
+    if (imageUrls.length) {
+      await db.execute(sql`
+        UPDATE phone_upload_sessions SET pending_images = '[]' WHERE token = ${token}
+      `);
+    }
+    return c.json({ imageUrls });
+  } catch (e) {
+    return c.json({ error: errorChain(e) }, 500);
+  }
+});
+
+// ---- Practice exams ----
+app.get("/api/practice-exams/:subjectId", authMiddleware, async (c: any) => {
+  try {
+    const db = c.get("db");
+    await ensurePracticeExamTables(db);
+    const subjectId = canonicalSubjectId(c.req.param("subjectId"));
+    const rows = await db.execute(sql`
+      SELECT pe.year, pe.exam_number, pe.published,
+        (SELECT COUNT(*)::integer FROM practice_exam_pages pep WHERE pep.exam_id = pe.id) AS page_count
+      FROM practice_exams pe
+      WHERE pe.subject_id = ${subjectId}
+      ORDER BY pe.year DESC, pe.exam_number ASC
+    `);
+    const exams = (rows.rows as Record<string, unknown>[]).map((r) => ({
+      year: Number(r.year),
+      examNumber: Number(r.exam_number ?? 1) === 2 ? 2 : 1,
+      published: Number(r.published) === 1,
+      hasPages: Number(r.page_count ?? 0) > 0,
+    }));
+    return c.json({ exams });
+  } catch (e) {
+    return c.json({ error: errorChain(e) }, 500);
+  }
+});
+
+app.get("/api/practice-exams/:subjectId/:year/:examNumber", authMiddleware, async (c: any) => {
+  try {
+    const db = c.get("db");
+    await ensurePracticeExamTables(db);
+    const user = c.get("user");
+    const subjectId = canonicalSubjectId(c.req.param("subjectId"));
+    const year = Math.round(Number(c.req.param("year")));
+    const examNumber = Math.round(Number(c.req.param("examNumber"))) === 2 ? 2 : 1;
+    if (!year || year < 2000 || year > 2100) return c.json({ error: "Invalid year." }, 400);
+
+    const rows = await db.execute(sql`
+      SELECT id, slots_json, published, transparent_inputs, layout, mcq_count, mcq_json
+      FROM practice_exams
+      WHERE subject_id = ${subjectId} AND year = ${year} AND exam_number = ${examNumber}
+      LIMIT 1
+    `);
+    const row = (rows.rows as Record<string, unknown>[])[0];
+    if (!row) return c.json({ error: "Exam not found." }, 404);
+    const published = Number(row.published) === 1;
+    const isAdmin = String(user.email ?? "").toLowerCase() === ADMIN_EMAIL_LC;
+    if (!published && !isAdmin) return c.json({ error: "Exam not available." }, 404);
+
+    const pageRows = await db.execute(sql`
+      SELECT page_number FROM practice_exam_pages
+      WHERE exam_id = ${Number(row.id)}
+      ORDER BY page_number ASC
+    `);
+    const legacyTransparent = Number(row.transparent_inputs ?? 0) === 1;
+    const layout = parsePracticeExamLayout(row.layout);
+    const mcqCount = parsePracticeExamMcqCount(row.mcq_count, layout);
+    const mcqItems = parsePracticeExamMcqItems(safeJsonParse(String(row.mcq_json ?? "[]")));
+    const slots = parsePracticeExamSlots(safeJsonParse(String(row.slots_json ?? "[]"))).map(
+      (slot) => ({
+        ...slot,
+        transparentInput: slot.transparentInput ?? (legacyTransparent ? true : undefined),
+      }),
+    );
+    return c.json({
+      subjectId,
+      year,
+      examNumber,
+      published,
+      layout,
+      mcqCount,
+      mcqItems,
+      slots,
+      pages: (pageRows.rows as Record<string, unknown>[]).map((p) => ({
+        pageNumber: Number(p.page_number),
+      })),
+    });
+  } catch (e) {
+    return c.json({ error: errorChain(e) }, 500);
+  }
+});
+
+app.get("/api/practice-exams/:subjectId/:year/:examNumber/pages/:pageNumber", authMiddleware, async (c: any) => {
+  try {
+    const db = c.get("db");
+    await ensurePracticeExamTables(db);
+    const user = c.get("user");
+    const subjectId = canonicalSubjectId(c.req.param("subjectId"));
+    const year = Math.round(Number(c.req.param("year")));
+    const examNumber = Math.round(Number(c.req.param("examNumber"))) === 2 ? 2 : 1;
+    const pageNumber = Math.round(Number(c.req.param("pageNumber")));
+    if (!year || !pageNumber || pageNumber < 1) return c.json({ error: "Invalid request." }, 400);
+
+    const examRows = await db.execute(sql`
+      SELECT id, published FROM practice_exams
+      WHERE subject_id = ${subjectId} AND year = ${year} AND exam_number = ${examNumber}
+      LIMIT 1
+    `);
+    const exam = (examRows.rows as Record<string, unknown>[])[0];
+    if (!exam) return c.json({ error: "Exam not found." }, 404);
+    const published = Number(exam.published) === 1;
+    const isAdmin = String(user.email ?? "").toLowerCase() === ADMIN_EMAIL_LC;
+    if (!published && !isAdmin) return c.json({ error: "Exam not available." }, 404);
+
+    const pageRows = await db.execute(sql`
+      SELECT image_data_url FROM practice_exam_pages
+      WHERE exam_id = ${Number(exam.id)} AND page_number = ${pageNumber}
+      LIMIT 1
+    `);
+    const page = (pageRows.rows as Record<string, unknown>[])[0];
+    if (!page) return c.json({ error: "Page not found." }, 404);
+    return c.json({ pageNumber, imageDataUrl: String(page.image_data_url ?? "") });
+  } catch (e) {
+    return c.json({ error: errorChain(e) }, 500);
+  }
+});
+
+app.get("/api/admin/practice-exams/:subjectId/:year/:examNumber", adminAccessMiddleware, async (c: any) => {
+  try {
+    const db = c.get("db");
+    await ensurePracticeExamTables(db);
+    const subjectId = canonicalSubjectId(c.req.param("subjectId"));
+    const year = Math.round(Number(c.req.param("year")));
+    const examNumber = Math.round(Number(c.req.param("examNumber"))) === 2 ? 2 : 1;
+    if (!year) return c.json({ error: "Invalid year." }, 400);
+
+    const rows = await db.execute(sql`
+      SELECT id, slots_json, published, transparent_inputs, layout, mcq_count, mcq_json
+      FROM practice_exams
+      WHERE subject_id = ${subjectId} AND year = ${year} AND exam_number = ${examNumber}
+      LIMIT 1
+    `);
+    const row = (rows.rows as Record<string, unknown>[])[0];
+    if (!row) {
+      const layout = examNumber === 2 && subjectId === "methods" ? "mcq_then_written" : "written";
+      const mcqCount = layout === "mcq_then_written" ? 20 : 0;
+      return c.json({
+        subjectId,
+        year,
+        examNumber,
+        published: false,
+        layout,
+        mcqCount,
+        mcqItems: [],
+        slots: [],
+        pages: [],
+      });
+    }
+
+    const pageRows = await db.execute(sql`
+      SELECT page_number FROM practice_exam_pages
+      WHERE exam_id = ${Number(row.id)}
+      ORDER BY page_number ASC
+    `);
+    const legacyTransparent = Number(row.transparent_inputs ?? 0) === 1;
+    const layout = parsePracticeExamLayout(row.layout);
+    const mcqCount = parsePracticeExamMcqCount(row.mcq_count, layout);
+    const mcqItems = parsePracticeExamMcqItems(safeJsonParse(String(row.mcq_json ?? "[]")));
+    const slots = parsePracticeExamSlots(safeJsonParse(String(row.slots_json ?? "[]"))).map(
+      (slot) => ({
+        ...slot,
+        transparentInput: slot.transparentInput ?? (legacyTransparent ? true : undefined),
+      }),
+    );
+    return c.json({
+      subjectId,
+      year,
+      examNumber,
+      published: Number(row.published) === 1,
+      layout,
+      mcqCount,
+      mcqItems,
+      slots,
+      pages: (pageRows.rows as Record<string, unknown>[]).map((p) => ({
+        pageNumber: Number(p.page_number),
+      })),
+    });
+  } catch (e) {
+    return c.json({ error: errorChain(e) }, 500);
+  }
+});
+
+app.get("/api/admin/practice-exams/:subjectId/:year/:examNumber/pages/:pageNumber", adminAccessMiddleware, async (c: any) => {
+  try {
+    const db = c.get("db");
+    await ensurePracticeExamTables(db);
+    const subjectId = canonicalSubjectId(c.req.param("subjectId"));
+    const year = Math.round(Number(c.req.param("year")));
+    const examNumber = Math.round(Number(c.req.param("examNumber"))) === 2 ? 2 : 1;
+    const pageNumber = Math.round(Number(c.req.param("pageNumber")));
+    if (!year || !pageNumber || pageNumber < 1) return c.json({ error: "Invalid request." }, 400);
+
+    const examRows = await db.execute(sql`
+      SELECT id FROM practice_exams
+      WHERE subject_id = ${subjectId} AND year = ${year} AND exam_number = ${examNumber}
+      LIMIT 1
+    `);
+    const exam = (examRows.rows as Record<string, unknown>[])[0];
+    if (!exam) return c.json({ error: "Exam not found." }, 404);
+
+    const pageRows = await db.execute(sql`
+      SELECT image_data_url FROM practice_exam_pages
+      WHERE exam_id = ${Number(exam.id)} AND page_number = ${pageNumber}
+      LIMIT 1
+    `);
+    const page = (pageRows.rows as Record<string, unknown>[])[0];
+    if (!page) return c.json({ error: "Page not found." }, 404);
+    return c.json({ pageNumber, imageDataUrl: String(page.image_data_url ?? "") });
+  } catch (e) {
+    return c.json({ error: errorChain(e) }, 500);
+  }
+});
+
+app.put("/api/admin/practice-exams/:subjectId/:year/:examNumber", adminAccessMiddleware, async (c: any) => {
+  try {
+    const db = c.get("db");
+    await ensurePracticeExamTables(db);
+    const subjectId = canonicalSubjectId(c.req.param("subjectId"));
+    const year = Math.round(Number(c.req.param("year")));
+    const examNumber = Math.round(Number(c.req.param("examNumber"))) === 2 ? 2 : 1;
+    if (!year) return c.json({ error: "Invalid year." }, 400);
+    const body = await c.req.json().catch(() => ({}));
+    const layout = parsePracticeExamLayout(body?.layout);
+    const mcqCount = parsePracticeExamMcqCount(body?.mcqCount, layout);
+    const mcqItems = parsePracticeExamMcqItems(body?.mcqItems);
+    const slots = parsePracticeExamSlots(body?.slots);
+    const published =
+      body?.published === true ||
+      body?.published === 1 ||
+      String(body?.published ?? "").toLowerCase() === "true"
+        ? 1
+        : 0;
+    const examId = await upsertPracticeExamRow(db, subjectId, year, examNumber);
+    const now = nowIso();
+    await db.execute(sql`
+      UPDATE practice_exams
+      SET slots_json = ${JSON.stringify(slots)},
+        layout = ${layout},
+        mcq_count = ${mcqCount},
+        mcq_json = ${JSON.stringify(mcqItems)},
+        published = ${published},
+        updated_at = ${now}
+      WHERE id = ${examId}
+    `);
+    return c.json({
+      ok: true,
+      examId,
+      slotCount: slots.length,
+      mcqCount: mcqItems.length,
+      published: published === 1,
+    });
+  } catch (e) {
+    return c.json({ error: errorChain(e) }, 500);
+  }
+});
+
+app.put("/api/admin/practice-exams/:subjectId/:year/:examNumber/pages/:pageNumber", adminAccessMiddleware, async (c: any) => {
+  try {
+    const db = c.get("db");
+    await ensurePracticeExamTables(db);
+    const subjectId = canonicalSubjectId(c.req.param("subjectId"));
+    const year = Math.round(Number(c.req.param("year")));
+    const examNumber = Math.round(Number(c.req.param("examNumber"))) === 2 ? 2 : 1;
+    const pageNumber = Math.round(Number(c.req.param("pageNumber")));
+    if (!year || !pageNumber || pageNumber < 1) return c.json({ error: "Invalid request." }, 400);
+
+    const body = await c.req.json().catch(() => ({}));
+    const imageDataUrl = String(body?.imageDataUrl ?? "").trim();
+    if (!imageDataUrl.startsWith("data:image/")) {
+      return c.json({ error: "imageDataUrl is required." }, 400);
+    }
+    const sizeErr = validatePracticeExamPageImageUrl(imageDataUrl);
+    if (sizeErr) return c.json({ error: sizeErr }, 400);
+
+    const examId = await upsertPracticeExamRow(db, subjectId, year, examNumber);
+    await db.execute(sql`
+      INSERT INTO practice_exam_pages (exam_id, page_number, image_data_url)
+      VALUES (${examId}, ${pageNumber}, ${imageDataUrl})
+      ON CONFLICT (exam_id, page_number)
+      DO UPDATE SET image_data_url = EXCLUDED.image_data_url
+    `);
+    return c.json({ ok: true, pageNumber });
+  } catch (e) {
+    return c.json({ error: errorChain(e) }, 500);
+  }
+});
+
+app.delete("/api/admin/practice-exams/:subjectId/:year/:examNumber", adminAccessMiddleware, async (c: any) => {
+  try {
+    const db = c.get("db");
+    await ensurePracticeExamTables(db);
+    const subjectId = canonicalSubjectId(c.req.param("subjectId"));
+    const year = Math.round(Number(c.req.param("year")));
+    const examNumber = Math.round(Number(c.req.param("examNumber"))) === 2 ? 2 : 1;
+    if (!year) return c.json({ error: "Invalid year." }, 400);
+    await db.execute(sql`
+      DELETE FROM practice_exams
+      WHERE subject_id = ${subjectId} AND year = ${year} AND exam_number = ${examNumber}
+    `);
+    return c.json({ ok: true });
+  } catch (e) {
+    return c.json({ error: errorChain(e) }, 500);
+  }
+});
+
 // ---- Written ----
 app.get("/api/written/:subjectId/:questionKey", authMiddleware, async (c: any) => {
   const user = c.get("user"); const db = c.get("db");
@@ -3221,16 +4767,19 @@ app.put("/api/written/:subjectId/:questionKey", authMiddleware, async (c: any) =
 });
 
 app.post("/api/written/:subjectId/:questionKey/mark", authMiddleware, async (c: any) => {
+  let isHandwritingMark = false;
   try {
     const env = c.env as Env;
     if (!openAiConfigured(env)) {
-      return c.json({ error: "AI marking is not configured (OPENAI_API_KEY missing)." }, 503);
+      return c.json({ error: "AI marking is not available right now." }, 503);
     }
     const user = c.get("user");
     const db = c.get("db");
     const body = await c.req.json();
-    const responseText = cleanText(body?.responseText, 12000);
-    if (!responseText) return c.json({ error: "responseText is required." }, 400);
+    const subjectId = c.req.param("subjectId");
+    const questionKey = c.req.param("questionKey");
+    const handwritingImages = collectHandwritingImages(body ?? {});
+    isHandwritingMark = handwritingImages.length > 0;
 
     const q = (body?.question ?? {}) as Record<string, unknown>;
     const questionText = cleanText(String(q.question ?? q.questionText ?? ""), 4000);
@@ -3255,26 +4804,60 @@ app.post("/api/written/:subjectId/:questionKey/mark", authMiddleware, async (c: 
                 : undefined,
         })).filter((p) => p.label)
       : undefined;
-    const studentParts = Array.isArray(body?.studentParts)
-      ? body.studentParts.map((p: unknown) => String(p ?? "").trim()).slice(0, 12)
-      : undefined;
 
-    const result = await markLongAnswer(env, {
-      questionText,
-      questionType,
-      topic: q.topic ? cleanText(String(q.topic), 240) : undefined,
-      marks,
-      guidance,
-      acceptedAnswers,
-      answerParts,
-      studentResponse: responseText,
-      studentParts,
-    });
+    let result;
+    let storedResponseText: string;
+
+    if (handwritingImages.length > 0) {
+      if (canonicalSubjectId(subjectId) !== "demo") {
+        return c.json({ error: "Handwriting marking is only available in demo." }, 400);
+      }
+      const imageError = validateMarkingImageUrls(handwritingImages);
+      if (imageError) return c.json({ error: imageError }, 400);
+
+      result = await markHandwritingAnswer(env, {
+        questionText,
+        questionType,
+        topic: q.topic ? cleanText(String(q.topic), 240) : undefined,
+        marks,
+        guidance,
+        acceptedAnswers,
+        answerParts,
+        images: handwritingImages,
+      });
+      storedResponseText = `[handwritten answer — ${handwritingImages.length} image(s)]`;
+    } else {
+      const responseText = cleanText(body?.responseText, 12000);
+      if (!responseText) return c.json({ error: "responseText is required." }, 400);
+      const qt = questionType.toLowerCase();
+      if (qt !== "long_answer" && qt !== "long") {
+        return c.json(
+          { error: "AI text marking is only available for long-answer questions." },
+          400,
+        );
+      }
+      const studentParts = Array.isArray(body?.studentParts)
+        ? body.studentParts.map((p: unknown) => String(p ?? "").trim()).slice(0, 12)
+        : undefined;
+
+      result = await markLongAnswer(env, {
+        questionText,
+        questionType,
+        topic: q.topic ? cleanText(String(q.topic), 240) : undefined,
+        marks,
+        guidance,
+        acceptedAnswers,
+        answerParts,
+        studentResponse: responseText,
+        studentParts,
+      });
+      storedResponseText = responseText;
+    }
 
     const now = nowIso();
     await db.execute(sql`
       INSERT INTO written_responses (user_id, subject_id, question_key, response_text, updated_at, ai_correct, ai_score_percent, ai_feedback, ai_marked_at)
-      VALUES (${user.id}, ${c.req.param("subjectId")}, ${c.req.param("questionKey")}, ${responseText}, ${now}, ${result.correct ? 1 : 0}, ${result.scorePercent}, ${result.feedback}, ${now})
+      VALUES (${user.id}, ${subjectId}, ${questionKey}, ${storedResponseText}, ${now}, ${result.correct ? 1 : 0}, ${result.scorePercent}, ${result.feedback}, ${now})
       ON CONFLICT(user_id, subject_id, question_key) DO UPDATE SET
         response_text = EXCLUDED.response_text,
         updated_at = EXCLUDED.updated_at,
@@ -3292,11 +4875,13 @@ app.post("/api/written/:subjectId/:questionKey/mark", authMiddleware, async (c: 
         marksAwarded: result.marksAwarded,
         maxMarks: result.maxMarks,
         feedback: result.feedback,
+        correctAnswers: result.correctAnswers,
         partResults: result.partResults,
       },
     });
   } catch (e) {
-    return c.json({ error: errorChain(e) }, 500);
+    console.error("[written/mark]", errorChain(e));
+    return c.json({ error: userFacingMarkError(e, isHandwritingMark) }, 500);
   }
 });
 
@@ -3590,6 +5175,56 @@ app.get("/api/admin/users", adminAccessMiddleware, async (c: any) => {
   return c.json({ users: rows, total });
 });
 
+app.get("/api/admin/feedback", adminAccessMiddleware, async (c: any) => {
+  const db = c.get("db");
+  const limitRaw = Number(c.req.query("limit") ?? 50);
+  const offsetRaw = Number(c.req.query("offset") ?? 0);
+  const limit = Number.isFinite(limitRaw)
+    ? Math.min(Math.max(Math.trunc(limitRaw), 1), 200)
+    : 50;
+  const offset = Number.isFinite(offsetRaw) ? Math.max(Math.trunc(offsetRaw), 0) : 0;
+
+  const rows = await db
+    .select({
+      id: userFeedback.id,
+      userId: userFeedback.userId,
+      authorName: userFeedback.authorName,
+      authorEmail: userFeedback.authorEmail,
+      message: userFeedback.message,
+      rating: userFeedback.rating,
+      vceStudent: userFeedback.vceStudent,
+      featuresStandOut: userFeedback.featuresStandOut,
+      createdAt: userFeedback.createdAt,
+    })
+    .from(userFeedback)
+    .orderBy(desc(userFeedback.createdAt))
+    .limit(limit)
+    .offset(offset);
+
+  const countResult = await db.execute(
+    sql`SELECT COUNT(*)::int AS count FROM user_feedback`,
+  );
+  const total = Number((countResult.rows?.[0] as { count?: number })?.count ?? 0);
+
+  return c.json({
+    feedback: rows.map((row) => ({
+      id: Number(row.id),
+      userId: row.userId != null ? Number(row.userId) : null,
+      authorName: String(row.authorName ?? "").trim() || "Anonymous",
+      authorEmail: row.authorEmail != null ? String(row.authorEmail) : null,
+      message: String(row.message ?? ""),
+      rating: row.rating != null ? Number(row.rating) : null,
+      vceStudent: row.vceStudent != null ? String(row.vceStudent) : null,
+      featuresStandOut:
+        row.featuresStandOut != null ? String(row.featuresStandOut) : null,
+      createdAt: String(row.createdAt ?? ""),
+    })),
+    total,
+    limit,
+    offset,
+  });
+});
+
 app.get("/api/admin/stats", adminAccessMiddleware, async (c: any) => {
   const db = c.get("db");
   const countResult = await db.execute(
@@ -3614,6 +5249,9 @@ app.get("/api/admin/questions", adminAccessMiddleware, async (c: any) => {
     const normalizedAcc =
       acc?.length || row.type === "mcq" || !answerFallback ? acc : [answerFallback];
     const imgs = safeJsonParse(row.imageUrls) as string[] | undefined;
+    const answerImgs = safeJsonParse(
+      (row as { answerImageUrls?: string | null }).answerImageUrls ?? null,
+    ) as string[] | undefined;
     const parts = safeJsonParse(row.answerPartsJson) as unknown[] | undefined;
     const aiRaw = (row as { aiMarkingEnabled?: number | null }).aiMarkingEnabled;
     const useAiMarking =
@@ -3626,6 +5264,7 @@ app.get("/api/admin/questions", adminAccessMiddleware, async (c: any) => {
       topic: row.topic ?? "General",
       question: row.question,
       imageUrls: imgs,
+      answerImageUrls: answerImgs,
       options: opts,
       correctAnswer: row.answer || undefined,
       acceptedAnswers: normalizedAcc,
@@ -3857,6 +5496,31 @@ app.get("/api/english/books", async (c: any) => {
 app.get("/api/english/prompts", async (c: any) => {
   try {
     const db = c.get("db");
+    const promptIdLookup = Number(c.req.query("promptId"));
+    if (Number.isFinite(promptIdLookup) && promptIdLookup > 0) {
+      const one = await db.execute(sql`
+        SELECT p.id, p.prompt_text, p.section, b.id AS book_id, b.title AS book_title
+        FROM english_prompts p
+        JOIN english_books b ON b.id = p.book_id
+        WHERE p.id = ${promptIdLookup}
+        LIMIT 1
+      `);
+      const row = (one.rows as any[])[0];
+      if (!row) {
+        return c.json({ prompts: [] });
+      }
+      return c.json({
+        prompts: [
+          {
+            id: Number(row.id),
+            bookId: Number(row.book_id),
+            bookTitle: String(row.book_title || ""),
+            prompt: String(row.prompt_text || ""),
+            section: normalizeEnglishSection(row.section),
+          },
+        ],
+      });
+    }
     const section = normalizeEnglishSection(c.req.query("section"));
     if (section === "B") {
       await ensureSectionBCuratedPrompts(db);
@@ -3946,16 +5610,35 @@ app.post("/api/english/responses", authMiddleware, async (c: any) => {
     `);
     const responseId = Number((inserted.rows as any[])[0]?.id ?? 0);
 
+    const env = c.env as Env;
+    const aiConfigured = openAiConfigured(env);
     let aiScore: { score: number; feedback: string } | null = null;
-    if (responseId > 0 && responseText.length >= 20 && openAiConfigured(c.env as Env)) {
-      try {
-        aiScore = await runEnglishAiScore(db, c.env as Env, responseId);
-      } catch (err) {
-        console.error("[english/responses POST ai-score]", errorChain(err));
+    let aiScoringPending = false;
+    if (responseId > 0 && responseText.length >= 20 && aiConfigured) {
+      const execCtx = c.executionCtx as { waitUntil?: (p: Promise<unknown>) => void } | undefined;
+      if (execCtx?.waitUntil) {
+        aiScoringPending = true;
+        execCtx.waitUntil(
+          runEnglishAiScore(db, env, responseId).catch((err) => {
+            console.error("[english/responses POST ai-score async]", errorChain(err));
+          }),
+        );
+      } else {
+        try {
+          aiScore = await runEnglishAiScore(db, env, responseId);
+        } catch (err) {
+          console.error("[english/responses POST ai-score]", errorChain(err));
+        }
       }
     }
 
-    return c.json({ ok: true, id: responseId || undefined, aiScore });
+    return c.json({
+      ok: true,
+      id: responseId || undefined,
+      aiScore,
+      aiScoringPending,
+      aiConfigured,
+    });
   } catch (e) {
     return c.json({ error: errorChain(e) }, 500);
   }
@@ -3964,8 +5647,73 @@ app.post("/api/english/responses", authMiddleware, async (c: any) => {
 app.get("/api/english/responses", authMiddleware, async (c: any) => {
   try {
     const db = c.get("db");
-    const section = normalizeEnglishSection(c.req.query("section"));
-    const bookId = Number(c.req.query("bookId"));
+    const promptIdFilter = Number(c.req.query("promptId"));
+    let section = normalizeEnglishSection(c.req.query("section"));
+    let bookId = Number(c.req.query("bookId"));
+    let matchingPromptIds: number[] | null = null;
+    let promptMeta: {
+      id: number;
+      prompt: string;
+      section: "A" | "B" | "C";
+      bookId: number | null;
+    } | null = null;
+
+    if (Number.isFinite(promptIdFilter) && promptIdFilter > 0) {
+      const anchorRes = await db.execute(sql`
+        SELECT p.id, p.prompt_text, p.section, p.book_id
+        FROM english_prompts p
+        WHERE p.id = ${promptIdFilter}
+        LIMIT 1
+      `);
+      const anchor = (anchorRes.rows as any[])[0];
+      if (!anchor) {
+        return c.json({ responses: [], prompt: null });
+      }
+      section = normalizeEnglishSection(anchor.section);
+      bookId = Number(anchor.book_id);
+      promptMeta = {
+        id: promptIdFilter,
+        prompt: String(anchor.prompt_text ?? ""),
+        section,
+        bookId: Number.isFinite(bookId) && bookId > 0 ? bookId : null,
+      };
+      const anchorKey = normalizeEnglishPromptKey(anchor.prompt_text);
+      const scopePrompts =
+        section === "A"
+          ? Number.isFinite(bookId) && bookId > 0
+            ? await db.execute(sql`
+                SELECT p.id, p.prompt_text
+                FROM english_prompts p
+                WHERE p.book_id = ${bookId}
+                  AND LEFT(UPPER(TRIM(REGEXP_REPLACE(COALESCE(p.section, ''), '^SECTION\\s*', '', 'i'))), 1) = 'A'
+              `)
+            : await db.execute(sql`
+                SELECT p.id, p.prompt_text
+                FROM english_prompts p
+                WHERE LEFT(UPPER(TRIM(REGEXP_REPLACE(COALESCE(p.section, ''), '^SECTION\\s*', '', 'i'))), 1) = 'A'
+              `)
+          : await db.execute(sql`
+              SELECT p.id, p.prompt_text
+              FROM english_prompts p
+              WHERE LEFT(UPPER(TRIM(REGEXP_REPLACE(COALESCE(p.section, ''), '^SECTION\\s*', '', 'i'))), 1) = UPPER(${section})
+            `);
+      matchingPromptIds = (scopePrompts.rows as any[])
+        .filter((row) => normalizeEnglishPromptKey(row.prompt_text) === anchorKey)
+        .map((row) => Number(row.id))
+        .filter((id) => Number.isFinite(id) && id > 0);
+      if (!matchingPromptIds.length) {
+        matchingPromptIds = [promptIdFilter];
+      }
+    }
+
+    const promptIdClause =
+      matchingPromptIds?.length
+        ? sql`AND r.prompt_id IN (${sql.join(
+            matchingPromptIds.map((id) => sql`${id}`),
+            sql`, `,
+          )})`
+        : sql``;
+
     const rows =
       section === "A"
         ? Number.isFinite(bookId) && bookId > 0
@@ -3978,6 +5726,7 @@ app.get("/api/english/responses", authMiddleware, async (c: any) => {
               JOIN english_books b ON b.id = p.book_id
               JOIN users u ON u.id = r.user_id
               WHERE b.id = ${bookId} AND LEFT(UPPER(TRIM(REGEXP_REPLACE(COALESCE(p.section, ''), '^SECTION\\s*', '', 'i'))), 1) = 'A'
+              ${promptIdClause}
               ORDER BY r.updated_at DESC
             `)
           : await db.execute(sql`
@@ -3988,6 +5737,7 @@ app.get("/api/english/responses", authMiddleware, async (c: any) => {
               JOIN english_prompts p ON p.id = r.prompt_id
               JOIN users u ON u.id = r.user_id
               WHERE LEFT(UPPER(TRIM(REGEXP_REPLACE(COALESCE(p.section, ''), '^SECTION\\s*', '', 'i'))), 1) = 'A'
+              ${promptIdClause}
               ORDER BY r.updated_at DESC
             `)
         : await db.execute(sql`
@@ -3998,10 +5748,12 @@ app.get("/api/english/responses", authMiddleware, async (c: any) => {
             JOIN english_prompts p ON p.id = r.prompt_id
             JOIN users u ON u.id = r.user_id
             WHERE LEFT(UPPER(TRIM(REGEXP_REPLACE(COALESCE(p.section, ''), '^SECTION\\s*', '', 'i'))), 1) = UPPER(${section})
+            ${promptIdClause}
             ORDER BY r.updated_at DESC
           `);
 
     return c.json({
+      prompt: promptMeta,
       responses: (rows.rows as any[]).map((r) => ({
         id: Number(r.id),
         promptId: Number(r.prompt_id),
@@ -4049,6 +5801,16 @@ app.post("/api/english/responses/:id/ai-score", authMiddleware, async (c: any) =
       return c.json({ error: "Not allowed to score this response." }, 403);
     }
 
+    const execCtx = c.executionCtx as { waitUntil?: (p: Promise<unknown>) => void } | undefined;
+    if (execCtx?.waitUntil) {
+      execCtx.waitUntil(
+        runEnglishAiScore(db, env, responseId).catch((err) => {
+          console.error("[english/responses ai-score async]", errorChain(err));
+        }),
+      );
+      return c.json({ ok: true, aiScoringPending: true });
+    }
+
     const result = await runEnglishAiScore(db, env, responseId);
     if (!result) return c.json({ error: "Could not score response (text too short or missing)." }, 400);
     return c.json({ ok: true, aiScore: result });
@@ -4093,6 +5855,18 @@ function parseCustomQuestionPayload(body: Record<string, unknown>) {
   } else if (body.image_urls_json != null) {
     const imgs = parseFlexibleStringArray(body.image_urls_json);
     if (imgs?.length) imageUrlsJson = JSON.stringify(imgs.slice(0, 6));
+  }
+
+  let answerImageUrlsJson: string | null = null;
+  if (Array.isArray(body.answerImageUrls)) {
+    const urls = body.answerImageUrls
+      .map((u: unknown) => String(u ?? "").trim())
+      .filter(Boolean)
+      .slice(0, 6);
+    if (urls.length) answerImageUrlsJson = JSON.stringify(urls);
+  } else if (body.answer_image_urls_json != null) {
+    const imgs = parseFlexibleStringArray(body.answer_image_urls_json);
+    if (imgs?.length) answerImageUrlsJson = JSON.stringify(imgs.slice(0, 6));
   }
 
   const answerRaw = body.correctAnswer ?? body.answer;
@@ -4146,6 +5920,7 @@ function parseCustomQuestionPayload(body: Record<string, unknown>) {
     acceptedAnswersJson,
     answerPartsJson,
     imageUrlsJson,
+    answerImageUrlsJson,
     answer,
     marks,
     aiMarkingEnabled,
@@ -4172,6 +5947,7 @@ async function insertCustomQuestionRow(
         topic: p.topic,
         question: p.question,
         imageUrls: p.imageUrlsJson,
+        answerImageUrls: p.answerImageUrlsJson,
         options: p.optionsJson,
         answer: p.answer,
         acceptedAnswers: p.acceptedAnswersJson,
@@ -4242,7 +6018,7 @@ app.put("/api/admin/questions/:id", adminAccessMiddleware, async (c: any) => {
   if (body.topic != null) {
     updates.topic = cleanText(body.topic, 240) || "General";
   }
-  if (body.passage != null) {
+  if (body.passage !== undefined) {
     updates.passage = body.passage ? cleanText(body.passage, 3000) : null;
   }
   if (body.guidance != null) {
@@ -4283,10 +6059,36 @@ app.put("/api/admin/questions/:id", adminAccessMiddleware, async (c: any) => {
       .map((u: unknown) => String(u ?? "").trim())
       .filter(Boolean)
       .slice(0, 6);
-    updates.imageUrls = urls.length ? JSON.stringify(urls) : null;
+    if (urls.length) {
+      const imageError = validateStorableImageUrls(urls);
+      if (imageError) {
+        return c.json({ error: imageError }, 400);
+      }
+      updates.imageUrls = JSON.stringify(urls);
+    } else {
+      updates.imageUrls = null;
+    }
   } else if (body.image_urls_json != null) {
     const imgs = parseFlexibleStringArray(body.image_urls_json);
     updates.imageUrls = imgs?.length ? JSON.stringify(imgs.slice(0, 6)) : null;
+  }
+  if (Array.isArray(body.answerImageUrls)) {
+    const urls = body.answerImageUrls
+      .map((u: unknown) => String(u ?? "").trim())
+      .filter(Boolean)
+      .slice(0, 6);
+    if (urls.length) {
+      const imageError = validateStorableImageUrls(urls);
+      if (imageError) {
+        return c.json({ error: imageError }, 400);
+      }
+      updates.answerImageUrls = JSON.stringify(urls);
+    } else {
+      updates.answerImageUrls = null;
+    }
+  } else if (body.answer_image_urls_json != null) {
+    const imgs = parseFlexibleStringArray(body.answer_image_urls_json);
+    updates.answerImageUrls = imgs?.length ? JSON.stringify(imgs.slice(0, 6)) : null;
   }
   if (body.answerParts === null) {
     updates.answerPartsJson = null;
@@ -4303,41 +6105,30 @@ app.put("/api/admin/questions/:id", adminAccessMiddleware, async (c: any) => {
 
   const db = c.get("db");
   const questionId = Number(c.req.param("id"));
-  if (updates.question != null || updates.subjectId != null) {
-    const current = await db
-      .select({
-        subjectId: customQuestions.subjectId,
-        question: customQuestions.question,
-      })
-      .from(customQuestions)
-      .where(eq(customQuestions.id, questionId))
-      .limit(1);
-    if (!current.length) {
-      return c.json({ error: "Question not found." }, 404);
-    }
-    const nextSubjectId = String(
-      updates.subjectId ?? current[0].subjectId ?? "",
-    );
-    const nextQuestion = String(updates.question ?? current[0].question ?? "");
-    const dupeId = await findExistingQuestionByStem(
-      db,
-      nextSubjectId,
-      nextQuestion,
-      questionId,
-    );
-    if (dupeId) {
-      return c.json(
-        { error: "A question with this text already exists for this subject." },
-        409,
-      );
-    }
+  if (!Number.isFinite(questionId) || questionId <= 0) {
+    return c.json({ error: "Invalid question id." }, 400);
   }
 
-  await db
-    .update(customQuestions)
-    .set(updates)
-    .where(eq(customQuestions.id, questionId));
-  return c.json({ ok: true });
+  try {
+    await db
+      .update(customQuestions)
+      .set(updates)
+      .where(eq(customQuestions.id, questionId));
+    return c.json({ ok: true });
+  } catch (e: unknown) {
+    const msg = errorChain(e);
+    console.error("[admin/questions PUT]", questionId, msg);
+    if (/payload too large|query too large|statement too large/i.test(msg)) {
+      return c.json(
+        {
+          error:
+            "Image data is too large. Crop the figure tighter or use a smaller screenshot.",
+        },
+        400,
+      );
+    }
+    return c.json({ error: msg || "Failed to update question." }, 500);
+  }
 });
 
 app.post("/api/admin/questions/bulk", adminAccessMiddleware, async (c: any) => {
@@ -4403,6 +6194,8 @@ app.post(
         if (!imgs?.length) {
           throw new Error("image_urls_json must contain at least one URL.");
         }
+        const imageError = validateStorableImageUrls(imgs);
+        if (imageError) throw new Error(imageError);
         const imageUrlsJson = JSON.stringify(imgs.slice(0, 6));
         const questionId = Number(m.questionId);
         if (Number.isFinite(questionId) && questionId > 0) {
@@ -4596,90 +6389,29 @@ app.post("/api/admin/questions/delete-by-subject", adminAccessMiddleware, async 
   }
 });
 
+const ADMIN_AI_DISABLED =
+  "Admin AI features are disabled. OpenAI is used only for English scoring, handwriting marking, and long-answer marking.";
+
 app.get("/api/admin/ai/status", adminAccessMiddleware, async (c: any) => {
   const env = c.env as Env;
   return c.json({
     configured: openAiConfigured(env),
     model: openAiModel(env),
+    adminFeaturesEnabled: false,
+    studentMarkingEnabled: openAiConfigured(env),
   });
 });
 
-app.post("/api/admin/ai/parse-questions", adminAccessMiddleware, async (c: any) => {
-  try {
-    const env = c.env as Env;
-    if (!openAiConfigured(env)) {
-      return c.json({ error: "OPENAI_API_KEY is not configured." }, 503);
-    }
-    const body = await c.req.json();
-    const rawText = cleanText(String(body?.rawText ?? body?.text ?? ""), 120000);
-    if (!rawText) return c.json({ error: "rawText is required." }, 400);
-    const defaultSubjectId = canonicalSubjectId(
-      cleanText(String(body?.subjectId ?? body?.subject_id ?? "methods"), 80),
-    );
+app.post("/api/admin/ai/fill-answers", adminAccessMiddleware, async (c: any) => {
+  return c.json({ error: ADMIN_AI_DISABLED }, 503);
+});
 
-    const questions = await parseQuestionsFromText(env, rawText, defaultSubjectId);
-    if (!questions.length) {
-      return c.json({ error: "No questions could be extracted from the text." }, 400);
-    }
-    return c.json({ ok: true, questions });
-  } catch (e) {
-    return c.json({ error: errorChain(e) }, 500);
-  }
+app.post("/api/admin/ai/parse-questions", adminAccessMiddleware, async (c: any) => {
+  return c.json({ error: ADMIN_AI_DISABLED }, 503);
 });
 
 app.post("/api/admin/ai/question-chat", adminAccessMiddleware, async (c: any) => {
-  try {
-    const env = c.env as Env;
-    if (!openAiConfigured(env)) {
-      return c.json({ error: "OPENAI_API_KEY is not configured." }, 503);
-    }
-    const body = await c.req.json();
-    const subjectId = canonicalSubjectId(
-      cleanText(String(body?.subjectId ?? body?.subject_id ?? "methods"), 80),
-    );
-    const resources = cleanText(String(body?.resources ?? ""), 80000);
-    const rawMessages = Array.isArray(body?.messages) ? body.messages : [];
-    const messages = rawMessages
-      .map((m: Record<string, unknown>) => ({
-        role: String(m.role ?? "").toLowerCase() === "assistant" ? "assistant" as const : "user" as const,
-        content: cleanText(String(m.content ?? ""), 12000),
-      }))
-      .filter((m: { content: string }) => m.content);
-    if (!messages.length) {
-      return c.json({ error: "messages array is required." }, 400);
-    }
-
-    const topicOptions = Array.isArray(body?.topicOptions)
-      ? body.topicOptions.map((t: unknown) => String(t ?? "").trim()).filter(Boolean).slice(0, 40)
-      : [];
-
-    const draftRaw = Array.isArray(body?.currentDraft) ? body.currentDraft : [];
-    const currentDraft = draftRaw
-      .map((row: Record<string, unknown>) => {
-        const q = String(row.question ?? "").trim();
-        if (!q) return null;
-        return {
-          subjectId: String(row.subjectId ?? subjectId),
-          type: String(row.type ?? "short_answer"),
-          topic: String(row.topic ?? "General"),
-          question: q,
-          marks: Number.isFinite(Number(row.marks)) ? Math.round(Number(row.marks)) : undefined,
-        };
-      })
-      .filter(Boolean) as { subjectId: string; type: string; topic: string; question: string; marks?: number }[];
-
-    const result = await questionGenerationChat(env, {
-      subjectId,
-      topicOptions,
-      messages,
-      resources: resources || undefined,
-      currentDraft: currentDraft.length ? currentDraft : undefined,
-    });
-
-    return c.json({ ok: true, message: result.message, questions: result.questions });
-  } catch (e) {
-    return c.json({ error: errorChain(e) }, 500);
-  }
+  return c.json({ error: ADMIN_AI_DISABLED }, 503);
 });
 
 app.get("/api/admin/google-sheet/status", adminAccessMiddleware, async (c: any) => {

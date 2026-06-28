@@ -1,8 +1,10 @@
 import { Routes, Route, Navigate, useSearchParams } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { Toaster } from "@/components/ui/sonner";
 import { lazy, Suspense, type ReactNode } from "react";
 import { StudyTimerProvider } from "@/context/StudyTimerContext";
+import { HandwritingModeProvider } from "@/context/HandwritingModeContext";
 import { ADMIN_EMAIL, STORAGE_KEYS } from "@/lib/constants";
 import LandingPage from "@/pages/LandingPage";
 import FeedbackPage from "@/pages/FeedbackPage";
@@ -22,8 +24,14 @@ const EnglishPromptResponsesPage = lazy(
   () => import("@/pages/EnglishPromptResponsesPage"),
 );
 const AdminPage = lazy(() => import("@/pages/AdminPage"));
+const CreatePage = lazy(() => import("@/pages/CreatePage"));
+const TeacherPage = lazy(() => import("@/pages/TeacherPage"));
+const JoinClassPage = lazy(() => import("@/pages/JoinClassPage"));
 const UploadWrittenImagesPage = lazy(() => import("@/pages/UploadWrittenImagesPage"));
 const PracticeSetupPage = lazy(() => import("@/pages/PracticeSetupPage"));
+const PracticeExamsPage = lazy(() => import("@/pages/PracticeExamsPage"));
+const PracticeExamPapersPage = lazy(() => import("@/pages/PracticeExamPapersPage"));
+const PracticeExamDetailPage = lazy(() => import("@/pages/PracticeExamDetailPage"));
 
 function LoadingFallback() {
   return (
@@ -164,6 +172,33 @@ function AppRoutes() {
         />
 
         <Route
+          path="/practice/:subjectId/exams"
+          element={
+            <ProtectedRoute>
+              <PracticeExamsPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/practice/:subjectId/exams/:year"
+          element={
+            <ProtectedRoute>
+              <PracticeExamPapersPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/practice/:subjectId/exams/:year/:examNumber"
+          element={
+            <ProtectedRoute>
+              <PracticeExamDetailPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
           path="/quiz/:subjectId"
           element={
             <ProtectedRoute>
@@ -218,6 +253,39 @@ function AppRoutes() {
         />
 
         <Route
+          path="/teacher"
+          element={
+            <ProtectedRoute>
+              <AdminOnlyRoute>
+                <TeacherPage />
+              </AdminOnlyRoute>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/teacher/create"
+          element={
+            <ProtectedRoute>
+              <AdminOnlyRoute>
+                <CreatePage />
+              </AdminOnlyRoute>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route path="/create" element={<Navigate to="/teacher/create" replace />} />
+
+        <Route
+          path="/join-class"
+          element={
+            <ProtectedRoute>
+              <JoinClassPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
           path="/admin"
           element={
             <ProtectedRoute>
@@ -241,11 +309,14 @@ function AppRoutes() {
 export default function App() {
   return (
     <AuthProvider>
-      <TooltipProvider>
-        <StudyTimerProvider>
-          <AppRoutes />
-        </StudyTimerProvider>
-      </TooltipProvider>
+      <HandwritingModeProvider>
+        <TooltipProvider>
+          <StudyTimerProvider>
+            <AppRoutes />
+            <Toaster richColors closeButton position="top-center" />
+          </StudyTimerProvider>
+        </TooltipProvider>
+      </HandwritingModeProvider>
     </AuthProvider>
   );
 }

@@ -32,6 +32,39 @@ function stemKey(question) {
     .slice(0, 280);
 }
 
+const CANONICAL_TOPICS = [
+  "Data analysis",
+  "Recursion and financial modelling",
+  "Matrices",
+  "Networks and decision mathematics",
+];
+
+/** Assign one of the four General Maths Units 3 & 4 topics from stored label + stem. */
+function inferGeneralMathsTopic(row) {
+  const label = String(row.topic ?? "").trim();
+  if (CANONICAL_TOPICS.includes(label)) return label;
+
+  const blob = `${label}\n${row.question ?? ""}\n${row.passage ?? ""}`.toLowerCase();
+  if (/matrix|matrices|markov|transition\s+matrix|pmatrix|begin\{pmatrix\}/.test(blob)) {
+    return "Matrices";
+  }
+  if (
+    /spanning\s+tree|critical\s+path|euler|hamilton|dijkstra|network|vertex|vertices|scheduling|float|slack/.test(
+      blob,
+    )
+  ) {
+    return "Networks and decision mathematics";
+  }
+  if (
+    /compound|loan|depreciat|annuit|perpetuit|sequence|recurrence|interest|term\s+deposit|savings|credit\s+card|endowment/.test(
+      blob,
+    )
+  ) {
+    return "Recursion and financial modelling";
+  }
+  return "Data analysis";
+}
+
 const databaseUrl = loadDatabaseUrl();
 if (!databaseUrl) {
   console.error("Missing DATABASE_URL (.dev.vars or env).");
@@ -47,7 +80,7 @@ const gmRows = await sql`
 const gmStems = new Set(gmRows.map((r) => stemKey(r.question)));
 
 const demoRows = await sql`
-  SELECT id, type, topic, question, marks
+  SELECT id, type, topic, question, passage, marks
   FROM custom_questions
   WHERE LOWER(TRIM(subject_id)) = 'demo'
   ORDER BY id
@@ -93,9 +126,11 @@ if (!APPLY) {
 
 let moved = 0;
 for (const r of toMove) {
+  const topic = inferGeneralMathsTopic(r);
   await sql`
     UPDATE custom_questions
-    SET subject_id = 'general-maths'
+    SET subject_id = 'general-maths',
+        topic = ${topic}
     WHERE id = ${r.id}
   `;
   moved++;

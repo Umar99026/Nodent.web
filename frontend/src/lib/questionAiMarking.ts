@@ -1,5 +1,11 @@
-import { apiFetch } from "@/lib/api";
+import { AI_FETCH_TIMEOUT_MS, apiFetch } from "@/lib/api";
 import { API_PATHS } from "@/lib/constants";
+import { compressDataUrlIfLarge, prepareHandwritingForMarking } from "@/lib/imageCompressor";
+import {
+  collectHandwritingImages,
+  handwritingAllowedForSubject,
+  isHandwritingValue,
+} from "@/lib/handwritingMode";
 import { isAutoMarkableAnswer } from "@/lib/utils";
 import type { AnswerPart, Question } from "@/lib/subjects";
 
@@ -16,25 +22,6 @@ export function isMathsSubject(subjectId?: string): boolean {
   return MATHS_SUBJECT_IDS.has(sid);
 }
 
-/** Strip $...$ for verb detection in maths stems. */
-function stripLatexForDetection(text: string): string {
-  return String(text ?? "")
-    .replace(/\$[^$]*\$/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-const OPEN_ENDED_STEM_RE =
-  /\b(explain|prove|show\s+that|justify|verify|discuss|outline|identify|describe|compare|evaluate|comment|analyse|analyze|deduce|demonstrate|interpret|suggest|account\s+for|give\s+reasons|how\s+does|how\s+do|why\s+does|why\s+do|why\s+is|why\s+are|what\s+evidence|in\s+words|argue|assess|examine|sketch\s+the\s+graph\s+of|state\s+a\s+sequence)\b/i;
-
-export function questionStemNeedsAiMarking(
-  questionText: string,
-  partLabels: string[] = [],
-): boolean {
-  const texts = [questionText, ...partLabels].map(stripLatexForDetection).filter(Boolean);
-  return texts.some((t) => OPEN_ENDED_STEM_RE.test(t));
-}
-
 export function acceptedAnswersNeedAiMarking(acceptedAnswers: string[]): boolean {
   const accepted = acceptedAnswers.map((a) => String(a ?? "").trim()).filter(Boolean);
   if (!accepted.length) return false;
@@ -43,17 +30,12 @@ export function acceptedAnswersNeedAiMarking(acceptedAnswers: string[]): boolean
   return true;
 }
 
-function isShortType(questionType?: Question["type"] | string): boolean {
-  const t = String(questionType ?? "");
-  return t === "short" || t === "short_answer";
-}
-
 function isLongType(questionType?: Question["type"] | string): boolean {
   const t = String(questionType ?? "");
   return t === "long" || t === "long_answer";
 }
 
-/** Whether smart marking should run (open-ended stem, prose rubric, or long type). */
+/** OpenAI text marking: long-answer questions only (handwriting uses a separate path). */
 export function shouldUseAiMarking(input: {
   questionText: string;
   partLabels?: string[];
@@ -61,22 +43,20 @@ export function shouldUseAiMarking(input: {
   questionType?: Question["type"] | string;
   subjectId?: string;
 }): boolean {
-  const partLabels = input.partLabels ?? [];
   const type = input.questionType;
   const accepted = input.acceptedAnswers ?? [];
 
   if (type === "mcq") return false;
+  if (!isLongType(type)) return false;
 
   if (isMathsSubject(input.subjectId)) {
-    if (isShortType(type)) return false;
-    if (!isLongType(type)) return false;
-    if (questionStemNeedsAiMarking(input.questionText, partLabels)) return true;
     return acceptedAnswersNeedAiMarking(accepted);
   }
+  return true;
+}
 
-  if (questionStemNeedsAiMarking(input.questionText, partLabels)) return true;
-  if (isLongType(type)) return true;
-  if (acceptedAnswersNeedAiMarking(accepted)) return true;
+/** Diagram-label slots use exact matching — not OpenAI. */
+export function shouldUseAiForFigureLabels(_parts?: AnswerPart[]): boolean {
   return false;
 }
 
@@ -89,11 +69,10 @@ export function resolveAiMarking(input: {
   questionType?: Question["type"] | string;
   subjectId?: string;
 }): boolean {
-  const inferred = shouldUseAiMarking(input);
   if (input.useAiMarking === false) return false;
-  if (isMathsSubject(input.subjectId)) return inferred;
+  if (!isLongType(input.questionType)) return false;
   if (input.useAiMarking === true) return true;
-  return inferred;
+  return shouldUseAiMarking(input);
 }
 
 export function inferUseAiMarkingForImport(input: {
@@ -112,6 +91,17 @@ export function inferUseAiMarkingForImport(input: {
     subjectId: input.subjectId,
   });
 }
+
+import type { AiMarkPartResult } from "@/components/quiz/AiMarkingFeedbackPanel";
+import { handwritingMarkUserError, sanitizeUserFacingError } from "@/lib/userFacingErrors";
+
+export type SmartMarkResult = {
+  correct: boolean;
+  scorePercent: number;
+  feedback: string;
+  correctAnswers?: string[];
+  partResults?: AiMarkPartResult[];
+};
 
 export type SmartMarkQuestionPayload = {
   type: string;
@@ -132,36 +122,178 @@ export async function requestSmartMark(
   subjectId: string,
   questionKey: string,
   input: {
-    responseText: string;
+    responseText?: string;
+    responseImages?: string[];
     studentParts?: string[];
     question: SmartMarkQuestionPayload;
   },
-): Promise<{
-  correct: boolean;
-  scorePercent: number;
-  feedback: string;
-  partResults?: { index: number; correct: boolean }[];
-} | null> {
+): Promise<SmartMarkResult | null> {
   try {
+    const handwritingImages = (input.responseImages ?? []).filter(isHandwritingValue);
+    const compressedImages = handwritingImages.length
+      ? await Promise.all(
+          handwritingImages.map((img) => prepareHandwritingForMarking(img)),
+        )
+      : undefined;
+    const responseText =
+      input.responseText && !isHandwritingValue(input.responseText)
+        ? input.responseText
+        : undefined;
+    const studentParts = input.studentParts
+      ?.map((part) => String(part ?? "").trim())
+      .filter((part) => part.length > 0);
+
     const ai = await apiFetch<{
-      mark: {
-        correct: boolean;
-        scorePercent: number;
-        feedback: string;
-        partResults?: { index: number; correct: boolean }[];
-      };
+      mark: SmartMarkResult;
     }>(API_PATHS.written.mark(subjectId, questionKey), {
       method: "POST",
+      timeoutMs: AI_FETCH_TIMEOUT_MS,
       body: JSON.stringify({
-        responseText: input.responseText,
-        studentParts: input.studentParts,
+        responseText,
+        responseImages: compressedImages,
+        studentParts,
         question: input.question,
       }),
     });
     return ai?.mark ?? null;
-  } catch {
-    return null;
+  } catch (err) {
+    throw new Error(
+      sanitizeUserFacingError(
+        err instanceof Error ? err.message : err,
+        "Could not mark your answer. Try again.",
+      ),
+    );
   }
+}
+
+export async function requestHandwritingMark(
+  subjectId: string,
+  questionKey: string,
+  input: {
+    answer: string;
+    parts: string[];
+    isMultipart: boolean;
+    question: SmartMarkQuestionPayload;
+  },
+): Promise<SmartMarkResult | null> {
+  if (!handwritingAllowedForSubject(subjectId)) return null;
+  const images = collectHandwritingImages(input.answer, input.parts, input.isMultipart);
+  if (!images.length) return null;
+  try {
+    return await requestSmartMark(subjectId, questionKey, {
+      responseImages: images,
+      question: input.question,
+    });
+  } catch (err) {
+    throw new Error(handwritingMarkUserError(err instanceof Error ? err.message : err));
+  }
+}
+
+/** Prepend what we read from the drawing when the model returns it. */
+function enrichPartWithInterpretation(part: AiMarkPartResult): AiMarkPartResult {
+  const read = String(part.studentAnswerRead ?? "").trim();
+  const fb = String(part.partFeedback ?? "").trim();
+  if (!read) return part;
+  const line = `• We read your drawing as: ${read}`;
+  if (fb.includes(read)) return part;
+  return { ...part, partFeedback: fb ? `${line}\n${fb}` : line };
+}
+
+/** Fill in correct answers / feedback when the model omits them. */
+export function enrichHandwritingMarkResult(
+  ai: SmartMarkResult,
+  expectedAnswers: string[],
+): SmartMarkResult {
+  const answers = expectedAnswers.map((a) => String(a ?? "").trim()).filter(Boolean);
+  let enriched: SmartMarkResult = { ...ai };
+
+  if (!ai.correct && !ai.correctAnswers?.length && answers.length) {
+    enriched = { ...enriched, correctAnswers: answers };
+  }
+
+  if (answers.length) {
+    if (enriched.partResults?.length) {
+      enriched = {
+        ...enriched,
+        partResults: enriched.partResults.map((p, idx) =>
+          enrichPartWithInterpretation({
+            ...p,
+            correctAnswer: p.correctAnswer ?? answers[p.index ?? idx],
+          }),
+        ),
+      };
+    } else if (!ai.correct && answers.length > 1) {
+      enriched = {
+        ...enriched,
+        partResults: answers.map((ans, index) => ({
+          index,
+          correct: false,
+          marksAwarded: 0,
+          correctAnswer: ans,
+        })),
+      };
+    }
+    // Ensure every multipart slot has a partResults row for inline UI.
+    if (answers.length > 1 && enriched.partResults?.length) {
+      const byIndex = new Map(enriched.partResults.map((p) => [p.index, p]));
+      enriched = {
+        ...enriched,
+        partResults: answers.map((ans, index) => {
+          const existing = byIndex.get(index);
+          if (existing) return existing;
+          return {
+            index,
+            correct: Boolean(ai.correct),
+            marksAwarded: 0,
+            correctAnswer: ans,
+            partFeedback: ai.correct
+              ? "• Your working and answer look correct."
+              : undefined,
+          };
+        }),
+      };
+    }
+  }
+
+  if (!String(enriched.feedback ?? "").trim() && !ai.correct) {
+    const ans = enriched.correctAnswers ?? answers;
+    enriched = {
+      ...enriched,
+      feedback: ans.length
+        ? `• Incorrect.\n• Correct answer: ${ans.join("; ")}`
+        : `• Incorrect. Review the model solution.`,
+    };
+  }
+
+  return enriched;
+}
+
+export function buildFallbackHandwritingMark(
+  expectedAnswers: string[],
+): SmartMarkResult {
+  const answers = expectedAnswers.map((a) => String(a ?? "").trim()).filter(Boolean);
+  return {
+    correct: false,
+    scorePercent: 0,
+    feedback: answers.length
+      ? `• Could not read your drawing right now.\n• Correct answer: ${answers.join("; ")}`
+      : `• Could not read your drawing. Try again.`,
+    correctAnswers: answers.length ? answers : undefined,
+    partResults: answers.map((ans, index) => ({
+      index,
+      correct: false,
+      marksAwarded: 0,
+      correctAnswer: ans,
+      partFeedback: `• Could not read your drawing right now.\n• Model answer for this part: ${ans}`,
+    })),
+  };
+}
+
+export function partMarkAt(
+  ai: SmartMarkResult | null | undefined,
+  index: number,
+): AiMarkPartResult | undefined {
+  return ai?.partResults?.find((p) => p.index === index);
 }
 
 export function buildSmartMarkPayload(

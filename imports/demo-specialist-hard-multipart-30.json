@@ -1,0 +1,424 @@
+{
+  "questions": [
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Logic and proof",
+      "question": "A security keypad accepts codes $k$ such that $k^2\\equiv 1\\pmod{8}$. The manufacturer requires $k>3$.",
+      "acceptedAnswers": ["5", "1"],
+      "marks": 4,
+      "guidance": "Test odd residues mod $8$. For $7^{50}\\pmod 4$: since $7\\equiv 3\\pmod 4$ and $3^2\\equiv 1$, we get $7^{50}\\equiv 1$.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find the smallest valid code $k$.", "marks": 2, "acceptedAnswer": "5", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) Find the remainder when $7^{50}$ is divided by $4$.", "marks": 2, "acceptedAnswer": "1", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Logic and proof",
+      "question": "An encryption key must satisfy $n\\equiv 2\\pmod 3$ and $n\\equiv 3\\pmod 5$, with $0<n<30$.",
+      "acceptedAnswers": ["8", "23"],
+      "marks": 4,
+      "guidance": "Solve the simultaneous congruences using the Chinese remainder idea on the given modulus.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find the smallest positive solution.", "marks": 2, "acceptedAnswer": "8", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) Find the next solution below $30$.", "marks": 2, "acceptedAnswer": "23", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Complex numbers and algebra",
+      "question": "A signal is modelled by $z=4-3i$ in the complex plane.",
+      "acceptedAnswers": ["5", "25"],
+      "marks": 4,
+      "guidance": "$|z|=\\sqrt{4^2+(-3)^2}$ and $z\\bar z=|z|^2$.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find $|z|$.", "marks": 2, "acceptedAnswer": "5", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) Find $z\\bar{z}$.", "marks": 2, "acceptedAnswer": "25", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Complex numbers and algebra",
+      "question": "Two oscillations combine as $w=(2+i)(3-i)$.",
+      "acceptedAnswers": ["5", "26"],
+      "marks": 4,
+      "guidance": "Expand the product, then use $|w|^2=(\\operatorname{Re} w)^2+(\\operatorname{Im} w)^2$.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find $\\operatorname{Re}(w)$.", "marks": 2, "acceptedAnswer": "5", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) Find $|w|^2$.", "marks": 2, "acceptedAnswer": "26", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Complex numbers and algebra",
+      "question": "A rotation in the plane is represented by $z=1+\\sqrt{3}i$.",
+      "acceptedAnswers": ["2", "3"],
+      "marks": 4,
+      "guidance": "$|z|=2$ and $\\arg(z)=\\pi/3$.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find $|z|$.", "marks": 2, "acceptedAnswer": "2", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) If $\\arg(z)=\\dfrac{\\pi}{k}$, find $k$.", "marks": 2, "acceptedAnswer": "3", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Functions, relations and graphs",
+      "question": "A curve is given parametrically by $x=t^2$ and $y=t^3-t$ for $t\\ge 0$.",
+      "acceptedAnswers": ["2.75", "0"],
+      "marks": 4,
+      "guidance": "$\\frac{dy}{dx}=\\frac{dy/dt}{dx/dt}$. At a cusp-like point where $dx/dt=0$, use limits or check $t=0$.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find the gradient of the tangent at $t=2$.", "marks": 2, "acceptedAnswer": "2.75", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) Find $y$ when $t=0$.", "marks": 2, "acceptedAnswer": "0", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Functions, relations and graphs",
+      "question": "The output of a process is $f(x)=\\dfrac{x^2}{1+x^2}$ for $x\\ge 0$.",
+      "acceptedAnswers": ["0", "0.8"],
+      "marks": 4,
+      "guidance": "Find stationary points using $f'(x)=\\frac{2x}{(1+x^2)^2}$; on $[0,2]$ the maximum occurs at an endpoint or where $f'$ changes sign.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find $f'(0)$.", "marks": 2, "acceptedAnswer": "0", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) Find the maximum value of $f(x)$ on $0\\le x\\le 2$.", "marks": 2, "acceptedAnswer": "0.8", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Differential calculus",
+      "question": "A damped response is modelled by $f(x)=x^2e^{-x}$ for $x\\ge 0$.",
+      "acceptedAnswers": ["0", "0.541"],
+      "marks": 4,
+      "guidance": "$f'(x)=e^{-x}(2x-x^2)$, so a stationary point occurs at $x=2$.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find $f'(2)$.", "marks": 2, "acceptedAnswer": "0", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) Find $f(2)$, correct to three decimal places.", "marks": 2, "acceptedAnswer": "0.541", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Differential calculus",
+      "question": "A machine's error rate is $E(x)=\\dfrac{x}{1+x^2}$ for $x>0$.",
+      "acceptedAnswers": ["1", "0.5"],
+      "marks": 4,
+      "guidance": "Use the quotient rule or simplify before differentiating.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find the value of $x$ that minimises $E(x)$.", "marks": 2, "acceptedAnswer": "1", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) Hence find the minimum value of $E(x)$.", "marks": 2, "acceptedAnswer": "0.5", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Differential calculus",
+      "question": "A bridge arch has shape $y=12x^2-x^4$ for $-\\sqrt{12}\\le x\\le \\sqrt{12}$, with height in metres.",
+      "acceptedAnswers": ["36", "24"],
+      "marks": 4,
+      "guidance": "$y'=24x-4x^3=4x(6-x^2)$ and $y''=24-12x^2$.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find the maximum height of the arch.", "marks": 2, "acceptedAnswer": "36", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) Find $y''(0)$.", "marks": 2, "acceptedAnswer": "24", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Integral calculus",
+      "question": "A panel's projected area under $y=2x+1$ from $x=0$ to $x=3$ is being estimated for fabrication.",
+      "acceptedAnswers": ["12", "4"],
+      "marks": 4,
+      "guidance": "Area is $\\int_0^3(2x+1)\\,dx$.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find the exact area.", "marks": 2, "acceptedAnswer": "12", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) The same integral equals $3\\times$ (average height). Find that average height.", "marks": 2, "acceptedAnswer": "4", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Integral calculus",
+      "question": "A sensor records a rate $R(x)=\\dfrac{1}{x}$ for $1\\le x\\le e$ (units scaled so the integral gives total load).",
+      "acceptedAnswers": ["1", "0.693"],
+      "marks": 4,
+      "guidance": "Total load is $\\int_1^e \\frac{1}{x}\\,dx$.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find the total load over $[1,e]$.", "marks": 2, "acceptedAnswer": "1", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) Find the load over $[1,2]$, correct to three decimal places.", "marks": 2, "acceptedAnswer": "0.693", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Differential equations",
+      "question": "A metal rod cools in a room held at $15^\\circ\\text{C}$. Its temperature satisfies $\\dfrac{dT}{dt}=-0.2\\,(T-15)$ with $T(0)=85$.",
+      "acceptedAnswers": ["40.75", "15"],
+      "marks": 4,
+      "guidance": "Solution form $T=15+70e^{-0.2t}$.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find $T(5)$, correct to two decimal places.", "marks": 2, "acceptedAnswer": "40.75", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) State the long-term limiting temperature.", "marks": 2, "acceptedAnswer": "15", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Differential equations",
+      "question": "A tank contains a chemical that approaches saturation level $6$ g/L. The amount $y$ (g/L) satisfies $\\dfrac{dy}{dt}=3-\\dfrac{y}{2}$, with $y(0)=0$.",
+      "acceptedAnswers": ["3.79", "6"],
+      "marks": 4,
+      "guidance": "Solve to $y=6-6e^{-t/2}$.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find $y(2)$, correct to two decimal places.", "marks": 2, "acceptedAnswer": "3.79", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) State the saturation level.", "marks": 2, "acceptedAnswer": "6", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Differential equations",
+      "question": "A spring system has displacement $y$ (cm) modelled by $y''+4y=0$ with $y(0)=3$ and $y'(0)=0$.",
+      "acceptedAnswers": ["0", "3"],
+      "marks": 4,
+      "guidance": "Solution is $y=3\\cos(2x)$.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find $y\\left(\\dfrac{\\pi}{4}\\right)$.", "marks": 2, "acceptedAnswer": "0", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) Find the amplitude of the motion.", "marks": 2, "acceptedAnswer": "3", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Kinematics",
+      "question": "A drone moves in the plane with position $\\mathbf{r}(t)=(t^2,\\,t^3-2t)$, where $t$ is in seconds.",
+      "acceptedAnswers": ["10.77", "4"],
+      "marks": 4,
+      "guidance": "Velocity is $\\mathbf{v}(t)=(2t,\\,3t^2-2)$.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find the speed at $t=2$, correct to two decimal places.", "marks": 2, "acceptedAnswer": "10.77", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) Find the $x$-component of velocity at $t=2$.", "marks": 2, "acceptedAnswer": "4", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Kinematics",
+      "question": "A particle moves along a line with displacement $s(t)=t^3-9t^2+24t$ metres, $t\\ge 0$.",
+      "acceptedAnswers": ["20", "16"],
+      "marks": 4,
+      "guidance": "Solve $v(t)=3t^2-18t+24=0$ for rest times, then evaluate $s(t)$.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find the displacement at the first instant the particle is at rest.", "marks": 2, "acceptedAnswer": "20", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) Find the displacement at the next instant the particle is at rest.", "marks": 2, "acceptedAnswer": "16", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Kinematics",
+      "question": "A projectile is modelled by $\\mathbf{r}(t)=(40t,\\,30t-5t^2)$ with position in metres and $t$ in seconds.",
+      "acceptedAnswers": ["3", "45"],
+      "marks": 4,
+      "guidance": "Maximum height occurs when the vertical velocity is zero.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find the time of maximum height.", "marks": 2, "acceptedAnswer": "3", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) Hence find the maximum height.", "marks": 2, "acceptedAnswer": "45", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Vectors in two and three dimensions",
+      "question": "Forces on a bracket are $\\mathbf{a}=(2,-1,3)$ N and $\\mathbf{b}=(-1,4,2)$ N.",
+      "acceptedAnswers": ["8", "17.15"],
+      "marks": 4,
+      "guidance": "Use $\\mathbf{a}\\cdot\\mathbf{b}$ and $|\\mathbf{a}\\times\\mathbf{b}|$.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find $\\mathbf{a}\\cdot\\mathbf{b}$.", "marks": 2, "acceptedAnswer": "8", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) Find $|\\mathbf{a}\\times\\mathbf{b}|$, correct to two decimal places.", "marks": 2, "acceptedAnswer": "17.15", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Vectors in two and three dimensions",
+      "question": "A ship sails with velocity $\\mathbf{v}=(12,5)$ km/h relative to the water. A current adds $\\mathbf{c}=(3,-4)$ km/h.",
+      "acceptedAnswers": ["13", "15.03"],
+      "marks": 4,
+      "guidance": "Ground velocity is $\\mathbf{v}+\\mathbf{c}$.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find the speed of the ship relative to the water.", "marks": 2, "acceptedAnswer": "13", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) Find the speed over the ground, correct to two decimal places.", "marks": 2, "acceptedAnswer": "15.03", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Vectors in two and three dimensions",
+      "question": "A vector $\\mathbf{p}=(6,8)$ is resolved into components parallel and perpendicular to $\\mathbf{d}=(1,0)$.",
+      "acceptedAnswers": ["6", "8"],
+      "marks": 4,
+      "guidance": "Parallel component uses projection onto $\\mathbf{d}$; perpendicular magnitude from Pythagoras.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find the scalar resolute of $\\mathbf{p}$ in the direction of $\\mathbf{d}$.", "marks": 2, "acceptedAnswer": "6", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) Find the magnitude of the perpendicular component.", "marks": 2, "acceptedAnswer": "8", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Lines and planes in 3D",
+      "question": "A laser beam follows $\\mathbf{r}(\\lambda)=(1,2,3)+\\lambda(2,1,-1)$. It meets the plane $2x+y+z=5$.",
+      "acceptedAnswers": ["-0.5", "3.5"],
+      "marks": 4,
+      "guidance": "Substitute the line into the plane equation to find $\\lambda$, then the $z$-coordinate.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find the parameter $\\lambda$ at the intersection.", "marks": 2, "acceptedAnswer": "-0.5", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) Find the $z$-coordinate of the intersection point.", "marks": 2, "acceptedAnswer": "3.5", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Lines and planes in 3D",
+      "question": "A beacon is at point $B(1,1,1)$. A roof plane has equation $x+y+z=9$.",
+      "acceptedAnswers": ["3.46", "3"],
+      "marks": 4,
+      "guidance": "Use perpendicular distance $\\dfrac{|ax_0+by_0+cz_0+d|}{\\sqrt{a^2+b^2+c^2}}$.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find the shortest distance from $B$ to the plane, correct to two decimal places.", "marks": 2, "acceptedAnswer": "3.46", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) Find the value of $x+y+z$ at $B$.", "marks": 2, "acceptedAnswer": "3", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Vector calculus",
+      "question": "A fluid flow in the plane has velocity field $\\mathbf{F}(x,y)=(x^2,\\,y^2)$.",
+      "acceptedAnswers": ["6", "4"],
+      "marks": 4,
+      "guidance": "Divergence is $\\dfrac{\\partial P}{\\partial x}+\\dfrac{\\partial Q}{\\partial y}$.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find $\\nabla\\cdot\\mathbf{F}$ at $(1,2)$.", "marks": 2, "acceptedAnswer": "6", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) Find the $x$-component of $\\mathbf{F}$ at $(2,3)$.", "marks": 2, "acceptedAnswer": "4", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Vector calculus",
+      "question": "A circulation field is $\\mathbf{F}(x,y)=(-y,\\,x)$ on the plane.",
+      "acceptedAnswers": ["0", "2"],
+      "marks": 4,
+      "guidance": "Divergence of $(-y,x)$ is zero; curl in 2D scalar form is $\\dfrac{\\partial Q}{\\partial x}-\\dfrac{\\partial P}{\\partial y}$.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find $\\nabla\\cdot\\mathbf{F}$.", "marks": 2, "acceptedAnswer": "0", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) Find the scalar curl $\\dfrac{\\partial Q}{\\partial x}-\\dfrac{\\partial P}{\\partial y}$.", "marks": 2, "acceptedAnswer": "2", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Random variables and sampling",
+      "question": "Each batch has $12$ items inspected independently; the defect rate is $0.4$. Let $X$ be the defect count.",
+      "acceptedAnswers": ["4.8", "2.88"],
+      "marks": 4,
+      "guidance": "$X\\sim B(12,0.4)$.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find $E(X)$.", "marks": 2, "acceptedAnswer": "4.8", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) Find $\\operatorname{Var}(X)$.", "marks": 2, "acceptedAnswer": "2.88", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Random variables and sampling",
+      "question": "A courier's wait time $W$ (minutes) is uniform on $[2,8]$.",
+      "acceptedAnswers": ["5", "3"],
+      "marks": 4,
+      "guidance": "For $U(a,b)$: $E(W)=\\dfrac{a+b}{2}$ and $\\operatorname{Var}(W)=\\dfrac{(b-a)^2}{12}$.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find $E(W)$.", "marks": 2, "acceptedAnswer": "5", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) Find $\\operatorname{Var}(W)$.", "marks": 2, "acceptedAnswer": "3", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Random variables and sampling",
+      "question": "Component lifetimes $T$ (years) are exponential with rate $\\lambda=0.25$, so $P(T>t)=e^{-0.25t}$.",
+      "acceptedAnswers": ["4", "0.135"],
+      "marks": 4,
+      "guidance": "Mean is $1/\\lambda$; use $P(T>8)=e^{-2}$.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find $E(T)$.", "marks": 2, "acceptedAnswer": "4", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) Find $P(T>8)$, correct to three decimal places.", "marks": 2, "acceptedAnswer": "0.135", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Confidence intervals",
+      "question": "A poll of $144$ voters gives $\\hat{p}=0.55$. Use $z=1.96$ for a $95\\%$ interval.",
+      "acceptedAnswers": ["0.041", "0.081"],
+      "marks": 4,
+      "guidance": "Margin of error is $z\\times\\sqrt{\\hat{p}(1-\\hat{p})/n}$.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find the standard error, correct to three decimal places.", "marks": 2, "acceptedAnswer": "0.041", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) Find the margin of error, correct to three decimal places.", "marks": 2, "acceptedAnswer": "0.081", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Confidence intervals",
+      "question": "A quality engineer wants the standard error of a sample proportion to be at most $0.03$ when $p=0.5$.",
+      "acceptedAnswers": ["278", "0.03"],
+      "marks": 4,
+      "guidance": "Solve $\\sqrt{0.25/n}\\le 0.03$ for the minimum integer $n$.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find the minimum sample size required.", "marks": 2, "acceptedAnswer": "278", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) For $n=278$ and $p=0.5$, state the standard error correct to two decimal places.", "marks": 2, "acceptedAnswer": "0.03", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    }
+  ]
+}

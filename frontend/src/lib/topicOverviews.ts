@@ -250,7 +250,7 @@ No overview is defined for this label yet. Use one of the fourteen **Units 3 & 4
 **Subject:** Mathematical Methods`;
   }
 
-  if (args.subjectId === "general-maths") {
+  if (args.subjectId === "general-maths" || args.subjectId === "demo") {
     const g = getGeneralMathsCurriculumOverview(topic);
     if (g) return g;
     return `### ${topic}

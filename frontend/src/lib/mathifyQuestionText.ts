@@ -100,8 +100,61 @@ function fixIntegralNotation(text: string): string {
   return q;
 }
 
+/** dy/dx, d^2y/dx^2, dx/dt → \frac{dy}{dx} etc. (also repairs dy/dt inside $...$). */
+function normalizeDerivativeSlashes(segment: string): string {
+  return segment.replace(
+    /\bd(\^2)?([a-z])\s*\/\s*d(\^2)?([a-z])\b/gi,
+    (_m, numSq: string | undefined, numVar: string, denSq: string | undefined, denVar: string) => {
+      const num = `d${numSq ?? ""}${numVar}`;
+      const den = `d${denSq ?? ""}${denVar}`;
+      return `\\frac{${num}}{${den}}`;
+    },
+  );
+}
+
+function wrapOdeAndFunctionNotation(segment: string): string {
+  let out = segment;
+
+  out = out.replace(
+    /\bSolve\s+((?:\\frac\{d[^{}]+\}\{d[^{}]+\})[^$]+?)(?=\s+with\b|[,.]|\s+given\b|\s+for\b|$)/gi,
+    (_m, eq: string) => `Solve $${eq.trim().replace(/\s+/g, " ")}$`,
+  );
+
+  out = out.replace(
+    /\bFor\s+((?:\\frac\{d[^{}]+\}\{d[^{}]+\})[^$]+?)(?=\s*,\s|\.\s|$)/gi,
+    (_m, eq: string) => `For $${eq.trim().replace(/\s+/g, " ")}$`,
+  );
+
+  out = out.replace(
+    /\b([fgh]|y)\s*\(\s*([^)]+?)\s*\)\s*=\s*([^,\s;.]+)/gi,
+    (_m, fn: string, arg: string, val: string) => `$${fn}(${arg.trim()})=${val.trim()}$`,
+  );
+
+  out = out.replace(
+    /\b(find|evaluate|determine|calculate|compute|hence\s+find)\s+([fgh]|y)\s*\(\s*([^)]+?)\s*\)/gi,
+    (_m, verb: string, fn: string, arg: string) => `${verb} $${fn}(${arg.trim()})$`,
+  );
+
+  return out;
+}
+
+function mathifyDerivativesAndOdes(text: string): string {
+  return text
+    .split(/(\$[^$]*\$)/g)
+    .map((part) => {
+      if (part.startsWith("$") && part.endsWith("$")) {
+        const inner = normalizeDerivativeSlashes(part.slice(1, -1));
+        return `$${inner}$`;
+      }
+      let out = normalizeDerivativeSlashes(part);
+      out = wrapOdeAndFunctionNotation(out);
+      return out;
+    })
+    .join("");
+}
+
 function segmentLooksMath(segment: string): boolean {
-  return /f\s*\(\s*x\s*\)|\\int|∫|\^|e\^|\\[a-zA-Z]+|f'|d\/dx|[0-9][a-zA-Z]\^|cis\s*\(|\\operatorname\{cis\}|Re\s*\(|\\operatorname\{Re\}/.test(
+  return /f\s*\(\s*x\s*\)|\\int|∫|\^|e\^|\\[a-zA-Z]+|f'|d\/dx|d\^2[a-z]\/d[a-z]|[a-z]\/d[a-z]|[0-9][a-zA-Z]\^|cis\s*\(|\\operatorname\{cis\}|Re\s*\(|\\operatorname\{Re\}|\b(?:dy|dx|dt)\//i.test(
     segment,
   );
 }
@@ -131,6 +184,12 @@ function wrapBareMathSegments(text: string): string {
       if (expr.includes("$")) return _m;
       return `$${fn}(x)=${mathifyIntegrand(expr)}$`;
     },
+  );
+
+  // Periodic models d(t)=A\cos(...)+k (Tide, Ferris wheel, etc.)
+  out = out.replace(
+    /(?<!\$)\b([a-z])\(\s*t\s*\)\s*=\s*((?:[\d.]+\s*)?\\(?:sin|cos|tan)[\s\S]*?\\right\s*\)\s*(?:\+\s*[\d.]+)?)/gi,
+    (_m, fn, expr) => `$${fn}(t)=${mathifyIntegrand(expr.replace(/\s+/g, " "))}$`,
   );
 
   // Evaluate \int... without $
@@ -167,6 +226,7 @@ export function mathifyQuestionText(raw: unknown): string {
   out = wrapLetComplexStems(out);
   out = normalizeComplexNotation(out);
   out = normalizePowers(out);
+  out = mathifyDerivativesAndOdes(out);
 
   if (segmentLooksMath(out)) {
     out = wrapOutsideExistingDollars(out);

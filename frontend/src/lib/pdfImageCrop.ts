@@ -8,8 +8,13 @@ export type CropRect = {
 
 export const FULL_CROP: CropRect = { x: 0, y: 0, w: 1, h: 1 };
 
+/** True when the crop rect trims the image (not full-frame). */
+export function isMeaningfulCropRect(rect: CropRect): boolean {
+  return rect.x > 0.005 || rect.y > 0.005 || rect.w < 0.995 || rect.h < 0.995;
+}
+
 /** JPEG quality when exporting a crop (keep high — crops are often re-encoded). */
-export const PDF_CROP_JPEG_QUALITY = 0.93;
+export const PDF_CROP_JPEG_QUALITY = 0.95;
 
 function loadImageElement(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {

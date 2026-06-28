@@ -1,4 +1,4 @@
-import { apiFetch } from "@/lib/api";
+import { apiFetch, BOOTSTRAP_FETCH_TIMEOUT_MS } from "@/lib/api";
 import { API_PATHS, STORAGE_KEYS } from "@/lib/constants";
 import {
   canonicalSubjectId,
@@ -44,6 +44,7 @@ export async function refreshCustomQuestionsCache(): Promise<
 > {
   const data = await apiFetch<{ customQuestions?: Record<string, unknown[]> }>(
     API_PATHS.bootstrap,
+    { timeoutMs: BOOTSTRAP_FETCH_TIMEOUT_MS },
   );
   const map = data.customQuestions ?? {};
   localStorage.setItem(STORAGE_KEYS.customQuestions, JSON.stringify(map));

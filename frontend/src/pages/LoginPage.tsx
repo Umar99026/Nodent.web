@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { FEEDBACK_PATH } from "@/components/landing/WelcomeFeedbackSection";
 import { useAuth } from "@/context/AuthContext";
-import { ApiError, API_UNREACHABLE_MESSAGE } from "@/lib/api";
+import { ApiError, apiUnreachableMessage } from "@/lib/api";
 import { STORAGE_KEYS } from "@/lib/constants";
 import { AuthLayout } from "@/components/layout/AuthLayout";
 import { Button } from "@/components/ui/button";
@@ -89,7 +89,7 @@ export default function LoginPage() {
       navigate("/dashboard", { replace: true });
     } catch (err) {
       if (err instanceof ApiError) {
-        setServerError(err.status === 0 ? API_UNREACHABLE_MESSAGE : err.message);
+        setServerError(err.status === 0 ? apiUnreachableMessage() : err.message);
       } else {
         setServerError("Something went wrong. Please try again.");
       }
@@ -111,7 +111,7 @@ export default function LoginPage() {
       navigate(FEEDBACK_PATH, { replace: true });
     } catch (err) {
       if (err instanceof ApiError) {
-        setServerError(err.status === 0 ? API_UNREACHABLE_MESSAGE : err.message);
+        setServerError(err.status === 0 ? apiUnreachableMessage() : err.message);
       } else {
         setServerError("Something went wrong. Please try again.");
       }

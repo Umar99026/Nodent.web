@@ -5,6 +5,7 @@ import { useCallback, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { ArrowRight, Check, Lock } from "lucide-react";
+import { InstagramIcon } from "@/components/icons/InstagramIcon";
 
 import { LandingNav } from "@/components/landing/LandingNav";
 
@@ -89,6 +90,8 @@ const PRICING = [
   },
 
 ] as const;
+
+const INSTAGRAM_URL = "https://www.instagram.com/nodent.learning/";
 
 
 
@@ -592,17 +595,27 @@ export default function LandingPage() {
 
 
 
-          <footer className="mt-16 flex flex-col items-center justify-between gap-6 border-t border-slate-200 pt-10 sm:flex-row">
+          <footer className="mt-16 border-t border-slate-200 pt-10">
+            <div className="flex flex-col items-center justify-between gap-8 sm:flex-row">
+              <NodentWordmark size="sm" variant="onCream" />
 
-            <NodentWordmark size="sm" variant="onCream" />
+              <a
+                href={INSTAGRAM_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:border-brand/40 hover:text-brand-dark"
+              >
+                <InstagramIcon className="size-4" />
+                <span>Follow us</span>
+                <span className="text-slate-500">@nodent.learning</span>
+              </a>
 
-            <p className="text-sm text-slate-500">
+              <p className="text-sm text-slate-500">
+                © {new Date().getFullYear()} Nodent. All rights reserved.
+              </p>
+            </div>
 
-              © {new Date().getFullYear()} Nodent. All rights reserved.
-
-            </p>
-
-            <div className="flex gap-6 text-sm text-slate-600">
+            <div className="mt-8 flex flex-wrap items-center justify-center gap-6 text-sm text-slate-600 sm:justify-end">
 
               <button
 
@@ -645,6 +658,22 @@ export default function LandingPage() {
                 Log in
 
               </Link>
+
+              <Link to="/feedback" className="hover:text-brand-dark">
+
+                Feedback
+
+              </Link>
+
+              <a
+                href={INSTAGRAM_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 hover:text-brand-dark"
+              >
+                <InstagramIcon className="size-3.5" />
+                Instagram
+              </a>
 
             </div>
 

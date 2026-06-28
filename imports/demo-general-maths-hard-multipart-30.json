@@ -1,0 +1,424 @@
+{
+  "questions": [
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Data analysis",
+      "question": "A café chain reports weekday revenue (thousands of dollars) with five-number summary: minimum $8$, $Q_1=14$, median $18$, $Q_3=24$, maximum $52$.",
+      "acceptedAnswers": ["10", "42"],
+      "marks": 4,
+      "guidance": "IQR $=Q_3-Q_1$. Upper fence $=Q_3+1.5\\times\\text{IQR}$.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find the interquartile range.", "marks": 2, "acceptedAnswer": "10", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) Find the upper fence for outlier detection.", "marks": 2, "acceptedAnswer": "42", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Data analysis",
+      "question": "An online retailer fits a least-squares line $\\hat{y}=85+12x$, where $x$ is daily ad spend (hundreds of dollars) and $\\hat{y}$ is predicted sales (units).",
+      "acceptedAnswers": ["265", "18"],
+      "marks": 4,
+      "guidance": "Substitute $x=15$. Residual $=\\text{actual}-\\text{predicted}$.",
+      "answerParts": [
+        { "key": "a", "label": "a) Predict sales when $x=15$.", "marks": 2, "acceptedAnswer": "265", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) On that day actual sales were $283$ units. Find the residual.", "marks": 2, "acceptedAnswer": "18", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Data analysis",
+      "question": "A fitness app records workout minutes for $n=25$ users with $\\sum x=475$.",
+      "acceptedAnswers": ["19", "18.33"],
+      "marks": 4,
+      "guidance": "Mean $=\\sum x/n$. After removing one $40$-minute session, recompute with $n=24$.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find the mean minutes per user.", "marks": 2, "acceptedAnswer": "19", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) One outlier session of $40$ minutes is removed. Find the new mean, correct to two decimal places.", "marks": 2, "acceptedAnswer": "18.33", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Data analysis",
+      "question": "Monthly electricity use shows a seasonal index of $1.25$ in summer. A household used $450$ kWh in January.",
+      "acceptedAnswers": ["360", "25"],
+      "marks": 4,
+      "guidance": "Deseasonalised $=\\dfrac{\\text{actual}}{\\text{index}}$. A $1.25$ index is $25\\%$ above the seasonal average.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find the deseasonalised usage.", "marks": 2, "acceptedAnswer": "360", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) By what whole-number percent is the observation above the seasonal average?", "marks": 2, "acceptedAnswer": "25", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Data analysis",
+      "question": "Quarterly online orders (thousands) are $Q_1=44$, $Q_2=50$, $Q_3=58$, $Q_4=54$.",
+      "acceptedAnswers": ["50.67", "54"],
+      "marks": 4,
+      "guidance": "Three-term centred moving averages at $Q_2$ and $Q_3$.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find the three-term moving average for $Q_2$, correct to two decimal places.", "marks": 2, "acceptedAnswer": "50.67", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) Find the three-term moving average for $Q_3$.", "marks": 2, "acceptedAnswer": "54", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Data analysis",
+      "question": "Exam scores are normally distributed with mean $\\mu=62$ and standard deviation $\\sigma=8$.",
+      "acceptedAnswers": ["2", "-1.5"],
+      "marks": 4,
+      "guidance": "$z=\\dfrac{x-\\mu}{\\sigma}$.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find the $z$-score for $x=78$.", "marks": 2, "acceptedAnswer": "2", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) Find the $z$-score for $x=50$.", "marks": 2, "acceptedAnswer": "-1.5", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Data analysis",
+      "question": "A regression of study hours vs test score gives correlation $r=0.72$.",
+      "acceptedAnswers": ["0.5184", "0.48"],
+      "marks": 4,
+      "guidance": "$r^2$ is the explained variation fraction; $1-r^2$ is unexplained.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find $r^2$, correct to four decimal places.", "marks": 2, "acceptedAnswer": "0.5184", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) What fraction of variation in score is **not** explained by the linear model? Give a decimal correct to two decimal places.", "marks": 2, "acceptedAnswer": "0.48", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Data analysis",
+      "question": "Of $240$ students surveyed, $144$ play a sport and $96$ play music. Exactly $60$ students do both.",
+      "acceptedAnswers": ["0.35", "0.42"],
+      "marks": 4,
+      "guidance": "Sport only $=144-60$. Conditional probability uses the sport group as the denominator.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find the probability a randomly chosen student plays sport but not music.", "marks": 2, "acceptedAnswer": "0.35", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) Given a student plays sport, find the probability they also play music, correct to two decimal places.", "marks": 2, "acceptedAnswer": "0.42", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Recursion and financial modelling",
+      "question": "A term deposit of $12,000 earns 4.5% p.a. compounded annually for $5$ years.",
+      "acceptedAnswers": ["14954", "2954"],
+      "marks": 4,
+      "guidance": "Future value $=12000(1.045)^5$.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find the balance after $5$ years, nearest dollar.", "marks": 2, "acceptedAnswer": "14954", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) Find the total interest earned, nearest dollar.", "marks": 2, "acceptedAnswer": "2954", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Recursion and financial modelling",
+      "question": "A home loan has balance $B_0=\\$320\\,000$ with monthly interest rate $r=0.0045$. One repayment of $\\$2\\,200$ is made.",
+      "acceptedAnswers": ["319240", "1440"],
+      "marks": 4,
+      "guidance": "$B_1=B_0(1+r)-R$. Interest component of the payment is $B_0 r$.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find the balance immediately after the payment, nearest dollar.", "marks": 2, "acceptedAnswer": "319240", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) Find the interest charged on the opening balance for that month, nearest dollar.", "marks": 2, "acceptedAnswer": "1440", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Recursion and financial modelling",
+      "question": "A theatre sells seats in rows. Row $1$ has $18$ seats and each row has $4$ more seats than the previous row.",
+      "acceptedAnswers": ["38", "168"],
+      "marks": 4,
+      "guidance": "Arithmetic sequence with $u_1=18$, $d=4$.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find the number of seats in row $6$.", "marks": 2, "acceptedAnswer": "38", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) Find the total seats in the first $6$ rows.", "marks": 2, "acceptedAnswer": "168", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Recursion and financial modelling",
+      "question": "A viral post's shares follow a geometric sequence with $u_1=5$ and common ratio $r=1.8$.",
+      "acceptedAnswers": ["52.49", "111.85"],
+      "marks": 4,
+      "guidance": "$u_n=u_1 r^{n-1}$ and $S_n=\\dfrac{u_1(1-r^n)}{1-r}$ for $r\\ne 1$.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find $u_5$, correct to two decimal places.", "marks": 2, "acceptedAnswer": "52.49", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) Find the total shares in the first $5$ days, correct to two decimal places.", "marks": 2, "acceptedAnswer": "111.85", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Recursion and financial modelling",
+      "question": "An endowment must pay $\\$7\\,200$ each year forever. The fund earns $6\\%$ p.a.",
+      "acceptedAnswers": ["120000", "96000"],
+      "marks": 4,
+      "guidance": "Perpetuity present value $=\\dfrac{\\text{payment}}{r}$.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find the required principal at $6\\%$ p.a., nearest dollar.", "marks": 2, "acceptedAnswer": "120000", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) If the rate rises to $7.5\\%$ p.a. with the same payment, find the new principal, nearest dollar.", "marks": 2, "acceptedAnswer": "96000", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Recursion and financial modelling",
+      "question": "A credit card quotes $18\\%$ p.a. nominal interest compounded monthly.",
+      "acceptedAnswers": ["0.015", "19.56"],
+      "marks": 4,
+      "guidance": "Monthly rate $=0.18/12$. Effective annual rate $=(1+\\text{monthly})^{12}-1$.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find the monthly interest rate as a decimal, correct to three decimal places.", "marks": 2, "acceptedAnswer": "0.015", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) Find the effective annual rate as a percent, correct to two decimal places.", "marks": 2, "acceptedAnswer": "19.56", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Recursion and financial modelling",
+      "question": "A machine is depreciated by flat rate: initial value $\\$48\\,000$ with $\\$6\\,000$ written off each year.",
+      "acceptedAnswers": ["30000", "10000"],
+      "marks": 4,
+      "guidance": "Value after $n$ years is $V_0-6000n$.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find the book value after $3$ years.", "marks": 2, "acceptedAnswer": "30000", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) Find the book value after $5$ years.", "marks": 2, "acceptedAnswer": "10000", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Recursion and financial modelling",
+      "question": "A savings account follows $A_{n+1}=1.03\\,A_n+400$ with $A_0=0$. Deposits of $\\$400$ are made at the end of each period.",
+      "acceptedAnswers": ["1673", "3558"],
+      "marks": 4,
+      "guidance": "Build the balance period by period, or use the annuity future-value factor for four deposits.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find $A_4$ after the fourth deposit, nearest dollar.", "marks": 2, "acceptedAnswer": "1673", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) Find $A_8$ after the eighth deposit, nearest dollar.", "marks": 2, "acceptedAnswer": "3558", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Matrices",
+      "question": "A logistics firm encodes warehouse codes with $A=\\begin{pmatrix}3&1\\\\2&4\\end{pmatrix}$.",
+      "acceptedAnswers": ["10", "2"],
+      "marks": 4,
+      "guidance": "$\\det(A)=ad-bc$. For $2\\times2$ inverse, $(A^{-1})_{11}=d/\\det(A)$.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find $\\det(A)$.", "marks": 2, "acceptedAnswer": "10", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) Find the $(1,1)$ entry of $A^{-1}$.", "marks": 2, "acceptedAnswer": "2", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Matrices",
+      "question": "Production is modelled by $B=\\begin{pmatrix}2&1\\\\0&3\\end{pmatrix}$ and a batch vector $\\mathbf{x}=\\begin{pmatrix}4\\\\2\\end{pmatrix}$.",
+      "acceptedAnswers": ["10", "6"],
+      "marks": 4,
+      "guidance": "Compute $B\\mathbf{x}$.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find the first entry of $B\\mathbf{x}$.", "marks": 2, "acceptedAnswer": "10", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) Find the second entry of $B\\mathbf{x}$.", "marks": 2, "acceptedAnswer": "6", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Matrices",
+      "question": "Customers switch between two phone plans with transition matrix $T=\\begin{pmatrix}0.85&0.15\\\\0.25&0.75\\end{pmatrix}$. Initially everyone is on plan A.",
+      "acceptedAnswers": ["0.85", "0.15"],
+      "marks": 4,
+      "guidance": "One-step state is $\\mathbf{s}_0 T$ with $\\mathbf{s}_0=(1,0)$.",
+      "answerParts": [
+        { "key": "a", "label": "a) After one month, what fraction remains on plan A?", "marks": 2, "acceptedAnswer": "0.85", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) After one month, what fraction is on plan B?", "marks": 2, "acceptedAnswer": "0.15", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Matrices",
+      "question": "A two-state Markov chain has $T=\\begin{pmatrix}0.6&0.4\\\\0.4&0.6\\end{pmatrix}$. In the long run fraction $p$ is in state A.",
+      "acceptedAnswers": ["0.5", "0.5"],
+      "marks": 4,
+      "guidance": "Steady state solves $p=0.6p+0.4(1-p)$.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find the steady-state fraction in state A.", "marks": 2, "acceptedAnswer": "0.5", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) Find the steady-state fraction in state B.", "marks": 2, "acceptedAnswer": "0.5", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Matrices",
+      "question": "A graphics app applies shear $S=\\begin{pmatrix}1&2\\\\0&1\\end{pmatrix}$ to the point $\\begin{pmatrix}3\\\\5\\end{pmatrix}$.",
+      "acceptedAnswers": ["13", "5"],
+      "marks": 4,
+      "guidance": "Multiply $S\\begin{pmatrix}3\\\\5\\end{pmatrix}$.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find the first coordinate after the transformation.", "marks": 2, "acceptedAnswer": "13", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) Find the second coordinate after the transformation.", "marks": 2, "acceptedAnswer": "5", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Matrices",
+      "question": "Matrix $C=\\begin{pmatrix}4&2\\\\8&4\\end{pmatrix}$ maps a region in the plane.",
+      "acceptedAnswers": ["0", "2"],
+      "marks": 4,
+      "guidance": "$\\det(C)=0$ means the transformation collapses area. Row 2 is a multiple of row 1.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find $\\det(C)$.", "marks": 2, "acceptedAnswer": "0", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) Row 2 equals which scalar multiple of row 1?", "marks": 2, "acceptedAnswer": "2", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Matrices",
+      "question": "Two factories combine outputs via $M=\\begin{pmatrix}1&3\\\\2&1\\end{pmatrix}$ and input vector $\\mathbf{v}=\\begin{pmatrix}5\\\\2\\end{pmatrix}$.",
+      "acceptedAnswers": ["11", "12"],
+      "marks": 4,
+      "guidance": "Compute $M\\mathbf{v}$.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find the first entry of $M\\mathbf{v}$.", "marks": 2, "acceptedAnswer": "11", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) Find the second entry of $M\\mathbf{v}$.", "marks": 2, "acceptedAnswer": "12", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Networks and decision mathematics",
+      "question": "A project has activities $A$ (5 days) and $B$ (4 days) starting together, then both must finish before activity $C$ (2 days) can start.",
+      "acceptedAnswers": ["7", "1"],
+      "marks": 4,
+      "guidance": "Critical path length is $\\max(5,4)+2$. Float for $B$ is critical duration minus $B$'s path length.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find the minimum project duration.", "marks": 2, "acceptedAnswer": "7", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) Find the float of activity $B$.", "marks": 2, "acceptedAnswer": "1", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Networks and decision mathematics",
+      "question": "A connected trail network has vertex degrees $3$, $3$, $2$, $2$, $2$, $2$.",
+      "acceptedAnswers": ["0", "2"],
+      "marks": 4,
+      "guidance": "An Eulerian circuit needs all even degrees. An Eulerian trail allows exactly two odd vertices.",
+      "answerParts": [
+        { "key": "a", "label": "a) How many vertices of odd degree are required for an Eulerian circuit?", "marks": 2, "acceptedAnswer": "0", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) How many vertices of odd degree does this graph have?", "marks": 2, "acceptedAnswer": "2", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Networks and decision mathematics",
+      "question": "A regional road authority must connect $9$ towns with fibre along existing roads (a spanning tree).",
+      "acceptedAnswers": ["8", "36"],
+      "marks": 4,
+      "guidance": "A tree on $n$ vertices has $n-1$ edges. $K_9$ has $\\binom{9}{2}$ edges.",
+      "answerParts": [
+        { "key": "a", "label": "a) How many fibre links are in a spanning tree?", "marks": 2, "acceptedAnswer": "8", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) If every pair of towns could be linked directly, how many distinct links would exist?", "marks": 2, "acceptedAnswer": "36", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Networks and decision mathematics",
+      "question": "Delivery drones fly between hubs $1$, $2$, and $3$ with travel times (minutes): $1\\!-\\!2$: $6$, $2\\!-\\!3$: $4$, $1\\!-\\!3$: $15$.",
+      "acceptedAnswers": ["10", "15"],
+      "marks": 4,
+      "guidance": "Compare the direct route with the route via hub $2$.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find the shortest time from hub $1$ to hub $3$.", "marks": 2, "acceptedAnswer": "10", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) How many minutes longer is the direct $1\\!-\\!3$ link than the shortest route?", "marks": 2, "acceptedAnswer": "5", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Networks and decision mathematics",
+      "question": "A power company must wire three substations forming a triangle with cable costs $\\$3$ M, $\\$5$ M, and $\\$6$ M on the three sides.",
+      "acceptedAnswers": ["8", "6"],
+      "marks": 4,
+      "guidance": "A minimum spanning tree on three vertices uses the two cheapest edges.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find the minimum total cost to connect all three substations.", "marks": 2, "acceptedAnswer": "8", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) Find the cost in millions of the link not used in the minimum spanning tree.", "marks": 2, "acceptedAnswer": "6", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Networks and decision mathematics",
+      "question": "In a scheduling network, activity $X$ has duration $6$ days with earliest start $4$ and latest finish $10$.",
+      "acceptedAnswers": ["4", "0"],
+      "marks": 4,
+      "guidance": "Latest start $=LF-\\text{duration}$. Float $=LS-ES$.",
+      "answerParts": [
+        { "key": "a", "label": "a) Find the latest start time of $X$.", "marks": 2, "acceptedAnswer": "4", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) Find the float of $X$.", "marks": 2, "acceptedAnswer": "0", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Networks and decision mathematics",
+      "question": "A warehouse roster assigns one worker to each of $7$ zones. Each worker can cover exactly $4$ zones, and every zone must be covered twice across the roster (two shifts).",
+      "acceptedAnswers": ["14", "28"],
+      "marks": 4,
+      "guidance": "Each zone needs $2$ shifts, so $7\\times2=14$ zone-shifts are required. With $7$ workers each covering $4$ zones, $7\\times4=28$ assignments are available.",
+      "answerParts": [
+        { "key": "a", "label": "a) How many zone-shifts must be scheduled in total?", "marks": 2, "acceptedAnswer": "14", "placeholder": "Type your answer…" },
+        { "key": "b", "label": "b) How many worker–zone assignments are available in total?", "marks": 2, "acceptedAnswer": "28", "placeholder": "Type your answer…" }
+      ],
+      "useAiMarking": false
+    }
+  ]
+}

@@ -6,7 +6,7 @@ import {
   useCallback,
   type ReactNode,
 } from "react";
-import { apiFetch, ApiError } from "@/lib/api";
+import { apiFetch, ApiError, BOOTSTRAP_FETCH_TIMEOUT_MS } from "@/lib/api";
 import { STORAGE_KEYS, API_PATHS } from "@/lib/constants";
 
 export interface User {
@@ -141,7 +141,9 @@ function isAbortError(err: unknown): boolean {
 
 /** Warm customQuestions in localStorage without blocking login or routes. */
 function prefetchQuestionBankInBackground() {
-  void apiFetch<BootstrapResponse>(API_PATHS.bootstrap)
+  void apiFetch<BootstrapResponse>(API_PATHS.bootstrap, {
+    timeoutMs: BOOTSTRAP_FETCH_TIMEOUT_MS,
+  })
     .then((data) => {
       if (data.customQuestions) {
         localStorage.setItem(

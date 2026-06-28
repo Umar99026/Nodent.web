@@ -1,4 +1,9 @@
-import { type CropRect } from "@/lib/pdfImageCrop";
+import {
+  cropImageDataUrl,
+  FULL_CROP,
+  isMeaningfulCropRect,
+  type CropRect,
+} from "@/lib/pdfImageCrop";
 import {
   extractPageText,
   extractMcqOptionsFromText,
@@ -6,8 +11,13 @@ import {
   PDF_RENDER_STANDARD,
   renderPageToDataUrl,
 } from "@/lib/pdfQuestionImport";
-import { formatPartDescriptor, formatSinglePartLabel, partLetterForIndex } from "@/lib/questionDisplay";
+import { partKeyFromLabel, studentFacingPartText } from "@/lib/questionDisplay";
 import { normalizeQuestionMathText } from "@/lib/questionMathText";
+import {
+  clampOverlay,
+  partHasOverlay,
+  type DiagramLabelPart,
+} from "@/lib/diagramLabels";
 
 export type NodentQuestionType = "mcq" | "short_answer" | "long_answer";
 
@@ -17,6 +27,13 @@ export type NodentPartMeta = {
   label: string;
   answer: string;
   placeholder: string;
+  /** This sub-part has its own figure (crop from PDF page). */
+  useImage?: boolean;
+  crop?: CropRect;
+  imagePage?: number;
+  /** Place draggable input boxes on this part's figure. */
+  needsInputBoxes?: boolean;
+  labelOverlays?: DiagramLabelPart[];
 };
 
 export type NodentPageMeta = {
@@ -32,6 +49,12 @@ export type NodentPageMeta = {
   correctAnswer?: string;
   /** When false, import without stimulus image. */
   useImage: boolean;
+  /** Figure crop as fractions of the page image (0–1). */
+  crop?: CropRect;
+  /** Place input boxes on the main stimulus figure. */
+  needsInputBoxes?: boolean;
+  labelDiagramEnabled?: boolean;
+  labelOverlays?: DiagramLabelPart[];
 };
 
 export type NodentParsedQuestion = {
@@ -39,14 +62,16 @@ export type NodentParsedQuestion = {
   questionId: string;
   subjectId: string;
   pageNumber: number;
+  /** Every PDF page for this question_id (in order). */
+  pageNumbers?: number[];
   question: string;
   marks: number;
   topic: string;
   type: NodentQuestionType;
-  /** Cropped figure (metadata stripped). Empty when useImage is false. */
   imageDataUrl: string;
-  /** Full page render for re-cropping in admin. Omitted when useImage is false. */
+  imageDataUrls?: string[];
   sourceImageDataUrl?: string;
+  sourceImageDataUrls?: string[];
   crop: CropRect;
   parts: Array<{
     label: string;
@@ -54,14 +79,20 @@ export type NodentParsedQuestion = {
     placeholder: string;
     acceptedAnswer: string;
     marks: number;
+    imageDataUrl?: string;
+    cropApplied?: boolean;
+    needsInputBoxes?: boolean;
+    labelOverlays?: DiagramLabelPart[];
   }>;
   mcqOptions?: string[];
   correctAnswer?: string;
   useImage: boolean;
   passage?: string;
-  /** 1-based index when multiple ---NODENT--- blocks share one PDF page. */
   pageQuestionIndex?: number;
   pageQuestionCount?: number;
+  labelDiagramEnabled?: boolean;
+  labelOverlays?: DiagramLabelPart[];
+  cropApplied?: boolean;
 };
 
 const IMAGE_FLAG_VALUES = new Set([
@@ -299,10 +330,6 @@ function parseUseImage(fields: Map<string, string>): boolean {
   return true;
 }
 
-function partDescriptor(key: string, label: string): string {
-  return formatPartDescriptor(key, label);
-}
-
 /** All ---NODENT--- … ---END--- block bodies in document order. */
 export function extractNodentBlockBodies(text: string): string[] {
   const normalized = normalizeNodentText(text);
@@ -323,12 +350,293 @@ export function extractNodentBlockBodies(text: string): string[] {
     if (body) bodies.push(body);
     if (bodies.length >= 12) break;
   }
+  if (bodies.length) return bodies;
+
+  // Some PDFs omit ---NODENT--- but still terminate with ---END---.
+  for (const m of normalized.matchAll(
+    /(?:^|[\n\r])([\s\S]*?\bquestion_id\s*:[\s\S]*?)---END---/gi,
+  )) {
+    const body = m[1]?.trim();
+    if (!body || /---NODENT---/i.test(body)) continue;
+    bodies.push(body);
+    if (bodies.length >= 12) break;
+  }
+
   return bodies;
+}
+
+function normalizeQuestionId(raw: string): string {
+  const trimmed = raw
+    .trim()
+    .replace(/---[\s\S]*$/i, "")
+    .trim();
+  const standard = trimmed.match(/^([a-z][\w.-]*-q\d+)/i);
+  if (standard?.[1]) return standard[1];
+  const token = trimmed.match(/^(\S+)/);
+  return token?.[1] ?? trimmed;
+}
+
+function clampCropFraction(n: number): number {
+  return Math.min(1, Math.max(0, n));
+}
+
+function parseCropFromFields(fields: Map<string, string>): CropRect | undefined {
+  const x = Number(fields.get("crop_x") ?? fields.get("figure_crop_x"));
+  const y = Number(fields.get("crop_y") ?? fields.get("figure_crop_y"));
+  const w = Number(fields.get("crop_w") ?? fields.get("figure_crop_w"));
+  const h = Number(fields.get("crop_h") ?? fields.get("figure_crop_h"));
+  if (![x, y, w, h].every((n) => Number.isFinite(n))) return undefined;
+  const rect: CropRect = {
+    x: clampCropFraction(x),
+    y: clampCropFraction(y),
+    w: clampCropFraction(w),
+    h: clampCropFraction(h),
+  };
+  return isMeaningfulCropRect(rect) ? rect : undefined;
+}
+
+function boolMetaField(raw: string | undefined): boolean {
+  const t = (raw ?? "").trim().toLowerCase();
+  return ["true", "yes", "1", "on"].includes(t);
+}
+
+function defaultBoxLayout(index: number): DiagramLabelPart {
+  const cols = 3;
+  const col = index % cols;
+  const row = Math.floor(index / cols);
+  const w = 16;
+  const h = 7;
+  return {
+    key: String(index + 1),
+    ...clampOverlay({
+      overlayX: 4 + col * (w + 3),
+      overlayY: 8 + row * (h + 4),
+      overlayW: w,
+      overlayH: h,
+    }),
+  };
+}
+
+/** Assign grid positions to boxes missing coordinates; pad to expectedCount if given. */
+export function finalizeInputBoxes(
+  boxes: DiagramLabelPart[],
+  expectedCount = 0,
+): DiagramLabelPart[] {
+  const withCoords = boxes.map((box, i) => {
+    if (partHasOverlay(box)) {
+      return {
+        ...box,
+        key: box.key?.trim() || String(i + 1),
+      };
+    }
+    const layout = defaultBoxLayout(i);
+    return {
+      ...layout,
+      ...box,
+      key: box.key?.trim() || layout.key,
+      ...clampOverlay({
+        overlayX: layout.overlayX,
+        overlayY: layout.overlayY,
+        overlayW: box.overlayW ?? layout.overlayW,
+        overlayH: box.overlayH ?? layout.overlayH,
+      }),
+    };
+  });
+
+  const target = Math.max(withCoords.length, expectedCount);
+  const result = [...withCoords];
+  while (result.length < target) {
+    const layout = defaultBoxLayout(result.length);
+    result.push({
+      ...layout,
+      label: `Box ${result.length + 1}`,
+      acceptedAnswer: "",
+      marks: 1,
+    });
+  }
+  return result;
+}
+
+function parseInputBoxCount(fields: Map<string, string>): number {
+  const n = Number(fields.get("input_box_count") ?? fields.get("box_count"));
+  return Number.isFinite(n) && n > 0 ? Math.round(n) : 0;
+}
+
+function parsePartCropFromFields(fields: Map<string, string>, letter: string): CropRect | undefined {
+  const x = Number(fields.get(`part_${letter}_crop_x`) ?? fields.get(`part_${letter}_figure_crop_x`));
+  const y = Number(fields.get(`part_${letter}_crop_y`) ?? fields.get(`part_${letter}_figure_crop_y`));
+  const w = Number(fields.get(`part_${letter}_crop_w`) ?? fields.get(`part_${letter}_figure_crop_w`));
+  const h = Number(fields.get(`part_${letter}_crop_h`) ?? fields.get(`part_${letter}_figure_crop_h`));
+  if (![x, y, w, h].every((n) => Number.isFinite(n))) return undefined;
+  const rect: CropRect = {
+    x: clampCropFraction(x),
+    y: clampCropFraction(y),
+    w: clampCropFraction(w),
+    h: clampCropFraction(h),
+  };
+  return isMeaningfulCropRect(rect) ? rect : undefined;
+}
+
+function parsePartUseImage(fields: Map<string, string>, letter: string): boolean {
+  if (boolMetaField(fields.get(`part_${letter}_use_image`))) return true;
+  if (boolMetaField(fields.get(`part_${letter}_has_figure`))) return true;
+  if (boolMetaField(fields.get(`part_${letter}_has_stimulus`))) return true;
+  if (parsePartCropFromFields(fields, letter)) return true;
+  return parsePartInputBoxesFromFields(fields, letter).length > 0;
+}
+
+function parsePartNeedsInputBoxes(
+  fields: Map<string, string>,
+  letter: string,
+  boxes: DiagramLabelPart[],
+): boolean {
+  if (boxes.length > 0) return true;
+  if (boolMetaField(fields.get(`part_${letter}_needs_input_boxes`))) return true;
+  if (boolMetaField(fields.get(`part_${letter}_input_boxes`))) return true;
+  if (boolMetaField(fields.get(`part_${letter}_on_figure`))) return true;
+  const count = Number(fields.get(`part_${letter}_input_box_count`));
+  return Number.isFinite(count) && count > 0;
+}
+
+function parsePartInputBoxesFromFields(
+  fields: Map<string, string>,
+  letter: string,
+): DiagramLabelPart[] {
+  const prefix = `part_${letter}_box_`;
+  const boxIds = new Set<string>();
+  for (const key of fields.keys()) {
+    if (!key.startsWith(prefix)) continue;
+    const rest = key.slice(prefix.length);
+    const id = rest.split("_")[0];
+    if (id) boxIds.add(id);
+  }
+
+  const sorted = [...boxIds].sort((a, b) => {
+    const an = Number(a);
+    const bn = Number(b);
+    if (Number.isFinite(an) && Number.isFinite(bn)) return an - bn;
+    return a.localeCompare(b);
+  });
+
+  const boxes: DiagramLabelPart[] = [];
+  for (const id of sorted) {
+    const p = `${prefix}${id}_`;
+    const label = fields.get(`${p}label`)?.trim() ?? "";
+    const answer = fields.get(`${p}answer`)?.trim() ?? "";
+    const unit = fields.get(`${p}unit`)?.trim() ?? "";
+    const x = Number(fields.get(`${p}x`));
+    const y = Number(fields.get(`${p}y`));
+    const w = Number(fields.get(`${p}w`) ?? 18);
+    const h = Number(fields.get(`${p}h`) ?? 8);
+    const marks = Number(fields.get(`${p}marks`));
+    if (!label && !answer && !Number.isFinite(x)) continue;
+    const base: DiagramLabelPart = {
+      key: id,
+      label: label || id,
+      placeholder: fields.get(`${p}placeholder`)?.trim() || "",
+      acceptedAnswer: answer,
+      marks: Number.isFinite(marks) && marks > 0 ? Math.round(marks) : 1,
+      ...(unit ? ({ unit } as { unit?: string }) : {}),
+    };
+    if (Number.isFinite(x) && Number.isFinite(y)) {
+      boxes.push({
+        ...base,
+        ...clampOverlay({
+          overlayX: x,
+          overlayY: y,
+          overlayW: Number.isFinite(w) ? w : 18,
+          overlayH: Number.isFinite(h) ? h : 8,
+        }),
+      });
+    } else {
+      boxes.push(base);
+    }
+  }
+  return boxes;
+}
+
+function parseInputBoxesFromFields(fields: Map<string, string>): DiagramLabelPart[] {
+  const boxIds = new Set<string>();
+  for (const key of fields.keys()) {
+    const num = key.match(/^box_(\d+)_/);
+    if (num?.[1]) boxIds.add(num[1]!);
+    const letter = key.match(/^box_([a-z])_/);
+    if (letter?.[1]) boxIds.add(letter[1]!);
+  }
+
+  const sorted = [...boxIds].sort((a, b) => {
+    const an = Number(a);
+    const bn = Number(b);
+    if (Number.isFinite(an) && Number.isFinite(bn)) return an - bn;
+    return a.localeCompare(b);
+  });
+
+  const boxes: DiagramLabelPart[] = [];
+  for (const id of sorted) {
+    const prefix = `box_${id}_`;
+    const label = fields.get(`${prefix}label`)?.trim() ?? "";
+    const answer = fields.get(`${prefix}answer`)?.trim() ?? "";
+    const unit = fields.get(`${prefix}unit`)?.trim() ?? "";
+    const x = Number(fields.get(`${prefix}x`));
+    const y = Number(fields.get(`${prefix}y`));
+    const w = Number(fields.get(`${prefix}w`) ?? 18);
+    const h = Number(fields.get(`${prefix}h`) ?? 8);
+    const marks = Number(fields.get(`${prefix}marks`));
+    if (!label && !answer && !Number.isFinite(x)) continue;
+    const base: DiagramLabelPart = {
+      key: id,
+      label: label || id,
+      placeholder: fields.get(`${prefix}placeholder`)?.trim() || "",
+      acceptedAnswer: answer,
+      marks: Number.isFinite(marks) && marks > 0 ? Math.round(marks) : 1,
+      ...(unit ? ({ unit } as { unit?: string }) : {}),
+    };
+    if (Number.isFinite(x) && Number.isFinite(y)) {
+      boxes.push({
+        ...base,
+        ...clampOverlay({
+          overlayX: x,
+          overlayY: y,
+          overlayW: Number.isFinite(w) ? w : 18,
+          overlayH: Number.isFinite(h) ? h : 8,
+        }),
+      });
+    } else {
+      boxes.push(base);
+    }
+  }
+
+  const declared = parseInputBoxCount(fields);
+  if (declared > boxes.length) {
+    for (let i = boxes.length; i < declared; i++) {
+      const n = i + 1;
+      boxes.push({
+        key: String(n),
+        label: fields.get(`box_${n}_label`)?.trim() || `Box ${n}`,
+        acceptedAnswer: fields.get(`box_${n}_answer`)?.trim() || "",
+        marks: 1,
+      });
+    }
+  }
+
+  return boxes;
+}
+
+function parseLabelDiagramFromFields(
+  fields: Map<string, string>,
+  boxes: DiagramLabelPart[],
+): boolean {
+  if (boolMetaField(fields.get("needs_input_boxes"))) return true;
+  if (boolMetaField(fields.get("figure_has_blanks"))) return true;
+  const raw = (fields.get("label_diagram") ?? fields.get("input_boxes") ?? "").trim().toLowerCase();
+  if (["true", "yes", "1", "on", "table", "matrix", "diagram"].includes(raw)) return true;
+  if (["false", "no", "0", "off"].includes(raw)) return false;
+  return boxes.length > 0 || parseInputBoxCount(fields) > 0;
 }
 
 function parseNodentMetadataBlock(blockBody: string): NodentPageMeta | null {
   const fields = parseFieldMap(blockBody);
-  const questionId = fields.get("question_id") ?? "";
+  const questionId = normalizeQuestionId(fields.get("question_id") ?? "");
   if (!questionId) return null;
 
   const totalMarks = Math.max(1, Math.round(Number(fields.get("marks")) || 0));
@@ -337,6 +645,12 @@ function parseNodentMetadataBlock(blockBody: string): NodentPageMeta | null {
   const question = normalizeQuestionMathText(fields.get("question") ?? "");
   const passage = parsePassageFromFields(fields);
   const useImage = parseUseImage(fields);
+  const crop = parseCropFromFields(fields);
+  const rawBoxes = parseInputBoxesFromFields(fields);
+  const boxCount = parseInputBoxCount(fields);
+  const labelOverlays = finalizeInputBoxes(rawBoxes, boxCount);
+  const needsInputBoxes = parseLabelDiagramFromFields(fields, labelOverlays);
+  const labelDiagramEnabled = needsInputBoxes;
 
   const mcqParsed = parseMcqOptionsFromFields(fields);
   const isMcq =
@@ -356,6 +670,10 @@ function parseNodentMetadataBlock(blockBody: string): NodentPageMeta | null {
       mcqOptions: mcqParsed.options,
       correctAnswer: mcqParsed.correctAnswer,
       useImage,
+      crop,
+      needsInputBoxes,
+      labelDiagramEnabled,
+      labelOverlays: needsInputBoxes ? labelOverlays : undefined,
     };
   }
 
@@ -373,6 +691,10 @@ function parseNodentMetadataBlock(blockBody: string): NodentPageMeta | null {
       mcqOptions: mcqParsed.options,
       correctAnswer: mcqParsed.correctAnswer,
       useImage,
+      crop,
+      needsInputBoxes,
+      labelDiagramEnabled,
+      labelOverlays: needsInputBoxes ? labelOverlays : undefined,
     };
   }
 
@@ -387,14 +709,58 @@ function parseNodentMetadataBlock(blockBody: string): NodentPageMeta | null {
   if (partLetters.size > 0) {
     parts = [...partLetters]
       .sort()
-      .map((letter) => ({
-        key: letter,
-        marks: Math.max(1, Math.round(Number(fields.get(`part_${letter}_marks`)) || 1)),
-        label: fields.get(`part_${letter}_label`) ?? "",
-        answer: fields.get(`part_${letter}_answer`) ?? "",
-        placeholder: fields.get(`part_${letter}_placeholder`) ?? "Type your answer…",
-      }))
-      .filter((p) => p.label || p.answer);
+      .map((letter) => {
+        const partBoxes = parsePartInputBoxesFromFields(fields, letter);
+        const partBoxCount = Number(fields.get(`part_${letter}_input_box_count`));
+        const needsPartBoxes = parsePartNeedsInputBoxes(fields, letter, partBoxes);
+        let finalizedBoxes =
+          partBoxes.length || needsPartBoxes
+            ? finalizeInputBoxes(
+                partBoxes,
+                Number.isFinite(partBoxCount) && partBoxCount > 0 ? partBoxCount : 0,
+              )
+            : undefined;
+        const answer = fields.get(`part_${letter}_answer`) ?? "";
+        if (
+          needsPartBoxes &&
+          finalizedBoxes &&
+          finalizedBoxes.length === 0 &&
+          answer.trim()
+        ) {
+          finalizedBoxes.push(
+            ...finalizeInputBoxes([
+              {
+                key: "1",
+                label: fields.get(`part_${letter}_label`)?.trim() || "Answer",
+                acceptedAnswer: answer,
+                marks: Math.max(1, Math.round(Number(fields.get(`part_${letter}_marks`)) || 1)),
+              },
+            ]),
+          );
+        } else if (
+          needsPartBoxes &&
+          finalizedBoxes &&
+          finalizedBoxes.length === 1 &&
+          !finalizedBoxes[0]?.acceptedAnswer?.trim() &&
+          answer.trim()
+        ) {
+          finalizedBoxes[0] = { ...finalizedBoxes[0]!, acceptedAnswer: answer };
+        }
+        const imagePageRaw = Number(fields.get(`part_${letter}_image_page`));
+        return {
+          key: letter,
+          marks: Math.max(1, Math.round(Number(fields.get(`part_${letter}_marks`)) || 1)),
+          label: fields.get(`part_${letter}_label`) ?? "",
+          answer,
+          placeholder: fields.get(`part_${letter}_placeholder`) ?? "Type your answer…",
+          useImage: parsePartUseImage(fields, letter),
+          crop: parsePartCropFromFields(fields, letter),
+          imagePage: Number.isFinite(imagePageRaw) && imagePageRaw > 0 ? imagePageRaw : undefined,
+          needsInputBoxes: needsPartBoxes,
+          labelOverlays: needsPartBoxes ? finalizedBoxes : undefined,
+        };
+      })
+      .filter((p) => p.label?.trim() || p.answer?.trim() || p.useImage || p.needsInputBoxes);
   } else if (
     fields.has("part_label") ||
     fields.has("accepted_answer") ||
@@ -453,6 +819,10 @@ function parseNodentMetadataBlock(blockBody: string): NodentPageMeta | null {
     passage,
     parts,
     useImage,
+    crop,
+    needsInputBoxes,
+    labelDiagramEnabled,
+    labelOverlays: needsInputBoxes ? labelOverlays : undefined,
   };
 }
 
@@ -461,6 +831,77 @@ export function parseAllNodentMetadataBlocks(text: string): NodentPageMeta[] {
   return extractNodentBlockBodies(text)
     .map((body) => parseNodentMetadataBlock(body))
     .filter((m): m is NodentPageMeta => m != null);
+}
+
+function sortPositionedItems(items: TextItem[]): TextItem[] {
+  return [...items].sort((a, b) => {
+    const yDiff = b.y - a.y;
+    if (Math.abs(yDiff) > 4) return yDiff > 0 ? 1 : -1;
+    return a.x - b.x;
+  });
+}
+
+function buildTextFromPositionedItems(items: TextItem[]): string {
+  let text = "";
+  let lastY: number | null = null;
+  for (const item of items) {
+    if (lastY !== null && Math.abs(item.y - lastY) > 7) {
+      text += "\n";
+    } else if (text && !text.endsWith("\n") && !text.endsWith(" ")) {
+      text += " ";
+    }
+    text += item.str;
+    lastY = item.y;
+  }
+  return text;
+}
+
+function estimateBodyTopY(body: string, items: TextItem[]): number {
+  const idMatch = body.match(/\bquestion_id\s*:\s*(\S+)/i);
+  if (idMatch?.[1]) {
+    const id = idMatch[1].replace(/---.*$/, "").trim();
+    const hit = items.find((it) => it.str.includes(id));
+    if (hit) return hit.y;
+  }
+  const firstLine = body.split("\n").find((l) => l.trim())?.trim() ?? "";
+  if (firstLine.length >= 8) {
+    const needle = firstLine.slice(0, Math.min(20, firstLine.length));
+    const hit = items.find((it) => it.str.includes(needle));
+    if (hit) return hit.y;
+  }
+  return 0;
+}
+
+function sortBlockBodiesTopToBottom(bodies: string[], items: TextItem[]): string[] {
+  if (bodies.length <= 1) return bodies;
+  return [...bodies].sort(
+    (a, b) => estimateBodyTopY(b, items) - estimateBodyTopY(a, items),
+  );
+}
+
+type PageNodentParseResult = {
+  metas: NodentPageMeta[];
+  skippedBlocks: number;
+};
+
+async function parseAllNodentMetadataBlocksFromPage(
+  page: import("pdfjs-dist").PDFPageProxy,
+): Promise<PageNodentParseResult> {
+  const items = sortPositionedItems(await extractPositionedItems(page));
+  const text = normalizeNodentText(buildTextFromPositionedItems(items));
+  const bodies = sortBlockBodiesTopToBottom(extractNodentBlockBodies(text), items);
+
+  const metas: NodentPageMeta[] = [];
+  let skippedBlocks = 0;
+  for (const body of bodies) {
+    const meta = parseNodentMetadataBlock(body);
+    if (meta) {
+      metas.push(meta);
+    } else if (body.replace(/\s/g, "").length > 8) {
+      skippedBlocks++;
+    }
+  }
+  return { metas, skippedBlocks };
 }
 
 export function parseNodentMetadata(text: string): NodentPageMeta | null {
@@ -512,7 +953,9 @@ export async function estimateNodentFigureCrop(
 }
 
 export function isNodentPdfText(text: string): boolean {
-  return /---\s*NODENT\s*---/i.test(normalizeNodentText(text));
+  const normalized = normalizeNodentText(text);
+  if (/---\s*NODENT\s*---/i.test(normalized)) return true;
+  return /\bquestion_id\s*:/i.test(normalized) && /---END---/i.test(normalized);
 }
 
 export type ParseNodentPdfOptions = {
@@ -550,39 +993,11 @@ function buildQuestionsFromPage(
     let correctAnswer = meta.correctAnswer ?? "";
     let questionStem = meta.question.trim();
 
-    if (metaNeedsMcqFill(meta)) {
-      const fromText = pageMcqFromText;
-      const extracted =
-        fromText?.options?.length === 4
-          ? fromText
-          : fromText?.options?.[3]?.trim()
-            ? fromText
-            : null;
-      if (extracted?.options?.length === 4) {
-        mcqOptions = [...extracted.options];
-        if (!correctAnswer && extracted.correctAnswer) {
-          correctAnswer = extracted.correctAnswer;
-        }
-        if (!questionStem && extracted.stem.trim()) {
-          questionStem = extracted.stem.trim();
-        }
-      } else if (
-        mcqOptions &&
-        mcqOptions.filter((o) => o.trim()).length >= 3 &&
-        !mcqOptions[3]?.trim()
-      ) {
-        const dOpt = fromText?.options?.[3]?.trim();
-        if (dOpt) mcqOptions[3] = dOpt;
-      }
-    }
-
     const isMcqRow =
       meta.type === "mcq" || Boolean(mcqOptions?.filter((o) => o.trim()).length);
     const useImage = meta.useImage;
 
-    const stem =
-      questionStem ||
-      (imagePrimary && useImage ? "See figure." : `Question ${meta.questionId}`);
+    const stem = questionStem || `Question ${meta.questionId}`;
 
     const safeId = meta.questionId.replace(/[^\w.-]+/g, "_");
     const uniqueId =
@@ -607,19 +1022,15 @@ function buildQuestionsFromPage(
       crop,
       parts: isMcqRow
         ? []
-        : meta.parts.map((p, idx) => {
-            const letter = partLetterForIndex(idx);
-            const multi = meta.parts.length >= 2;
-            return {
-              label: letter,
-              descriptor: multi
-                ? partDescriptor(letter, p.label)
-                : formatSinglePartLabel(p.label) || p.label.trim() || "Answer",
-              placeholder: p.placeholder,
-              acceptedAnswer: p.answer,
-              marks: p.marks,
-            };
-          }),
+        : meta.parts.map((p) => ({
+            label: partKeyFromLabel(p.label, p.key),
+            descriptor: normalizeQuestionMathText(p.label)?.trim() || "Answer",
+            placeholder: p.placeholder,
+            acceptedAnswer: p.answer,
+            marks: p.marks,
+            ...(p.needsInputBoxes ? { needsInputBoxes: true } : {}),
+            ...(p.labelOverlays?.length ? { labelOverlays: p.labelOverlays } : {}),
+          })),
       ...(mcqOptions?.every((o) => o.trim())
         ? {
             mcqOptions,
@@ -627,67 +1038,305 @@ function buildQuestionsFromPage(
           }
         : {}),
       ...(meta.passage ? { passage: meta.passage } : {}),
+      ...(meta.needsInputBoxes || meta.labelDiagramEnabled
+        ? { labelDiagramEnabled: true }
+        : {}),
     });
   }
 
   return out;
 }
 
-/** Parse a NODENT PDF — one page at a time, text then image (never concurrent). */
+/** Exam order: gm-exam-q1 → 1 */
+export function extractQuestionNumber(questionId: string): number | null {
+  const id = questionId.trim().toLowerCase();
+  const qMatch = id.match(/(?:^|[-_.])q(\d+)(?:[^0-9]|$)/);
+  if (qMatch?.[1]) return parseInt(qMatch[1], 10);
+  const lead = id.match(/^(\d+)/);
+  if (lead?.[1]) return parseInt(lead[1], 10);
+  return null;
+}
+
+export function canonicalQuestionIdKey(rawId: string): string {
+  return rawId.trim().replace(/---[\s\S]*$/i, "").toLowerCase();
+}
+
+export function compareNodentQuestionOrder(
+  a: Pick<NodentParsedQuestion, "questionId" | "pageNumber" | "pageNumbers" | "pageQuestionIndex">,
+  b: Pick<NodentParsedQuestion, "questionId" | "pageNumber" | "pageNumbers" | "pageQuestionIndex">,
+): number {
+  const aNum = extractQuestionNumber(a.questionId);
+  const bNum = extractQuestionNumber(b.questionId);
+  if (aNum != null && bNum != null && aNum !== bNum) return aNum - bNum;
+  const aFirst = a.pageNumbers?.[0] ?? a.pageNumber;
+  const bFirst = b.pageNumbers?.[0] ?? b.pageNumber;
+  if (aFirst !== bFirst) return aFirst - bFirst;
+  return (a.pageQuestionIndex ?? 1) - (b.pageQuestionIndex ?? 1);
+}
+
+type PageAnchor = {
+  pageNumber: number;
+  meta: NodentPageMeta;
+  metaIndexOnPage: number;
+};
+
+function pagesForQuestionGroup(
+  groupAnchors: PageAnchor[],
+  anchorPages: Set<number>,
+  nextGroupFirstPage: number,
+  totalPages: number,
+): number[] {
+  const idPages = [...new Set(groupAnchors.map((a) => a.pageNumber))].sort((a, b) => a - b);
+  const firstAnchorPage = idPages[0]!;
+  const pages = new Set<number>(idPages);
+
+  const rangeEnd = Math.min(nextGroupFirstPage, totalPages + 1);
+  for (let p = firstAnchorPage; p < rangeEnd; p++) {
+    if (!anchorPages.has(p)) pages.add(p);
+  }
+
+  for (const p of idPages) {
+    if (p >= nextGroupFirstPage) pages.add(p);
+  }
+
+  return [...pages].sort((a, b) => a - b);
+}
+
+function mergeGroupPageMeta(anchors: PageAnchor[]): NodentPageMeta {
+  const sorted = [...anchors].sort(
+    (a, b) => a.pageNumber - b.pageNumber || a.metaIndexOnPage - b.metaIndexOnPage,
+  );
+  const primary = sorted[0]!.meta;
+  const partByKey = new Map<string, NodentPartMeta>();
+
+  for (const anchor of sorted) {
+    for (const part of anchor.meta.parts) {
+      const key = (part.key || "a").toLowerCase();
+      const existing = partByKey.get(key);
+      if (!existing) {
+        partByKey.set(key, { ...part });
+        continue;
+      }
+      partByKey.set(key, {
+        ...existing,
+        label: part.label?.trim() || existing.label,
+        answer: part.answer?.trim() || existing.answer,
+        placeholder: part.placeholder?.trim() || existing.placeholder,
+        marks: part.marks > 0 ? part.marks : existing.marks,
+        useImage: part.useImage || existing.useImage,
+        crop: part.crop ?? existing.crop,
+        imagePage: part.imagePage ?? existing.imagePage,
+        needsInputBoxes: part.needsInputBoxes || existing.needsInputBoxes,
+        labelOverlays: part.labelOverlays?.length ? part.labelOverlays : existing.labelOverlays,
+      });
+    }
+  }
+
+  const parts = [...partByKey.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([, part]) => part);
+
+  const questionBlocks = sorted.map((a) => a.meta.question.trim()).filter(Boolean);
+  const question = [...new Set(questionBlocks)].join("\n\n") || primary.question;
+
+  const passageBlocks = sorted
+    .map((a) => a.meta.passage?.trim())
+    .filter((p): p is string => Boolean(p));
+  const passage = passageBlocks.length
+    ? [...new Set(passageBlocks)].join("\n\n")
+    : primary.passage;
+
+  return { ...primary, question, passage, parts };
+}
+
+async function buildGroupedQuestion(
+  groupAnchors: PageAnchor[],
+  pagesInRange: number[],
+  doc: import("pdfjs-dist").PDFDocumentProxy,
+  imagePrimary: boolean,
+): Promise<NodentParsedQuestion> {
+  const primary = groupAnchors[0]!;
+  const meta = mergeGroupPageMeta(groupAnchors);
+  const pageNumber = pagesInRange[0]!;
+
+  const cropRect = meta.crop ?? FULL_CROP;
+  const shouldCrop = Boolean(meta.crop && isMeaningfulCropRect(meta.crop));
+  let crop = cropRect;
+
+  const imageDataUrls: string[] = [];
+  const sourceImageDataUrls: string[] = [];
+  if (meta.useImage) {
+    for (const p of pagesInRange) {
+      const pageImg = await doc.getPage(p);
+      const img = await renderPageToDataUrl(pageImg, PDF_RENDER_STANDARD);
+      sourceImageDataUrls.push(img);
+      imageDataUrls.push(shouldCrop ? await cropImageDataUrl(img, cropRect) : img);
+    }
+    if (shouldCrop) {
+      crop = FULL_CROP;
+    }
+  }
+
+  const pageMcqFromText = null;
+
+  const built = buildQuestionsFromPage(
+    [meta],
+    pageNumber,
+    pageMcqFromText,
+    imagePrimary,
+    sourceImageDataUrls[0] ?? "",
+    crop,
+  )[0]!;
+
+  const enrichedParts = await Promise.all(
+    built.parts.map(async (part, idx) => {
+      const metaPart = meta.parts[idx];
+      if (!metaPart) return part;
+
+      let imageDataUrl = part.imageDataUrl;
+      let cropApplied = part.cropApplied;
+      const partCrop = metaPart.crop;
+      const partShouldCrop = Boolean(partCrop && isMeaningfulCropRect(partCrop));
+
+      if (metaPart.useImage) {
+        const targetPage = metaPart.imagePage ?? pagesInRange[0] ?? pageNumber;
+        const sourceIdx = Math.max(0, pagesInRange.indexOf(targetPage));
+        const source = sourceImageDataUrls[sourceIdx] ?? sourceImageDataUrls[0];
+        if (source) {
+          if (partShouldCrop && partCrop) {
+            imageDataUrl = await cropImageDataUrl(source, partCrop);
+            cropApplied = true;
+          } else {
+            imageDataUrl = imageDataUrls[sourceIdx] ?? imageDataUrls[0] ?? source;
+            cropApplied = Boolean(imageDataUrl);
+          }
+        }
+      }
+
+      return {
+        ...part,
+        imageDataUrl,
+        cropApplied,
+        ...(metaPart.needsInputBoxes ? { needsInputBoxes: true } : {}),
+        ...(metaPart.labelOverlays?.length ? { labelOverlays: metaPart.labelOverlays } : {}),
+      };
+    }),
+  );
+
+  const safeId = meta.questionId.replace(/[^\w.-]+/g, "_");
+
+  return {
+    ...built,
+    parts: enrichedParts,
+    id: safeId,
+    pageNumber,
+    pageNumbers: pagesInRange,
+    imageDataUrl: imageDataUrls[0] ?? "",
+    imageDataUrls: meta.useImage ? imageDataUrls : [],
+    sourceImageDataUrl: sourceImageDataUrls[0],
+    sourceImageDataUrls: meta.useImage ? sourceImageDataUrls : [],
+    pageQuestionIndex: 1,
+    pageQuestionCount: 1,
+    cropApplied: shouldCrop,
+    ...(meta.labelOverlays?.length ? { labelOverlays: meta.labelOverlays } : {}),
+    ...(meta.needsInputBoxes || meta.labelDiagramEnabled ? { labelDiagramEnabled: true } : {}),
+  };
+}
+
+/** Parse a NODENT PDF — one row per question_id, all matching pages as croppable images. */
 export async function parseNodentPdfToQuestions(
   file: File,
   { imagePrimary = true, onProgress }: ParseNodentPdfOptions = {},
 ): Promise<{ questions: NodentParsedQuestion[]; errors: string[] }> {
   const doc = await openPdfDocument(file);
   const total = doc.numPages;
-  const questions: NodentParsedQuestion[] = [];
   const errors: string[] = [];
+  const anchors: PageAnchor[] = [];
+  const anchorPages = new Set<number>();
+  const questions: NodentParsedQuestion[] = [];
 
   try {
     for (let pageNumber = 1; pageNumber <= total; pageNumber++) {
       onProgress?.(pageNumber, total);
       const page = await doc.getPage(pageNumber);
-      const text = normalizeNodentText(await extractPageText(page));
-      const metas = parseAllNodentMetadataBlocks(text);
+      const { metas, skippedBlocks } = await parseAllNodentMetadataBlocksFromPage(page);
 
       if (!metas.length) {
+        const text = normalizeNodentText(await extractPageText(page));
         const bodies = extractNodentBlockBodies(text);
-        const hint = /NODENT/i.test(text)
-          ? bodies.length
-            ? " (NODENT marker found but question_id missing — check key: value format)"
-            : " (NODENT text found but block not closed with ---END---?)"
-          : text.trim()
-            ? " (page text found but no NODENT marker)"
-            : " (no extractable text on this page)";
-        errors.push(`Page ${pageNumber}: no question parsed${hint}.`);
-        if (pageNumber === 1) {
-          console.warn("[nodent-import] page 1 text sample:", text.slice(0, 600));
+        if (/NODENT/i.test(text) || bodies.length) {
+          const hint = bodies.length
+            ? " (NODENT block found but question_id missing — check key: value format)"
+            : " (NODENT text found but block not closed with ---END---?)";
+          errors.push(`Page ${pageNumber}: no question parsed${hint}.`);
         }
         continue;
       }
 
-      const pageNeedsImage = metas.some((m) => m.useImage);
-      const crop = defaultCropForMetaCount(metas.length);
-      let sourceImageDataUrl = "";
-      if (pageNeedsImage) {
-        sourceImageDataUrl = await renderPageToDataUrl(page, PDF_RENDER_STANDARD);
+      if (skippedBlocks > 0) {
+        errors.push(
+          `Page ${pageNumber}: ${skippedBlocks} NODENT block(s) skipped (missing question_id).`,
+        );
       }
 
-      const needsMcqTextFill = metas.some((m) => metaNeedsMcqFill(m));
-      const strippedText = stripNodentBlocks(text).trim();
-      const pageMcqFromText = needsMcqTextFill ? extractMcqOptionsFromText(strippedText) : null;
+      metas.forEach((meta, metaIndexOnPage) => {
+        anchors.push({ pageNumber, meta, metaIndexOnPage });
+        anchorPages.add(pageNumber);
+      });
+    }
+
+    if (!anchors.length) {
+      errors.push("No NODENT questions found — each question needs a ---NODENT--- block with question_id.");
+      return { questions: [], errors };
+    }
+
+    const byKey = new Map<string, PageAnchor[]>();
+    for (const anchor of anchors) {
+      const key = canonicalQuestionIdKey(anchor.meta.questionId);
+      const list = byKey.get(key) ?? [];
+      list.push(anchor);
+      byKey.set(key, list);
+    }
+
+    const groupKeys = [...byKey.keys()].sort((ka, kb) => {
+      const aAnchor = byKey.get(ka)!.sort(
+        (x, y) => x.pageNumber - y.pageNumber || x.metaIndexOnPage - y.metaIndexOnPage,
+      )[0]!;
+      const bAnchor = byKey.get(kb)!.sort(
+        (x, y) => x.pageNumber - y.pageNumber || x.metaIndexOnPage - y.metaIndexOnPage,
+      )[0]!;
+      const cmp = compareNodentQuestionOrder(
+        { questionId: aAnchor.meta.questionId, pageNumber: aAnchor.pageNumber },
+        { questionId: bAnchor.meta.questionId, pageNumber: bAnchor.pageNumber },
+      );
+      if (cmp !== 0) return cmp;
+      return ka.localeCompare(kb);
+    });
+
+    for (let gi = 0; gi < groupKeys.length; gi++) {
+      const key = groupKeys[gi]!;
+      const groupAnchors = [...byKey.get(key)!].sort(
+        (a, b) => a.pageNumber - b.pageNumber || a.metaIndexOnPage - b.metaIndexOnPage,
+      );
+      const primary = groupAnchors[0]!;
+      const nextGroupFirstPage =
+        gi + 1 < groupKeys.length
+          ? Math.min(...byKey.get(groupKeys[gi + 1]!)!.map((a) => a.pageNumber))
+          : total + 1;
+
+      const pagesInRange = pagesForQuestionGroup(
+        groupAnchors,
+        anchorPages,
+        nextGroupFirstPage,
+        total,
+      );
 
       questions.push(
-        ...buildQuestionsFromPage(
-          metas,
-          pageNumber,
-          pageMcqFromText,
-          imagePrimary,
-          sourceImageDataUrl,
-          crop,
-        ),
+        await buildGroupedQuestion(groupAnchors, pagesInRange, doc, imagePrimary),
       );
     }
+
+    questions.sort(compareNodentQuestionOrder);
   } finally {
     await doc.destroy();
   }

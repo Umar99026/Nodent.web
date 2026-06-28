@@ -3,12 +3,12 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { AppShell } from "@/components/layout/AppShell";
 import { API_PATHS } from "@/lib/constants";
-import { apiFetch } from "@/lib/api";
+import { AI_FETCH_TIMEOUT_MS, apiFetch } from "@/lib/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
+import { ExamPaperAnswerBlock } from "@/components/quiz/ExamPaperAnswerBlock";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Check, Loader2, X } from "lucide-react";
@@ -58,6 +58,35 @@ function dedupePrompts(list: Prompt[]): Prompt[] {
     out.push(p);
   }
   return out;
+}
+
+function englishResponsesQuery(section: Section, promptId: number, bookId?: number): string {
+  const params = new URLSearchParams({
+    section,
+    promptId: String(promptId),
+  });
+  if (section === "A" && bookId != null && Number.isFinite(bookId) && bookId > 0) {
+    params.set("bookId", String(bookId));
+  }
+  return `?${params.toString()}`;
+}
+
+function englishPromptsQuery(section: Section, bookId?: number, promptId?: number): string {
+  if (promptId != null && Number.isFinite(promptId) && promptId > 0) {
+    return `?promptId=${encodeURIComponent(promptId)}`;
+  }
+  if (section === "A" && bookId != null && Number.isFinite(bookId) && bookId > 0) {
+    return `?section=A&bookId=${encodeURIComponent(bookId)}`;
+  }
+  return `?section=${encodeURIComponent(section)}`;
+}
+
+function formatEnglishPromptForSection(section: Section, raw: string): string {
+  const base = cleanSectionBPromptText(raw);
+  if (!base.trim()) return "";
+  if (section === "A") return cleanSectionAPromptText(base);
+  if (section === "B") return formatSectionBPromptDisplay(base);
+  return base;
 }
 
 export function EnglishPracticePanel() {
@@ -202,6 +231,8 @@ export function EnglishPracticePanel() {
         ok: boolean;
         id?: number;
         aiScore?: { score: number; feedback: string } | null;
+        aiScoringPending?: boolean;
+        aiConfigured?: boolean;
       }>(API_PATHS.english.responses, {
         method: "POST",
         body: JSON.stringify({
@@ -215,6 +246,13 @@ export function EnglishPracticePanel() {
         toast.success(`Smart mark: ${submitResult.aiScore.score}/10`, {
           description: submitResult.aiScore.feedback?.slice(0, 240) || undefined,
           duration: 10000,
+        });
+      } else if (submitResult.aiScoringPending) {
+        toast.success("Response uploaded. Smart marking in progress…", { duration: 6000 });
+      } else if (responseText.length >= 20 && submitResult.aiConfigured === false) {
+        toast.success("Response uploaded.", {
+          description: "Smart marking is not configured on the server yet.",
+          duration: 8000,
         });
       } else if (responseText.length > 0 && responseText.length < 20) {
         toast.success("Response uploaded. Write at least 20 characters for smart marking.");
@@ -256,14 +294,13 @@ export function EnglishPracticePanel() {
           </div>
           <div className="practice-card-header">
             <p className="practice-card-header-title">English Practice</p>
+            {section !== "A" ? (
+              <p className="practice-card-header-meta">
+                {section === "B" ? "Creative writing practice" : "Section C writing practice"}
+              </p>
+            ) : null}
           </div>
-          <CardHeader className="pb-4 pt-4">
-            <CardTitle className="font-display text-xl text-[#0b0f19] sm:text-2xl">Setup</CardTitle>
-            <CardDescription className="text-muted-foreground">
-              Choose your section, open prompts, and draft your responses.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-4 px-4 py-4 sm:px-7 sm:py-5">
             <div className="w-full max-w-xs">
               <Select value={section} onValueChange={(v) => setSection((v as Section) ?? "A")}>
                 <SelectTrigger className="h-11 border-brand-light/50 bg-brand-light/50 font-medium text-[#0b0f19]">
@@ -299,11 +336,7 @@ export function EnglishPracticePanel() {
                   </Select>
                 </div>
               </div>
-            ) : (
-              <Badge variant="secondary" className="rounded-full border border-brand-light/50 bg-brand-light/50 text-[#0b0f19]">
-                {section === "B" ? "Creative writing practice" : "Section C writing practice"}
-              </Badge>
-            )}
+            ) : null}
           </CardContent>
         </Card>
 
@@ -399,16 +432,13 @@ export function EnglishPracticePanel() {
                         ) : null}
                       </div>
                     ) : null}
-                    <Textarea
-                      rows={8}
+                    <ExamPaperAnswerBlock
                       value={textByPrompt[activePrompt.id] ?? ""}
-                      onChange={(e) => setTextByPrompt((m) => ({ ...m, [activePrompt.id]: e.target.value }))}
-                      placeholder={
-                        section === "C"
-                          ? "Write your argument analysis response..."
-                          : "Write your response for this prompt..."
+                      onChange={(v) =>
+                        setTextByPrompt((m) => ({ ...m, [activePrompt.id]: v }))
                       }
-                      className="min-h-[220px] border-black/15 bg-white text-[15px] leading-7 shadow-sm"
+                      lines={section === "C" ? 14 : 12}
+                      className="min-h-[220px]"
                     />
                     {section === "C" ? (
                       <div className="rounded-xl border border-black/8 bg-[#f3f4f6]/60 p-4">
@@ -490,27 +520,55 @@ export function EnglishPromptResponsesPage() {
   const [loading, setLoading] = useState(true);
   const [responses, setResponses] = useState<ResponseRow[]>([]);
   const [catalogPromptRaw, setCatalogPromptRaw] = useState("");
+  const [resolvedSection, setResolvedSection] = useState<Section>(section);
   const [openResponseId, setOpenResponseId] = useState<number | null>(null);
   const [scoringResponseId, setScoringResponseId] = useState<number | null>(null);
+  const [pollingAiScore, setPollingAiScore] = useState(false);
 
   const openFromQuery = Number(searchParams.get("open"));
 
-  const promptsQuerySuffix =
-    section === "A"
-      ? `?section=A&bookId=${encodeURIComponent(bookId)}`
-      : `?section=${encodeURIComponent(section)}`;
+  const validBookId =
+    section === "A" && Number.isFinite(bookId) && bookId > 0 ? bookId : undefined;
+
+  const promptsQuerySuffix = englishPromptsQuery(section, validBookId, numericPromptId);
+  const responsesQuerySuffix = englishResponsesQuery(section, numericPromptId, validBookId);
+
+  const loadResponses = async () => {
+    const r = await apiFetch<{
+      responses: ResponseRow[];
+      prompt?: { id: number; prompt: string; section: Section; bookId: number | null } | null;
+    }>(`${API_PATHS.english.responses}${responsesQuerySuffix}`);
+    if (r.prompt?.prompt) {
+      setCatalogPromptRaw(String(r.prompt.prompt));
+      if (r.prompt.section === "A" || r.prompt.section === "B" || r.prompt.section === "C") {
+        setResolvedSection(r.prompt.section);
+      }
+    }
+    const displaySection =
+      r.prompt?.section === "A" || r.prompt?.section === "B" || r.prompt?.section === "C"
+        ? r.prompt.section
+        : resolvedSection;
+    return (r.responses ?? []).map((x) => ({
+      ...x,
+      prompt: formatEnglishPromptForSection(displaySection, x.prompt),
+    }));
+  };
 
   useEffect(() => {
     if (!Number.isFinite(numericPromptId) || numericPromptId <= 0) return;
     let cancelled = false;
     (async () => {
       try {
-        const p = await apiFetch<{ prompts: { id: number; prompt: string }[] }>(
+        const p = await apiFetch<{ prompts: { id: number; prompt: string; section?: Section }[] }>(
           `${API_PATHS.english.prompts}${promptsQuerySuffix}`,
         );
         if (cancelled) return;
-        const hit = (p.prompts ?? []).find((x) => Number(x.id) === numericPromptId);
-        setCatalogPromptRaw(String(hit?.prompt ?? ""));
+        const hit = (p.prompts ?? []).find((x) => Number(x.id) === numericPromptId) ?? p.prompts?.[0];
+        const raw = String(hit?.prompt ?? "");
+        if (raw) setCatalogPromptRaw(raw);
+        if (hit?.section === "A" || hit?.section === "B" || hit?.section === "C") {
+          setResolvedSection(hit.section);
+        }
       } catch {
         if (!cancelled) setCatalogPromptRaw("");
       }
@@ -521,25 +579,58 @@ export function EnglishPromptResponsesPage() {
   }, [numericPromptId, promptsQuerySuffix]);
 
   useEffect(() => {
+    if (!Number.isFinite(numericPromptId) || numericPromptId <= 0) return;
+    let cancelled = false;
     (async () => {
       try {
         setLoading(true);
-        const suffix =
-          section === "A"
-            ? `?section=A&bookId=${encodeURIComponent(bookId)}`
-            : `?section=${encodeURIComponent(section)}`;
-        const r = await apiFetch<{ responses: ResponseRow[] }>(`${API_PATHS.english.responses}${suffix}`);
-        const rows = (r.responses ?? [])
-          .map((x) => ({ ...x, prompt: cleanSectionBPromptText(x.prompt) }))
-          .filter((x) => x.promptId === numericPromptId);
-        setResponses(rows);
+        const rows = await loadResponses();
+        if (!cancelled) setResponses(rows);
       } catch {
-        toast.error("Could not load responses for this prompt.");
+        if (!cancelled) toast.error("Could not load responses for this prompt.");
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     })();
-  }, [section, bookId, numericPromptId]);
+    return () => {
+      cancelled = true;
+    };
+  }, [section, validBookId, numericPromptId, responsesQuerySuffix]);
+
+  useEffect(() => {
+    if (!Number.isFinite(openFromQuery) || openFromQuery <= 0 || loading) return;
+    const target = responses.find((r) => r.id === openFromQuery);
+    if (!target || target.aiScore != null) return;
+    if ((target.responseText?.trim().length ?? 0) < 20) return;
+
+    let cancelled = false;
+    setPollingAiScore(true);
+    (async () => {
+      for (let attempt = 0; attempt < 30 && !cancelled; attempt++) {
+        await new Promise((resolve) => window.setTimeout(resolve, 2000));
+        try {
+          const rows = await loadResponses();
+          if (cancelled) return;
+          setResponses(rows);
+          const updated = rows.find((r) => r.id === openFromQuery);
+          if (updated?.aiScore != null) {
+            toast.success(`Smart mark: ${updated.aiScore}/10`, {
+              description: updated.aiFeedback?.slice(0, 240) || undefined,
+              duration: 10000,
+            });
+            break;
+          }
+        } catch {
+          break;
+        }
+      }
+      if (!cancelled) setPollingAiScore(false);
+    })();
+    return () => {
+      cancelled = true;
+      setPollingAiScore(false);
+    };
+  }, [openFromQuery, loading, responsesQuerySuffix]);
 
   useEffect(() => {
     if (!Number.isFinite(openFromQuery) || openFromQuery <= 0 || loading) return;
@@ -551,14 +642,40 @@ export function EnglishPromptResponsesPage() {
   const requestAiScore = async (responseId: number) => {
     setScoringResponseId(responseId);
     try {
-      const result = await apiFetch<{ ok: boolean; aiScore: { score: number; feedback: string } }>(
-        API_PATHS.english.aiScoreResponse(responseId),
-        { method: "POST" },
-      );
+      const result = await apiFetch<{
+        ok: boolean;
+        aiScore?: { score: number; feedback: string };
+        aiScoringPending?: boolean;
+      }>(API_PATHS.english.aiScoreResponse(responseId), {
+        method: "POST",
+        timeoutMs: AI_FETCH_TIMEOUT_MS,
+      });
+      if (result.aiScoringPending) {
+        setPollingAiScore(true);
+        for (let attempt = 0; attempt < 30; attempt++) {
+          await new Promise((resolve) => window.setTimeout(resolve, 2000));
+          const rows = await loadResponses();
+          setResponses(rows);
+          const updated = rows.find((r) => r.id === responseId);
+          if (updated?.aiScore != null) {
+            toast.success(`Smart mark: ${updated.aiScore}/10`, {
+              description: updated.aiFeedback?.slice(0, 240) || undefined,
+              duration: 10000,
+            });
+            return;
+          }
+        }
+        toast.error("Smart marking is taking longer than expected. Try refreshing in a moment.");
+        return;
+      }
+      if (!result.aiScore) {
+        toast.error("Could not score response.");
+        return;
+      }
       setResponses((prev) =>
         prev.map((row) =>
           row.id === responseId
-            ? { ...row, aiScore: result.aiScore.score, aiFeedback: result.aiScore.feedback }
+            ? { ...row, aiScore: result.aiScore!.score, aiFeedback: result.aiScore!.feedback }
             : row,
         ),
       );
@@ -571,18 +688,15 @@ export function EnglishPromptResponsesPage() {
       toast.error(message);
     } finally {
       setScoringResponseId(null);
+      setPollingAiScore(false);
     }
   };
 
   const resolvedPromptFormatted = useMemo(() => {
     const fromRows = responses.map((row) => row.prompt).find((t) => String(t ?? "").trim()) ?? "";
     const raw = String(catalogPromptRaw ?? "").trim() || fromRows;
-    const base = cleanSectionBPromptText(raw);
-    if (!base.trim()) return "";
-    return section === "A"
-      ? cleanSectionAPromptText(base)
-      : formatSectionBPromptDisplay(base);
-  }, [catalogPromptRaw, responses, section]);
+    return formatEnglishPromptForSection(resolvedSection, raw);
+  }, [catalogPromptRaw, responses, resolvedSection]);
 
   const openResponse = responses.find((r) => r.id === openResponseId) ?? null;
 
@@ -718,6 +832,12 @@ export function EnglishPromptResponsesPage() {
                     ) : (
                       "Not smart marked yet"
                     )}
+                    {pollingAiScore && openResponse.aiScore == null ? (
+                      <span className="ml-2 inline-flex items-center gap-1 text-[#0f172a]">
+                        <Loader2 className="size-3 animate-spin" />
+                        Scoring…
+                      </span>
+                    ) : null}
                   </p>
                 </div>
                 {user?.id != null && Number(user.id) === Number(openResponse.userId) &&

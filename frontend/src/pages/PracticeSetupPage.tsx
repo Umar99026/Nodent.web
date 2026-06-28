@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, BOOTSTRAP_FETCH_TIMEOUT_MS } from "@/lib/api";
 import { API_PATHS, STORAGE_KEYS, isAdminUser } from "@/lib/constants";
 import { baseSubjects, subjectsForUser } from "@/lib/subjects";
 import type { Question, Subject } from "@/lib/subjects";
+import { loadPracticeBank } from "@/lib/questionBankCache";
 import {
   getRawCustomQuestionsForSubject,
   practiceQuestionsForSubject,
@@ -13,7 +14,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, BookOpen, ArrowRight } from "lucide-react";
+import { Loader2, BookOpen, ArrowRight, FileText } from "lucide-react";
 import { generalMathsPracticeTopicOptions } from "@/lib/generalMathsAreaTopic";
 import { methodsPracticeTopicOptions } from "@/lib/methodsAreaTopic";
 import { specialistMathsPracticeTopicOptions } from "@/lib/specialistMathsAreaTopic";
@@ -68,14 +69,27 @@ export default function PracticeSetupPage() {
   useEffect(() => {
     if (!subjectId) return;
     let cancelled = false;
+
+    const cached = loadPracticeBank(subjectId);
+    if (cached.length > 0) {
+      setQuestions(cached);
+      setLoading(false);
+    } else if (!user) {
+      setQuestions(practiceQuestionsForSubject([], subjectId));
+      setLoading(false);
+      return;
+    } else {
+      setLoading(true);
+    }
+
+    if (!user) return;
+
     (async () => {
       try {
-        setLoading(true);
-        if (!user) {
-          setQuestions(practiceQuestionsForSubject([], subjectId));
-          return;
-        }
-        const data = await apiFetch<{ customQuestions?: Record<string, unknown[]> }>(API_PATHS.bootstrap);
+        const data = await apiFetch<{ customQuestions?: Record<string, unknown[]> }>(
+          API_PATHS.bootstrap,
+          { timeoutMs: BOOTSTRAP_FETCH_TIMEOUT_MS },
+        );
         if (cancelled) return;
         if (data.customQuestions) {
           localStorage.setItem(STORAGE_KEYS.customQuestions, JSON.stringify(data.customQuestions));
@@ -83,19 +97,8 @@ export default function PracticeSetupPage() {
         const raw = getRawCustomQuestionsForSubject(data.customQuestions, subjectId);
         setQuestions(practiceQuestionsForSubject(raw, subjectId));
       } catch {
-        let fallback: Question[] = [];
-        try {
-          const parsed = JSON.parse(
-            localStorage.getItem(STORAGE_KEYS.customQuestions) || "{}",
-          ) as Record<string, unknown[]>;
-          fallback = practiceQuestionsForSubject(
-            getRawCustomQuestionsForSubject(parsed, subjectId),
-            subjectId,
-          );
-        } catch {
-          fallback = practiceQuestionsForSubject([], subjectId);
-        }
-        setQuestions(fallback);
+        if (cancelled) return;
+        setQuestions(loadPracticeBank(subjectId));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -106,7 +109,7 @@ export default function PracticeSetupPage() {
   }, [subjectId, user]);
 
   const isMethods = String(subjectId) === "methods";
-  const isGeneralMaths = String(subjectId) === "general-maths";
+  const isGeneralMaths = String(subjectId) === "general-maths" || String(subjectId) === "demo";
   const isSpecialistMaths = String(subjectId) === "specialist-maths";
 
   const availableTopics = useMemo(() => {
@@ -222,15 +225,27 @@ export default function PracticeSetupPage() {
                 </div>
               )}
 
-              <Button
-                variant="accent"
-                onClick={handleStart}
-                className="h-11 w-full gap-2 rounded-xl sm:w-auto"
-              >
-                <BookOpen className="size-4" />
-                Questions
-                <ArrowRight className="size-4" />
-              </Button>
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => navigate(`/practice/${subjectId}/exams`)}
+                  className="h-11 w-full gap-2 rounded-xl sm:w-auto"
+                >
+                  <FileText className="size-4" />
+                  Exams
+                  <ArrowRight className="size-4" />
+                </Button>
+                <Button
+                  variant="accent"
+                  onClick={handleStart}
+                  className="h-11 w-full gap-2 rounded-xl sm:w-auto"
+                >
+                  <BookOpen className="size-4" />
+                  Questions
+                  <ArrowRight className="size-4" />
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>

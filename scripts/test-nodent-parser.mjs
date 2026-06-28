@@ -18,7 +18,14 @@ function looksLikeFieldLine(line) {
   const colon = line.indexOf(":");
   if (colon <= 0) return false;
   const key = normalizeFieldKey(line.slice(0, colon));
-  return /^[a-z][a-z0-9_]*$/.test(key);
+  if (!/^[a-z][a-z0-9_]*$/.test(key)) return false;
+  const known = new Set([
+    "question_id", "subject_id", "type", "topic", "marks", "use_image", "question",
+    "option_a", "option_b", "option_c", "option_d", "correct_answer",
+    "part_a_label", "part_a_marks", "part_a_answer",
+  ]);
+  if (known.has(key)) return true;
+  return /^part_(?:[a-z]|i{1,3}|iv)_(label|marks|answer|placeholder)$/.test(key);
 }
 
 function parseFieldMap(block) {
@@ -33,11 +40,11 @@ function parseFieldMap(block) {
     const key = normalizeFieldKey(trimmed.slice(0, colon));
     if (!key) continue;
     let val = trimmed.slice(colon + 1).trim();
-    while (!val && i + 1 < lines.length) {
+    while (i + 1 < lines.length) {
       const next = lines[i + 1];
       if (looksLikeFieldLine(next) || /^---/i.test(next)) break;
-      val = next;
       i++;
+      val = val ? `${val} ${next}` : next;
     }
     if (!fields.has(key) || val) fields.set(key, val);
   }
@@ -97,14 +104,20 @@ subject_id: demo
     expectId: "2024-gm1-q3",
   },
   {
-    name: "no END marker",
+    name: "multiline question",
     text: `---NODENT---
-question_id: 2024-gm1-q4
-subject_id: demo
-type: mcq
-option_a: [1]
-Figure text with colons: x=1`,
-    expectId: "2024-gm1-q4",
+question_id: gm-q1
+subject_id: general-maths
+type: short_answer
+marks: 2
+question: A researcher collects data on hours studied and test scores for 10 students.
+The correlation is strong and positive.
+part_a_label: State the correlation coefficient.
+part_a_answer: 1
+---END---`,
+    expectId: "gm-q1",
+    expectQuestion:
+      "A researcher collects data on hours studied and test scores for 10 students. The correlation is strong and positive.",
   },
 ];
 
@@ -116,6 +129,14 @@ for (const s of samples) {
   if (id !== s.expectId) {
     console.error("FAIL", s.name, "got", id, "want", s.expectId, { bodies });
     failed++;
+  } else if (s.expectQuestion) {
+    const q = fields.get("question");
+    if (q !== s.expectQuestion) {
+      console.error("FAIL", s.name, "question got", q, "want", s.expectQuestion);
+      failed++;
+    } else {
+      console.log("ok", s.name, id);
+    }
   } else {
     console.log("ok", s.name, id);
   }

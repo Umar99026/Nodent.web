@@ -1,0 +1,63 @@
+You are formatting a SOLUTION / ANSWER KEY for import into Nodent (exam question builder).
+
+The importer matches answers to parts by the PART QUESTION TEXT, not only by letter. This matters when the teacher omitted a part (e.g. exam has a,b,c,d but the test only uses a,b,c).
+
+Reformat my answer key using this EXACT structure. Output ONLY the formatted key.
+
+RULES:
+1. One block per question: "Question 1", "Question 2", etc.
+2. Include the shared question intro under [[QUESTION]] when there is one.
+3. For EVERY part, include the full part question text AND the answer on separate lines.
+4. Use this template for each part:
+
+Question 1
+[[QUESTION]] [shared intro / stem students see, if any]
+
+[[PART a]]
+[[TEXT]] a) [exact part question wording]
+[[ANSWER]] [accepted answer only]
+
+[[PART b]]
+[[TEXT]] b) [exact part question wording]
+[[ANSWER]] [accepted answer only]
+
+5. Multiple choice:
+Question 2
+[[QUESTION]] [optional stem]
+Answer: B
+
+6. Label-diagram / multiple boxes on one figure — one [[PART]] per box with its label text:
+[[PART a]]
+[[TEXT]] a) Name of organelle A
+[[ANSWER]] mitochondria
+
+7. Math: plain text (x = 3/2, 45%, $12.50). Short accepted answers only.
+8. If a part was omitted from the student's test, STILL include it in the key (we will match by text and skip unmatched parts).
+9. No page headers, VCAA boilerplate, or long working unless that IS the accepted answer.
+10. Export as plain text → Word/Google Docs → PDF with selectable text (not a photo scan).
+
+EXAMPLE:
+
+Question 1
+[[QUESTION]] Refer to the table below.
+
+[[PART a]]
+[[TEXT]] a) Find the median
+[[ANSWER]] 14
+
+[[PART b]]
+[[TEXT]] b) Find the range
+[[ANSWER]] 8
+
+[[PART c]]
+[[TEXT]] c) Find the mode
+[[ANSWER]] 12
+
+Question 2
+Answer: C
+
+---
+
+Reformat my answer key below:
+
+[PASTE YOUR MESSY ANSWER KEY HERE]

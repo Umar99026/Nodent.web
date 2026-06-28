@@ -95,8 +95,60 @@ function fixIntegralNotation(text) {
   return q;
 }
 
+function normalizeDerivativeSlashes(segment) {
+  return segment.replace(
+    /\bd(\^2)?([a-z])\s*\/\s*d(\^2)?([a-z])\b/gi,
+    (_m, numSq, numVar, denSq, denVar) => {
+      const num = `d${numSq ?? ""}${numVar}`;
+      const den = `d${denSq ?? ""}${denVar}`;
+      return `\\frac{${num}}{${den}}`;
+    },
+  );
+}
+
+function wrapOdeAndFunctionNotation(segment) {
+  let out = segment;
+
+  out = out.replace(
+    /\bSolve\s+((?:\\frac\{d[^{}]+\}\{d[^{}]+\})[^$]+?)(?=\s+with\b|[,.]|\s+given\b|\s+for\b|$)/gi,
+    (_m, eq) => `Solve $${eq.trim().replace(/\s+/g, " ")}$`,
+  );
+
+  out = out.replace(
+    /\bFor\s+((?:\\frac\{d[^{}]+\}\{d[^{}]+\})[^$]+?)(?=\s*,\s|\.\s|$)/gi,
+    (_m, eq) => `For $${eq.trim().replace(/\s+/g, " ")}$`,
+  );
+
+  out = out.replace(
+    /\b([fgh]|y)\s*\(\s*([^)]+?)\s*\)\s*=\s*([^,\s;.]+)/gi,
+    (_m, fn, arg, val) => `$${fn}(${arg.trim()})=${val.trim()}$`,
+  );
+
+  out = out.replace(
+    /\b(find|evaluate|determine|calculate|compute|hence\s+find)\s+([fgh]|y)\s*\(\s*([^)]+?)\s*\)/gi,
+    (_m, verb, fn, arg) => `${verb} $${fn}(${arg.trim()})$`,
+  );
+
+  return out;
+}
+
+function mathifyDerivativesAndOdes(text) {
+  return text
+    .split(/(\$[^$]*\$)/g)
+    .map((part) => {
+      if (part.startsWith("$") && part.endsWith("$")) {
+        const inner = normalizeDerivativeSlashes(part.slice(1, -1));
+        return `$${inner}$`;
+      }
+      let out = normalizeDerivativeSlashes(part);
+      out = wrapOdeAndFunctionNotation(out);
+      return out;
+    })
+    .join("");
+}
+
 function segmentLooksMath(segment) {
-  return /f\s*\(\s*x\s*\)|\\int|∫|\^|e\^|\\[a-zA-Z]+|f'|d\/dx|[0-9][a-zA-Z]\^|cis\s*\(|\\operatorname\{cis\}|Re\s*\(|\\operatorname\{Re\}/.test(
+  return /f\s*\(\s*x\s*\)|\\int|∫|\^|e\^|\\[a-zA-Z]+|f'|d\/dx|d\^2[a-z]\/d[a-z]|[a-z]\/d[a-z]|[0-9][a-zA-Z]\^|cis\s*\(|\\operatorname\{cis\}|Re\s*\(|\\operatorname\{Re\}|\b(?:dy|dx|dt)\//i.test(
     segment,
   );
 }
@@ -145,6 +197,7 @@ export function mathifyQuestionText(raw) {
   out = wrapLetComplexStems(out);
   out = normalizeComplexNotation(out);
   out = normalizePowers(out);
+  out = mathifyDerivativesAndOdes(out);
   if (segmentLooksMath(out)) out = wrapOutsideExistingDollars(out);
   return out;
 }

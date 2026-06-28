@@ -29,12 +29,14 @@ import {
   Search,
   X,
   Star,
+  Users,
 } from "lucide-react";
 
 import { baseSubjects, subjectsForUser } from "@/lib/subjects";
 import type { Subject } from "@/lib/subjects";
 import { localDateISO } from "@/lib/utils";
 import { isAdminUser } from "@/lib/constants";
+import { fetchClassMembership } from "@/lib/teacherClass";
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -178,6 +180,26 @@ export default function DashboardPage() {
   const [scoreCardOpen, setScoreCardOpen] = useState(false);
   const [scoreCardLoading, setScoreCardLoading] = useState(false);
   const [scoreCard, setScoreCard] = useState<ScorecardData | null>(null);
+  const [classMembership, setClassMembership] = useState<{
+    enrolled: boolean;
+    className?: string;
+    teacherName?: string;
+  }>({ enrolled: false });
+
+  useEffect(() => {
+    if (!user || isAdmin) return;
+    let cancelled = false;
+    void fetchClassMembership()
+      .then((data) => {
+        if (!cancelled) setClassMembership(data);
+      })
+      .catch(() => {
+        if (!cancelled) setClassMembership({ enrolled: false });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user, isAdmin]);
 
   const avgDailyStudyMinutes = useMemo(() => {
     if (!user) return 0;
@@ -412,6 +434,38 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
+
+      {!isAdmin && !classMembership.enrolled ? (
+        <div className="mt-4 rounded-2xl border border-brand/20 bg-brand/5 p-4 sm:mt-5 sm:p-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-brand/15 text-brand">
+                <Users className="size-5" />
+              </div>
+              <div>
+                <p className="font-semibold text-[#0b0f19]">Join your class</p>
+                <p className="text-sm text-muted-foreground">
+                  Enter the code from your teacher or scan their QR code.
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="secondary"
+              className="shrink-0"
+              onClick={() => navigate("/join-class")}
+            >
+              Join class
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      {!isAdmin && classMembership?.enrolled ? (
+        <div className="mt-4 rounded-2xl border border-black/8 bg-white px-4 py-3 text-sm text-muted-foreground sm:mt-5">
+          In <span className="font-medium text-foreground">{classMembership.className}</span>
+          {classMembership.teacherName ? ` with ${classMembership.teacherName}` : ""}
+        </div>
+      ) : null}
 
       {/* Subjects container */}
       <div className="mt-4 min-w-0 max-w-full rounded-3xl border border-black/8 bg-white p-4 shadow-sm sm:mt-5 sm:p-6 lg:mt-6 lg:p-8">

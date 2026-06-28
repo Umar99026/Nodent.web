@@ -14,7 +14,7 @@ export default defineConfig({
     // Listen on all interfaces so http://localhost and http://127.0.0.1 both work on Windows.
     host: true,
     port: 5173,
-    strictPort: false,
+    strictPort: true,
     proxy: {
       "/api": {
         target: "http://127.0.0.1:8787",

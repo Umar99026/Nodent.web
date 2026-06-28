@@ -1,3 +1,5 @@
+import { stripAnswerUnits } from "@/lib/utils";
+
 export function displayMarks(marks: number | undefined, type: "mcq" | "short" | "long"): number {
   if (typeof marks === "number" && Number.isFinite(marks) && marks > 0) {
     return Math.max(1, Math.round(marks));
@@ -85,10 +87,59 @@ export function partLetterForIndex(index: number): string {
   return String.fromCharCode(97 + Math.min(Math.max(0, index), 25));
 }
 
-/** Normalize stored part keys (part1, A, etc.) to a, b, c, … */
+/** Roman/letter prefix id from PDF part label, e.g. b.i. → b_i, i. → i, a. → a */
+export function partKeyFromLabel(rawLabel: string, fallbackKey = ""): string {
+  const label = String(rawLabel ?? "").trim();
+  const bi = label.match(/^([a-z])\.(i{1,3}|iv)\./i);
+  if (bi?.[1] && bi[2]) return `${bi[1]}_${bi[2].toLowerCase()}`;
+  const roman = label.match(/^(i{1,3}|iv)\./i);
+  if (roman?.[1]) return roman[1].toLowerCase();
+  const letter = label.match(/^([a-z])\./i);
+  if (letter?.[1]) return letter[1].toLowerCase();
+  const fb = fallbackKey.trim().toLowerCase();
+  return fb || "a";
+}
+
+/** Student-facing part text — no a)/b)/i./ii. prefixes. */
+export function studentFacingPartText(label: string): string {
+  let out = String(label ?? "").trim();
+  out = out.replace(/^([a-z])\.(?:i{1,3}|iv)\.\s*/i, "");
+  out = out.replace(/^(?:i{1,3}|iv)\.\s*/i, "");
+  while (/^(?:[a-z])\s*[).:\-–—]\s*/i.test(out)) {
+    out = out.replace(/^(?:[a-z])\s*[).:\-–—]\s*/i, "").trim();
+  }
+  return out.trim();
+}
+
+/** Strip roman sub-part markers only — keeps letter prefixes like a. / b. */
+export function stripRomanPartPrefix(label: string): string {
+  let out = String(label ?? "").trim();
+  // b.i. / c.ii. → b. / c.
+  out = out.replace(/^([a-z])\.(?:i{1,3}|iv)\.\s*/i, "$1. ");
+  // standalone i. / ii. at the start (no parent letter)
+  out = out.replace(/^(?:i{1,3}|iv)\.\s*/i, "");
+  return out.trim();
+}
+
+/** @deprecated Use partLetterForIndex(index) — all parts display as a, b, c, … */
+export function romanParentLetterForPart(
+  _parts: Array<{ key?: string }>,
+  index: number,
+  _stemHint?: string,
+): string {
+  return partLetterForIndex(index);
+}
+
+/** Roman sub-part keys used under a letter part (i. / ii. / iii. / iv.). */
+export function isRomanPartKey(key: string): boolean {
+  return /^(?:i{1,3}|iv)$/i.test(String(key ?? "").trim());
+}
+
+/** Normalize stored part keys (part1, A, i, ii, etc.) to a display key. */
 export function normalizePartKey(key: string | undefined, index: number): string {
   const k = key?.trim().toLowerCase() ?? "";
-  if (/^[a-z]$/.test(k)) return k;
+  if (/^[a-z]$/.test(k) && !isRomanPartKey(k)) return k;
+  if (isRomanPartKey(k)) return k;
   const m = k.match(/^part(\d+)$/i);
   if (m?.[1]) {
     const n = Number(m[1]);
@@ -99,34 +150,119 @@ export function normalizePartKey(key: string | undefined, index: number): string
 
 /** Strip leading part letter markers (a) / a. / a:) from stored labels. */
 export function stripMainPartPrefix(label: string): string {
-  let out = String(label ?? "").trim();
+  let out = stripRomanPartPrefix(String(label ?? "").trim());
   if (!out) return "";
   out = out.replace(/^(?:[a-z])\s*[).:\-–—]\s*/i, "");
   return out.trim();
 }
 
-/** Student-facing part heading, e.g. "a) Find the mean" or "b) i. Find f'(x)". */
+/** Student-facing part heading, e.g. "a. Find the mean" (VCE booklet style). */
 export function formatPartDescriptor(letter: string, label: string): string {
   const L = letter.trim().toLowerCase();
   const clean = stripMainPartPrefix(label);
-  if (!clean || /^answer$/i.test(clean)) return `${L})`;
+  const suffix = ".";
+  if (!clean || /^answer$/i.test(clean)) return `${L}${suffix}`;
+  return `${L}${suffix} ${clean}`;
+}
 
-  // Sub-parts (i. / ii. / iii. / iv.) — prefix with main part letter.
-  if (/^(?:i{1,3}|iv)\.\s+/i.test(clean)) {
-    return `${L}) ${clean}`;
+/** Prefix for submitted multipart answers (a) / i. etc.). */
+export function partSubmitLabel(key: string): string {
+  const k = key.trim().toLowerCase();
+  return isRomanPartKey(k) ? `${k}.` : `${k})`;
+}
+
+/** Strip all leading letter markers wrongly copied onto sub-part labels. */
+function stripAnyLetterPartPrefix(label: string): string {
+  let out = String(label ?? "").trim();
+  while (/^(?:[a-z])\s*[).:\-–—]\s*/i.test(out)) {
+    out = out.replace(/^(?:[a-z])\s*[).:\-–—]\s*/i, "").trim();
   }
-
-  return `${L}) ${clean}`;
+  return out;
 }
 
 export function resolveMultipartPartDisplay(
   answerParts: Array<{ key?: string; label?: string }>,
+  _options?: { stemHint?: string },
 ): { letters: string[]; descriptors: string[] } {
-  const letters = answerParts.map((_, idx) => partLetterForIndex(idx));
-  const descriptors = answerParts.map((p, idx) =>
-    formatPartDescriptor(letters[idx]!, p.label ?? ""),
-  );
+  const letters: string[] = [];
+  const descriptors: string[] = [];
+
+  for (let idx = 0; idx < answerParts.length; idx += 1) {
+    const p = answerParts[idx]!;
+    const key = normalizePartKey(p.key, idx);
+    letters.push(key);
+    const raw = String(p.label ?? "").trim();
+    descriptors.push(
+      raw ? formatPartDescriptor(key, raw) : `${key}${isRomanPartKey(key) ? "." : ")"}`,
+    );
+  }
+
   return { letters, descriptors };
+}
+
+/** Strip leading part labels from a stored model answer (i. / a) / etc.). */
+export function cleanAcceptedPartAnswer(raw: string): string {
+  return stripAnswerUnits(
+    String(raw ?? "")
+      .replace(/^\s*(?:i{1,3}|iv)\.\s*/i, "")
+      .replace(/^\s*(?:\(?i+\)?|[a-z]|\d+)\)\s*/i, "")
+      .trim(),
+  );
+}
+
+/** Split a combined multipart answer like "i. volume; ii. $9.53$" into per-part values. */
+export function splitMultipartAcceptedAnswers(acceptedPool: string[]): string[] {
+  if (acceptedPool.length !== 1) {
+    return acceptedPool.map(cleanAcceptedPartAnswer).filter(Boolean);
+  }
+
+  const raw = String(acceptedPool[0] ?? "").trim();
+  if (!raw) return acceptedPool;
+
+  const romanChunks = [...raw.matchAll(/(?:^|[;\n])\s*(i{1,3}|iv)\.\s*([^;\n]+)/gi)];
+  if (romanChunks.length >= 2) {
+    return romanChunks.map((m) => cleanAcceptedPartAnswer(m[2] ?? "")).filter(Boolean);
+  }
+
+  const letterLabelled = raw.match(/(?:^|[;\n])\s*(?:\(?i+\)?|[a-z]|\d+)\)\s*([^;\n]+)/gi);
+  if (letterLabelled && letterLabelled.length >= 2) {
+    return letterLabelled.map((x) => cleanAcceptedPartAnswer(x)).filter(Boolean);
+  }
+
+  const split = raw
+    .split(/\s*;\s*|\s*\n+\s*/)
+    .map((x) => cleanAcceptedPartAnswer(x))
+    .filter(Boolean);
+  if (split.length >= 2) return split;
+
+  const splitCommaAndAnd = raw
+    .split(/\s*,\s*|\s+\band\b\s+/i)
+    .map((x) => cleanAcceptedPartAnswer(x))
+    .filter(Boolean);
+  return splitCommaAndAnd.length >= 2
+    ? splitCommaAndAnd
+    : acceptedPool.map(cleanAcceptedPartAnswer);
+}
+
+/** Normalize accepted answers to one value per multipart sub-part. */
+export function normalizeMultipartAcceptedAnswers(
+  acceptedPool: string[],
+  partCount: number,
+): string[] {
+  if (partCount < 2 || !acceptedPool.length) {
+    return acceptedPool.map(cleanAcceptedPartAnswer);
+  }
+  let expanded =
+    acceptedPool.length === 1
+      ? splitMultipartAcceptedAnswers(acceptedPool)
+      : acceptedPool.map(cleanAcceptedPartAnswer).filter(Boolean);
+  if (expanded.length === 1 && partCount >= 2) {
+    expanded = splitMultipartAcceptedAnswers(expanded);
+  }
+  if (expanded.length >= partCount) {
+    return expanded.slice(0, partCount).map(cleanAcceptedPartAnswer);
+  }
+  return expanded.map(cleanAcceptedPartAnswer);
 }
 
 /** Label for a single answer part — no a)/b) prefix. */
@@ -184,17 +320,42 @@ export function stripQuestionNumberPrefix(text: string): string {
   return stripMainPartPrefix(stripped);
 }
 
-/** True when stem ends with an unclosed $…$ (common PDF import glitch). */
+/** True when stem has unpaired $…$ or a dangling formula at the end. */
 export function isBrokenMathStem(text: string): boolean {
   const t = String(text ?? "").trim();
   if (!t) return false;
-  if (/\$\s*$/.test(t)) return true;
   const dollars = (t.match(/(?<!\\)\$/g) ?? []).length;
-  return dollars % 2 === 1;
+  if (dollars % 2 === 1) return true;
+  if (/\$[A-Za-z][A-Za-z0-9_]*\s*=\s*\$?\s*$/i.test(t)) return true;
+  return false;
+}
+
+/** Shared scenario text before roman sub-parts under a letter part (c) … i. … ii. …). */
+export function extractLetterScenarioBeforeRomans(text: string): string {
+  const t = stripMarksAnnotations(String(text ?? "").trim());
+  if (!t) return "";
+
+  const letterMatch = t.match(/^([a-z])\s*[.)]\s*/i);
+  const searchIn = letterMatch ? t.slice(letterMatch[0].length) : t;
+  const romanMatch = searchIn.match(/(?:^|\n|\s)((?:i{1,3}|iv)\.)\s+/i);
+  if (!romanMatch || romanMatch.index == null) {
+    return stripQuestionNumberPrefix(t);
+  }
+
+  const end = letterMatch
+    ? letterMatch[0].length + romanMatch.index
+    : romanMatch.index;
+  const scenario = t.slice(0, end).trim();
+  return stripQuestionNumberPrefix(stripMainPartPrefix(scenario));
 }
 
 function splitStemBeforeParts(text: string): string {
-  let stem = String(text ?? "").trim();
+  const romanStem = extractLetterScenarioBeforeRomans(text);
+  const t = String(text ?? "").trim();
+  const hasRoman = /(?:^|\n|\s)(?:i{1,3}|iv)\.\s+/i.test(t);
+  if (hasRoman && romanStem) return romanStem;
+
+  let stem = t;
   const firstPart = stem.search(/(?:^|\n)\s*(?:[a-z][.)]|[a-z]\.\s*i{1,3}\.)/i);
   if (firstPart < 0) return stem;
   if (firstPart === 0) return "";
@@ -211,7 +372,12 @@ export function multipartSharedStem(q: {
   const parts = q.answerParts?.filter((p) => p?.label?.trim()) ?? [];
   if (parts.length < 2) return stripQuestionNumberPrefix(q.question);
 
-  let stem = stripQuestionNumberPrefix(splitStemBeforeParts(q.question));
+  const hasRomanParts = parts.some((p) => isRomanPartKey(p.key ?? ""));
+  let stem = stripQuestionNumberPrefix(
+    hasRomanParts
+      ? extractLetterScenarioBeforeRomans(q.question) || splitStemBeforeParts(q.question)
+      : splitStemBeforeParts(q.question),
+  );
 
   if (/^question\s*\d*$/i.test(stem.replace(/\s+/g, " ").trim())) {
     stem = "";
@@ -318,6 +484,38 @@ export function hasVisibleStimulus(s: StimulusContent): boolean {
   return Boolean(s.passage?.trim()) || s.imageUrls.length > 0;
 }
 
+/** PDF continuation pages stored separately from the main stimulus (not solutions). */
+export function deferredQuestionImageUrls(q: { answerImageUrls?: string[] }): string[] {
+  const seen = new Set<string>();
+  return (q.answerImageUrls ?? [])
+    .map((u) => String(u ?? "").trim())
+    .filter((u) => {
+      if (!u || seen.has(u)) return false;
+      seen.add(u);
+      return true;
+    });
+}
+
+/** Stimulus images plus any deferred continuation pages (shown during the question). */
+export function collectFullQuestionStimulus(q: {
+  passage?: string;
+  imageUrls?: string[];
+  answerImageUrls?: string[];
+}): StimulusContent {
+  const base = collectStimulusFromQuestion(q);
+  const deferred = deferredQuestionImageUrls(q);
+  if (!deferred.length) return base;
+  const seen = new Set(base.imageUrls);
+  const imageUrls = [...base.imageUrls];
+  for (const url of deferred) {
+    if (!seen.has(url)) {
+      imageUrls.push(url);
+      seen.add(url);
+    }
+  }
+  return { passage: base.passage, imageUrls };
+}
+
 export function stripMarkdownImages(text: string): string {
   return String(text ?? "")
     .replace(/!\[[^\]]*\]\([^)]+\)\s*/g, "")
@@ -330,13 +528,50 @@ export function absolutizeMarkdownAssetUrls(text: string): string {
   });
 }
 
+const INLINE_MATH_SEGMENT_RE = /(\$\$[\s\S]*?\$\$|\$[^$\n]*?\$)/g;
+
+/** Sentence / line / subpart starts — leaves `$…$` math untouched. */
+export function capitalizeQuestionDisplayText(text: string): string {
+  const raw = String(text ?? "");
+  if (!raw.trim()) return raw;
+
+  const segments = raw.split(INLINE_MATH_SEGMENT_RE);
+  return segments
+    .map((segment, index) => (index % 2 === 1 ? segment : capitalizePlainQuestionText(segment)))
+    .join("");
+}
+
+function capitalizePlainQuestionText(text: string): string {
+  return text
+    .split("\n")
+    .map((line) => capitalizeQuestionLine(line))
+    .join("\n");
+}
+
+function capitalizeQuestionLine(line: string): string {
+  if (!line.trim()) return line;
+
+  let out = line.replace(
+    /^(\s*(?:\([a-zivx]+\)|[a-z]\))\s*)([a-z])/,
+    (_, prefix: string, letter: string) => `${prefix}${letter.toUpperCase()}`,
+  );
+
+  out = out.replace(/(^|[.!?;]\s+)([a-z])/g, (_, prefix: string, letter: string) => {
+    return `${prefix}${letter.toUpperCase()}`;
+  });
+
+  return out;
+}
+
 export function stripQuestionHeadingFromPassage(passage?: string): string | undefined {
   if (!passage?.trim()) return undefined;
   const lines = passage.split(/\r?\n/);
   const first = (lines[0] ?? "").trim();
   if (
     /^(?:test(?:\s*pdf)?|pdf\s*test)\b/i.test(first) ||
-    /^(?:question|q)\s*\d{1,4}\b/i.test(first)
+    /^(?:question|q)\s*\d{1,4}\b/i.test(first) ||
+    /^(?:stimulus\s*\/?\s*passage|passage\s*\/?\s*stimulus)\b/i.test(first) ||
+    /^(?:stimulus|passage)\s*$/i.test(first)
   ) {
     const rest = lines.slice(1).join("\n").trim();
     return rest || undefined;

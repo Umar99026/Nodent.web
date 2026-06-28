@@ -7,8 +7,8 @@ export default function FeedbackPage() {
   return (
     <div className="landing-root min-h-screen bg-[#f8fbff] text-[#0b0f19]">
       <LandingNav />
-      <main className="pt-24">
-        <WelcomeFeedbackSection visible />
+      <main className="pt-[calc(env(safe-area-inset-top,0px)+6rem)]">
+        <WelcomeFeedbackSection visible variant="landing" />
       </main>
       <footer className="border-t border-slate-200/80 py-10 text-center">
         <NodentWordmark size="sm" variant="onCream" className="mx-auto" />

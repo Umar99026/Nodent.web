@@ -1,0 +1,264 @@
+{
+  "questions": [
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Applications of differentiation",
+      "question": "A conical storage vessel stands vertex-down with a fixed height of $6\\,\\text{m}$ and a top radius of $3\\,\\text{m}$. Water is pumped in so that the volume increases at a constant rate of $8\\pi\\,\\text{m}^3\\text{/min}$. At any instant the water surface forms a similar cone. Let $h$ metres be the depth of the water.",
+      "acceptedAnswers": ["2", "1.28"],
+      "marks": 4,
+      "guidance": "Use $V=\\frac{\\pi h^3}{12}$ from similar triangles ($r=h/2$). Then $\\frac{dV}{dt}=\\frac{\\pi h^2}{4}\\frac{dh}{dt}$.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Find $\\frac{dh}{dt}$ when the water depth is $4\\,\\text{m}$.",
+          "marks": 2,
+          "acceptedAnswer": "2",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) Hence find $\\frac{dh}{dt}$ when the depth is $5\\,\\text{m}$, with the inflow rate unchanged.",
+          "marks": 2,
+          "acceptedAnswer": "1.28",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Polynomial, power and rational functions",
+      "question": "Square sheets of side length $24\\,\\text{cm}$ are used to make open-top boxes by cutting out congruent squares of side $x\\,\\text{cm}$ from each corner and folding up the sides. The volume of a box is $V(x)=x(24-2x)^2$ for $0<x<12$.",
+      "acceptedAnswers": ["4", "1024"],
+      "marks": 4,
+      "guidance": "Differentiate $V(x)$, solve $V'(x)=0$, and check the valid turning point gives a maximum.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Find the value of $x$ that maximises the volume.",
+          "marks": 2,
+          "acceptedAnswer": "4",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) Hence find the maximum possible volume (in $\\text{cm}^3$).",
+          "marks": 2,
+          "acceptedAnswer": "1024",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Exponential and logarithmic functions",
+      "question": "A hospital tracks the concentration of a drug in a patient's bloodstream. The concentration (in mg/L) is modelled by $C(t)=200e^{-0.5t}$ for $t\\ge 0$, where $t$ is measured in hours after the dose is administered.",
+      "acceptedAnswers": ["1.39", "-36.79"],
+      "marks": 4,
+      "guidance": "Half-life: solve $200e^{-0.5t}=100$. Rate of change: $C'(t)=-100e^{-0.5t}$.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Find the time (in hours) when the concentration first reaches $100\\,\\text{mg/L}$.",
+          "marks": 2,
+          "acceptedAnswer": "1.39",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) Find the rate of change of concentration at $t=2$ hours (in mg/L per hour).",
+          "marks": 2,
+          "acceptedAnswer": "-36.79",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Circular functions",
+      "question": "The outside temperature (in $^\\circ\\text{C}$) at a remote station $t$ hours after midnight is modelled by $T(t)=-5+12\\cos\\!\\left(\\frac{\\pi(t-4)}{12}\\right)$ for $0\\le t\\le 24$.",
+      "acceptedAnswers": ["-5", "16"],
+      "marks": 4,
+      "guidance": "At $t=10$ the cosine argument is $\\pi/2$. The minimum occurs when $\\cos(\\cdot)=-1$.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Find the temperature at $10\\,\\text{am}$.",
+          "marks": 2,
+          "acceptedAnswer": "-5",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) Find the time of day (hours after midnight) of the first minimum temperature after midnight.",
+          "marks": 2,
+          "acceptedAnswer": "16",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Algebra and equations",
+      "question": "A science team models a reaction variable $x$ by solving $e^{2x}-5e^x+6=0$. Let $u=e^x$.",
+      "acceptedAnswers": ["0.693", "1.099"],
+      "marks": 4,
+      "guidance": "Substitute $u=e^x$ to obtain $u^2-5u+6=0$, then solve for $x$ using natural logarithms.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Find the smaller solution for $x$, correct to three decimal places.",
+          "marks": 2,
+          "acceptedAnswer": "0.693",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) Find the larger solution for $x$, correct to three decimal places.",
+          "marks": 2,
+          "acceptedAnswer": "1.099",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Differential calculus",
+      "question": "A phone's battery percentage after being unplugged is modelled by $Q(t)=100-5t-t^2$ for $0\\le t\\le 10$, where $t$ is in hours.",
+      "acceptedAnswers": ["-11", "2"],
+      "marks": 4,
+      "guidance": "$Q'(t)=-5-2t$. Solve $Q'(t)=-9$ for part (b).",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Find $Q'(3)$ (the rate of change of battery percentage at $t=3$ hours).",
+          "marks": 2,
+          "acceptedAnswer": "-11",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) Find the first time when the battery is declining at $9\\%$ per hour.",
+          "marks": 2,
+          "acceptedAnswer": "2",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Applications of differentiation",
+      "question": "A drone's height above a flat runway (in metres) is modelled by $h(t)=t^3-9t^2+24t$ for $0\\le t\\le 6$, where $t$ is the time in seconds after take-off.",
+      "acceptedAnswers": ["2", "3"],
+      "marks": 4,
+      "guidance": "$h'(t)=3(t-2)(t-4)$. The first local maximum on $(0,6)$ occurs at $t=2$. After that, solve $h(t)=18$ on the descent.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Find the value of $t$ at the first local maximum of $h$ on the interval $(0,6)$.",
+          "marks": 2,
+          "acceptedAnswer": "2",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) After reaching this local maximum, find the first time (in seconds) when the height is again $18\\,\\text{m}$.",
+          "marks": 2,
+          "acceptedAnswer": "3",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Integral calculus",
+      "question": "A particle moves along a straight line with velocity $v(t)=3t^2+2\\,\\text{m/s}$ for $t\\ge 0$. Its initial position is at the origin.",
+      "acceptedAnswers": ["3", "12"],
+      "marks": 4,
+      "guidance": "Displacement is $s(t)=\\int_0^t v(u)\\,du=t^3+2t$.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Find the displacement during the first second.",
+          "marks": 2,
+          "acceptedAnswer": "3",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) Find the displacement during the first two seconds.",
+          "marks": 2,
+          "acceptedAnswer": "12",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Applications of integration",
+      "question": "A rail-mounted sensor moves in a straight line. Its velocity is $v(t)=3t^2-24t+45\\,\\text{m/s}$ for $0\\le t\\le 6$, where $t$ is in seconds. The sensor starts at the origin, so its displacement $s(t)$ satisfies $s(0)=0$.",
+      "acceptedAnswers": ["54", "50"],
+      "marks": 4,
+      "guidance": "$s(t)=t^3-12t^2+45t$. Solve $v(t)=0$ to find rest times, then evaluate $s(t)$.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Find the displacement (in metres) at the first instant when the sensor is at rest.",
+          "marks": 2,
+          "acceptedAnswer": "54",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) Find the displacement at the next instant when the sensor is at rest.",
+          "marks": 2,
+          "acceptedAnswer": "50",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": false
+    },
+    {
+      "subjectId": "demo",
+      "type": "short_answer",
+      "topic": "Discrete random variables",
+      "question": "In a manufacturing line, the number of defective items in a random batch of $25$ units is modelled by $D\\sim B(25,0.08)$. Each batch is independent.",
+      "acceptedAnswers": ["2", "1.84"],
+      "marks": 4,
+      "guidance": "For $X\\sim B(n,p)$: $E(X)=np$ and $\\text{Var}(X)=np(1-p)$.",
+      "answerParts": [
+        {
+          "key": "a",
+          "label": "a) Find the expected value of $D$.",
+          "marks": 2,
+          "acceptedAnswer": "2",
+          "placeholder": "Type your answer…"
+        },
+        {
+          "key": "b",
+          "label": "b) Find the variance of $D$.",
+          "marks": 2,
+          "acceptedAnswer": "1.84",
+          "placeholder": "Type your answer…"
+        }
+      ],
+      "useAiMarking": false
+    }
+  ]
+}

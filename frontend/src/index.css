@@ -2,12 +2,21 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist/index.css";
+@import "@fontsource/tinos/400.css";
+@import "@fontsource/tinos/400-italic.css";
+@import "@fontsource/tinos/700.css";
+@import "@fontsource/arimo/400.css";
+@import "@fontsource/arimo/700.css";
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
   --font-display: 'Geist Variable', system-ui, -apple-system, sans-serif;
   --font-sans: 'Geist Variable', system-ui, -apple-system, sans-serif;
+  --font-exam-sans: Arimo, Arial, 'Helvetica Neue', Helvetica, sans-serif;
+  --font-exam-serif: Tinos, 'Times New Roman', Times, 'Liberation Serif', Georgia, serif;
+  --vce-font-size: 17.5pt;
+  --vce-exam-line-height: 32px;
   --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
 
   /* Brand (blue) */
@@ -677,4 +686,370 @@
   max-width: 100%;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
+}
+
+/* Handwriting answer pad — dotted ruling visible behind transparent ink layer */
+.handwriting-pad {
+  background-color: #ffffff;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='32' viewBox='0 0 240 32'%3E%3Cline x1='12' y1='31' x2='228' y2='31' stroke='%230b0f19' stroke-opacity='0.34' stroke-width='1' stroke-dasharray='3 7' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-size: 100% 32px;
+  background-repeat: repeat-y;
+}
+
+/* Practice exam input boxes — dotted ruling fills the full box; text scrolls on top */
+.exam-paper-input-shell {
+  --exam-line-height: 24px;
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  border: 1px dotted rgba(11, 15, 25, 0.55);
+  border-radius: 2px;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.exam-paper-input-shell--filled {
+  background-color: #ffffff;
+}
+
+.exam-paper-input-shell--transparent {
+  background-color: transparent;
+  border: none;
+}
+
+.exam-paper-input-shell--editor-transparent {
+  border: none;
+  background-color: transparent;
+}
+
+.exam-paper-input-shell--editor-transparent.ring-2 {
+  border: none;
+}
+
+.exam-paper-input-ruling {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  --exam-dash-color: rgba(11, 15, 25, 0.34);
+  /* Full-width dash pattern, masked to 1px rows every line-height */
+  background-image: repeating-linear-gradient(
+    to right,
+    var(--exam-dash-color) 0,
+    var(--exam-dash-color) 3px,
+    transparent 3px,
+    transparent 10px
+  );
+  background-size: 100% 100%;
+  -webkit-mask-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(var(--exam-line-height) - 1px),
+    #000 calc(var(--exam-line-height) - 1px),
+    #000 var(--exam-line-height)
+  );
+  mask-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(var(--exam-line-height) - 1px),
+    #000 calc(var(--exam-line-height) - 1px),
+    #000 var(--exam-line-height)
+  );
+  -webkit-mask-size: 100% var(--exam-line-height);
+  mask-size: 100% var(--exam-line-height);
+  -webkit-mask-repeat: repeat-y;
+  mask-repeat: repeat-y;
+}
+
+textarea.exam-paper-input-field--typed {
+  color: transparent !important;
+  caret-color: transparent;
+  -webkit-text-fill-color: transparent !important;
+}
+
+.exam-paper-math-field {
+  isolation: isolate;
+}
+
+.exam-paper-math-display {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  padding: 6px 4px 0;
+  color: #0b0f19;
+  font-family: var(--font-exam-serif);
+  font-size: var(--vce-font-size);
+  line-height: var(--exam-line-height);
+  pointer-events: none;
+}
+
+.exam-paper-math-caret-measure {
+  position: absolute;
+  visibility: hidden;
+  pointer-events: none;
+  left: 0;
+  top: 0;
+  min-height: 0;
+}
+
+.exam-paper-math-caret {
+  position: absolute;
+  z-index: 3;
+  width: 1px;
+  height: calc(var(--exam-line-height) - 8px);
+  margin-top: 4px;
+  background: #0b0f19;
+  pointer-events: none;
+  animation: exam-paper-caret-blink 1.05s step-end infinite;
+}
+
+@keyframes exam-paper-caret-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+.exam-paper-math-line {
+  display: block;
+  min-height: var(--exam-line-height);
+  overflow-x: hidden;
+  overflow-y: visible;
+  white-space: nowrap;
+  line-height: var(--exam-line-height);
+}
+
+.exam-paper-plain {
+  font-family: inherit;
+  font-size: var(--vce-font-size);
+  line-height: var(--exam-line-height);
+  white-space: pre;
+}
+
+.exam-paper-script-bracket {
+  font-family: inherit;
+  font-size: var(--vce-font-size);
+  line-height: var(--exam-line-height);
+  color: rgba(11, 15, 25, 0.72);
+  white-space: pre;
+}
+
+.exam-paper-script-inner {
+  display: inline-block;
+  vertical-align: baseline;
+}
+
+.exam-paper-script-inner .katex {
+  font-size: var(--vce-font-size);
+  line-height: 1;
+}
+
+.exam-paper-math-line .katex {
+  font-size: var(--vce-font-size);
+  line-height: 1;
+  color: #0b0f19;
+}
+
+.exam-paper-math-line .katex .sqrt {
+  vertical-align: middle;
+}
+
+.exam-paper-math-line .katex .sqrt > .vlist-t {
+  overflow: visible;
+}
+
+.exam-paper-math-line .katex .sqrt .sqrt-sign {
+  margin-right: 0.05em;
+}
+
+/* Grow with content — no internal scroll; a spare ruled line spawns below typed text */
+.exam-paper-ruled-grow {
+  overflow: hidden;
+}
+
+.exam-paper-input-shell.exam-paper-ruled-grow {
+  position: relative;
+  inset: unset;
+  width: 100%;
+  overflow: hidden;
+}
+
+.exam-paper-ruled-grow textarea.exam-paper-input-field {
+  overflow-y: hidden !important;
+}
+
+.exam-paper-ruled-grow .exam-paper-math-display {
+  overflow: visible;
+}
+
+.exam-paper-ruled-grow .exam-paper-math-field {
+  min-height: calc(var(--exam-visible-lines) * var(--exam-line-height));
+}
+
+textarea.exam-paper-input-field {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: block;
+  height: 100% !important;
+  width: 100% !important;
+  min-height: 0 !important;
+  margin: 0;
+  padding: 6px 4px 0 !important;
+  border: none !important;
+  border-radius: 0;
+  background: transparent !important;
+  font-family: var(--font-exam-serif);
+  font-size: var(--vce-font-size) !important;
+  line-height: var(--exam-line-height) !important;
+  field-sizing: fixed;
+  resize: none;
+  overflow-y: auto;
+  overflow-x: hidden;
+  box-shadow: none !important;
+  outline: none;
+}
+
+textarea.exam-paper-input-field:focus-visible {
+  outline: none;
+  box-shadow: none !important;
+}
+
+/* Block-sized ruled answer area (quiz / demo — not PDF overlay) */
+.exam-paper-answer-block {
+  --exam-line-height: var(--vce-exam-line-height);
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px dotted rgba(11, 15, 25, 0.55);
+  border-radius: 2px;
+  background-color: #ffffff;
+  overflow: hidden;
+}
+
+.exam-paper-answer-block .exam-paper-math-field {
+  position: absolute;
+  inset: 0;
+  min-height: 100%;
+}
+
+.exam-paper-answer-block .exam-paper-math-display,
+.exam-paper-answer-block textarea.exam-paper-input-field {
+  font-family: var(--font-exam-serif);
+  font-size: var(--vce-font-size);
+  line-height: var(--exam-line-height);
+}
+
+/* VCE exam booklet typography — matches VCAA: Arial heading, Times body */
+.vce-question-paper {
+  font-family: var(--font-exam-serif);
+  font-size: var(--vce-font-size);
+  line-height: 1.45;
+  color: #0b0f19;
+  font-variant-numeric: lining-nums;
+}
+
+.vce-question-paper__heading {
+  font-family: var(--font-exam-sans);
+  font-size: var(--vce-font-size);
+  font-weight: 700;
+  line-height: 1.35;
+  letter-spacing: 0;
+  margin: 0 0 0.6rem;
+  color: #0b0f19;
+}
+
+.vce-question-paper__body {
+  font-family: var(--font-exam-serif);
+  font-size: var(--vce-font-size);
+  line-height: 1.45;
+  margin: 0 0 0.75rem;
+  color: #0b0f19;
+}
+
+.vce-question-paper__part-prompt {
+  font-family: var(--font-exam-serif);
+  font-size: var(--vce-font-size);
+  line-height: 1.45;
+  margin: 0.35rem 0 0.55rem;
+  color: #0b0f19;
+}
+
+.vce-question-paper__part-marker {
+  font-family: var(--font-exam-serif);
+  font-weight: 700;
+}
+
+/* Override Tailwind typography (Geist) inside exam questions */
+.vce-question-paper .prose,
+.vce-question-paper .rich-question-content,
+.vce-question-paper .vce-question-paper__prose {
+  --tw-prose-body: var(--font-exam-serif);
+  --tw-prose-headings: var(--font-exam-serif);
+  --tw-prose-bold: var(--font-exam-serif);
+  --tw-prose-bullets: #0b0f19;
+  font-family: var(--font-exam-serif) !important;
+  font-size: var(--vce-font-size) !important;
+  line-height: 1.45 !important;
+  color: #0b0f19 !important;
+  max-width: none;
+}
+
+.vce-question-paper .prose :where(p, li, blockquote, td, th, span):not(:where(.katex, .katex *)),
+.vce-question-paper .rich-question-content :where(p, li, span):not(:where(.katex, .katex *)),
+.vce-question-paper .vce-question-paper__prose :where(p, li, span):not(:where(.katex, .katex *)) {
+  font-family: inherit !important;
+  font-size: inherit !important;
+  line-height: inherit !important;
+  font-weight: 400;
+  color: inherit;
+}
+
+.vce-question-paper .prose p,
+.vce-question-paper .vce-question-paper__prose p,
+.vce-question-paper .rich-question-content p {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.vce-question-paper .prose strong,
+.vce-question-paper .vce-question-paper__prose strong {
+  font-weight: 700;
+}
+
+.vce-question-paper .katex {
+  font-size: var(--vce-font-size);
+}
+
+.vce-question-paper .katex .mathnormal,
+.vce-question-paper .katex .mathit {
+  font-style: italic;
+}
+
+/* Handwriting pad — same dotted box + ruling as typed answers */
+.exam-paper-handwriting-pad {
+  --exam-line-height: var(--vce-exam-line-height);
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px dotted rgba(11, 15, 25, 0.55);
+  border-radius: 2px;
+  background-color: #ffffff;
+  overflow: hidden;
+}
+
+.exam-paper-handwriting-pad .exam-paper-input-ruling {
+  z-index: 0;
+}
+
+.exam-paper-handwriting-pad canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
 }

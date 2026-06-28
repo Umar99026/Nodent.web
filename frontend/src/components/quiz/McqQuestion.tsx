@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { cn, getQuestionTypeLabel } from "@/lib/utils";
 import type { McqQuestion as McqQuestionType } from "@/lib/subjects";
 import {
-  collectStimulusFromQuestion,
+  collectFullQuestionStimulus,
   displayMarks,
   hasVisibleStimulus,
   stripMcqOptionPrefix,
@@ -16,6 +16,11 @@ import { CheckCircle2, XCircle } from "lucide-react";
 
 interface McqQuestionProps {
   question: McqQuestionType;
+  /** Practice exam: pick without locking; parent reveals results on submit. */
+  deferFeedback?: boolean;
+  controlledSelected?: string | null;
+  onSelectOption?: (option: string) => void;
+  revealResults?: boolean;
   onAnswer: (isCorrect: boolean) => void;
   disabled?: boolean;
   /** Hide stimulus when the parent group already rendered it. */
@@ -26,6 +31,8 @@ interface McqQuestionProps {
   classFullyCorrectPercent?: number | null;
   /** Allow multiple attempts (used for wrong-answer practice). */
   allowRetry?: boolean;
+  /** Demo sandbox — keep answering after submit (including when correct). */
+  repeatSandbox?: boolean;
   persistedState?: {
     selectedOption?: string | null;
     submitted?: boolean;
@@ -41,13 +48,24 @@ export function McqQuestion({
   lockedCorrect = false,
   classFullyCorrectPercent,
   allowRetry = false,
+  repeatSandbox = false,
   persistedState,
   onStateChange,
+  deferFeedback = false,
+  controlledSelected,
+  onSelectOption,
+  revealResults = false,
 }: McqQuestionProps) {
   const [selectedOption, setSelectedOption] = useState<string | null>(
     persistedState?.selectedOption ?? null,
   );
   const [submitted, setSubmitted] = useState(Boolean(persistedState?.submitted));
+
+  const activeSelected =
+    deferFeedback && controlledSelected !== undefined
+      ? controlledSelected
+      : selectedOption;
+  const showResults = deferFeedback ? revealResults : submitted;
 
   useEffect(() => {
     if (lockedCorrect) {
@@ -70,22 +88,28 @@ export function McqQuestion({
   }, [selectedOption, submitted]);
 
   const handleSelect = (option: string) => {
-    const alreadyCorrect = submitted && selectedOption === question.answer;
+    const alreadyCorrect = showResults && activeSelected === question.answer;
     if (disabled) return;
-    if (submitted && (!allowRetry || alreadyCorrect)) return;
+    if (showResults && (!allowRetry || alreadyCorrect) && !repeatSandbox) return;
+
+    if (deferFeedback) {
+      onSelectOption?.(option);
+      return;
+    }
+
     setSelectedOption(option);
     setSubmitted(true);
     const isCorrect = option === question.answer;
     onAnswer(isCorrect);
   };
 
-  const userWrong = submitted && selectedOption !== question.answer;
+  const userWrong = showResults && activeSelected !== question.answer;
 
   const getOptionClasses = (option: string) => {
     const base =
       "relative flex w-full items-start gap-3 rounded-lg border-2 px-4 py-3 text-left text-sm transition-all duration-200";
 
-    if (!submitted && !disabled) {
+    if (!showResults && !disabled) {
       return cn(
         base,
         "border-border bg-white hover:border-brand-light/60 hover:bg-brand-light/15 cursor-pointer"
@@ -96,7 +120,7 @@ export function McqQuestion({
     if (!userWrong && option === question.answer) {
       return cn(base, "border-success/60 bg-success/8 cursor-default");
     }
-    if (option === selectedOption && option !== question.answer) {
+    if (option === activeSelected && option !== question.answer) {
       return cn(base, "border-danger/60 bg-danger/8 cursor-default");
     }
     return cn(base, "border-border/40 bg-white/30 opacity-60 cursor-default");
@@ -127,7 +151,7 @@ export function McqQuestion({
       </div>
 
       {!hidePassage && (() => {
-        const stimulus = collectStimulusFromQuestion(question);
+        const stimulus = collectFullQuestionStimulus(question);
         if (hasVisibleStimulus(stimulus)) {
           return (
             <PassageBlock
@@ -161,22 +185,24 @@ export function McqQuestion({
           <button
             key={index}
             onClick={() => handleSelect(option)}
-            disabled={submitted || disabled}
+            disabled={showResults || disabled}
             className={getOptionClasses(option)}
           >
             {/* Option letter badge */}
             <span
               className={cn(
                 "flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold transition-colors",
-                submitted &&
+                showResults &&
                   !userWrong &&
                   option === question.answer
                   ? "bg-success text-white"
-                  : submitted &&
-                      option === selectedOption &&
+                  : showResults &&
+                      option === activeSelected &&
                       option !== question.answer
                     ? "bg-danger text-white"
-                    : "bg-muted text-muted-foreground"
+                    : !showResults && option === activeSelected
+                      ? "bg-brand text-white"
+                      : "bg-muted text-muted-foreground"
               )}
             >
               {optionLabels[index]}
@@ -191,11 +217,11 @@ export function McqQuestion({
             </span>
 
             {/* Result icon */}
-            {submitted && !userWrong && option === question.answer && (
+            {showResults && !userWrong && option === question.answer && (
               <CheckCircle2 className="size-5 shrink-0 text-success" />
             )}
-            {submitted &&
-              option === selectedOption &&
+            {showResults &&
+              option === activeSelected &&
               option !== question.answer && (
                 <XCircle className="size-5 shrink-0 text-danger" />
               )}
@@ -204,27 +230,21 @@ export function McqQuestion({
       </div>
 
       {/* Feedback message */}
-      {submitted && (
+      {showResults && (
         <div
           className={cn(
             "rounded-lg px-4 py-3 text-sm font-medium",
-            selectedOption === question.answer
+            activeSelected === question.answer
               ? "bg-success/10 text-success"
               : "bg-danger/10 text-danger"
           )}
         >
-          {selectedOption === question.answer
+          {activeSelected === question.answer
             ? "Correct! Well done."
             : "Not quite — that wasn\u2019t the right choice."}
         </div>
       )}
 
-      {submitted && (
-        <QuestionImageGrid
-          urls={question.answerImageUrls}
-          title="Solution / marking scheme"
-        />
-      )}
     </div>
   );
 }

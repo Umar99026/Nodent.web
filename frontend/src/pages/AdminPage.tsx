@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { apiFetch, apiFetchAdmin, ApiError } from "@/lib/api";
 import { API_PATHS, ADMIN_EMAIL } from "@/lib/constants";
+import { saveAdminQuestion, refreshQuestionBankAfterSave, patchCachedQuestionAfterAdminSave, type AdminQuestionSaveDraft } from "@/lib/adminQuestionSave";
 import { refreshCustomQuestionsCache } from "@/lib/questionBankCache";
 import { canonicalSubjectId } from "@/lib/practiceQuestions";
 import {
@@ -9,6 +10,7 @@ import {
   matchAdminBankCorrection,
 } from "@/lib/adminBankCorrections";
 import { repairAdminQuestionStem } from "@/lib/adminStemRepairs";
+import { inferUseAiMarkingForImport } from "@/lib/questionAiMarking";
 import {
   getAllBuiltinSeedRows,
   questionStemKey,
@@ -58,11 +60,13 @@ import {
 } from "lucide-react";
 
 import { baseSubjects, subjectsForUser } from "@/lib/subjects";
-import { GOOGLE_SHEETS_TOPIC_LABELS } from "@/lib/mathSubjectTopics";
+import { GOOGLE_SHEETS_TOPIC_LABELS, topicTaxonomySubjectId } from "@/lib/mathSubjectTopics";
 import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
 import { PdfQuestionImportPanel } from "@/components/admin/PdfQuestionImportPanel";
-import { AiQuestionImportPanel } from "@/components/admin/AiQuestionImportPanel";
+import { AdminPracticeExamPanel } from "@/components/admin/AdminPracticeExamPanel";
+import { AdminFeedbackPanel } from "@/components/admin/AdminFeedbackPanel";
+import { AdminQuestionImageEditor } from "@/components/admin/AdminQuestionImageEditor";
 import {
   MultipartAnswerPartsEditor,
   buildAnswerPartsPayload,
@@ -114,8 +118,7 @@ function adminSubjectDisplayName(
 }
 
 function adminTopicOptionsForSubject(subjectId: string): string[] {
-  const sid = canonicalSubjectId(subjectId);
-  const key = sid === "demo" ? "general-maths" : sid;
+  const key = topicTaxonomySubjectId(canonicalSubjectId(subjectId));
   return [...(GOOGLE_SHEETS_TOPIC_LABELS[key] ?? [])];
 }
 
@@ -196,8 +199,6 @@ export default function AdminPage() {
   const [passage, setPassage] = useState("");
   const [topic, setTopic] = useState("");
   const [imageUrlsText, setImageUrlsText] = useState("");
-  const imageFilesRef = useRef<HTMLInputElement | null>(null);
-  const [isProcessingImages, setIsProcessingImages] = useState(false);
   const [marks, setMarks] = useState<number>(1);
 
   // MCQ
@@ -272,6 +273,8 @@ export default function AdminPage() {
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<Partial<AdminQuestion>>({});
   const [editSaving, setEditSaving] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const handledEditLinkRef = useRef<string | null>(null);
 
   function formatExpectedAnswer(value: unknown): string {
     if (typeof value === "string") {
@@ -549,11 +552,15 @@ export default function AdminPage() {
       } else {
         body.acceptedAnswers = q.acceptedAnswers;
       }
-      await apiFetchAdmin(`${API_PATHS.admin.questions}/${id}`, {
-        method: "PUT",
-        body: JSON.stringify(body),
-      });
-      changed++;
+      try {
+        await apiFetchAdmin(`${API_PATHS.admin.questions}/${id}`, {
+          method: "PUT",
+          body: JSON.stringify(body),
+        });
+        changed++;
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 409) continue;
+      }
     }
     if (changed > 0) {
       toast.success(`Repaired ${changed} question stem(s) in the bank.`);
@@ -585,11 +592,15 @@ export default function AdminPage() {
       } else {
         body.acceptedAnswers = q.acceptedAnswers;
       }
-      await apiFetchAdmin(`${API_PATHS.admin.questions}/${id}`, {
-        method: "PUT",
-        body: JSON.stringify(body),
-      });
-      changed++;
+      try {
+        await apiFetchAdmin(`${API_PATHS.admin.questions}/${id}`, {
+          method: "PUT",
+          body: JSON.stringify(body),
+        });
+        changed++;
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 409) continue;
+      }
     }
     if (changed > 0) {
       toast.success(`Reconciled ${changed} question assignment(s) in the bank.`);
@@ -729,19 +740,23 @@ export default function AdminPage() {
     if (!isAdmin) return;
     let cancelled = false;
     (async () => {
-      const [current] = await Promise.all([
-        fetchQuestions(),
-        fetchEnglishPrompts(),
-        fetchRecentUsers(),
-      ]);
-      if (cancelled || current === null) return;
-      await applyStemRepairs(current);
-      if (cancelled) return;
-      await applyBankCorrections(current);
-      if (cancelled) return;
-      await syncBuiltinsToDatabase();
-      if (cancelled) return;
-      await publishQuestionBank();
+      try {
+        const [current] = await Promise.all([
+          fetchQuestions(),
+          fetchEnglishPrompts(),
+          fetchRecentUsers(),
+        ]);
+        if (cancelled || current === null) return;
+        await applyStemRepairs(current);
+        if (cancelled) return;
+        await applyBankCorrections(current);
+        if (cancelled) return;
+        await syncBuiltinsToDatabase();
+        if (cancelled) return;
+        await publishQuestionBank();
+      } catch (e) {
+        console.error("[admin-init]", e);
+      }
     })();
     return () => {
       cancelled = true;
@@ -788,36 +803,6 @@ export default function AdminPage() {
       );
     } finally {
       setUploadingPartIndex(null);
-    }
-  };
-
-  const appendImageDataUrls = async (files: FileList | File[]) => {
-    const list = Array.from(files).filter((f) => f.type.startsWith("image/"));
-    if (list.length === 0) return;
-
-    setIsProcessingImages(true);
-    try {
-      const urls = await Promise.all(
-        list.slice(0, 6).map(async (file) => {
-          // Compress to keep payload size manageable.
-          return await compressImageFileToDataUrl(file, {
-            maxWidth: 1000,
-            maxHeight: 1000,
-            quality: 0.65,
-            outputType: "image/jpeg",
-          });
-        }),
-      );
-
-      const existing = imageUrlsText
-        .split("\n")
-        .map((u) => u.trim())
-        .filter(Boolean);
-
-      const next = [...existing, ...urls].slice(0, 12);
-      setImageUrlsText(next.join("\n"));
-    } finally {
-      setIsProcessingImages(false);
     }
   };
 
@@ -924,6 +909,23 @@ export default function AdminPage() {
       body.marks = marks;
     }
 
+    if (questionType !== "mcq") {
+      const accForAi =
+        questionType === "long_answer" && multipartEnabled
+          ? answerParts.map((p) => (p.acceptedAnswer ?? "").trim()).filter(Boolean)
+          : acceptedAnswers
+              .split("\n")
+              .map((a) => a.trim())
+              .filter(Boolean);
+      body.useAiMarking = inferUseAiMarkingForImport({
+        type: questionType,
+        questionText: [questionText, passage].filter(Boolean).join("\n"),
+        partLabels: multipartEnabled ? answerParts.map((p) => p.label) : [],
+        acceptedAnswers: accForAi,
+        subjectId,
+      });
+    }
+
     try {
       await apiFetchAdmin(API_PATHS.admin.questions, {
         method: "POST",
@@ -953,7 +955,6 @@ export default function AdminPage() {
 
   const startEditingQuestion = (q: AdminQuestion) => {
     const parts = q.answerParts ?? [];
-    const isMultipart = parts.length >= 2;
     setEditingQuestionId(String(q.id));
     setEditDraft({
       subjectId: q.subjectId,
@@ -967,11 +968,51 @@ export default function AdminPage() {
       acceptedAnswers: q.acceptedAnswers,
       guidance: q.guidance,
       imageUrls: q.imageUrls,
-      answerParts: isMultipart
-        ? mergePartsWithAcceptedAnswers(parts, q.acceptedAnswers)
-        : undefined,
+      answerParts:
+        parts.length > 0
+          ? mergePartsWithAcceptedAnswers(parts, q.acceptedAnswers)
+          : undefined,
     });
   };
+
+  useEffect(() => {
+    if (!isAdmin || questionsLoading) return;
+    const editId = searchParams.get("edit")?.trim();
+    if (!editId || handledEditLinkRef.current === editId) return;
+
+    const subjectParam = searchParams.get("subject")?.trim();
+    if (subjectParam) {
+      setSubjectFilter(canonicalSubjectId(subjectParam));
+    }
+
+    const target = questions.find((q) => String(q.id) === editId && !q._english);
+    if (!target) return;
+
+    handledEditLinkRef.current = editId;
+    setSubjectFilter(canonicalSubjectId(String(target.subjectId)));
+    setExpandedSubjects((prev) => {
+      const next = new Set(prev);
+      next.add(target.subjectName);
+      return next;
+    });
+    startEditingQuestion(target);
+
+    window.setTimeout(() => {
+      document
+        .getElementById(`admin-question-${target.id}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 120);
+
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("edit");
+        next.delete("subject");
+        return next;
+      },
+      { replace: true },
+    );
+  }, [isAdmin, questionsLoading, questions, searchParams, setSearchParams]);
 
   const cancelEditingQuestion = () => {
     setEditingQuestionId(null);
@@ -982,38 +1023,30 @@ export default function AdminPage() {
     setEditSaving(true);
     try {
       const editParts = (editDraft.answerParts ?? []) as MultipartPartDraft[];
-      const editMultipart = editParts.length >= 2;
-      const body: Record<string, unknown> = {
-        subjectId: editDraft.subjectId,
-        type: editDraft.type,
-        topic: editDraft.topic,
-        question: editDraft.question,
-        passage: editDraft.passage || null,
-        marks: editDraft.marks,
-        guidance: editDraft.guidance || null,
+      const draft: AdminQuestionSaveDraft = {
+        subjectId: String(editDraft.subjectId ?? ""),
+        type: (editDraft.type as AdminQuestionSaveDraft["type"]) ?? "long_answer",
+        topic: String(editDraft.topic ?? "General"),
+        question: String(editDraft.question ?? ""),
+        passage: editDraft.passage ?? null,
+        marks: Number(editDraft.marks ?? 1),
+        guidance: editDraft.guidance ?? null,
         imageUrls: editDraft.imageUrls,
+        options: editDraft.options,
+        correctAnswer: editDraft.correctAnswer,
+        acceptedAnswers: editDraft.acceptedAnswers,
+        answerParts: editParts.length >= 2 ? editParts : undefined,
       };
-      if (editDraft.type === "mcq") {
-        body.options = editDraft.options;
-        body.correctAnswer = editDraft.correctAnswer;
-      } else if (editDraft.type === "long_answer" && editMultipart) {
-        const payloadParts = buildAnswerPartsPayload(editParts);
-        body.answerParts = payloadParts;
-        body.acceptedAnswers = editParts
-          .map((p) => (p.acceptedAnswer ?? "").trim())
-          .filter(Boolean);
-        body.marks = payloadParts.reduce((sum, p) => sum + (p.marks ?? 0), 0) || editDraft.marks;
-      } else {
-        body.acceptedAnswers = editDraft.acceptedAnswers;
-        body.answerParts = null;
-      }
-      await apiFetchAdmin(`${API_PATHS.admin.questions}/${questionId}`, {
-        method: "PUT",
-        body: JSON.stringify(body),
-      });
+      const saved = await saveAdminQuestion(questionId, draft);
+      patchCachedQuestionAfterAdminSave(
+        questionId,
+        saved,
+        String(editDraft.subjectId ?? ""),
+      );
       toast.success("Question updated.");
       cancelEditingQuestion();
-      await publishQuestionBank();
+      await refreshQuestionBankAfterSave();
+      await fetchQuestions();
     } catch (err) {
       if (err instanceof ApiError) toast.error(err.message);
       else toast.error("Failed to update question.");
@@ -1582,7 +1615,7 @@ export default function AdminPage() {
         />
       </div>
       <div className="space-y-1">
-        <Label className="text-xs">Passage / stimulus text</Label>
+        <Label className="text-xs">Passage text</Label>
         <Textarea
           rows={2}
           className="bg-white/70 text-xs"
@@ -1592,23 +1625,10 @@ export default function AdminPage() {
           }
         />
       </div>
-      <div className="space-y-1">
-        <Label className="text-xs">Stimulus images (one URL per line)</Label>
-        <Textarea
-          rows={2}
-          className="bg-white/70 text-xs"
-          value={(editDraft.imageUrls ?? q.imageUrls ?? []).join("\n")}
-          onChange={(e) =>
-            setEditDraft((d) => ({
-              ...d,
-              imageUrls: e.target.value
-                .split("\n")
-                .map((x) => x.trim())
-                .filter(Boolean),
-            }))
-          }
-        />
-      </div>
+      <AdminQuestionImageEditor
+        imageUrls={editDraft.imageUrls ?? q.imageUrls ?? []}
+        onChange={(imageUrls) => setEditDraft((d) => ({ ...d, imageUrls }))}
+      />
       {editDraft.type === "mcq" || q.type === "mcq" ? (
         <>
           <div className="space-y-1">
@@ -1636,19 +1656,21 @@ export default function AdminPage() {
             />
           </div>
         </>
-      ) : editDraft.type === "long_answer" || q.type === "long_answer" ? (
+      ) : editDraft.type !== "mcq" && q.type !== "mcq" ? (
         <>
-          <div className="space-y-1">
-            <Label className="text-xs">Marking guidance</Label>
-            <Textarea
-              rows={2}
-              className="bg-white/70 text-xs"
-              value={editDraft.guidance ?? q.guidance ?? ""}
-              onChange={(e) =>
-                setEditDraft((d) => ({ ...d, guidance: e.target.value }))
-              }
-            />
-          </div>
+          {editDraft.type === "long_answer" || q.type === "long_answer" ? (
+            <div className="space-y-1">
+              <Label className="text-xs">Marking guidance</Label>
+              <Textarea
+                rows={2}
+                className="bg-white/70 text-xs"
+                value={editDraft.guidance ?? q.guidance ?? ""}
+                onChange={(e) =>
+                  setEditDraft((d) => ({ ...d, guidance: e.target.value }))
+                }
+              />
+            </div>
+          ) : null}
           {(editDraft.answerParts?.length ?? 0) >= 2 ? (
             <MultipartAnswerPartsEditor
               parts={(editDraft.answerParts ?? []) as MultipartPartDraft[]}
@@ -1715,7 +1737,7 @@ export default function AdminPage() {
               }
             >
               <Plus className="size-3.5" />
-              Convert to multipart
+              Add answer parts
             </Button>
           ) : null}
         </>
@@ -1848,13 +1870,14 @@ export default function AdminPage() {
           </CardContent>
         </Card>
 
-        <PdfQuestionImportPanel
+        <AdminFeedbackPanel />
+
+        <AdminPracticeExamPanel
           subjects={visibleSubjects.map((s) => ({ id: s.id, name: s.name }))}
           defaultSubjectId={subjectId}
-          onImported={publishQuestionBank}
         />
 
-        <AiQuestionImportPanel
+        <PdfQuestionImportPanel
           subjects={visibleSubjects.map((s) => ({ id: s.id, name: s.name }))}
           defaultSubjectId={subjectId}
           onImported={publishQuestionBank}
@@ -1868,9 +1891,9 @@ export default function AdminPage() {
               Add Question
             </CardTitle>
             <p className="text-sm text-muted-foreground">
-              Manual entry. For PDFs with figures, use{" "}
-              <span className="font-medium text-foreground">Import questions</span> above â€” crop
-              images there, then import to Demo.
+              Manual entry. For exam PDFs, use{" "}
+              <span className="font-medium text-foreground">Import questions</span> above — same
+              workflow as practice exams, with each question saved separately to the bank.
             </p>
           </CardHeader>
           <CardContent className="space-y-5">
@@ -1949,87 +1972,13 @@ export default function AdminPage() {
               />
             </div>
 
-            {/* Images (optional) */}
-            <div className="space-y-1.5">
-              <Label>
-                Question Images / Stimulus{" "}
-                <span className="text-muted-foreground">(optional)</span>
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                Shared figures shown above the question (diagrams, tables, data). Paste URLs or
-                drag/drop images.
-              </p>
-
-              {/* Drag + Drop uploader */}
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={() => imageFilesRef.current?.click()}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") imageFilesRef.current?.click();
-                }}
-                onDragOver={(e) => {
-                  e.preventDefault();
-                }}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-                    void appendImageDataUrls(e.dataTransfer.files);
-                  }
-                }}
-                className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-black/15 bg-white/50 px-4 py-4 text-center transition-colors hover:bg-white/70"
-              >
-                <span className="text-sm font-semibold text-[#0b0f19]/80">
-                  {isProcessingImages ? "Processing images..." : "Drag & drop images here"}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  or click to browse (up to 6 at a time)
-                </span>
-              </div>
-
-              <input
-                ref={imageFilesRef}
-                type="file"
-                accept="image/*"
-                multiple
-                className="hidden"
-                onChange={(e) => {
-                  if (e.target.files && e.target.files.length > 0) {
-                    void appendImageDataUrls(e.target.files);
-                    e.currentTarget.value = "";
-                  }
-                }}
-              />
-
-              <Textarea
-                placeholder={"https://example.com/image1.png\nhttps://example.com/image2.jpg"}
-                value={imageUrlsText}
-                onChange={(e) => setImageUrlsText(e.target.value)}
-                rows={3}
-              />
-              {imageUrlsText.trim() && (
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {imageUrlsText
-                    .split("\n")
-                    .map((u) => u.trim())
-                    .filter(Boolean)
-                    .slice(0, 4)
-                    .map((u) => (
-                      <div
-                        key={u}
-                        className="overflow-hidden rounded-xl border border-black/10 bg-white"
-                      >
-                        <img
-                          src={u}
-                          alt="Question media"
-                          className="h-40 w-full object-cover"
-                          loading="lazy"
-                        />
-                      </div>
-                    ))}
-                </div>
-              )}
-            </div>
+            <AdminQuestionImageEditor
+              imageUrls={imageUrlsText
+                .split("\n")
+                .map((x) => x.trim())
+                .filter(Boolean)}
+              onChange={(urls) => setImageUrlsText(urls.join("\n"))}
+            />
 
             {/* Passage (optional) */}
             <div className="space-y-1.5">
@@ -2474,6 +2423,7 @@ C\tSection C Argument Prompts\tWrite an argument on patience in modern life.`}
                               {subjectQuestions.map((q) => (
                                 <div
                                   key={q.id}
+                                  id={`admin-question-${q.id}`}
                                   className="flex items-start justify-between gap-3 border-b border-border/30 px-4 py-3 last:border-b-0"
                                 >
                                   <div className="flex min-w-0 flex-1 gap-3">
@@ -2768,6 +2718,7 @@ C\tSection C Argument Prompts\tWrite an argument on patience in modern life.`}
                       filteredQuestions.map((q) => (
                         <div
                           key={q.id}
+                          id={`admin-question-${q.id}`}
                           className="flex items-start justify-between gap-3 border-b border-border/30 px-4 py-3 last:border-b-0"
                         >
                           <div className="flex min-w-0 flex-1 gap-3">

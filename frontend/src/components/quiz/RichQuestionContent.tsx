@@ -8,10 +8,11 @@ import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import "katex/dist/katex.min.css";
 import { cn } from "@/lib/utils";
 import { RichMathText } from "@/components/quiz/QuestionStimulus";
-import { absolutizeMarkdownAssetUrls } from "@/lib/questionDisplay";
+import { absolutizeMarkdownAssetUrls, capitalizeQuestionDisplayText } from "@/lib/questionDisplay";
 import {
   fixInlineMathDelimiters,
   normalizeQuestionMathText,
+  simplifyFragileLatexDollars,
 } from "@/lib/questionMathText";
 
 const RICH_FORCE =
@@ -172,6 +173,8 @@ type RichQuestionContentProps = {
   preferMarkdown?: boolean;
   /** Practice topic overviews — larger prose and tables (General / Specialist Maths). */
   overviewMode?: boolean;
+  /** VCAA exam paper — Times body, no Geist prose sizing */
+  examPaperMode?: boolean;
 };
 
 /**
@@ -183,20 +186,25 @@ export function RichQuestionContent({
   className,
   preferMarkdown = false,
   overviewMode = false,
+  examPaperMode = false,
 }: RichQuestionContentProps) {
   const { forced, body: afterForce } = stripRichForcePrefix(text);
   const { usePlainFallback, body: rawBody } = stripPlainOptOut(afterForce);
 
+  const displayBody = examPaperMode ? capitalizeQuestionDisplayText(rawBody) : rawBody;
+
   // normalizeQuestionMathText collapses all whitespace (including newlines), which destroys
   // overview markdown (tables, headings, lists). Only run it on plain imported question text.
   const preserveMarkdownStructure =
-    preferMarkdown ||
+    (preferMarkdown && !examPaperMode) ||
     overviewMode ||
-    looksLikeStructuredMarkdown(rawBody);
-  const body = fixInlineMathDelimiters(
-    preserveMarkdownStructure
-      ? absolutizeMarkdownAssetUrls(rawBody)
-      : normalizeQuestionMathText(rawBody),
+    looksLikeStructuredMarkdown(displayBody);
+  const body = simplifyFragileLatexDollars(
+    fixInlineMathDelimiters(
+      preserveMarkdownStructure
+        ? absolutizeMarkdownAssetUrls(displayBody)
+        : normalizeQuestionMathText(displayBody),
+    ),
   );
 
   // Never send structured Markdown (headings, lists, tables) through RichMathText — it blanks long notes.
@@ -210,16 +218,23 @@ export function RichQuestionContent({
   // For plain imported text (across all subjects), use RichMathText so
   // fractions/powers/matrices are consistently rendered in notation.
   if (useRichMathBranch) {
-    return <RichMathText text={body} className={className} />;
+    return (
+      <RichMathText
+        text={body}
+        className={cn(examPaperMode && "vce-question-paper__prose", className)}
+      />
+    );
   }
 
   return (
     <div
       className={cn(
         "rich-question-content",
-        overviewMode
+        examPaperMode
+          ? "vce-question-paper__prose max-w-none text-[#0b0f19] [&_.katex]:text-[length:var(--vce-font-size)] [&_.katex-display]:my-2"
+          : overviewMode
           ? "overview-markdown max-w-none text-foreground [&_.katex]:text-[1em] sm:[&_.katex]:text-[1.02em]"
-          : "prose prose-sm max-w-none text-foreground dark:prose-invert",
+          : "prose prose-base max-w-none text-foreground dark:prose-invert",
         "[&_.katex]:text-foreground [&_.katex-display]:my-3 [&_.katex-display]:max-w-full [&_.katex-display]:overflow-x-auto",
         "[&_img]:mx-auto [&_img]:block [&_img]:max-h-[min(70vh,560px)] [&_img]:w-auto [&_img]:max-w-full [&_img]:rounded-lg [&_img]:border [&_img]:border-black/10 [&_img]:bg-muted/20 [&_img]:object-contain",
         !overviewMode &&
