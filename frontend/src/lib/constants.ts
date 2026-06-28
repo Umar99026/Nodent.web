@@ -27,6 +27,13 @@ export function isAdminUser(user: { email?: string | null } | null | undefined):
   return !!email && email === ADMIN_EMAIL.toLowerCase();
 }
 
+/** Past-exam browsing and class join — admin-only until public launch. */
+export function canAccessExamsAndClassFeatures(
+  user: { email?: string | null } | null | undefined,
+): boolean {
+  return isAdminUser(user);
+}
+
 export const API_PATHS = {
   auth: {
     login: "/api/auth/login",

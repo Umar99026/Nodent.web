@@ -175,7 +175,9 @@ function AppRoutes() {
           path="/practice/:subjectId/exams"
           element={
             <ProtectedRoute>
-              <PracticeExamsPage />
+              <AdminOnlyRoute>
+                <PracticeExamsPage />
+              </AdminOnlyRoute>
             </ProtectedRoute>
           }
         />
@@ -184,7 +186,9 @@ function AppRoutes() {
           path="/practice/:subjectId/exams/:year"
           element={
             <ProtectedRoute>
-              <PracticeExamPapersPage />
+              <AdminOnlyRoute>
+                <PracticeExamPapersPage />
+              </AdminOnlyRoute>
             </ProtectedRoute>
           }
         />
@@ -193,7 +197,9 @@ function AppRoutes() {
           path="/practice/:subjectId/exams/:year/:examNumber"
           element={
             <ProtectedRoute>
-              <PracticeExamDetailPage />
+              <AdminOnlyRoute>
+                <PracticeExamDetailPage />
+              </AdminOnlyRoute>
             </ProtectedRoute>
           }
         />
@@ -280,7 +286,9 @@ function AppRoutes() {
           path="/join-class"
           element={
             <ProtectedRoute>
-              <JoinClassPage />
+              <AdminOnlyRoute>
+                <JoinClassPage />
+              </AdminOnlyRoute>
             </ProtectedRoute>
           }
         />

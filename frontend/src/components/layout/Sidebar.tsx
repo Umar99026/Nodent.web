@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useHandwritingMode } from "@/context/HandwritingModeContext";
-import { ADMIN_EMAIL } from "@/lib/constants";
+import { ADMIN_EMAIL, canAccessExamsAndClassFeatures } from "@/lib/constants";
 import { fetchClassMembership } from "@/lib/teacherClass";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -102,8 +102,10 @@ export function AppSidebar() {
     setPhotoPreview(user?.profilePhoto ?? null);
   }, [user, accountOpen]);
 
+  const showClassFeatures = canAccessExamsAndClassFeatures(user);
+
   useEffect(() => {
-    if (!user) return;
+    if (!user || !showClassFeatures) return;
     let cancelled = false;
     void fetchClassMembership()
       .then((data) => {
@@ -115,7 +117,7 @@ export function AppSidebar() {
     return () => {
       cancelled = true;
     };
-  }, [user, accountOpen]);
+  }, [user, accountOpen, showClassFeatures]);
 
   const openJoinClass = () => {
     navigate("/join-class");
@@ -272,6 +274,7 @@ export function AppSidebar() {
                 </span>
               </DropdownMenuCheckboxItem>
               ) : null}
+              {showClassFeatures ? (
               <DropdownMenuItem
                 onClick={openJoinClass}
                 className="cursor-pointer rounded-lg px-3 py-2"
@@ -283,6 +286,7 @@ export function AppSidebar() {
                     : "Join a class"}
                 </span>
               </DropdownMenuItem>
+              ) : null}
               <DropdownMenuItem
                 onClick={() => setAccountOpen(true)}
                 className="cursor-pointer rounded-lg px-3 py-2"
@@ -364,6 +368,7 @@ export function AppSidebar() {
               />
             </div>
 
+            {showClassFeatures ? (
             <div className="space-y-3 rounded-2xl border border-black/10 bg-[#f8fafc] p-4">
               <div>
                 <p className="text-sm font-semibold text-[#0b0f19]">Class</p>
@@ -389,6 +394,7 @@ export function AppSidebar() {
                 {classMembership.enrolled ? "View class" : "Join a class"}
               </Button>
             </div>
+            ) : null}
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">

@@ -1622,6 +1622,7 @@ let englishResponsesConstraintDropped = false;
 let usersTablePatched = false;
 let performanceIndexesPatched = false;
 let studyTablesPatched = false;
+let classTablesPatched = false;
 let coreTablesPatched = false;
 let uniqueStemIndexPatched = false;
 let lastSessionCleanupAt = 0;
@@ -1749,6 +1750,15 @@ async function runDbMigrations(db: ReturnType<typeof createDb>): Promise<void> {
       /* ignore */
     } finally {
       studyTablesPatched = true;
+    }
+  }
+  if (!classTablesPatched) {
+    try {
+      await ensureClassTables(db);
+    } catch {
+      /* ignore */
+    } finally {
+      classTablesPatched = true;
     }
   }
   if (!uniqueStemIndexPatched) {
@@ -2137,6 +2147,30 @@ async function ensureCoreTables(db: any) {
       PRIMARY KEY (exam_id, page_number)
     )
   `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS teacher_classes (
+      id serial PRIMARY KEY,
+      teacher_id integer NOT NULL UNIQUE REFERENCES users (id) ON DELETE CASCADE,
+      join_code text NOT NULL UNIQUE,
+      class_name text NOT NULL DEFAULT 'My class',
+      created_at text NOT NULL
+    )
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS class_members (
+      class_id integer NOT NULL REFERENCES teacher_classes (id) ON DELETE CASCADE,
+      user_id integer NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+      joined_at text NOT NULL,
+      PRIMARY KEY (class_id, user_id)
+    )
+  `);
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS class_members_user_idx
+    ON class_members (user_id)
+  `);
+}
+
+async function ensureClassTables(db: ReturnType<typeof createDb>) {
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS teacher_classes (
       id serial PRIMARY KEY,

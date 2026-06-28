@@ -2,7 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { apiFetch, BOOTSTRAP_FETCH_TIMEOUT_MS } from "@/lib/api";
-import { API_PATHS, STORAGE_KEYS, isAdminUser } from "@/lib/constants";
+import {
+  API_PATHS,
+  STORAGE_KEYS,
+  canAccessExamsAndClassFeatures,
+  isAdminUser,
+} from "@/lib/constants";
 import { baseSubjects, subjectsForUser } from "@/lib/subjects";
 import type { Question, Subject } from "@/lib/subjects";
 import { loadPracticeBank } from "@/lib/questionBankCache";
@@ -34,6 +39,7 @@ export default function PracticeSetupPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const isAdmin = isAdminUser(user);
+  const showExamsEntry = canAccessExamsAndClassFeatures(user);
   const [searchParams] = useSearchParams();
 
   // Demo subject is admin-only (guard direct URL access).
@@ -226,16 +232,18 @@ export default function PracticeSetupPage() {
               )}
 
               <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => navigate(`/practice/${subjectId}/exams`)}
-                  className="h-11 w-full gap-2 rounded-xl sm:w-auto"
-                >
-                  <FileText className="size-4" />
-                  Exams
-                  <ArrowRight className="size-4" />
-                </Button>
+                {showExamsEntry ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => navigate(`/practice/${subjectId}/exams`)}
+                    className="h-11 w-full gap-2 rounded-xl sm:w-auto"
+                  >
+                    <FileText className="size-4" />
+                    Exams
+                    <ArrowRight className="size-4" />
+                  </Button>
+                ) : null}
                 <Button
                   variant="accent"
                   onClick={handleStart}

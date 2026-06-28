@@ -35,7 +35,7 @@ import {
 import { baseSubjects, subjectsForUser } from "@/lib/subjects";
 import type { Subject } from "@/lib/subjects";
 import { localDateISO } from "@/lib/utils";
-import { isAdminUser } from "@/lib/constants";
+import { canAccessExamsAndClassFeatures, isAdminUser } from "@/lib/constants";
 import { fetchClassMembership } from "@/lib/teacherClass";
 
 /* ------------------------------------------------------------------ */
@@ -186,8 +186,10 @@ export default function DashboardPage() {
     teacherName?: string;
   }>({ enrolled: false });
 
+  const showClassFeatures = canAccessExamsAndClassFeatures(user);
+
   useEffect(() => {
-    if (!user || isAdmin) return;
+    if (!user || !showClassFeatures) return;
     let cancelled = false;
     void fetchClassMembership()
       .then((data) => {
@@ -199,7 +201,7 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [user, isAdmin]);
+  }, [user, showClassFeatures]);
 
   const avgDailyStudyMinutes = useMemo(() => {
     if (!user) return 0;
@@ -435,7 +437,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {!isAdmin && !classMembership.enrolled ? (
+      {showClassFeatures && !classMembership.enrolled ? (
         <div className="mt-4 rounded-2xl border border-brand/20 bg-brand/5 p-4 sm:mt-5 sm:p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
@@ -460,7 +462,7 @@ export default function DashboardPage() {
         </div>
       ) : null}
 
-      {!isAdmin && classMembership?.enrolled ? (
+      {showClassFeatures && classMembership?.enrolled ? (
         <div className="mt-4 rounded-2xl border border-black/8 bg-white px-4 py-3 text-sm text-muted-foreground sm:mt-5">
           In <span className="font-medium text-foreground">{classMembership.className}</span>
           {classMembership.teacherName ? ` with ${classMembership.teacherName}` : ""}
