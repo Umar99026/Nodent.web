@@ -5,6 +5,7 @@ import {
   buildSmartMarkPayload,
   buildFallbackHandwritingMark,
   enrichHandwritingMarkResult,
+  enrichSmartMarkResult,
   partMarkAt,
   requestHandwritingMark,
   requestSmartMark,
@@ -53,6 +54,8 @@ import {
   AiMarkingPartFeedback,
 } from "@/components/quiz/AiMarkingFeedbackPanel";
 import { MultipartMarkBreakdown } from "@/components/quiz/MultipartMarkBreakdown";
+import { WrongAnswerFeedbackPanel } from "@/components/quiz/WrongAnswerFeedbackPanel";
+import { buildWrongAnswerBullets } from "@/lib/wrongAnswerFeedback";
 import type { SmartMarkResult } from "@/lib/questionAiMarking";
 
 interface ShortQuestionProps {
@@ -448,17 +451,24 @@ export function ShortQuestion({
           }),
         });
         if (ai) {
-          setAiMark(ai);
-          if (ai.partResults?.length) {
+          const enriched = enrichSmartMarkResult(ai, {
+            studentAnswer: compositeAnswer,
+            studentParts: isMultipart ? parts : undefined,
+            expectedAnswers: expectedAnswersForDisplay,
+            guidance: question.guidance,
+            questionText: question.question,
+          });
+          setAiMark(enriched);
+          if (enriched.partResults?.length) {
             partCorrectFlags = parts.map((_, idx) => {
-              const hit = ai.partResults?.find((p) => p.index === idx);
+              const hit = enriched.partResults?.find((p) => p.index === idx);
               return hit ? hit.correct : (partCorrectFlags[idx] ?? false);
             });
             setPartResults(partCorrectFlags);
           }
           finalCorrect = isMultipart
             ? multipartAllCorrect(partCorrectFlags)
-            : ai.correct;
+            : enriched.correct;
         }
       } finally {
         setAiMarking(false);
@@ -1001,33 +1011,33 @@ export function ShortQuestion({
             partResults={partResults}
             partMarks={slotMarks.length ? slotMarks : partMarks}
             expectedAnswers={expectedAnswersForDisplay}
+            studentAnswers={parts}
+            guidance={question.guidance}
           />
         ) : null}
 
-        {submitted && !isMultipart && (
+        {submitted && !isMultipart && !isCorrect && !aiMark ? (
+          <WrongAnswerFeedbackPanel
+            bullets={buildWrongAnswerBullets({
+              studentAnswer: compositeAnswer,
+              expectedAnswers: expectedAnswersForDisplay,
+              guidance: question.guidance,
+              questionText: question.question,
+            })}
+          />
+        ) : null}
+
+        {submitted && !isMultipart && isCorrect && (
           <div
             className={cn(
               "flex items-start gap-3 rounded-lg px-4 py-3 text-sm",
-              isCorrect ? "bg-success/10 text-success" : "bg-danger/10 text-danger",
+              "bg-success/10 text-success",
             )}
           >
-            {isCorrect ? (
-              <>
-                <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
-                <div>
-                  <span className="font-medium">Correct! Well done.</span>
-                </div>
-              </>
-            ) : (
-              <>
-                <XCircle className="mt-0.5 size-4 shrink-0" />
-                <div className="space-y-1">
-                  <span className="font-medium">
-                    Not quite — keep working on this one.
-                  </span>
-                </div>
-              </>
-            )}
+            <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
+            <div>
+              <span className="font-medium">Correct! Well done.</span>
+            </div>
           </div>
         )}
         {aiMark && submitted && !(isMultipart && handwritingMode) ? (

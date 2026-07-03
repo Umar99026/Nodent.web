@@ -5198,16 +5198,7 @@ app.post("/api/written/:subjectId/:questionKey/mark", authMiddleware, async (c: 
 
     if (handwritingImages.length > 0) {
       if (canonicalSubjectId(subjectId) !== "demo") {
-        return c.json({ error: "Handwriting marking is only available in demo." }, 400);
-      }
-      if (!qualifiesForOpenAiHandwriting(openAiGate)) {
-        return c.json(
-          {
-            error:
-              "AI marking is only available for explain, discuss, prove, and similar worded questions.",
-          },
-          400,
-        );
+        return c.json({ error: "Handwriting marking is only available in the Maths sandbox." }, 400);
       }
       const imageError = validateMarkingImageUrls(handwritingImages);
       if (imageError) return c.json({ error: imageError }, 400);

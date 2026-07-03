@@ -12,6 +12,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { PassageBlock, QuestionImageGrid } from "@/components/quiz/QuestionStimulus";
 import { RichQuestionContent } from "@/components/quiz/RichQuestionContent";
+import { WrongAnswerFeedbackPanel } from "@/components/quiz/WrongAnswerFeedbackPanel";
+import { buildMcqWrongFeedback } from "@/lib/wrongAnswerFeedback";
 import { CheckCircle2, XCircle } from "lucide-react";
 
 interface McqQuestionProps {
@@ -230,20 +232,21 @@ export function McqQuestion({
       </div>
 
       {/* Feedback message */}
-      {showResults && (
-        <div
-          className={cn(
-            "rounded-lg px-4 py-3 text-sm font-medium",
-            activeSelected === question.answer
-              ? "bg-success/10 text-success"
-              : "bg-danger/10 text-danger"
-          )}
-        >
-          {activeSelected === question.answer
-            ? "Correct! Well done."
-            : "Not quite — that wasn\u2019t the right choice."}
+      {showResults && activeSelected === question.answer ? (
+        <div className="rounded-lg bg-success/10 px-4 py-3 text-sm font-medium text-success">
+          Correct! Well done.
         </div>
-      )}
+      ) : null}
+      {showResults && userWrong ? (
+        <WrongAnswerFeedbackPanel
+          bullets={buildMcqWrongFeedback({
+            selectedOption: activeSelected,
+            correctOption: question.answer,
+            options: question.options,
+            guidance: question.guidance,
+          })}
+        />
+      ) : null}
 
     </div>
   );

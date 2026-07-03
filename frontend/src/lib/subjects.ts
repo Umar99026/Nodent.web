@@ -74,12 +74,13 @@ export interface Subject {
   quiz: Question[];
 }
 
-/** Local sandbox — admin-only subject. */
+/** Local sandbox — admin-only subject (draw + AI marking demo). */
 export const demoSubject: Subject = {
   id: "demo",
-  name: "Demo",
+  name: "Maths",
   category: "Mathematics",
-  description: "Local-only sandbox subject (blank by default).",
+  description:
+    "Handwriting sandbox — draw worked solutions and get AI marking feedback.",
   quiz: [],
 };
 

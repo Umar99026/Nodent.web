@@ -928,7 +928,7 @@ export default function QuizPage() {
         )}
         {isDemoSandbox && !isWrongReview && (
           <p className="rounded-lg border border-brand/25 bg-brand/5 px-4 py-3 text-sm text-foreground">
-            Demo sandbox — VCE-style layout with dotted ruled answer lines (draw or type). Submit as many times as you like.
+            Maths sandbox — draw your working on the pad (one image per part). AI reads your handwriting and marks with detailed feedback. Submit as many times as you like.
           </p>
         )}
 

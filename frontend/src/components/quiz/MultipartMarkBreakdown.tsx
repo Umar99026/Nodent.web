@@ -1,6 +1,8 @@
+import { SmartMarkingBulletList } from "@/components/quiz/AiMarkingFeedbackPanel";
 import { RichQuestionContent } from "@/components/quiz/RichQuestionContent";
 import { marksEarnedFromPartResults } from "@/lib/questionDisplay";
 import { cn } from "@/lib/utils";
+import { buildWrongAnswerBullets } from "@/lib/wrongAnswerFeedback";
 import { CheckCircle2, XCircle } from "lucide-react";
 
 type MultipartMarkBreakdownProps = {
@@ -8,6 +10,8 @@ type MultipartMarkBreakdownProps = {
   partResults: Array<boolean | null | undefined>;
   partMarks: number[];
   expectedAnswers: string[];
+  studentAnswers?: string[];
+  guidance?: string;
   className?: string;
 };
 
@@ -16,6 +20,8 @@ export function MultipartMarkBreakdown({
   partResults,
   partMarks,
   expectedAnswers,
+  studentAnswers = [],
+  guidance,
   className,
 }: MultipartMarkBreakdownProps) {
   const slotCount = Math.max(partResults.length, partMarks.length, expectedAnswers.length);
@@ -45,6 +51,15 @@ export function MultipartMarkBreakdown({
           const slotMarks = marks[idx] ?? 1;
           const label = partLabels[idx]?.trim() || `Part ${String.fromCharCode(97 + (idx % 26))}`;
           const expected = expectedAnswers[idx]?.trim() ?? "";
+          const student = studentAnswers[idx]?.trim() ?? "";
+          const wrongBullets =
+            !ok && expected
+              ? buildWrongAnswerBullets({
+                  studentAnswer: student,
+                  expectedAnswers: [expected],
+                  guidance,
+                })
+              : [];
           return (
             <li
               key={idx}
@@ -65,14 +80,22 @@ export function MultipartMarkBreakdown({
                     {slotMarks === 1 ? "mark" : "marks"}
                   </p>
                   {!ok && expected ? (
-                    <div className="text-xs text-muted-foreground">
-                      <span className="font-medium uppercase tracking-wide">Correct answer</span>
-                      <div className="mt-0.5 font-semibold text-foreground">
-                        <RichQuestionContent
-                          text={expected}
-                          className="prose prose-sm max-w-none prose-p:my-0"
+                    <div className="space-y-2 text-xs text-muted-foreground">
+                      {wrongBullets.length ? (
+                        <SmartMarkingBulletList
+                          text={wrongBullets.map((b) => `• ${b}`).join("\n")}
                         />
-                      </div>
+                      ) : (
+                        <div>
+                          <span className="font-medium uppercase tracking-wide">Correct answer</span>
+                          <div className="mt-0.5 font-semibold text-foreground">
+                            <RichQuestionContent
+                              text={expected}
+                              className="prose prose-sm max-w-none prose-p:my-0"
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ) : null}
                 </div>

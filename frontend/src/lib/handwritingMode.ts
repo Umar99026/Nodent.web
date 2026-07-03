@@ -25,12 +25,10 @@ export function usesHandwritingMarking(
   isMultipart: boolean,
   openAiEligible = false,
 ): boolean {
-  void subjectId;
   void openAiEligible;
-  // Handwriting (canvas) answers are no longer interpreted with AI.
-  // If iPad Scribble converts handwriting to text, it will be graded as normal text.
-  // Canvas-only drawings are stored for review but are not auto-read for marking.
-  return false;
+  const sid = String(subjectId ?? "").trim().toLowerCase();
+  if (sid !== "demo") return false;
+  return collectHandwritingImages(answer, parts, isMultipart).length > 0;
 }
 
 export function handwritingResponseSummary(imageCount: number): string {
@@ -70,10 +68,12 @@ export function writeHandwritingMode(enabled: boolean): void {
   }
 }
 
-/** Handwriting / draw answers are only enabled in the demo subject sandbox. */
+/** Handwriting / draw answers with AI marking are enabled in the Maths sandbox (`demo` id). */
 export function handwritingAllowedForSubject(subjectId: string | undefined): boolean {
-  // Allow handwriting mode UI across all subjects.
-  // Note: marking remains text-first (no AI interpretation of drawings).
   void subjectId;
   return true;
+}
+
+export function isDemoMathsSubject(subjectId: string | undefined): boolean {
+  return String(subjectId ?? "").trim().toLowerCase() === "demo";
 }

@@ -458,18 +458,34 @@ export async function markLongAnswer(
     {
       role: "system",
       content: `You mark student responses for VCE-style questions.
-Return JSON:
+Return JSON only:
 {
   "correct": boolean (true if broadly correct for full credit),
   "scorePercent": 0-100,
   "marksAwarded": number (0 to maxMarks, can be fractional .5),
   "maxMarks": number,
-  "feedback": "2-4 sentences, constructive",
-  "partResults": [{"index":0,"correct":true,"marksAwarded":1}]
+  "feedback": "4-8 bullet points when wrong (each line starts with •); 2-3 bullets when correct",
+  "correctAnswers": ["authoritative model answer(s) in order when wrong or multipart"],
+  "partResults": [{
+    "index": 0,
+    "correct": true,
+    "marksAwarded": 1,
+    "correctAnswer": "model answer for this part",
+    "partFeedback": "3-6 bullet points for THIS part — each on its own line starting with • "
+  }]
 }
 
+When the student is WRONG, feedback MUST be specific and detailed:
+• Quote or paraphrase what they actually wrote.
+• Name the exact mistake (wrong formula, missing step, sign error, incomplete explanation, etc.).
+• Give a step-by-step model solution or reasoning chain for this question.
+• State the correct final answer clearly.
+• If multipart, put per-part detail in partResults.partFeedback (not only global feedback).
+
+When correct: still give 2-3 bullets on what they did well.
+
 Be fair: accept equivalent methods and reasonable rounding. For multipart, grade each part.
-Use guidance and acceptedAnswers as the rubric when provided.`,
+Use guidance and acceptedAnswers as the rubric when provided; prefer those over inventing answers.`,
     },
     {
       role: "user",
@@ -586,7 +602,7 @@ Use guidance and acceptedAnswers as the rubric; prefer those over inventing answ
     { role: "user", content: userContent },
   ]);
 
-  return parseLongAnswerMarkResult(parsed, input.marks, { maxFeedbackChars: 800 });
+  return parseLongAnswerMarkResult(parsed, input.marks, { maxFeedbackChars: 2000 });
 }
 
 export type EnglishScoreInput = {

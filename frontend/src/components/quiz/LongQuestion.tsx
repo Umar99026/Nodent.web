@@ -30,6 +30,7 @@ import {
   buildSmartMarkPayload,
   buildFallbackHandwritingMark,
   enrichHandwritingMarkResult,
+  enrichSmartMarkResult,
   partMarkAt,
   requestHandwritingMark,
   requestSmartMark,
@@ -56,6 +57,8 @@ import {
   type AnswerScoreDetail,
 } from "@/lib/questionDisplay";
 import { MultipartMarkBreakdown } from "@/components/quiz/MultipartMarkBreakdown";
+import { WrongAnswerFeedbackPanel } from "@/components/quiz/WrongAnswerFeedbackPanel";
+import { buildWrongAnswerBullets } from "@/lib/wrongAnswerFeedback";
 import { toast } from "sonner";
 import { AiMarkingFeedbackPanel, AiMarkingPartFeedback } from "@/components/quiz/AiMarkingFeedbackPanel";
 import {
@@ -514,17 +517,24 @@ export function LongQuestion({
             }),
           });
           if (ai) {
-            setAiMark(ai);
-            if (ai.partResults?.length) {
+            const enriched = enrichSmartMarkResult(ai, {
+              studentAnswer: effectiveResponse,
+              studentParts: isMultipart ? parts : undefined,
+              expectedAnswers: expectedAnswersForDisplay,
+              guidance: question.guidance,
+              questionText: question.question,
+            });
+            setAiMark(enriched);
+            if (enriched.partResults?.length) {
               partCorrectFlags = parts.map((_, idx) => {
-                const hit = ai.partResults?.find((p) => p.index === idx);
+                const hit = enriched.partResults?.find((p) => p.index === idx);
                 return hit ? hit.correct : (partCorrectFlags[idx] ?? false);
               });
               setPartResults(partCorrectFlags);
             }
             finalResult = isMultipart
               ? multipartAllCorrect(partCorrectFlags)
-              : ai.correct;
+              : enriched.correct;
             setAutoMarkResult(finalResult);
           }
         } catch {
@@ -571,6 +581,12 @@ export function LongQuestion({
       setSaving(false);
     }
   };
+
+  const displayStudentAnswer = isMultipart
+    ? partLabels
+        .map((label, idx) => `${partSubmitLabel(label)} ${parts[idx] ?? ""}`.trim())
+        .join("\n")
+    : response;
 
   return (
     <div className={cn("space-y-5", examPaper && "vce-question-paper")}>
@@ -877,30 +893,32 @@ export function LongQuestion({
             partResults={partResults}
             partMarks={partMarks}
             expectedAnswers={expectedAnswersForDisplay}
+            studentAnswers={parts}
+            guidance={question.guidance}
           />
         ) : null}
-        {(practiceOnly ? submitted : saved) && autoMarkResult !== null && !isMultipart && (
+        {(practiceOnly ? submitted : saved) &&
+        autoMarkResult === false &&
+        !isMultipart &&
+        !aiMark ? (
+          <WrongAnswerFeedbackPanel
+            bullets={buildWrongAnswerBullets({
+              studentAnswer: displayStudentAnswer,
+              expectedAnswers: expectedAnswersForDisplay,
+              guidance: question.guidance,
+              questionText: question.question,
+            })}
+          />
+        ) : null}
+        {(practiceOnly ? submitted : saved) && autoMarkResult === true && !isMultipart && (
           <div
             className={cn(
               "flex items-start gap-3 rounded-lg px-4 py-3 text-sm",
-              autoMarkResult
-                ? "bg-success/10 text-success"
-                : "bg-danger/10 text-danger",
+              "bg-success/10 text-success",
             )}
           >
-            {autoMarkResult ? (
-              <>
-                <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
-                <span className="font-medium">Correct! Well done.</span>
-              </>
-            ) : (
-              <>
-                <XCircle className="mt-0.5 size-4 shrink-0" />
-                <span className="font-medium">
-                  Not quite — keep working on this one.
-                </span>
-              </>
-            )}
+            <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
+            <span className="font-medium">Correct! Well done.</span>
           </div>
         )}
         {aiMark && (practiceOnly ? submitted : saved) && !(isMultipart && handwritingMode) ? (

@@ -5,6 +5,7 @@ import {
   getRawCustomQuestionsForSubject,
   practiceQuestionsForSubject,
 } from "@/lib/practiceQuestions";
+import { DEMO_MATHS_QUESTIONS } from "@/lib/demoMathsQuestions";
 import type { Question } from "@/lib/subjects";
 
 /** Fired after admin saves or bootstrap refreshes the global question bank. */
@@ -59,6 +60,10 @@ export function loadPracticeBank(
   subjectId: string,
   cache?: Record<string, unknown[]>,
 ): Question[] {
+  const sid = canonicalSubjectId(subjectId);
+  if (sid === "demo") {
+    return DEMO_MATHS_QUESTIONS;
+  }
   const map = cache ?? readCustomQuestionsCache();
   const raw = getRawCustomQuestionsForSubject(map, subjectId);
   return practiceQuestionsForSubject(raw, subjectId);

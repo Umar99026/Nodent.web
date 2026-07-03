@@ -45,7 +45,10 @@ function inferPracticeTopic(
   if (sid === "general-maths") {
     return inferGeneralMathsAreaOfStudy(topicLabel, questionText, passage);
   }
-  if (sid === "specialist-maths" || sid === "demo") {
+  if (sid === "demo") {
+    return inferMethodsAreaOfStudy(topicLabel, questionText, passage);
+  }
+  if (sid === "specialist-maths") {
     return inferSpecialistMathsAreaOfStudy(topicLabel, questionText, passage);
   }
   return topicLabel;

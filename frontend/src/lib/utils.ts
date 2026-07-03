@@ -115,7 +115,7 @@ export function normalizeAcceptedAnswersText(multiline: string): string {
     .join("\n");
 }
 
-function parseNumericAnswer(raw: string): number | null {
+export function parseNumericAnswer(raw: string): number | null {
   const t = stripAnswerFormatting(raw)
     .trim()
     .toLowerCase()

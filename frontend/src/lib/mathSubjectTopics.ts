@@ -32,8 +32,8 @@ export const GOOGLE_SHEETS_TOPIC_LABELS: Record<string, readonly string[]> = {
   "specialist-maths": [...SPECIALIST_MATHS_TOPICS],
 };
 
-/** Demo sandbox uses the same topic taxonomy as General Mathematics. */
+/** Maths sandbox uses Methods topic labels. */
 export function topicTaxonomySubjectId(subjectId: string): string {
   const sid = String(subjectId ?? "").trim().toLowerCase();
-  return sid === "demo" ? "general-maths" : sid;
+  return sid === "demo" ? "methods" : sid;
 }

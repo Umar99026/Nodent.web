@@ -87,6 +87,11 @@ export function inferUseAiMarkingForImport(input: {
 
 import type { AiMarkPartResult } from "@/components/quiz/AiMarkingFeedbackPanel";
 import { handwritingMarkUserError, sanitizeUserFacingError } from "@/lib/userFacingErrors";
+import { isDemoMathsSubject } from "@/lib/handwritingMode";
+import {
+  buildWrongAnswerBullets,
+  bulletsToFeedbackText,
+} from "@/lib/wrongAnswerFeedback";
 
 export type SmartMarkResult = {
   correct: boolean;
@@ -186,7 +191,8 @@ export async function requestHandwritingMark(
       questionText: input.question.question,
       partLabels: input.question.answerParts?.map((p) => p.label),
       acceptedAnswers: input.question.acceptedAnswers,
-    })
+    }) &&
+    !isDemoMathsSubject(subjectId)
   ) {
     return null;
   }
@@ -274,8 +280,79 @@ export function enrichHandwritingMarkResult(
     enriched = {
       ...enriched,
       feedback: ans.length
-        ? `• Incorrect.\n• Correct answer: ${ans.join("; ")}`
-        : `• Incorrect. Review the model solution.`,
+        ? bulletsToFeedbackText(
+            buildWrongAnswerBullets({
+              studentAnswer: "",
+              expectedAnswers: ans,
+            }),
+          )
+        : `• Incorrect. Review the model solution and compare each step of your method.`,
+    };
+  }
+
+  return enriched;
+}
+
+/** Add client-side diagnosis when smart-marking feedback is thin. */
+export function enrichSmartMarkResult(
+  ai: SmartMarkResult,
+  input: {
+    studentAnswer: string;
+    studentParts?: string[];
+    expectedAnswers: string[];
+    guidance?: string;
+    questionText?: string;
+  },
+): SmartMarkResult {
+  if (ai.correct) return ai;
+
+  const answers = input.expectedAnswers.map((a) => String(a ?? "").trim()).filter(Boolean);
+  let enriched: SmartMarkResult = { ...ai };
+
+  if (!ai.correctAnswers?.length && answers.length) {
+    enriched = { ...enriched, correctAnswers: answers };
+  }
+
+  const feedback = String(enriched.feedback ?? "").trim();
+  const supplemental = buildWrongAnswerBullets({
+    studentAnswer: input.studentAnswer,
+    expectedAnswers: answers,
+    guidance: input.guidance,
+    questionText: input.questionText,
+  });
+  const supplementalText = bulletsToFeedbackText(supplemental);
+
+  if (!feedback) {
+    enriched = { ...enriched, feedback: supplementalText };
+  } else if (feedback.length < 160 && supplementalText) {
+    enriched = {
+      ...enriched,
+      feedback: `${feedback}\n${supplementalText}`,
+    };
+  }
+
+  if (enriched.partResults?.length && input.studentParts?.length) {
+    enriched = {
+      ...enriched,
+      partResults: enriched.partResults.map((part) => {
+        if (part.correct) return part;
+        const idx = part.index;
+        const expected = part.correctAnswer ?? answers[idx];
+        const student = String(input.studentParts?.[idx] ?? "").trim();
+        const partFb = String(part.partFeedback ?? "").trim();
+        const extra = buildWrongAnswerBullets({
+          studentAnswer: student,
+          expectedAnswers: expected ? [expected] : [],
+          guidance: input.guidance,
+          questionText: input.questionText,
+        });
+        const extraText = bulletsToFeedbackText(extra);
+        if (!partFb) return { ...part, partFeedback: extraText };
+        if (partFb.length < 120 && extraText) {
+          return { ...part, partFeedback: `${partFb}\n${extraText}` };
+        }
+        return part;
+      }),
     };
   }
 
@@ -286,19 +363,30 @@ export function buildFallbackHandwritingMark(
   expectedAnswers: string[],
 ): SmartMarkResult {
   const answers = expectedAnswers.map((a) => String(a ?? "").trim()).filter(Boolean);
+  const feedback = answers.length
+    ? bulletsToFeedbackText(
+        buildWrongAnswerBullets({
+          studentAnswer: "",
+          expectedAnswers: answers,
+        }),
+      )
+    : `• Could not read your drawing. Try again.`;
   return {
     correct: false,
     scorePercent: 0,
-    feedback: answers.length
-      ? `• Could not read your drawing right now.\n• Correct answer: ${answers.join("; ")}`
-      : `• Could not read your drawing. Try again.`,
+    feedback: `• Could not read your drawing right now.\n${feedback}`,
     correctAnswers: answers.length ? answers : undefined,
     partResults: answers.map((ans, index) => ({
       index,
       correct: false,
       marksAwarded: 0,
       correctAnswer: ans,
-      partFeedback: `• Could not read your drawing right now.\n• Model answer for this part: ${ans}`,
+      partFeedback: bulletsToFeedbackText(
+        buildWrongAnswerBullets({
+          studentAnswer: "",
+          expectedAnswers: [ans],
+        }),
+      ),
     })),
   };
 }
