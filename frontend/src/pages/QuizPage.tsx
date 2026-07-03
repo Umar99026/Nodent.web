@@ -54,13 +54,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { EnglishPracticePanel } from "@/pages/EnglishPracticePage";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { TopicPerformanceSelect } from "@/components/practice/TopicPerformanceSelect";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -80,6 +74,8 @@ import {
   Clock,
   BookOpen,
   Loader2,
+  MessageSquare,
+  X,
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
@@ -195,6 +191,7 @@ export default function QuizPage() {
   }, [isDemoSandbox, isWrongReview, setHandwritingMode]);
 
   const [showInactivityDialog, setShowInactivityDialog] = useState(false);
+  const [discussionOpen, setDiscussionOpen] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, boolean | null>>({});
   const [initialized, setInitialized] = useState(false);
@@ -938,11 +935,11 @@ export default function QuizPage() {
         <div className="practice-toolbar">
           <div className="flex min-w-0 flex-1 items-center">
             {!isWrongReview && (
-              <div className="w-full max-w-xs sm:max-w-sm">
-                <Select
+              <div className="w-fit min-w-0">
+                <TopicPerformanceSelect
+                  subjectId={subjectId}
                   value={topicFilter}
                   onValueChange={(val) => {
-                    if (!val) return;
                     setTopicFilter(val);
                     setSearchParams(
                       (prev) => {
@@ -954,19 +951,11 @@ export default function QuizPage() {
                       { replace: true },
                     );
                   }}
-                >
-                  <SelectTrigger className="h-10 border-brand-light/50 bg-brand-light/50 text-[#0b0f19]">
-                    <SelectValue placeholder="Topic" />
-                  </SelectTrigger>
-                  <SelectContent alignItemWithTrigger={false} className="max-h-72">
-                    <SelectItem value="all">All topics</SelectItem>
-                    {availableTopics.map((t) => (
-                      <SelectItem key={t} value={t}>
-                        {t}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  topics={availableTopics}
+                  includeAllOption
+                  allOptionLabel="All topics"
+                  placeholder="Topic"
+                />
               </div>
             )}
             {isWrongReview ? (
@@ -974,7 +963,20 @@ export default function QuizPage() {
             ) : null}
           </div>
 
-          <div className="flex justify-end">
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant={discussionOpen ? "accent" : "outline"}
+              onClick={() => setDiscussionOpen((open) => !open)}
+              className="gap-2"
+              aria-expanded={discussionOpen}
+            >
+              <MessageSquare className="size-4" />
+              <span className="hidden sm:inline">
+                {discussionOpen ? "Hide discussion" : "Discussion"}
+              </span>
+              <span className="sm:hidden">{discussionOpen ? "Hide" : "Chat"}</span>
+            </Button>
             <Tooltip>
               <TooltipTrigger>
                 <Button
@@ -1001,10 +1003,15 @@ export default function QuizPage() {
           </div>
         </div>
 
-        {/* Two-column layout */}
-        <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
-          {/* Left column: Question */}
-          <div className="space-y-6">
+        {/* Question + optional discussion sidebar */}
+        <div
+          className={cn(
+            "grid gap-6 transition-[grid-template-columns] duration-300 ease-out",
+            discussionOpen && "lg:grid-cols-[minmax(0,1fr)_340px]",
+          )}
+        >
+          {/* Question column — full width until discussion opens */}
+          <div className="min-w-0 space-y-6">
             <Card className="practice-card">
               <div className="practice-card-accent" aria-hidden>
                 <div className="practice-card-accent-black" />
@@ -1044,7 +1051,7 @@ export default function QuizPage() {
                             "rounded-xl border p-3 sm:p-4",
                             markedCorrect
                               ? "border-success/35 bg-success/5"
-                              : "border-black/10 border-l-4 border-l-brand-light/60 bg-white",
+                              : "border-black/10 border-l-4 border-l-brand-deep bg-white",
                           )}
                         >
                           {isAdmin && part.id ? (
@@ -1167,30 +1174,57 @@ export default function QuizPage() {
             </div>
           </div>
 
-          {/* Right column: Comments (desktop) — forum-style column, no extra card shell */}
-          <div className="hidden lg:block">
-            <div className="sticky top-[calc(3.5rem+0.75rem)]">
-              {focusPart && (
-                <CommentThread
-                  key={focusQKey}
-                  subjectId={subjectId}
-                  questionKey={focusQKey}
-                />
-              )}
+          {/* Discussion sidebar (desktop) */}
+          {discussionOpen ? (
+            <div className="hidden min-w-0 lg:block">
+              <div className="sticky top-[calc(3.5rem+0.75rem)]">
+                {focusPart && subjectId ? (
+                  <CommentThread
+                    key={focusQKey}
+                    subjectId={subjectId}
+                    questionKey={focusQKey}
+                  />
+                ) : null}
+              </div>
             </div>
-          </div>
+          ) : null}
         </div>
 
-        {/* Mobile comments (below question) */}
-        <div className="lg:hidden">
-          {focusPart && (
-            <CommentThread
-              key={`mobile-${focusQKey}`}
-              subjectId={subjectId}
-              questionKey={focusQKey}
+        {/* Discussion drawer (mobile / tablet) */}
+        {discussionOpen ? (
+          <>
+            <button
+              type="button"
+              className="fixed inset-0 z-40 bg-black/45 lg:hidden"
+              aria-label="Close discussion"
+              onClick={() => setDiscussionOpen(false)}
             />
-          )}
-        </div>
+            <div className="fixed inset-y-0 right-0 z-50 flex w-[min(340px,100vw)] flex-col border-l border-black/10 bg-[#f3f4f6] shadow-2xl lg:hidden">
+              <div className="flex shrink-0 items-center justify-between border-b border-black/10 bg-white px-4 py-3">
+                <p className="font-display text-sm font-semibold text-[#0b0f19]">Discussion</p>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-8"
+                  onClick={() => setDiscussionOpen(false)}
+                  aria-label="Close discussion"
+                >
+                  <X className="size-4" />
+                </Button>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                {focusPart && subjectId ? (
+                  <CommentThread
+                    key={`mobile-${focusQKey}`}
+                    subjectId={subjectId}
+                    questionKey={focusQKey}
+                  />
+                ) : null}
+              </div>
+            </div>
+          </>
+        ) : null}
       </div>
 
       {/* Inactivity dialog */}

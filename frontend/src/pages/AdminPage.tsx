@@ -992,7 +992,7 @@ export default function AdminPage() {
     setSubjectFilter(canonicalSubjectId(String(target.subjectId)));
     setExpandedSubjects((prev) => {
       const next = new Set(prev);
-      next.add(target.subjectName);
+      next.add(target.subjectName ?? String(target.subjectId));
       return next;
     });
     startEditingQuestion(target);
@@ -1656,7 +1656,7 @@ export default function AdminPage() {
             />
           </div>
         </>
-      ) : editDraft.type !== "mcq" && q.type !== "mcq" ? (
+      ) : (
         <>
           {editDraft.type === "long_answer" || q.type === "long_answer" ? (
             <div className="space-y-1">
@@ -1741,24 +1741,6 @@ export default function AdminPage() {
             </Button>
           ) : null}
         </>
-      ) : (
-        <div className="space-y-1">
-          <Label className="text-xs">Accepted answers (one per line)</Label>
-          <Textarea
-            rows={3}
-            className="bg-white/70 text-xs"
-            value={(editDraft.acceptedAnswers ?? q.acceptedAnswers ?? []).join("\n")}
-            onChange={(e) =>
-              setEditDraft((d) => ({
-                ...d,
-                acceptedAnswers: e.target.value
-                  .split("\n")
-                  .map((x) => x.trim())
-                  .filter(Boolean),
-              }))
-            }
-          />
-        </div>
       )}
       <div className="flex gap-2">
         <Button
@@ -1892,8 +1874,8 @@ export default function AdminPage() {
             </CardTitle>
             <p className="text-sm text-muted-foreground">
               Manual entry. For exam PDFs, use{" "}
-              <span className="font-medium text-foreground">Import questions</span> above — same
-              workflow as practice exams, with each question saved separately to the bank.
+              <span className="font-medium text-foreground">Import questions</span> above — extract
+              stems from the PDF, match TSV answers, crop figures per question/subpart.
             </p>
           </CardHeader>
           <CardContent className="space-y-5">

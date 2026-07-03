@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
 import { AppShell } from "@/components/layout/AppShell";
@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import {
   Table,
   TableBody,
@@ -47,6 +46,8 @@ import {
   TrendingUp,
   Users,
 } from "lucide-react";
+import { ComparativeTopicRow } from "@/components/teacher/ComparativeTopicRow";
+import { formatPercentileBadge } from "@/lib/percentileDisplay";
 import { cn } from "@/lib/utils";
 
 function subjectLabel(id: string, subjects: ReturnType<typeof subjectsForUser>): string {
@@ -60,6 +61,8 @@ export default function TeacherPage() {
   const subjects = useMemo(() => subjectsForUser({ isAdmin }), [isAdmin]);
 
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [classInfo, setClassInfo] = useState<TeacherClassInfo | null>(null);
   const [classNameDraft, setClassNameDraft] = useState("");
   const [savingName, setSavingName] = useState(false);
@@ -75,22 +78,63 @@ export default function TeacherPage() {
   const subjectId = subjectFilter === "all" ? undefined : subjectFilter;
   const joinUrl = classInfo ? teacherJoinUrl(classInfo.joinCode) : "";
 
+  const isFirstLoad = useRef(true);
+
   const loadAll = useCallback(async () => {
-    setLoading(true);
+    const showFullPageSpinner = isFirstLoad.current;
+    if (showFullPageSpinner) setLoading(true);
+    else setRefreshing(true);
+    setLoadError(null);
     try {
-      const [cls, classStats, roster] = await Promise.all([
+      const [classResult, statsResult, membersResult] = await Promise.allSettled([
         fetchTeacherClass(),
         fetchClassStats(subjectId),
         fetchClassMembers(subjectId),
       ]);
-      setClassInfo(cls);
-      setClassNameDraft(cls.className);
-      setStats(classStats);
-      setMembers(roster);
+
+      const errors: string[] = [];
+      if (classResult.status === "fulfilled") {
+        setClassInfo(classResult.value);
+        setClassNameDraft(classResult.value.className);
+      } else {
+        errors.push(
+          classResult.reason instanceof Error
+            ? classResult.reason.message
+            : "Could not load class info.",
+        );
+      }
+      if (statsResult.status === "fulfilled") {
+        setStats(statsResult.value);
+      } else {
+        errors.push(
+          statsResult.reason instanceof Error
+            ? statsResult.reason.message
+            : "Could not load class stats.",
+        );
+      }
+      if (membersResult.status === "fulfilled") {
+        setMembers(membersResult.value);
+      } else {
+        errors.push(
+          membersResult.reason instanceof Error
+            ? membersResult.reason.message
+            : "Could not load student roster.",
+        );
+      }
+
+      if (errors.length) {
+        const message = errors[0] ?? "Could not load teacher page.";
+        setLoadError(message);
+        toast.error(message);
+      }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not load teacher page.");
+      const message = e instanceof Error ? e.message : "Could not load teacher page.";
+      setLoadError(message);
+      toast.error(message);
     } finally {
-      setLoading(false);
+      isFirstLoad.current = false;
+      if (showFullPageSpinner) setLoading(false);
+      else setRefreshing(false);
     }
   }, [subjectId]);
 
@@ -164,7 +208,7 @@ export default function TeacherPage() {
   const selectedMember = members.find((m) => m.userId === selectedStudentId) ?? null;
 
   return (
-    <AppShell>
+    <AppShell title="Teacher">
       <div className="mx-auto w-full max-w-6xl space-y-6 px-4 py-6 sm:px-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -172,6 +216,12 @@ export default function TeacherPage() {
             <p className="mt-1 text-sm text-muted-foreground">
               Share your class code so students can join, then track their progress.
             </p>
+            {refreshing ? (
+              <p className="mt-1 text-xs text-muted-foreground">Updating stats…</p>
+            ) : null}
+            {loadError ? (
+              <p className="mt-2 text-sm text-destructive">{loadError}</p>
+            ) : null}
           </div>
           <Button
             className="gap-2 shrink-0"
@@ -273,11 +323,41 @@ export default function TeacherPage() {
                       <div className="text-xs text-muted-foreground">Students joined</div>
                     </div>
                   </div>
-                  <div>
-                    <div className="text-2xl font-bold tabular-nums">
+                  <div
+                    className={cn(
+                      "rounded-lg p-2",
+                      stats?.vsPlatform != null && stats.vsPlatform < 0 && "bg-danger/10",
+                      stats?.vsPlatform != null && stats.vsPlatform > 0 && "bg-success/10",
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        "text-2xl font-bold tabular-nums",
+                        stats?.vsPlatform != null && stats.vsPlatform < 0 && "text-danger",
+                        stats?.vsPlatform != null && stats.vsPlatform > 0 && "text-success",
+                      )}
+                    >
                       {stats?.avgPercent != null ? `${stats.avgPercent}%` : "—"}
                     </div>
                     <div className="text-xs text-muted-foreground">Class mark average</div>
+                    {stats?.platformPercent != null ? (
+                      <div className="mt-1 space-y-0.5 text-xs tabular-nums">
+                        <div className="text-muted-foreground">
+                          Other students: {stats.platformPercent}%
+                        </div>
+                        {stats.vsPlatform != null ? (
+                          <div
+                            className={cn(
+                              "font-semibold",
+                              stats.vsPlatform < 0 ? "text-danger" : stats.vsPlatform > 0 ? "text-success" : "",
+                            )}
+                          >
+                            {stats.vsPlatform > 0 ? "+" : ""}
+                            {stats.vsPlatform}% vs others
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
                   <div>
                     <div className="text-2xl font-bold tabular-nums">{stats?.activeStudents ?? 0}</div>
@@ -293,7 +373,10 @@ export default function TeacherPage() {
 
             <div className="flex flex-wrap items-center gap-3">
               <span className="text-sm font-medium text-muted-foreground">Filter by subject</span>
-              <Select value={subjectFilter} onValueChange={setSubjectFilter}>
+              <Select
+                value={subjectFilter}
+                onValueChange={(val) => setSubjectFilter(val ?? "all")}
+              >
                 <SelectTrigger className="w-[220px]">
                   <SelectValue placeholder="All subjects" />
                 </SelectTrigger>
@@ -309,32 +392,55 @@ export default function TeacherPage() {
             </div>
 
             <div className="grid gap-6 lg:grid-cols-2">
-              <Card className="border-black/10">
+              <Card className="border-danger/20">
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-lg">
-                    <AlertTriangle className="size-4 text-amber-600" />
-                    Weak topics (class)
+                  <CardTitle className="flex items-center gap-2 text-lg text-danger">
+                    <AlertTriangle className="size-4" />
+                    Below Nodent average
                   </CardTitle>
-                  <CardDescription>Lowest class averages — focus revision here.</CardDescription>
+                  <CardDescription>
+                    Topics where your class scores under other Nodent students (your class
+                    excluded from the average). Min. 3 marks attempted.
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  {!stats?.weakTopics?.length ? (
-                    <p className="text-sm text-muted-foreground">
-                      No topic data yet. Students need to attempt questions first.
-                    </p>
-                  ) : (
-                    <div className="space-y-3">
-                      {stats.weakTopics.map((t) => (
-                        <div key={`${t.subjectId}-${t.topic}`} className="space-y-1">
-                          <div className="flex items-center justify-between gap-2 text-sm">
-                            <span className="font-medium">{t.topic}</span>
-                            <Badge variant="secondary">{t.percent}%</Badge>
-                          </div>
-                          <Progress value={t.percent} className="h-2" />
-                          <div className="text-xs text-muted-foreground">
-                            {subjectLabel(t.subjectId, subjects)}
+                  {!stats?.belowAvgTopics?.length ? (
+                    <div className="space-y-3 text-sm">
+                      <p className="text-muted-foreground">
+                        {stats?.topicStats?.length
+                          ? "Your class is at or above the Nodent average on every topic with enough data."
+                          : "No topic data yet. Students need to attempt questions first."}
+                      </p>
+                      {stats?.weakTopics?.length ? (
+                        <div className="rounded-lg border border-black/10 bg-[#f8fafc] p-3">
+                          <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                            Lowest class topics (not below everyone)
+                          </p>
+                          <div className="space-y-3">
+                            {stats.weakTopics.slice(0, 4).map((t) => (
+                              <ComparativeTopicRow
+                                key={`weak-${t.subjectId}-${t.topic}`}
+                                row={t}
+                                label="Class"
+                                subjectName={subjectLabel(t.subjectId, subjects)}
+                                showSubject={subjectFilter === "all"}
+                                compact
+                              />
+                            ))}
                           </div>
                         </div>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {stats.belowAvgTopics.map((t) => (
+                        <ComparativeTopicRow
+                          key={`below-${t.subjectId}-${t.topic}`}
+                          row={t}
+                          label="Class"
+                          subjectName={subjectLabel(t.subjectId, subjects)}
+                          showSubject={subjectFilter === "all"}
+                        />
                       ))}
                     </div>
                   )}
@@ -347,27 +453,25 @@ export default function TeacherPage() {
                     <TrendingUp className="size-4 text-brand" />
                     Topic breakdown
                   </CardTitle>
-                  <CardDescription>Mark % by topic across your class.</CardDescription>
+                  <CardDescription>
+                    All class topics vs other Nodent students. Green = above others, red =
+                    below. Shaded bar = everyone else&apos;s average.
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   {!stats?.topicStats?.length ? (
                     <p className="text-sm text-muted-foreground">No attempts recorded yet.</p>
                   ) : (
-                    <div className="max-h-80 space-y-3 overflow-y-auto pr-1">
+                    <div className="max-h-96 space-y-4 overflow-y-auto pr-1">
                       {stats.topicStats.map((t) => (
-                        <div key={`${t.subjectId}-${t.topic}`} className="space-y-1">
-                          <div className="flex items-center justify-between gap-2 text-sm">
-                            <span className="min-w-0 truncate font-medium">{t.topic}</span>
-                            <span className="shrink-0 tabular-nums text-muted-foreground">{t.percent}%</span>
-                          </div>
-                          <Progress value={t.percent} className="h-1.5" />
-                          {subjectFilter === "all" ? (
-                            <div className="text-[11px] text-muted-foreground">
-                              {subjectLabel(t.subjectId, subjects)}
-                              {t.studentsAttempted != null ? ` · ${t.studentsAttempted} students` : ""}
-                            </div>
-                          ) : null}
-                        </div>
+                        <ComparativeTopicRow
+                          key={`${t.subjectId}-${t.topic}`}
+                          row={t}
+                          label="Class"
+                          subjectName={subjectLabel(t.subjectId, subjects)}
+                          showSubject={subjectFilter === "all"}
+                          compact
+                        />
                       ))}
                     </div>
                   )}
@@ -410,7 +514,18 @@ export default function TeacherPage() {
                           </TableCell>
                           <TableCell className="text-right tabular-nums">{m.questionCount}</TableCell>
                           <TableCell className="text-right tabular-nums">
-                            {m.marksAttempted > 0 ? `${m.percent}%` : "—"}
+                            {m.marksAttempted > 0 ? (
+                              <span
+                                className={cn(
+                                  m.percent < 50 && "font-semibold text-danger",
+                                  m.percent >= 80 && "font-semibold text-success",
+                                )}
+                              >
+                                {m.percent}%
+                              </span>
+                            ) : (
+                              "—"
+                            )}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -423,8 +538,26 @@ export default function TeacherPage() {
             {selectedStudentId && selectedMember ? (
               <Card className="border-black/10">
                 <CardHeader>
-                  <CardTitle className="text-lg">{selectedMember.username}</CardTitle>
-                  <CardDescription>Individual progress{subjectId ? ` · ${subjectLabel(subjectId, subjects)}` : ""}</CardDescription>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <CardTitle className="text-lg">{selectedMember.username}</CardTitle>
+                      <CardDescription>
+                        Individual progress
+                        {subjectId ? ` · ${subjectLabel(subjectId, subjects)}` : ""}
+                      </CardDescription>
+                    </div>
+                    {studentStats?.overallPercentile != null ? (
+                      <Badge
+                        className={
+                          studentStats.overallPercentile > 60
+                            ? "bg-danger/15 text-danger"
+                            : formatPercentileBadge(studentStats.overallPercentile).className
+                        }
+                      >
+                        {formatPercentileBadge(studentStats.overallPercentile).label} overall
+                      </Badge>
+                    ) : null}
+                  </div>
                 </CardHeader>
                 <CardContent>
                   {studentLoading ? (
@@ -432,50 +565,163 @@ export default function TeacherPage() {
                       <Loader2 className="size-5 animate-spin text-muted-foreground" />
                     </div>
                   ) : studentStats ? (
-                    <div className="grid gap-6 lg:grid-cols-2">
-                      <div className="space-y-3">
-                        <div className="grid grid-cols-3 gap-3">
-                          <div className="rounded-lg border border-black/10 p-3 text-center">
-                            <div className="text-xl font-bold tabular-nums">{studentStats.percent}%</div>
-                            <div className="text-xs text-muted-foreground">Mark avg</div>
+                    <div className="space-y-8">
+                      <div className="grid gap-3 sm:grid-cols-4">
+                        <div
+                          className={cn(
+                            "rounded-lg border p-3 text-center",
+                            studentStats.vsPlatform != null && studentStats.vsPlatform < 0
+                              ? "border-danger/30 bg-danger/10"
+                              : studentStats.vsPlatform != null && studentStats.vsPlatform > 0
+                                ? "border-success/30 bg-success/10"
+                                : "border-black/10",
+                          )}
+                        >
+                          <div
+                            className={cn(
+                              "text-xl font-bold tabular-nums",
+                              studentStats.vsPlatform != null && studentStats.vsPlatform < 0
+                                ? "text-danger"
+                                : studentStats.vsPlatform != null && studentStats.vsPlatform > 0
+                                  ? "text-success"
+                                  : "",
+                            )}
+                          >
+                            {studentStats.percent}%
                           </div>
-                          <div className="rounded-lg border border-black/10 p-3 text-center">
-                            <div className="text-xl font-bold tabular-nums">{studentStats.questionCount}</div>
-                            <div className="text-xs text-muted-foreground">Questions</div>
-                          </div>
-                          <div className="rounded-lg border border-black/10 p-3 text-center">
-                            <div className="text-xl font-bold tabular-nums">
-                              {studentStats.marksCorrect}/{studentStats.marksAttempted}
+                          <div className="text-xs text-muted-foreground">Student avg</div>
+                          {studentStats.vsPlatform != null ? (
+                            <div
+                              className={cn(
+                                "mt-1 text-xs font-semibold tabular-nums",
+                                studentStats.vsPlatform < 0
+                                  ? "text-danger"
+                                  : studentStats.vsPlatform > 0
+                                    ? "text-success"
+                                    : "text-muted-foreground",
+                              )}
+                            >
+                              {studentStats.vsPlatform > 0 ? "+" : ""}
+                              {studentStats.vsPlatform}% vs everyone
                             </div>
-                            <div className="text-xs text-muted-foreground">Marks</div>
-                          </div>
+                          ) : null}
                         </div>
-                        {subjectFilter === "all" && studentStats.subjects.length > 0 ? (
-                          <div className="space-y-2">
-                            <div className="text-sm font-medium">By subject</div>
-                            {studentStats.subjects.map((s) => (
-                              <div key={s.subjectId} className="flex items-center justify-between text-sm">
-                                <span>{subjectLabel(s.subjectId, subjects)}</span>
-                                <span className="tabular-nums">{s.percent}%</span>
-                              </div>
-                            ))}
+                        <div className="rounded-lg border border-black/10 p-3 text-center">
+                          <div className="text-xl font-bold tabular-nums text-muted-foreground">
+                            {studentStats.platformPercent != null
+                              ? `${studentStats.platformPercent}%`
+                              : "—"}
                           </div>
-                        ) : null}
+                          <div className="text-xs text-muted-foreground">Everyone avg</div>
+                        </div>
+                        <div className="rounded-lg border border-black/10 p-3 text-center">
+                          <div className="text-xl font-bold tabular-nums">
+                            {studentStats.questionCount}
+                          </div>
+                          <div className="text-xs text-muted-foreground">Questions</div>
+                        </div>
+                        <div className="rounded-lg border border-black/10 p-3 text-center">
+                          <div className="text-xl font-bold tabular-nums">
+                            {studentStats.marksCorrect}/{studentStats.marksAttempted}
+                          </div>
+                          <div className="text-xs text-muted-foreground">Marks</div>
+                        </div>
                       </div>
-                      <div className="space-y-2">
-                        <div className="text-sm font-medium">Weakest topics</div>
+
+                      {subjectFilter === "all" && studentStats.subjects.length > 0 ? (
+                        <div className="space-y-3">
+                          <div className="text-sm font-medium">By subject</div>
+                          {studentStats.subjects.map((s) => (
+                            <div
+                              key={s.subjectId}
+                              className={cn(
+                                "flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm",
+                                s.vsPlatform != null && s.vsPlatform < 0
+                                  ? "border-danger/25 bg-danger/5"
+                                  : s.vsPlatform != null && s.vsPlatform > 0
+                                    ? "border-success/20 bg-success/5"
+                                    : "border-black/10",
+                              )}
+                            >
+                              <span>{subjectLabel(s.subjectId, subjects)}</span>
+                              <div className="flex items-center gap-3 tabular-nums">
+                                <span
+                                  className={cn(
+                                    "font-semibold",
+                                    s.vsPlatform != null && s.vsPlatform >= 0
+                                      ? "text-success"
+                                      : s.vsPlatform != null
+                                        ? "text-danger"
+                                        : "",
+                                  )}
+                                >
+                                  {s.percent}%
+                                </span>
+                                <span className="text-muted-foreground">
+                                  vs {s.platformPercent ?? "—"}% everyone
+                                  {s.vsPlatform != null ? (
+                                    <span
+                                      className={cn(
+                                        "ml-1 font-semibold",
+                                        s.vsPlatform < 0
+                                          ? "text-danger"
+                                          : s.vsPlatform > 0
+                                            ? "text-success"
+                                            : "",
+                                      )}
+                                    >
+                                      ({s.vsPlatform > 0 ? "+" : ""}
+                                      {s.vsPlatform}%)
+                                    </span>
+                                  ) : null}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+
+                      <div className="space-y-3">
+                        <div>
+                          <div className="text-sm font-medium">Weakest topics</div>
+                          <p className="text-xs text-muted-foreground">
+                            Same topic list as below — lowest marks first, compared to everyone.
+                          </p>
+                        </div>
                         {!studentStats.weakTopics.length ? (
                           <p className="text-sm text-muted-foreground">Not enough data yet.</p>
                         ) : (
-                          studentStats.weakTopics.map((t) => (
-                            <div key={`${t.subjectId}-${t.topic}`} className="space-y-1">
-                              <div className="flex justify-between text-sm">
-                                <span>{t.topic}</span>
-                                <span className="tabular-nums">{t.percent}%</span>
-                              </div>
-                              <Progress value={t.percent} className="h-1.5" />
-                            </div>
-                          ))
+                          <div className="space-y-4">
+                            {studentStats.weakTopics.map((t) => (
+                              <ComparativeTopicRow
+                                key={`${t.subjectId}-${t.topic}`}
+                                row={t}
+                                label="Student"
+                                subjectName={subjectLabel(t.subjectId, subjects)}
+                                showSubject={subjectFilter === "all"}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="space-y-3">
+                        <div className="text-sm font-medium">Full topic breakdown</div>
+                        {!studentStats.topicStats.length ? (
+                          <p className="text-sm text-muted-foreground">No topic attempts yet.</p>
+                        ) : (
+                          <div className="max-h-96 space-y-4 overflow-y-auto pr-1">
+                            {studentStats.topicStats.map((t) => (
+                              <ComparativeTopicRow
+                                key={`${t.subjectId}-${t.topic}-full`}
+                                row={t}
+                                label="Student"
+                                subjectName={subjectLabel(t.subjectId, subjects)}
+                                showSubject={subjectFilter === "all"}
+                                compact
+                              />
+                            ))}
+                          </div>
                         )}
                       </div>
                     </div>

@@ -1,19 +1,21 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
-import { mathAnswersEquivalent, answerCandidatesFromWorking } from "@/lib/mathAnswerNormalize";
+import { mathAnswersEquivalent, workingAnswerCandidates } from "@/lib/mathAnswerNormalize";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-/** Trim, lowercase, and strip trailing punctuation from an answer string. */
-export function normalizeAnswer(text: string): string {
-  const base = /\d/.test(text) ? stripAnswerUnits(text) : text;
-  return base
-    .trim()
-    .toLowerCase()
-    .replace(/[.,;:!?]+$/, "");
-}
+/** Common trailing units in VCE numeric answers — stripped before compare (case-insensitive). */
+const ANSWER_UNIT_PATTERN =
+  "(?:grams?|kilograms?|tonnes?|kg|g|tonnes?|tons?|t|" +
+  "cm³|cm\\^?3|m³|m\\^?2|m\\^?3|mm²|mm\\^?2|cm²|cm\\^?2|mm|cm|km|m|" +
+  "ml|millilitres?|milliliters?|litres?|liters?|l|" +
+  "minutes?|mins?|seconds?|secs?|hours?|hrs?|days?|weeks?|months?|years?|yrs?|" +
+  "percent|pct|°c|°f|degrees?|deg|°|" +
+  "newtons?|n|joules?|j|watts?|w|pascals?|pa|kpa|mpa|hertz|hz|mol|moles?|" +
+  "m/s²|m/s\\^?2|m/s2|m/s|km/h|km\\s*hr\\^-?1|metres?\\s*per\\s*second|meters?\\s*per\\s*second|" +
+  "ms\\^-?1|m\\s*s\\^-?1|units?|students?|people|items?)";
 
 /** Strip LaTeX wrappers and trailing unit suffixes (g, kg, cm³, %, …) — case-insensitive. */
 export function stripAnswerUnits(raw: string): string {
@@ -21,8 +23,7 @@ export function stripAnswerUnits(raw: string): string {
   t = t.replace(/\$([^$]*)\$/g, (_, inner: string) => inner.trim());
   if (!/\d/.test(t)) return t;
 
-  const unit =
-    "(?:grams?|kilograms?|kg|g|cm³|cm\\^?3|m³|m\\^?3|mm|cm|km|ml|litres?|liters?|l|minutes?|mins?|hours?|hrs?|days?|weeks?|months?|years?|yrs?|percent|%)";
+  const unit = ANSWER_UNIT_PATTERN;
 
   let prev = "";
   while (prev !== t) {
@@ -35,8 +36,43 @@ export function stripAnswerUnits(raw: string): string {
   return t;
 }
 
-const ANSWER_UNIT_PATTERN =
-  "(?:grams?|kilograms?|kg|g|cm³|cm\\^?3|m³|m\\^?3|mm|cm|km|ml|litres?|liters?|l|minutes?|mins?|hours?|hrs?|days?|weeks?|months?|years?|yrs?|percent|%)";
+/** Strip part labels, "x =", "answer:", etc. before comparing. */
+function stripAnswerPrefixes(raw: string): string {
+  let t = String(raw ?? "").trim();
+  t = t.replace(/^\(?[a-z]\)?\s*[.):\-–—]\s*/i, "");
+  t = t.replace(/^\s*(?:i{1,3}|iv)\.\s*/i, "");
+  t = t.replace(
+    /^(?:answer|ans|final|therefore|hence|so|thus|∴)\s*[:=]?\s*/i,
+    "",
+  );
+  t = t.replace(/^(?:x|y|z|t|n|f\s*\([^)]*\))\s*=\s*/i, "");
+  t = t.replace(/^[≈~]\s*/, "");
+  const wrapped = t.match(/^\(\s*([^()]+)\s*\)$/);
+  if (wrapped?.[1]) t = wrapped[1].trim();
+  return t;
+}
+
+/** Normalize student/accepted text before string or numeric compare. */
+export function stripAnswerFormatting(raw: string): string {
+  let t = stripAnswerPrefixes(String(raw ?? ""));
+  t = stripAnswerUnits(t);
+  return t
+    .trim()
+    .replace(/[−–—]/g, "-")
+    .replace(/\s+/g, " ")
+    .replace(/^[([{"'`]+|[)"}'`]+$/g, "")
+    .trim();
+}
+
+/** Trim, lowercase, and strip trailing punctuation from an answer string. */
+export function normalizeAnswer(text: string): string {
+  const base = stripAnswerFormatting(text);
+  const stripped = /\d/.test(base) ? base : text.trim();
+  return stripped
+    .trim()
+    .toLowerCase()
+    .replace(/[.,;:!?]+$/, "");
+}
 
 /** Split a numeric answer into value + display unit (for inline input boxes). */
 export function splitAnswerValueAndUnit(raw: string): { value: string; unit: string } {
@@ -80,10 +116,9 @@ export function normalizeAcceptedAnswersText(multiline: string): string {
 }
 
 function parseNumericAnswer(raw: string): number | null {
-  const t = stripAnswerUnits(raw)
+  const t = stripAnswerFormatting(raw)
     .trim()
     .toLowerCase()
-    .replace(/[−–—]/g, "-")
     .replace(/[.,;:!?]+$/, "")
     .replace(/,/g, "")
     .replace(/\s+/g, "");
@@ -122,6 +157,29 @@ function parseNumericAnswer(raw: string): number | null {
     }
   }
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+/** Lenient numeric compare — units stripped; 1–2 dp rounding; small relative tolerance. */
+function numericValuesEquivalent(studentNum: number, accNum: number): boolean {
+  if (!Number.isFinite(studentNum) || !Number.isFinite(accNum)) return false;
+  if (Object.is(studentNum, accNum) || Math.abs(studentNum - accNum) < 1e-9) {
+    return true;
+  }
+
+  const s2 = Math.round(studentNum * 100) / 100;
+  const a2 = Math.round(accNum * 100) / 100;
+  if (Math.abs(s2 - a2) < 1e-9) return true;
+
+  const s1 = Math.round(studentNum * 10) / 10;
+  const a1 = Math.round(accNum * 10) / 10;
+  if (Math.abs(s1 - a1) < 1e-9) return true;
+
+  if (Math.abs(accNum - Math.round(accNum)) < 1e-9) {
+    if (Math.abs(studentNum - Math.round(accNum)) < 0.011) return true;
+  }
+
+  const scale = Math.max(1, Math.abs(accNum), Math.abs(studentNum));
+  return Math.abs(studentNum - accNum) / scale <= 0.005;
 }
 
 /** True when an accepted answer is a number, single token, or MCQ letter. */
@@ -396,24 +454,34 @@ export function matchesExplanationKeywords(
   return hits.length >= required;
 }
 
+export type AnswerGradeResult = {
+  correct: boolean;
+  dpHint: number | null;
+  /** What we treated as the student's final answer (last line upward). */
+  interpretedAnswer: string;
+};
+
 export function isAnswerCorrect(
   studentAnswer: string,
   acceptedAnswers: string[],
-): { correct: boolean; dpHint: number | null } {
-  const candidates = answerCandidatesFromWorking(studentAnswer);
+): AnswerGradeResult {
+  const candidates = workingAnswerCandidates(studentAnswer);
+  const dpHint = inferDpHintFromAccepted(acceptedAnswers);
+  const interpretedAnswer =
+    candidates[0] ?? String(studentAnswer ?? "").trim();
+
   if (!candidates.length) {
-    return { correct: false, dpHint: inferDpHintFromAccepted(acceptedAnswers) };
+    return { correct: false, dpHint, interpretedAnswer: "" };
   }
 
-  let last: { correct: boolean; dpHint: number | null } = {
-    correct: false,
-    dpHint: inferDpHintFromAccepted(acceptedAnswers),
-  };
   for (const candidate of candidates) {
-    last = isAnswerCorrectSingle(candidate, acceptedAnswers);
-    if (last.correct) return last;
+    const result = isAnswerCorrectSingle(candidate, acceptedAnswers);
+    if (result.correct) {
+      return { ...result, interpretedAnswer: candidate };
+    }
   }
-  return last;
+
+  return { correct: false, dpHint, interpretedAnswer };
 }
 
 function isAnswerCorrectSingle(
@@ -421,23 +489,15 @@ function isAnswerCorrectSingle(
   acceptedAnswers: string[],
 ): { correct: boolean; dpHint: number | null } {
   const dpHint = inferDpHintFromAccepted(acceptedAnswers);
-  const studentDp = studentDecimalPlaces(studentAnswer);
 
   const studentNum = parseNumericAnswer(studentAnswer);
   if (studentNum != null) {
     for (const a of acceptedAnswers) {
       const accNum = parseNumericAnswer(String(a));
       if (accNum == null) continue;
-      if (dpHint != null && dpHint > 0) {
-        if (studentDp === 0) continue;
-        const f = 10 ** 2;
-        const sn = Math.round(studentNum * f) / f;
-        const an = Math.round(accNum * f) / f;
-        if (Object.is(sn, an)) return { correct: true, dpHint };
-        continue;
+      if (numericValuesEquivalent(studentNum, accNum)) {
+        return { correct: true, dpHint };
       }
-      if (dpHint === 0 && studentDp != null && studentDp > 0 && studentDp !== 2) continue;
-      if (Math.abs(studentNum - accNum) < 1e-9) return { correct: true, dpHint };
     }
   }
 

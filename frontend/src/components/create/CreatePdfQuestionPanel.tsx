@@ -322,8 +322,8 @@ export function CreatePdfQuestionPanel({
       {draft.type === "mcq" ? (
         <RegionCard title="Correct answer" subtitle="Set the correct option letter">
           <Select
-            value={draft.correctAnswer || undefined}
-            onValueChange={(correctAnswer) => update({ correctAnswer })}
+            value={draft.correctAnswer ?? undefined}
+            onValueChange={(correctAnswer) => update({ correctAnswer: correctAnswer ?? "" })}
           >
             <SelectTrigger className="h-9 w-28">
               <SelectValue placeholder="Letter" />

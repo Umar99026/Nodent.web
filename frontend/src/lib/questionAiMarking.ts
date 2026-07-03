@@ -6,8 +6,11 @@ import {
   handwritingAllowedForSubject,
   isHandwritingValue,
 } from "@/lib/handwritingMode";
-import { isAutoMarkableAnswer } from "@/lib/utils";
 import type { AnswerPart, Question } from "@/lib/subjects";
+import {
+  qualifiesForOpenAiHandwriting,
+  qualifiesForOpenAiMarking,
+} from "@/lib/wordedQuestion";
 
 /** Maths subjects: smart marking only for genuinely open-ended long-answer items. */
 export const MATHS_SUBJECT_IDS = new Set([
@@ -22,20 +25,14 @@ export function isMathsSubject(subjectId?: string): boolean {
   return MATHS_SUBJECT_IDS.has(sid);
 }
 
-export function acceptedAnswersNeedAiMarking(acceptedAnswers: string[]): boolean {
-  const accepted = acceptedAnswers.map((a) => String(a ?? "").trim()).filter(Boolean);
-  if (!accepted.length) return false;
-  if (accepted.every((a) => /see marking guide/i.test(a))) return true;
-  if (accepted.every((a) => isAutoMarkableAnswer(a))) return false;
-  return true;
-}
+export { acceptedAnswersNeedAiMarking, qualifiesForOpenAiHandwriting } from "@/lib/wordedQuestion";
 
 function isLongType(questionType?: Question["type"] | string): boolean {
   const t = String(questionType ?? "");
   return t === "long" || t === "long_answer";
 }
 
-/** OpenAI text marking: long-answer questions only (handwriting uses a separate path). */
+/** OpenAI text marking: long worded questions only (explain / discuss / prove / similar). */
 export function shouldUseAiMarking(input: {
   questionText: string;
   partLabels?: string[];
@@ -43,16 +40,13 @@ export function shouldUseAiMarking(input: {
   questionType?: Question["type"] | string;
   subjectId?: string;
 }): boolean {
-  const type = input.questionType;
-  const accepted = input.acceptedAnswers ?? [];
-
-  if (type === "mcq") return false;
-  if (!isLongType(type)) return false;
-
-  if (isMathsSubject(input.subjectId)) {
-    return acceptedAnswersNeedAiMarking(accepted);
-  }
-  return true;
+  void input.subjectId;
+  return qualifiesForOpenAiMarking({
+    questionText: input.questionText,
+    questionType: input.questionType,
+    partLabels: input.partLabels,
+    acceptedAnswers: input.acceptedAnswers,
+  });
 }
 
 /** Diagram-label slots use exact matching — not OpenAI. */
@@ -71,7 +65,6 @@ export function resolveAiMarking(input: {
 }): boolean {
   if (input.useAiMarking === false) return false;
   if (!isLongType(input.questionType)) return false;
-  if (input.useAiMarking === true) return true;
   return shouldUseAiMarking(input);
 }
 
@@ -128,6 +121,18 @@ export async function requestSmartMark(
     question: SmartMarkQuestionPayload;
   },
 ): Promise<SmartMarkResult | null> {
+  const q = input.question;
+  if (
+    !qualifiesForOpenAiMarking({
+      questionText: q.question,
+      questionType: q.type,
+      partLabels: q.answerParts?.map((p) => p.label),
+      acceptedAnswers: q.acceptedAnswers,
+    })
+  ) {
+    return null;
+  }
+
   try {
     const handwritingImages = (input.responseImages ?? []).filter(isHandwritingValue);
     const compressedImages = handwritingImages.length
@@ -176,6 +181,15 @@ export async function requestHandwritingMark(
     question: SmartMarkQuestionPayload;
   },
 ): Promise<SmartMarkResult | null> {
+  if (
+    !qualifiesForOpenAiHandwriting({
+      questionText: input.question.question,
+      partLabels: input.question.answerParts?.map((p) => p.label),
+      acceptedAnswers: input.question.acceptedAnswers,
+    })
+  ) {
+    return null;
+  }
   if (!handwritingAllowedForSubject(subjectId)) return null;
   const images = collectHandwritingImages(input.answer, input.parts, input.isMultipart);
   if (!images.length) return null;

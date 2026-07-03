@@ -109,7 +109,7 @@ export default function JoinClassPage() {
 
   if (membershipLoading) {
     return (
-      <AppShell>
+      <AppShell title="Join a class">
         <div className="flex min-h-[40vh] items-center justify-center text-muted-foreground">
           <Loader2 className="size-6 animate-spin" />
         </div>
@@ -119,7 +119,7 @@ export default function JoinClassPage() {
 
   if (alreadyEnrolled) {
     return (
-      <AppShell>
+      <AppShell title="Join a class">
         <div className="mx-auto flex w-full max-w-md flex-col gap-6 px-4 py-8">
           <Card className="border-black/10">
             <CardHeader>
@@ -145,7 +145,7 @@ export default function JoinClassPage() {
   }
 
   return (
-    <AppShell>
+    <AppShell title="Join a class">
       <div className="mx-auto flex w-full max-w-md flex-col gap-6 px-4 py-8">
         <Card className="border-black/10">
           <CardHeader>

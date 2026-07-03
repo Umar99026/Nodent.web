@@ -166,6 +166,8 @@ export function AiMarkingFeedbackPanel({
         index,
         correct: false,
         correctAnswer: ans,
+        studentAnswerRead: undefined,
+        partFeedback: undefined,
       }));
     }
     return [];

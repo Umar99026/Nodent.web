@@ -25,6 +25,7 @@ const EXPORT_JPEG_QUALITY = 0.9;
 const DEFAULT_LINE_STEP = 32;
 const DEFAULT_LINE_INSET = 12;
 const EXAM_LINE_HEIGHT = 32;
+const EXPORT_DEBOUNCE_MS = 150;
 
 /** Custom eraser cursor (hotspot at the rubbing tip). */
 const ERASER_CURSOR = (() => {
@@ -199,6 +200,7 @@ export function HandwritingCanvas({
   const lastPointRef = useRef<{ x: number; y: number } | null>(null);
   const hasInkRef = useRef(false);
   const lastSentValueRef = useRef(value);
+  const exportTimerRef = useRef<number | null>(null);
   const ruledLines = examPaperMode
     ? Math.max(6, Math.min(24, Math.round(lines ?? 10)))
     : 0;
@@ -214,6 +216,8 @@ export function HandwritingCanvas({
   };
 
   const layoutCanvases = useCallback(() => {
+    if (drawingRef.current) return;
+
     const pad = padRef.current;
     const lines = linesRef.current;
     const ink = inkRef.current;
@@ -386,8 +390,38 @@ export function HandwritingCanvas({
     onChange(dataUrl);
   }, [examPaperMode, onChange]);
 
+  const scheduleExport = useCallback(() => {
+    if (exportTimerRef.current != null) {
+      window.clearTimeout(exportTimerRef.current);
+    }
+    exportTimerRef.current = window.setTimeout(() => {
+      exportTimerRef.current = null;
+      exportComposite();
+    }, EXPORT_DEBOUNCE_MS);
+  }, [exportComposite]);
+
+  useEffect(
+    () => () => {
+      if (exportTimerRef.current != null) {
+        window.clearTimeout(exportTimerRef.current);
+      }
+    },
+    [],
+  );
+
+  const blurFocusedField = () => {
+    const active = document.activeElement;
+    if (
+      active instanceof HTMLInputElement ||
+      active instanceof HTMLTextAreaElement
+    ) {
+      active.blur();
+    }
+  };
+
   const beginDraw = (clientX: number, clientY: number) => {
     if (disabled) return;
+    blurFocusedField();
     const point = canvasPoint(clientX, clientY);
     if (!point) return;
     drawingRef.current = true;
@@ -410,8 +444,8 @@ export function HandwritingCanvas({
     if (ink) {
       hasInkRef.current = canvasHasInk(ink);
     }
-    exportComposite();
-  }, [exportComposite]);
+    scheduleExport();
+  }, [scheduleExport]);
 
   useEffect(() => {
     const onWindowMouseUp = () => endDraw();
@@ -425,97 +459,99 @@ export function HandwritingCanvas({
         <p className="text-[11px] font-medium text-muted-foreground">{label}</p>
       ) : null}
       <div
-        ref={padRef}
-        className={cn(
-          "relative w-full overflow-hidden bg-white",
-          examPaperMode
-            ? "exam-paper-handwriting-pad"
-            : "rounded-md border-2 border-[#0b0f19]",
-          disabled && "opacity-60",
-        )}
-        style={
-          examPaperMode
-            ? ({
-                "--exam-line-height": `${EXAM_LINE_HEIGHT}px`,
-                height: padHeight,
-              } as CSSProperties)
-            : { height: padHeight }
-        }
-      >
-        {examPaperMode ? (
-          <div className="exam-paper-input-ruling" aria-hidden="true" />
-        ) : null}
-        <canvas
-          ref={linesRef}
-          aria-hidden
+          ref={padRef}
           className={cn(
-            "pointer-events-none absolute inset-0 block h-full w-full",
-            examPaperMode ? "hidden" : "z-0",
+            "handwriting-canvas-pad relative w-full overflow-hidden bg-white",
+            examPaperMode
+              ? "exam-paper-handwriting-pad"
+              : "rounded-md border-2 border-[#0b0f19]",
+            disabled && "opacity-60",
           )}
-        />
-        <canvas
-          ref={inkRef}
-          className={cn(
-            "absolute inset-0 z-[1] block h-full w-full touch-none",
-            disabled ? "cursor-not-allowed" : !eraserMode && "cursor-crosshair",
-          )}
-          style={!disabled && eraserMode ? { cursor: ERASER_CURSOR } : undefined}
-          onMouseDown={(e) => {
-            e.preventDefault();
-            beginDraw(e.clientX, e.clientY);
-          }}
-          onMouseMove={(e) => {
-            if (!drawingRef.current) return;
-            e.preventDefault();
-            moveDraw(e.clientX, e.clientY);
-          }}
-          onMouseUp={() => endDraw()}
-          onPointerDown={(e) => {
-            if (e.pointerType === "mouse") return;
-            e.preventDefault();
-            beginDraw(e.clientX, e.clientY);
-            e.currentTarget.setPointerCapture(e.pointerId);
-          }}
-          onPointerMove={(e) => {
-            if (e.pointerType === "mouse" || !drawingRef.current) return;
-            e.preventDefault();
-            moveDraw(e.clientX, e.clientY);
-          }}
-          onPointerUp={(e) => {
-            if (e.pointerType === "mouse") return;
-            try {
-              e.currentTarget.releasePointerCapture(e.pointerId);
-            } catch {
-              // ignore
-            }
-            endDraw();
-          }}
-          onPointerCancel={(e) => {
-            if (e.pointerType === "mouse") return;
-            endDraw();
-          }}
-        />
-        {!disabled ? (
-          <Button
-            type="button"
-            variant={eraserMode ? "default" : "outline"}
-            size="sm"
+          style={
+            examPaperMode
+              ? ({
+                  "--exam-line-height": `${EXAM_LINE_HEIGHT}px`,
+                  height: padHeight,
+                } as CSSProperties)
+              : { height: padHeight }
+          }
+        >
+          {examPaperMode ? (
+            <div className="exam-paper-input-ruling" aria-hidden="true" />
+          ) : null}
+          <canvas
+            ref={linesRef}
+            aria-hidden
             className={cn(
-              "absolute right-2 top-2 z-[2] h-8 gap-1.5 px-2.5 text-xs shadow-sm",
-              eraserMode
-                ? "border-[#0b0f19] bg-[#0b0f19] text-white hover:bg-[#0b0f19]/90"
-                : "border-[#0b0f19]/30 bg-white hover:bg-white",
+              "pointer-events-none absolute inset-0 block h-full w-full",
+              examPaperMode ? "hidden" : "z-0",
             )}
-            onMouseDown={(e) => e.stopPropagation()}
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={() => setEraserMode((on) => !on)}
-            aria-pressed={eraserMode}
-            aria-label={eraserMode ? "Eraser on — click to draw" : "Eraser — click to erase"}
-          >
-            <Eraser className="size-3.5" />
-            Eraser
-          </Button>
-        ) : null}
+          />
+          <canvas
+            ref={inkRef}
+            className={cn(
+              "absolute inset-0 z-[1] block h-full w-full touch-none select-none",
+              disabled ? "cursor-not-allowed" : !eraserMode && "cursor-crosshair",
+            )}
+            style={!disabled && eraserMode ? { cursor: ERASER_CURSOR } : undefined}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              beginDraw(e.clientX, e.clientY);
+            }}
+            onMouseMove={(e) => {
+              if (!drawingRef.current) return;
+              e.preventDefault();
+              moveDraw(e.clientX, e.clientY);
+            }}
+            onMouseUp={() => endDraw()}
+            onPointerDown={(e) => {
+              if (e.pointerType === "mouse") return;
+              e.preventDefault();
+              e.stopPropagation();
+              beginDraw(e.clientX, e.clientY);
+              e.currentTarget.setPointerCapture(e.pointerId);
+            }}
+            onPointerMove={(e) => {
+              if (e.pointerType === "mouse" || !drawingRef.current) return;
+              e.preventDefault();
+              moveDraw(e.clientX, e.clientY);
+            }}
+            onPointerUp={(e) => {
+              if (e.pointerType === "mouse") return;
+              try {
+                e.currentTarget.releasePointerCapture(e.pointerId);
+              } catch {
+                // ignore
+              }
+              endDraw();
+            }}
+            onPointerCancel={(e) => {
+              if (e.pointerType === "mouse") return;
+              endDraw();
+            }}
+          />
+          {!disabled ? (
+            <Button
+              type="button"
+              variant={eraserMode ? "default" : "outline"}
+              size="sm"
+              className={cn(
+                "absolute right-2 top-2 z-[2] h-8 gap-1.5 px-2.5 text-xs shadow-sm",
+                eraserMode
+                  ? "border-[#0b0f19] bg-[#0b0f19] text-white hover:bg-[#0b0f19]/90"
+                  : "border-[#0b0f19]/30 bg-white hover:bg-white",
+              )}
+              onMouseDown={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={() => setEraserMode((on) => !on)}
+              aria-pressed={eraserMode}
+              aria-label={eraserMode ? "Eraser on — click to draw" : "Eraser — click to erase"}
+            >
+              <Eraser className="size-3.5" />
+              Eraser
+            </Button>
+          ) : null}
       </div>
     </div>
   );

@@ -10,6 +10,7 @@ export function normalizeMathAnswerForCompare(raw: string): string {
   s = s.replace(/÷/g, "/");
   s = s.replace(/√\s*/g, "sqrt");
   s = s.replace(/π/g, "pi");
+  s = s.replace(/°/g, "deg");
 
   for (let i = 0; i < 6; i++) {
     const prev = s;
@@ -37,56 +38,55 @@ export function mathAnswersEquivalent(student: string, accepted: string): boolea
   return a === b;
 }
 
+/** Extract answer-like fragments from a single ruled line (priority order). */
+function lineAnswerCandidates(line: string): string[] {
+  const trimmed = line.trim();
+  if (!trimmed) return [];
+
+  const out: string[] = [];
+  const marked = trimmed.match(
+    /^(?:∴|therefore|hence|so|thus|answer|ans|final)(?:\s+answer)?\s*[:=]\s*(.+)$/i,
+  );
+  if (marked?.[1]?.trim()) out.push(marked[1].trim());
+
+  if (trimmed.includes("=")) {
+    const rhs = trimmed.split("=").pop()?.trim();
+    if (rhs && rhs.length <= 160) out.push(rhs);
+  }
+
+  out.push(trimmed);
+  return [...new Set(out.filter(Boolean))];
+}
+
 /**
- * Pull the student's final answer from multi-line working (VCE ruled lines).
- * Does not read handwriting — typed text only.
+ * Walk ruled working from the last line upward; return candidate answers in try order.
+ * Typed / scribble text only — not handwriting images.
  */
-export function extractFinalAnswerFromWorking(raw: string): string {
+export function workingAnswerCandidates(raw: string): string[] {
   const text = String(raw ?? "").trim();
-  if (!text) return "";
-  if (!text.includes("\n")) return text;
+  if (!text) return [];
 
   const lines = text
     .split(/\r?\n/)
     .map((l) => l.trim())
     .filter(Boolean);
-  if (!lines.length) return text;
-  if (lines.length === 1) return lines[0]!;
+  if (!lines.length) return [text];
 
-  for (let i = lines.length - 1; i >= Math.max(0, lines.length - 4); i--) {
-    const line = lines[i]!;
-    const marked = line.match(
-      /^(?:∴|therefore|hence|so|thus|answer|ans|final)(?:\s+answer)?\s*[:=]\s*(.+)$/i,
-    );
-    if (marked?.[1]?.trim()) return marked[1].trim();
+  const candidates: string[] = [];
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    for (const candidate of lineAnswerCandidates(lines[i]!)) {
+      if (!candidates.includes(candidate)) candidates.push(candidate);
+    }
   }
-
-  const last = lines[lines.length - 1]!;
-  if (last.includes("=")) {
-    const rhs = last.split("=").pop()?.trim();
-    if (rhs && rhs.length <= 160) return rhs;
-  }
-
-  return last;
+  return candidates;
 }
 
-/** Compare full response and extracted final line against accepted answers. */
+/** @deprecated alias — use workingAnswerCandidates */
 export function answerCandidatesFromWorking(raw: string): string[] {
-  const text = String(raw ?? "").trim();
-  if (!text) return [];
+  return workingAnswerCandidates(raw);
+}
 
-  const candidates: string[] = [text];
-  const extracted = extractFinalAnswerFromWorking(text);
-  if (extracted && extracted !== text) candidates.push(extracted);
-
-  if (text.includes("\n")) {
-    const lastLine = text
-      .split(/\r?\n/)
-      .map((l) => l.trim())
-      .filter(Boolean)
-      .pop();
-    if (lastLine && !candidates.includes(lastLine)) candidates.push(lastLine);
-  }
-
-  return candidates;
+/** Best-effort final answer: highest-priority fragment from the last non-empty line upward. */
+export function extractFinalAnswerFromWorking(raw: string): string {
+  return workingAnswerCandidates(raw)[0] ?? "";
 }

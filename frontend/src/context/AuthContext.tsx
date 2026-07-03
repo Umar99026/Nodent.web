@@ -7,13 +7,14 @@ import {
   type ReactNode,
 } from "react";
 import { apiFetch, ApiError, BOOTSTRAP_FETCH_TIMEOUT_MS } from "@/lib/api";
-import { STORAGE_KEYS, API_PATHS } from "@/lib/constants";
+import { STORAGE_KEYS, API_PATHS, type AccountRole } from "@/lib/constants";
 
 export interface User {
   id: number;
   email: string;
   username: string;
   profilePhoto?: string | null;
+  accountRole?: AccountRole | null;
 }
 
 interface AuthState {
@@ -29,6 +30,7 @@ interface AuthContextValue extends AuthState {
     username: string,
     email: string,
     password: string,
+    accountRole: AccountRole,
   ) => Promise<void>;
   logout: () => Promise<void>;
   updateAccount: (payload: {
@@ -256,10 +258,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const signup = useCallback(
-    async (username: string, email: string, password: string) => {
+    async (
+      username: string,
+      email: string,
+      password: string,
+      accountRole: AccountRole,
+    ) => {
       const data = await apiFetch<AuthResponse>(API_PATHS.auth.signup, {
         method: "POST",
-        body: JSON.stringify({ username, email, password }),
+        body: JSON.stringify({ username, email, password, accountRole }),
       });
 
       const user = withProfilePhoto(data.user);

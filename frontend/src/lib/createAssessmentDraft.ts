@@ -42,6 +42,8 @@ export type AssessmentDraft = {
   sharedPassage: string;
   groupId: string;
   questions: QuestionDraft[];
+  /** UI-only label; the PDF is not persisted in the draft. */
+  pdfFileName?: string;
   updatedAt: string;
 };
 

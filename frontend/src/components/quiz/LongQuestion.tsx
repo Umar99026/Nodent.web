@@ -22,6 +22,8 @@ import {
   inlineInputsForPart,
   slotsForPart,
   slotIndexForPartOverlay,
+  expectedAnswersForQuestionSlots,
+  type PartFigureLabelSource,
 } from "@/lib/diagramLabels";
 import { writtenApiPath } from "@/lib/writtenAnswerUpload";
 import {
@@ -32,26 +34,28 @@ import {
   requestHandwritingMark,
   requestSmartMark,
   resolveAiMarking,
+  qualifiesForOpenAiHandwriting,
   type SmartMarkResult,
 } from "@/lib/questionAiMarking";
 import { handwritingMarkUserError } from "@/lib/userFacingErrors";
 import {
   collectFullQuestionStimulus,
-  cleanAcceptedPartAnswer,
   displayMarks,
   formatPartDescriptor,
+  gradeMultipartAnswers,
   hasVisibleStimulus,
   marksEarnedFromPartResults,
+  multipartAllCorrect,
   normalizePartKey,
-  normalizeMultipartAcceptedAnswers,
+  partSubmitLabel,
   resolvePartMarks,
   resolveMultipartPartDisplay,
   multipartSharedStem,
-  partSubmitLabel,
   stripQuestionHeadingFromPassage,
   stripQuestionNumberPrefix,
   type AnswerScoreDetail,
 } from "@/lib/questionDisplay";
+import { MultipartMarkBreakdown } from "@/components/quiz/MultipartMarkBreakdown";
 import { toast } from "sonner";
 import { AiMarkingFeedbackPanel, AiMarkingPartFeedback } from "@/components/quiz/AiMarkingFeedbackPanel";
 import {
@@ -121,29 +125,33 @@ function formatExpectedAnswer(value: unknown): string {
   return String(value ?? "");
 }
 
-function gradeMultipartIndividually(parts: string[], acceptedPool: string[]) {
-  const expandedAccepted = normalizeMultipartAcceptedAnswers(
-    acceptedPool,
-    parts.length,
-  ).map(cleanAcceptedPartAnswer);
-  const byPosition =
-    expandedAccepted.length >= parts.length
-      ? parts.map((part, idx) => isAnswerCorrect((part ?? "").trim(), [expandedAccepted[idx]]))
-      : null;
-  if (byPosition) return byPosition;
-  const partGrades = parts.map((part) => {
-    const trimmed = (part ?? "").trim();
-    if (!trimmed) return { correct: false, dpHint: null as number | null };
-    for (let i = 0; i < expandedAccepted.length; i += 1) {
-      const graded = isAnswerCorrect(trimmed, [expandedAccepted[i]]);
-      if (graded.correct) {
-        return graded;
+function slotBreakdownLabels(
+  partLabels: string[],
+  partDescriptors: string[],
+  configuredParts: PartFigureLabelSource[],
+): string[] {
+  const labels: string[] = [];
+  partLabels.forEach((label, idx) => {
+    const part = configuredParts[idx];
+    const inline = inlineInputsForPart(part);
+    const descriptor = partDescriptors[idx]?.trim() || label;
+    if (inline.length) {
+      for (const box of inline) {
+        labels.push(box.label?.trim() ? `${descriptor} (${box.label})` : descriptor);
       }
+      return;
     }
-    const fallback = expandedAccepted[0] ? isAnswerCorrect(trimmed, [expandedAccepted[0]]) : null;
-    return { correct: false, dpHint: fallback?.dpHint ?? null };
+    if (partUsesFigureLabels(part)) {
+      for (const overlay of part?.labelOverlays ?? []) {
+        labels.push(
+          overlay.label?.trim() ? `${descriptor} (${overlay.label})` : descriptor,
+        );
+      }
+      return;
+    }
+    labels.push(descriptor);
   });
-  return partGrades;
+  return labels;
 }
 
 function detectMultipartLabels(questionText: string): string[] {
@@ -234,6 +242,11 @@ export function LongQuestion({
   const partDescriptors = configuredDisplay
     ? configuredDisplay.descriptors
     : detectMultipartDescriptors(question.question, partLabels);
+  const openAiHandwritingEligible = qualifiesForOpenAiHandwriting({
+    questionText: question.question,
+    partLabels: partDescriptors,
+    acceptedAnswers: question.acceptedAnswers,
+  });
   const partPlaceholders =
     configuredParts.length >= 1
       ? configuredParts.map((p) => p.placeholder?.trim() || "")
@@ -254,14 +267,14 @@ export function LongQuestion({
     configuredParts.length >= 1 &&
     configuredParts.every((p) => typeof p.marks === "number" && (p.marks ?? 0) > 0);
   const expectedAnswersForDisplay = isMultipart
-    ? normalizeMultipartAcceptedAnswers(
+    ? expectedAnswersForQuestionSlots(
+        configuredParts,
         [
           ...(Array.isArray(question.acceptedAnswers) ? question.acceptedAnswers : []),
           ...(question.answer ? [question.answer] : []),
         ]
           .map((s) => formatExpectedAnswer(s).trim())
           .filter(Boolean),
-        partLabels.length,
       )
     : [
         ...(
@@ -371,7 +384,13 @@ export function LongQuestion({
   }, [subjectId, questionKey, isMultipart, partLabels, practiceOnly]);
 
   const handleSave = async () => {
-    const usesHandwritingAi = usesHandwritingMarking(subjectId, response, parts, isMultipart);
+    const usesHandwritingAi = usesHandwritingMarking(
+      subjectId,
+      response,
+      parts,
+      isMultipart,
+      openAiHandwritingEligible,
+    );
     const handwritingImages = collectHandwritingImages(response, parts, isMultipart);
     const hasContent = isMultipart
       ? parts.every((part) => hasAnswerContent(part))
@@ -408,11 +427,11 @@ export function LongQuestion({
 
       if (!usesHandwritingAi && effectiveResponse.trim() && acceptedPool.length > 0) {
         if (isMultipart) {
-          const gradedParts = gradeMultipartIndividually(parts, acceptedPool);
+          const gradedParts = gradeMultipartAnswers(parts, acceptedPool, configuredParts);
           partCorrectFlags = gradedParts.map((g) => g.correct);
           setPartResults(partCorrectFlags);
           setDpHint(Math.max(...gradedParts.map((g) => g.dpHint ?? 0)) || null);
-          result = partCorrectFlags.every(Boolean);
+          result = multipartAllCorrect(partCorrectFlags);
         } else {
           setPartResults(Array(partLabels.length).fill(null));
           const graded = isAnswerCorrect(effectiveResponse, acceptedPool);
@@ -458,16 +477,18 @@ export function LongQuestion({
             ai ?? buildFallbackHandwritingMark(expectedAnswersForDisplay),
             expectedAnswersForDisplay,
           );
-          finalResult = enriched.correct;
-          setAutoMarkResult(finalResult);
-          setAiMark(enriched);
           if (enriched.partResults?.length) {
-            partCorrectFlags = partLabels.map((_, idx) => {
+            partCorrectFlags = parts.map((_, idx) => {
               const hit = enriched.partResults?.find((p) => p.index === idx);
-              return hit ? hit.correct : false;
+              return hit ? hit.correct : (partCorrectFlags[idx] ?? false);
             });
             setPartResults(partCorrectFlags);
           }
+          finalResult = isMultipart
+            ? multipartAllCorrect(partCorrectFlags)
+            : enriched.correct;
+          setAutoMarkResult(finalResult);
+          setAiMark(enriched);
         } catch (err) {
           const msg = handwritingMarkUserError(err);
           toast.error(msg);
@@ -493,22 +514,35 @@ export function LongQuestion({
             }),
           });
           if (ai) {
-            finalResult = ai.correct;
-            setAutoMarkResult(finalResult);
             setAiMark(ai);
             if (ai.partResults?.length) {
-              partCorrectFlags = partLabels.map((_, idx) => {
+              partCorrectFlags = parts.map((_, idx) => {
                 const hit = ai.partResults?.find((p) => p.index === idx);
-                return hit ? hit.correct : false;
+                return hit ? hit.correct : (partCorrectFlags[idx] ?? false);
               });
               setPartResults(partCorrectFlags);
             }
+            finalResult = isMultipart
+              ? multipartAllCorrect(partCorrectFlags)
+              : ai.correct;
+            setAutoMarkResult(finalResult);
           }
         } catch {
           // Keep client-side result if AI is unavailable.
         } finally {
           setAiMarking(false);
         }
+      }
+
+      if (isMultipart) {
+        const slotCount = parts.length;
+        if (partCorrectFlags.length !== slotCount) {
+          const graded = gradeMultipartAnswers(parts, acceptedPool, configuredParts);
+          partCorrectFlags = graded.map((g) => g.correct);
+        }
+        finalResult = multipartAllCorrect(partCorrectFlags);
+        setPartResults(partCorrectFlags);
+        setAutoMarkResult(finalResult);
       }
 
       const earned = isMultipart
@@ -638,7 +672,7 @@ export function LongQuestion({
       <div className="space-y-3">
         {handwritingMode && !examPaper ? (
           <p className="text-xs text-muted-foreground">
-            Handwriting mode — draw your working and answer. Smart marking will read your full working and mark the final answer.
+            Handwriting mode — draw your answer on the pad.
           </p>
         ) : null}
         {isMultipart && !examPaper ? (
@@ -815,14 +849,16 @@ export function LongQuestion({
                   : submitLabel}
           </Button>
         </div>
-        {isMultipart && (practiceOnly ? submitted : saved) && autoMarkResult !== null ? (
+        {isMultipart && (practiceOnly ? submitted : saved) && partResults.length > 0 ? (
           <div
             className={cn(
               "flex items-start gap-3 rounded-lg px-4 py-3 text-sm",
-              autoMarkResult ? "bg-success/10 text-success" : "bg-danger/10 text-danger",
+              multipartAllCorrect(partResults)
+                ? "bg-success/10 text-success"
+                : "bg-danger/10 text-danger",
             )}
           >
-            {autoMarkResult ? (
+            {multipartAllCorrect(partResults) ? (
               <>
                 <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
                 <span className="font-medium">All parts correct!</span>
@@ -830,10 +866,18 @@ export function LongQuestion({
             ) : (
               <>
                 <XCircle className="mt-0.5 size-4 shrink-0" />
-                <span className="font-medium">Some parts need work — check each part above.</span>
+                <span className="font-medium">Some parts need work — see the mark breakdown below.</span>
               </>
             )}
           </div>
+        ) : null}
+        {isMultipart && (practiceOnly ? submitted : saved) && partResults.length > 0 ? (
+          <MultipartMarkBreakdown
+            partLabels={slotBreakdownLabels(partLabels, partDescriptors, configuredParts)}
+            partResults={partResults}
+            partMarks={partMarks}
+            expectedAnswers={expectedAnswersForDisplay}
+          />
         ) : null}
         {(practiceOnly ? submitted : saved) && autoMarkResult !== null && !isMultipart && (
           <div

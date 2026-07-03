@@ -638,7 +638,7 @@ export function normalizeCustomQuestion(raw: unknown, subjectIdHint?: string): Q
     }
     if (!acceptedAnswers.length) {
       return {
-        type: "long",
+        type: "long" as const,
         topic,
         question: questionText,
         guidance:
@@ -661,7 +661,7 @@ export function normalizeCustomQuestion(raw: unknown, subjectIdHint?: string): Q
       };
     }
     return applyMultipartAcceptedAnswers({
-      type: "short",
+      type: "short" as const,
       topic,
       question: questionText,
       acceptedAnswers,
@@ -694,7 +694,7 @@ export function normalizeCustomQuestion(raw: unknown, subjectIdHint?: string): Q
     if (hasInlineInputBoxes && resolvedAnswerParts?.length) {
       const fromParts = flattenPartAcceptedAnswers(resolvedAnswerParts);
       return applyMultipartAcceptedAnswers({
-        type: "short",
+        type: "short" as const,
         topic,
         question: questionText,
         acceptedAnswers: fromParts.length ? fromParts : acceptedAnswers ?? [],
@@ -709,7 +709,7 @@ export function normalizeCustomQuestion(raw: unknown, subjectIdHint?: string): Q
       });
     }
     return applyMultipartAcceptedAnswers({
-      type: "long",
+      type: "long" as const,
       topic,
       question: questionText,
       acceptedAnswers,

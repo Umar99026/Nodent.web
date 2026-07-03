@@ -12,6 +12,8 @@ import { absolutizeMarkdownAssetUrls, capitalizeQuestionDisplayText } from "@/li
 import {
   fixInlineMathDelimiters,
   normalizeQuestionMathText,
+  repairCommonMathGlitches,
+  repairLeftRightDelimiters,
   simplifyFragileLatexDollars,
 } from "@/lib/questionMathText";
 
@@ -199,13 +201,13 @@ export function RichQuestionContent({
     (preferMarkdown && !examPaperMode) ||
     overviewMode ||
     looksLikeStructuredMarkdown(displayBody);
-  const body = simplifyFragileLatexDollars(
-    fixInlineMathDelimiters(
-      preserveMarkdownStructure
-        ? absolutizeMarkdownAssetUrls(displayBody)
-        : normalizeQuestionMathText(displayBody),
-    ),
-  );
+  let body = preserveMarkdownStructure
+    ? absolutizeMarkdownAssetUrls(displayBody)
+    : normalizeQuestionMathText(displayBody);
+  if (preserveMarkdownStructure) {
+    body = repairLeftRightDelimiters(repairCommonMathGlitches(body));
+  }
+  body = simplifyFragileLatexDollars(fixInlineMathDelimiters(body));
 
   // Never send structured Markdown (headings, lists, tables) through RichMathText — it blanks long notes.
   const useRichMathBranch =

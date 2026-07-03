@@ -27,6 +27,11 @@ export type TopicStatRow = {
   marksAttempted: number;
   percent: number;
   studentsAttempted?: number;
+  platformPercent?: number | null;
+  platformMarksAttempted?: number;
+  platformStudentCount?: number;
+  vsPlatform?: number | null;
+  topicPercentile?: number | null;
 };
 
 export type ClassStats = {
@@ -38,12 +43,27 @@ export type ClassStats = {
   marksCorrect: number;
   marksAttempted: number;
   avgPercent: number | null;
+  platformPercent?: number | null;
+  vsPlatform?: number | null;
   topicStats: TopicStatRow[];
   weakTopics: Array<{
     topic: string;
     subjectId: string;
     percent: number;
     marksAttempted: number;
+    platformPercent?: number | null;
+    vsPlatform?: number | null;
+    studentsAttempted?: number;
+  }>;
+  /** Topics where class mark % is below the Nodent-wide average. */
+  belowAvgTopics: Array<{
+    topic: string;
+    subjectId: string;
+    percent: number;
+    marksAttempted: number;
+    platformPercent?: number | null;
+    vsPlatform?: number | null;
+    studentsAttempted?: number;
   }>;
 };
 
@@ -55,6 +75,9 @@ export type StudentClassStats = {
   marksAttempted: number;
   percent: number;
   questionCount: number;
+  platformPercent?: number | null;
+  vsPlatform?: number | null;
+  overallPercentile?: number | null;
   topicStats: TopicStatRow[];
   weakTopics: TopicStatRow[];
   subjects: Array<{
@@ -62,6 +85,8 @@ export type StudentClassStats = {
     marksCorrect: number;
     marksAttempted: number;
     percent: number;
+    platformPercent?: number | null;
+    vsPlatform?: number | null;
   }>;
 };
 

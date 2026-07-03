@@ -1,4 +1,8 @@
 import { parseAnswerKeyDocument } from "@/lib/createPdfAnswerImport";
+import {
+  answerSlotsFromQuestionIdTsv,
+  looksLikeQuestionIdExamTsv,
+} from "@/lib/examQuestionIdTsv";
 import { openPdfDocument, renderPageToDataUrl, extractPageText } from "@/lib/pdfQuestionImport";
 import { normalizeQuestionMathText } from "@/lib/questionMathText";
 import type { AnswerSlotSource } from "@/lib/answerSlotOverlays";
@@ -50,15 +54,211 @@ export function applySolutionTextToPalette(text: string): AnswerSlotSource[] {
   return answerSlotsFromSolutionText(text);
 }
 
-function splitTsvLine(line: string): string[] {
-  return line.split("\t").map((cell) => cell.trim());
+function normHeaderCell(cell: string): string {
+  return cell.replace(/\uFEFF/g, "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+type TsvDelimiter = "\t" | "," | ";" | "|";
+
+function detectTsvDelimiter(line: string): TsvDelimiter {
+  const counts: Array<[TsvDelimiter, number]> = [
+    ["\t", (line.match(/\t/g) ?? []).length],
+    [",", (line.match(/,/g) ?? []).length],
+    [";", (line.match(/;/g) ?? []).length],
+    ["|", (line.match(/\|/g) ?? []).length],
+  ];
+  const best = counts.reduce((a, b) => (b[1] > a[1] ? b : a));
+  return best[1] > 0 ? best[0] : "\t";
+}
+
+function splitDelimitedLine(line: string, delimiter: TsvDelimiter): string[] {
+  if (delimiter === "\t") {
+    return line.split("\t").map((cell) => cell.trim());
+  }
+  if (delimiter === ",") {
+    return parseCsvLine(line);
+  }
+  return line.split(delimiter).map((cell) => cell.trim().replace(/^"|"$/g, ""));
+}
+
+function parseCsvLine(line: string): string[] {
+  const cells: string[] = [];
+  let current = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]!;
+    if (inQuotes) {
+      if (ch === '"') {
+        if (line[i + 1] === '"') {
+          current += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        current += ch;
+      }
+      continue;
+    }
+    if (ch === '"') {
+      inQuotes = true;
+      continue;
+    }
+    if (ch === ",") {
+      cells.push(current.trim());
+      current = "";
+      continue;
+    }
+    current += ch;
+  }
+  cells.push(current.trim());
+  return cells;
+}
+
+function detectDelimiterFromLines(lines: string[]): TsvDelimiter {
+  let tabLines = 0;
+  let commaLines = 0;
+  for (const line of lines.slice(0, 25)) {
+    if ((line.match(/\t/g) ?? []).length >= 4) tabLines++;
+    if ((line.match(/,/g) ?? []).length >= 4) commaLines++;
+  }
+  if (tabLines > 0) return "\t";
+  if (commaLines > 0) return ",";
+  return detectTsvDelimiter(lines[0] ?? "");
+}
+
+function isKnownExamImportHeaderLine(line: string): boolean {
+  const norm = line.toLowerCase().replace(/[^a-z0-9_\s]/g, " ");
+  return (
+    norm.includes("question") &&
+    (norm.includes("answer") || norm.includes("question text") || norm.includes("questiontext"))
+  );
+}
+
+function parseLooseExamImportLine(line: string): string[] | null {
+  const trimmed = line.trim();
+  if (!trimmed || isKnownExamImportHeaderLine(trimmed)) return null;
+
+  const head = trimmed.match(/^(\d+)\s+(stem|[a-z]{1,3}|mcq)\.?\s+/i);
+  if (!head) return null;
+
+  const question = head[1]!;
+  const part = head[2]!.toLowerCase();
+  let rest = trimmed.slice(head[0].length).trim();
+
+  let marks = "";
+  const marksMatch = rest.match(/\s+(\d+)\s*$/);
+  if (marksMatch) {
+    marks = marksMatch[1]!;
+    rest = rest.slice(0, -marksMatch[0].length).trim();
+  }
+
+  let answer = "";
+  if (part !== "stem" && rest) {
+    const answerMatch = rest.match(/\s+(\S+)\s*$/);
+    if (answerMatch) {
+      answer = answerMatch[1]!;
+      rest = rest.slice(0, -answerMatch[0].length).trim();
+    }
+  }
+
+  return [question, part, rest, answer, marks];
+}
+
+function normalizeHeaderTokens(line: string): string {
+  const lower = line.toLowerCase().trim();
+  const tokens = lower.split(/\s+/);
+  const out: string[] = [];
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i] ?? "";
+    if (token === "question" && tokens[i + 1] === "text") {
+      out.push("question_text");
+      i++;
+      continue;
+    }
+    out.push(token);
+  }
+  return out.join("\t");
+}
+
+function coerceLinesToTabSeparated(lines: string[]): string[] | null {
+  if (lines.some((line) => line.includes("\t"))) return null;
+
+  const parsed = lines
+    .map((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return null;
+      if (isKnownExamImportHeaderLine(trimmed)) {
+        return normalizeHeaderTokens(trimmed);
+      }
+      return parseLooseExamImportLine(trimmed)?.join("\t") ?? null;
+    })
+    .filter((line): line is string => Boolean(line));
+
+  if (parsed.length < 2) return null;
+  return parsed;
+}
+
+function normalizeTsvInput(text: string): { lines: string[]; delimiter: TsvDelimiter } {
+  const normalized = text
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .replace(/\\t/g, "\t")
+    .replace(/\uFEFF/g, "");
+  let lines = normalized
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (!lines.length) return { lines: [], delimiter: "\t" };
+
+  const coerced = coerceLinesToTabSeparated(lines);
+  if (coerced) {
+    lines = coerced;
+  }
+
+  let delimiter = detectDelimiterFromLines(lines);
+  if (delimiter === "\t" && !lines[0]!.includes("\t")) {
+    for (const line of lines.slice(0, 10)) {
+      const candidate = detectTsvDelimiter(line);
+      if (candidate !== "\t" && splitDelimitedLine(line, candidate).length >= 2) {
+        delimiter = candidate;
+        break;
+      }
+    }
+  }
+
+  const firstSplit = splitDelimitedLine(lines[0]!, delimiter);
+  if (firstSplit.length < 2 && lines.some((line) => /\s{2,}/.test(line))) {
+    lines = lines.map((line) =>
+      line
+        .split(/\s{2,}/)
+        .map((cell) => cell.trim())
+        .join("\t"),
+    );
+    delimiter = "\t";
+  }
+
+  return { lines, delimiter };
 }
 
 const TSV_HEADER_ALIASES: Record<string, string[]> = {
-  question: ["question", "q", "qn", "qnum", "num"],
+  question: ["question", "q", "qn", "qnum", "num", "no", "questionnum", "questionnumber"],
   part: ["part", "sub", "subpart", "letter"],
   key: ["key", "slot", "id"],
-  label: ["label", "descriptor", "name", "box", "stem", "questiontext", "prompt"],
+  label: ["label", "descriptor", "name", "box", "prompt", "partlabel"],
+  question_text: [
+    "questiontext",
+    "questiontextcolumn",
+    "stem",
+    "wording",
+    "body",
+    "content",
+    "parttext",
+    "prompttext",
+    "stemtext",
+    "description",
+    "text",
+  ],
   answer: ["answer", "accepted", "acceptedanswer", "solution", "value", "resp"],
   marks: ["marks", "mark", "m", "pts", "points"],
   option_a: ["option_a", "opt_a", "optiona"],
@@ -67,21 +267,96 @@ const TSV_HEADER_ALIASES: Record<string, string[]> = {
   option_d: ["option_d", "opt_d", "optiond"],
 };
 
+const STEM_PART_KEYS = new Set(["stem", "intro", "question", "stimulus", "passage"]);
+
 function mapTsvHeader(cells: string[]): Map<string, number> | null {
   const idx = new Map<string, number>();
   let matched = 0;
   for (let i = 0; i < cells.length; i++) {
-    const norm = cells[i]!.toLowerCase().replace(/[^a-z]/g, "");
+    const norm = normHeaderCell(cells[i] ?? "");
+    if (!norm) continue;
+    let bestField: string | null = null;
+    let bestLen = 0;
     for (const [field, aliases] of Object.entries(TSV_HEADER_ALIASES)) {
-      if (aliases.includes(norm)) {
-        idx.set(field, i);
-        matched++;
-        break;
+      for (const alias of aliases) {
+        if (norm === alias && alias.length > bestLen) {
+          bestField = field;
+          bestLen = alias.length;
+        }
       }
     }
+    if (bestField) {
+      if (bestField === "question" && idx.has("question") && i > 0) {
+        if (!idx.has("question_text")) {
+          idx.set("question_text", i);
+          matched++;
+        }
+        continue;
+      }
+      idx.set(bestField, i);
+      matched++;
+    }
   }
-  if (!idx.has("answer") || matched < 2) return null;
+  if (matched < 2) return null;
+  if (!idx.has("question") && !idx.has("key")) return null;
+  if (!idx.has("answer") && !idx.has("label") && !idx.has("question_text")) return null;
   return idx;
+}
+
+function defaultTsvColumnMap(colCount: number): Map<string, number> | null {
+  if (colCount >= 5) {
+    return new Map([
+      ["question", 0],
+      ["part", 1],
+      ["question_text", 2],
+      ["answer", 3],
+      ["marks", 4],
+    ]);
+  }
+  if (colCount === 4) {
+    return new Map([
+      ["question", 0],
+      ["part", 1],
+      ["answer", 2],
+      ["marks", 3],
+    ]);
+  }
+  if (colCount === 3) {
+    return new Map([
+      ["question", 0],
+      ["answer", 1],
+      ["marks", 2],
+    ]);
+  }
+  return null;
+}
+
+function isLikelyHeaderRow(cells: string[]): boolean {
+  if (/^\d+$/.test((cells[0] ?? "").trim())) return false;
+  return mapTsvHeader(cells) != null;
+}
+
+function parseQuestionNumberFromRow(
+  get: (field: string) => string,
+  cells: string[],
+): number | null {
+  const keyRaw = get("key");
+  if (keyRaw) {
+    const parsed = parseSlotKeyToken(keyRaw);
+    if (parsed) return parsed.question;
+  }
+
+  const qRaw = get("question");
+  if (qRaw && /^\d+$/.test(qRaw.trim())) {
+    return Number(qRaw);
+  }
+
+  const first = (cells[0] ?? "").trim();
+  if (/^\d+$/.test(first)) {
+    return Number(first);
+  }
+
+  return null;
 }
 
 function parseSlotKeyToken(token: string): { question: number; part: string } | null {
@@ -124,16 +399,19 @@ function slotFromFields(input: {
   mcqOptions?: string[];
 }): AnswerSlotSource | null {
   const answer = input.answer.trim();
-  if (!answer || !Number.isFinite(input.question) || input.question < 1) return null;
+  const text = input.label?.trim() || input.questionStem?.trim() || "";
+  if (!answer && !text) return null;
+  if (!Number.isFinite(input.question) || input.question < 1) return null;
   const part = (input.part || "a").trim().toLowerCase() || "a";
-  const marks = Math.max(1, Math.round(Number(input.marks ?? 1) || 1));
-  const stem = input.questionStem?.trim() || input.label?.trim();
+  const marksRaw = Number(input.marks ?? (answer ? 1 : 0));
+  const marks = Number.isFinite(marksRaw) ? Math.max(0, Math.round(marksRaw)) : answer ? 1 : 0;
+  const descriptor = text || slotDescriptor(input.question, part);
   return {
     key: slotKeyFor(input.question, part),
-    descriptor: slotDescriptor(input.question, part, stem || input.label),
+    descriptor,
     acceptedAnswer: answer,
-    marks,
-    ...(stem && part === "mcq" ? { questionStem: stem } : {}),
+    marks: marks || (answer ? 1 : 0),
+    ...(text && part === "mcq" ? { questionStem: text } : {}),
     ...(input.mcqOptions?.length ? { mcqOptions: input.mcqOptions } : {}),
   };
 }
@@ -147,34 +425,33 @@ function rowToAnswerSlot(
     return i == null ? "" : (cells[i] ?? "").trim();
   };
   const answer = get("answer");
-  if (!answer) return null;
+  const qRaw = get("question");
+  let label = get("question_text") || get("label") || undefined;
+  if (!label?.trim() && qRaw && !/^\d+$/.test(qRaw.trim())) {
+    label = qRaw;
+  }
+  if (!answer && !label?.trim()) return null;
 
   const keyRaw = get("key");
-  const qRaw = get("question");
   const hasPartCol = header.has("part");
-  const partRaw = hasPartCol ? get("part").toLowerCase() : "";
-  let question: number | null = null;
+  const partRaw = hasPartCol ? get("part").toLowerCase().replace(/\.$/, "") : "";
   let part = partRaw;
+
+  const question = parseQuestionNumberFromRow(get, cells);
+  if (question == null || !Number.isFinite(question) || question < 1) return null;
 
   if (keyRaw) {
     const parsed = parseSlotKeyToken(keyRaw);
-    if (!parsed) return null;
-    question = parsed.question;
-    part = parsed.part || part;
-  } else if (qRaw) {
-    question = Number(qRaw);
-    if (!Number.isFinite(question) || question < 1) return null;
-  } else {
-    return null;
+    if (parsed) part = parsed.part || part;
   }
 
   return {
     question: question!,
     part,
     answer,
-    label: get("label") || undefined,
-    marks: Number(get("marks") || 1),
-    questionStem: get("label") || undefined,
+    label,
+    marks: Number(get("marks") || (answer ? 1 : 0)),
+    questionStem: label,
     mcqOptions: [get("option_a"), get("option_b"), get("option_c"), get("option_d")].filter(
       Boolean,
     ),
@@ -277,33 +554,134 @@ function rowsToAnswerSlots(
 }
 
 /** Parse tab-separated answer rows for practice exam slot placement. */
-export function answerSlotsFromSolutionTsv(text: string): AnswerSlotSource[] {
-  const normalized = text
-    .replace(/\r\n/g, "\n")
-    .replace(/\\t/g, "\t")
-    .replace(/\uFEFF/g, "");
-  const lines = normalized
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
-  if (!lines.length) return [];
-
-  const looksTabular = lines.some((line) => splitTsvLine(line).length >= 2);
+function parseTsvDataLines(
+  lines: string[],
+  delimiter: TsvDelimiter,
+): Array<Omit<Parameters<typeof slotFromFields>[0], "part"> & { part: string }> {
+  const splitLine = (line: string) => splitDelimitedLine(line, delimiter);
+  const looksTabular = lines.some((line) => splitLine(line).length >= 2);
   if (!looksTabular) return [];
 
-  const firstCells = splitTsvLine(lines[0]!);
+  const firstCells = splitLine(lines[0]!);
+  const headerDetected = isLikelyHeaderRow(firstCells);
+  let header = headerDetected ? mapTsvHeader(firstCells) : null;
+  let dataLines = headerDetected
+    ? lines.slice(1).map(splitLine)
+    : lines.map(splitLine);
+  dataLines = dataLines.filter((cells) => cells.length >= 2);
 
-  const header = mapTsvHeader(firstCells);
-  const dataLines = (header ? lines.slice(1) : lines)
-    .map(splitTsvLine)
-    .filter((cells) => cells.length >= 2);
+  const parseRows = (
+    rowsHeader: Map<string, number> | null,
+    rowsData: string[][],
+  ) => {
+    const parsed: Array<Omit<Parameters<typeof slotFromFields>[0], "part"> & { part: string }> =
+      [];
+    for (const cells of rowsData) {
+      const row = rowsHeader
+        ? rowToAnswerSlot(cells, rowsHeader)
+        : rowToAnswerSlotHeuristic(cells);
+      if (row) parsed.push(row);
+    }
+    return parsed;
+  };
 
-  const rows: Array<Omit<Parameters<typeof slotFromFields>[0], "part"> & { part: string }> = [];
-  for (const cells of dataLines) {
-    const row = header ? rowToAnswerSlot(cells, header) : rowToAnswerSlotHeuristic(cells);
-    if (row) rows.push(row);
+  let rows = parseRows(header, dataLines);
+  if (rows.length) return rows;
+
+  if (header) {
+    rows = parseRows(null, dataLines);
+    if (rows.length) return rows;
+
+    const fallbackHeader = defaultTsvColumnMap(
+      dataLines[0]?.length ?? firstCells.length,
+    );
+    if (fallbackHeader) {
+      rows = parseRows(fallbackHeader, dataLines);
+      if (rows.length) return rows;
+    }
   }
+
+  const fallbackHeader = defaultTsvColumnMap(firstCells.length);
+  if (fallbackHeader && /^\d+$/.test((firstCells[0] ?? "").trim())) {
+    rows = parseRows(fallbackHeader, lines.map(splitLine).filter((c) => c.length >= 2));
+  }
+  return rows;
+}
+
+/** Parse tab-separated answer rows for practice exam slot placement. */
+export function answerSlotsFromSolutionTsv(text: string): AnswerSlotSource[] {
+  if (looksLikeQuestionIdExamTsv(text)) {
+    const idSlots = answerSlotsFromQuestionIdTsv(text);
+    if (idSlots.length) return idSlots;
+  }
+
+  const { lines, delimiter } = normalizeTsvInput(text);
+  if (!lines.length) return [];
+
+  let rows = parseTsvDataLines(lines, delimiter);
+  if (!rows.length) {
+    const firstCells = splitDelimitedLine(lines[0]!, delimiter);
+    const fallbackHeader = defaultTsvColumnMap(firstCells.length);
+    const dataStart = isLikelyHeaderRow(firstCells) ? 1 : 0;
+    if (fallbackHeader) {
+      rows = [];
+      for (const cells of lines
+        .slice(dataStart)
+        .map((line) => splitDelimitedLine(line, delimiter))
+        .filter((cells) => cells.length >= 2)) {
+        const row = rowToAnswerSlot(cells, fallbackHeader);
+        if (row) rows.push(row);
+      }
+    }
+  }
+
   return rowsToAnswerSlots(rows);
+}
+
+export type ExamImportTsvDiagnostics = {
+  ok: boolean;
+  slotCount: number;
+  lineCount: number;
+  hasTabs: boolean;
+  hint?: string;
+};
+
+/** Explain why exam-import TSV parsing failed (for admin UI). */
+export function getExamImportTsvDiagnostics(text: string): ExamImportTsvDiagnostics {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return { ok: false, slotCount: 0, lineCount: 0, hasTabs: false, hint: "Paste TSV text first." };
+  }
+
+  const { lines } = normalizeTsvInput(trimmed);
+  const hasTabs = trimmed.includes("\t");
+  const slotCount = answerSlotsFromSolutionTsv(trimmed).length;
+
+  if (slotCount > 0) {
+    return { ok: true, slotCount, lineCount: lines.length, hasTabs };
+  }
+
+  if (looksLikeQuestionIdExamTsv(trimmed)) {
+    return {
+      ok: false,
+      slotCount: 0,
+      lineCount: lines.length,
+      hasTabs: trimmed.includes("\t"),
+      hint: "Question_ID format detected but no rows parsed. Check IDs like A1a or B_M1_Q2b.",
+    };
+  }
+
+  let hint = "Use tab-separated columns: question, part, question_text, answer, marks — or Question_ID, Question, Answer.";
+  if (!hasTabs) {
+    hint =
+      "No tab characters found. Copy from Excel/Google Sheets, or click Insert template. Spaces between columns are not supported for long question text.";
+  } else if (lines.length < 2) {
+    hint = "Add a header row plus at least one data row.";
+  } else if (!isKnownExamImportHeaderLine(lines[0] ?? "")) {
+    hint = "First row should be: question, part, question_text, answer, marks";
+  }
+
+  return { ok: false, slotCount: 0, lineCount: lines.length, hasTabs, hint };
 }
 
 export function answerSlotsFromSolutionText(text: string): AnswerSlotSource[] {
@@ -591,6 +969,8 @@ export function parseMcqTsv(text: string): PracticeExamMcqItem[] {
     .map((line) => line.trim())
     .filter(Boolean);
   if (!lines.length) return [];
+
+  const splitTsvLine = (line: string) => line.split("\t").map((cell) => cell.trim());
 
   const firstCells = splitTsvLine(lines[0]!);
   const header = mapMcqTsvHeader(firstCells);

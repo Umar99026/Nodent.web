@@ -42,7 +42,9 @@ import type {
   PracticeExamSlot,
 } from "@/lib/practiceExamTypes";
 import type { DiagramLabelPart } from "@/lib/diagramLabels";
+import { typedAnswerDisplay } from "@/lib/handwritingMode";
 import { isAnswerCorrect } from "@/lib/utils";
+import { WorkingAnswerHint } from "@/components/quiz/WorkingAnswerHint";
 import { CheckCircle2, FileText, Loader2, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -102,6 +104,7 @@ export default function PracticeExamDetailPage() {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
   const [partResults, setPartResults] = useState<Record<string, boolean>>({});
+  const [interpretedAnswers, setInterpretedAnswers] = useState<Record<string, string>>({});
   const [section, setSection] = useState<"mcq" | "written">("mcq");
 
   const examYear = year && isPracticeExamYear(year) ? Number(year) : null;
@@ -241,6 +244,7 @@ export default function PracticeExamDetailPage() {
 
   const handleSubmit = () => {
     const next: Record<string, boolean> = {};
+    const interpreted: Record<string, string> = {};
     for (const item of mcqItems) {
       if (!item.acceptedAnswer?.trim()) {
         next[item.id] = false;
@@ -249,21 +253,25 @@ export default function PracticeExamDetailPage() {
       next[item.id] = isMcqAnswerCorrect(item, answers[item.id] ?? "");
     }
     for (const slot of writtenSlots) {
-      const response = (answers[slot.id] ?? "").trim();
+      const response = typedAnswerDisplay(answers[slot.id] ?? "").trim();
       const accepted = slot.acceptedAnswer?.trim();
       if (!accepted) {
         next[slot.id] = false;
         continue;
       }
-      next[slot.id] = isAnswerCorrect(response, [accepted]).correct;
+      const graded = isAnswerCorrect(response, [accepted]);
+      next[slot.id] = graded.correct;
+      interpreted[slot.id] = graded.interpretedAnswer;
     }
     setPartResults(next);
+    setInterpretedAnswers(interpreted);
     setSubmitted(true);
   };
 
   const handleTryAgain = () => {
     setSubmitted(false);
     setPartResults({});
+    setInterpretedAnswers({});
   };
 
 
@@ -396,10 +404,17 @@ export default function PracticeExamDetailPage() {
             {!isMcqThenWritten || section === "written" ? (
               <div className="space-y-6">
                 {isMcqThenWritten ? (
-                  <p className="px-1 text-sm text-muted-foreground">
-                    Questions {mcqCount + 1} onward — type your answers in the boxes on each page.
-                  </p>
-                ) : null}
+                  <div className="space-y-2 px-1">
+                    <p className="text-sm text-muted-foreground">
+                      Questions {mcqCount + 1} onward — type your answers in the boxes on each page.
+                    </p>
+                    <WorkingAnswerHint />
+                  </div>
+                ) : (
+                  <div className="px-1">
+                    <WorkingAnswerHint />
+                  </div>
+                )}
                 {partBPages.map((page) => {
                   const pageSlots = writtenSlots.filter((s) => s.pageNumber === page.pageNumber);
                   if (!pageSlots.length) {
@@ -476,6 +491,7 @@ export default function PracticeExamDetailPage() {
                     {writtenSlots.map((slot) => {
                       const correct = partResults[slot.id];
                       const label = shortLabelFromSlotKey(slot.key);
+                      const interpreted = interpretedAnswers[slot.id]?.trim();
                       return (
                         <div
                           key={slot.id}
@@ -495,7 +511,11 @@ export default function PracticeExamDetailPage() {
                               <span className="ml-2 opacity-90">Correct</span>
                             ) : (
                               <span className="ml-2 opacity-90">
-                                Expected{" "}
+                                We read your answer as{" "}
+                                <span className="font-semibold">
+                                  {interpreted || "(nothing found)"}
+                                </span>
+                                . Expected{" "}
                                 <span className="font-semibold">{slot.acceptedAnswer}</span>
                               </span>
                             )}

@@ -298,7 +298,7 @@ export function AdminInlineQuestionEditDialog({
                 />
               </div>
             </>
-          ) : draft.type !== "mcq" ? (
+          ) : (
             <div className="space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <Label className="text-sm">Answer parts</Label>
@@ -346,9 +346,9 @@ export function AdminInlineQuestionEditDialog({
                 </div>
               )}
             </div>
-          ) : null}
+          )}
 
-          {draft.type !== "mcq" && draft.type === "long_answer" ? (
+          {draft.type === "long_answer" ? (
             <div className="space-y-1.5">
               <Label className="text-xs">Marking guidance</Label>
               <Textarea

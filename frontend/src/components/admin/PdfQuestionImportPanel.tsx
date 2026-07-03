@@ -2,7 +2,6 @@ import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   CheckSquare,
-  FileText,
   FileUp,
   Loader2,
   Square,
@@ -11,6 +10,8 @@ import {
 } from "lucide-react";
 import { apiFetchAdmin, ApiError } from "@/lib/api";
 import { API_PATHS } from "@/lib/constants";
+import { PdfImportQuestionRow } from "@/components/admin/PdfImportQuestionRow";
+import { PdfImportScrollViewer } from "@/components/admin/PdfImportScrollViewer";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -22,23 +23,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { PdfPageCropEditor } from "@/components/admin/PdfPageCropEditor";
-import { RichQuestionContent } from "@/components/quiz/RichQuestionContent";
-import { parseAnswerKeyDocument } from "@/lib/createPdfAnswerImport";
+import { publishQuestionDraftsToPracticeBank } from "@/lib/createAssessmentDraft";
 import {
-  publishQuestionDraftsToPracticeBank,
-} from "@/lib/createAssessmentDraft";
-import {
-  applyAnswerTextToRows,
-  applySharedPageCrop,
-  extractAnswerPdfText,
+  applyTsvToExamImportRows,
   importRowToQuestionDraft,
   parseExamQuestionPdf,
+  type ExamImportPart,
   type ExamImportRow,
+  type QuestionImportMatchReport,
 } from "@/lib/examPdfImport";
+import { getExamImportTsvDiagnostics } from "@/lib/practiceExamImport";
+import { readImportTextFile } from "@/lib/readImportTextFile";
+import { FULL_CROP, type CropRect } from "@/lib/pdfImageCrop";
 import { purgeCustomQuestionsForSubject } from "@/lib/questionBankCache";
 import { inferPdfQuestionTopic, topicLabelsForSubject } from "@/lib/pdfTopicInfer";
-import type { PdfSplitMode } from "@/lib/pdfQuestionImport";
+import { loadExamPdfPages } from "@/lib/practiceExamImport";
+import type { PracticeExamPage } from "@/lib/practiceExamTypes";
 import { cn } from "@/lib/utils";
 
 type SubjectOption = { id: string; name: string };
@@ -49,13 +49,20 @@ type Props = {
   onImported?: () => void | Promise<void>;
 };
 
+type CropTarget =
+  | { kind: "row"; rowId: string }
+  | { kind: "part"; rowId: string; partKey: string };
+
 function rowLabel(row: ExamImportRow): string {
-  if (row.questionNumber != null) return `Question ${row.questionNumber}`;
+  const global = row.questionNumber;
+  const local = row.examLocalNumber;
+  if (global != null && local != null && local !== global) {
+    return `Question ${global} (Section Q${local})`;
+  }
+  if (global != null) return `Question ${global}`;
+  if (local != null) return `Question ${local}`;
   if (row.pageNumbers && row.pageNumbers.length > 1) {
     return `Pages ${row.pageNumbers.join(", ")}`;
-  }
-  if (row.pageQuestionCount && row.pageQuestionCount > 1) {
-    return `Page ${row.pageNumber} · Q ${row.pageQuestionIndex}/${row.pageQuestionCount}`;
   }
   return `Page ${row.pageNumber}`;
 }
@@ -66,7 +73,7 @@ export function PdfQuestionImportPanel({
   onImported,
 }: Props) {
   const questionFileRef = useRef<HTMLInputElement | null>(null);
-  const answerFileRef = useRef<HTMLInputElement | null>(null);
+  const tsvFileRef = useRef<HTMLInputElement | null>(null);
 
   const demoSubjectId = subjects.find((s) => s.id === "demo")?.id;
   const initialSubject =
@@ -77,18 +84,23 @@ export function PdfQuestionImportPanel({
 
   const [subjectId, setSubjectId] = useState(initialSubject);
   const [defaultTopic, setDefaultTopic] = useState("General");
-  const [splitMode, setSplitMode] = useState<PdfSplitMode>("per_question");
   const [parsing, setParsing] = useState(false);
   const [parseProgress, setParseProgress] = useState("");
   const [parseErrors, setParseErrors] = useState<string[]>([]);
   const [parseSource, setParseSource] = useState<"nodent" | "generic" | null>(null);
+  const [pages, setPages] = useState<PracticeExamPage[]>([]);
+  /** PDF-only: page numbers + images. No question wording. */
+  const [pdfSkeletonRows, setPdfSkeletonRows] = useState<ExamImportRow[]>([]);
   const [rows, setRows] = useState<ExamImportRow[]>([]);
-  const [answerPdfName, setAnswerPdfName] = useState("");
-  const [answerPaste, setAnswerPaste] = useState("");
-  const [showAnswerPaste, setShowAnswerPaste] = useState(true);
-  const [croppingRowId, setCroppingRowId] = useState<string | null>(null);
+  const [tsvText, setTsvText] = useState("");
+  const [tsvSourceName, setTsvSourceName] = useState<string | null>(null);
+  const [tsvParseHint, setTsvParseHint] = useState<string | null>(null);
+  const [matchReport, setMatchReport] = useState<QuestionImportMatchReport | null>(null);
   const [importing, setImporting] = useState(false);
   const [clearing, setClearing] = useState(false);
+  const [cropTarget, setCropTarget] = useState<CropTarget | null>(null);
+  const [cropPageNumber, setCropPageNumber] = useState<number | null>(null);
+  const [cropRect, setCropRect] = useState<CropRect>(FULL_CROP);
 
   const topicOptions = useMemo(() => {
     const labels = topicLabelsForSubject(subjectId);
@@ -104,48 +116,170 @@ export function PdfQuestionImportPanel({
   };
 
   const updateRow = (id: string, patch: Partial<ExamImportRow>) => {
+    setPdfSkeletonRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  };
+
+  const updatePart = (rowId: string, partKey: string, patch: Partial<ExamImportPart>) => {
+    setPdfSkeletonRows((prev) =>
+      prev.map((r) => {
+        if (r.id !== rowId) return r;
+        return {
+          ...r,
+          parts: r.parts.map((p) =>
+            p.key.trim().toLowerCase() === partKey.trim().toLowerCase()
+              ? { ...p, ...patch }
+              : p,
+          ),
+        };
+      }),
+    );
+    setRows((prev) =>
+      prev.map((r) => {
+        if (r.id !== rowId) return r;
+        return {
+          ...r,
+          parts: r.parts.map((p) =>
+            p.key.trim().toLowerCase() === partKey.trim().toLowerCase()
+              ? { ...p, ...patch }
+              : p,
+          ),
+        };
+      }),
+    );
+  };
+
+  const mergeTsvIntoRows = (
+    skeleton: ExamImportRow[],
+    text: string,
+    showToast = false,
+  ): boolean => {
+    if (!text.trim()) {
+      setRows(skeleton);
+      setMatchReport(null);
+      setTsvParseHint(null);
+      return true;
+    }
+    const { rows: merged, report } = applyTsvToExamImportRows(skeleton, text);
+    setRows(merged);
+    setMatchReport(report);
+
+    if (report.matchedQuestions > 0) {
+      setTsvParseHint(null);
+    } else {
+      setTsvParseHint(getExamImportTsvDiagnostics(text).hint ?? "Could not parse TSV.");
+    }
+
+    if (text.trim() && !report.matchedQuestions) {
+      if (showToast) {
+        const diag = getExamImportTsvDiagnostics(text);
+        toast.error(diag.hint ?? "Could not parse TSV.");
+      }
+      return false;
+    }
+
+    if (showToast) {
+      const filled = merged.filter((r) =>
+        r.type === "mcq"
+          ? Boolean(r.correctAnswer.trim())
+          : r.parts.some((p) => p.acceptedAnswer.trim()) || Boolean(r.question.trim()),
+      ).length;
+      const pdfNote =
+        report.pdfQuestions > 0
+          ? ` · ${filled}/${report.pdfQuestions} have TSV wording`
+          : "";
+      const awaitingNote =
+        report.awaitingTsv > 0
+          ? ` · ${report.awaitingTsv} still need TSV rows`
+          : "";
+      toast.success(
+        `TSV: ${report.matchedQuestions} question(s) parsed${pdfNote}${awaitingNote}`,
+      );
+    }
+    return true;
+  };
+
+  const handleTsvChange = (text: string) => {
+    setTsvText(text);
+    setTsvSourceName(null);
+    mergeTsvIntoRows(pdfSkeletonRows, text, false);
+  };
+
+  const loadTsvFile = async (file: File) => {
+    try {
+      const text = await readImportTextFile(file);
+      setTsvText(text);
+      setTsvSourceName(file.name);
+      mergeTsvIntoRows(pdfSkeletonRows, text, true);
+    } catch {
+      toast.error(`Could not read "${file.name}".`);
+    }
   };
 
   const processQuestionPdf = async (file: File) => {
     if (
       rows.length > 0 &&
-      !window.confirm(
-        `Replace ${rows.length} question(s) in the editor with a fresh parse of "${file.name}"?`,
-      )
+      !window.confirm(`Replace ${rows.length} parsed question(s) with "${file.name}"?`)
     ) {
       return;
     }
     setParsing(true);
-    setParseProgress("Reading question PDF…");
+    setParseProgress("Reading PDF…");
+    setPdfSkeletonRows([]);
     setRows([]);
+    setPages([]);
     setParseErrors([]);
     setParseSource(null);
-    setAnswerPdfName("");
-    setAnswerPaste("");
+    setMatchReport(null);
+    setCropTarget(null);
+    setCropPageNumber(null);
+    const tsvSnapshot = tsvText;
     try {
-      const { rows: parsed, errors, source } = await parseExamQuestionPdf(file, {
-        splitMode,
-        onProgress: (done, total) => {
-          setParseProgress(`Scanning page ${done + 1} of ${total}…`);
-        },
-      });
-      setRows(parsed);
-      setParseErrors(errors);
-      setParseSource(source);
-      if (!parsed.length) {
+      const [parsedResult, loadedPages] = await Promise.all([
+        parseExamQuestionPdf(file, {
+          skeletonOnly: true,
+          onProgress: (done, total) => {
+            setParseProgress(`Mapping questions… page ${done + 1} of ${total}`);
+          },
+        }),
+        loadExamPdfPages(file, (done, total) => {
+          if (done === 0 || done === total) {
+            setParseProgress(`Rendering pages… ${done}/${total}`);
+          }
+        }),
+      ]);
+
+      const skeleton = parsedResult.rows.map((row) => ({
+        ...row,
+        question: "",
+        parts: [],
+        imagePageNumber: row.pageNumber,
+        sourceImageDataUrl: row.sourceImageDataUrl ?? row.imageDataUrl,
+      }));
+
+      setPages(loadedPages);
+      setPdfSkeletonRows(skeleton);
+      setParseErrors(parsedResult.errors);
+      setParseSource(parsedResult.source);
+
+      if (!skeleton.length && !tsvSnapshot.trim()) {
         toast.error(
-          errors[0] ??
-            "No questions found. Try a different split mode or check the PDF format.",
+          parsedResult.errors[0] ??
+            "No question headers found in PDF. Paste a TSV to build questions.",
           { duration: 10000 },
         );
         return;
       }
-      toast.success(
-        `Found ${parsed.length} question(s)${source === "nodent" ? " (NODENT metadata)" : ""}.`,
-      );
-      if (errors.length) {
-        toast.message(`${errors.length} page warning(s) — see details below.`);
+
+      if (tsvSnapshot.trim()) {
+        mergeTsvIntoRows(skeleton, tsvSnapshot, true);
+      } else {
+        setRows(skeleton);
+        toast.success(
+          skeleton.length
+            ? `Mapped ${skeleton.length} question slot(s). Paste TSV for wording + answers.`
+            : "Paste your questions TSV below.",
+        );
       }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not read question PDF.");
@@ -155,66 +289,92 @@ export function PdfQuestionImportPanel({
     }
   };
 
-  const applyAnswerText = (text: string, source: string) => {
-    if (!rows.length) {
-      toast.error("Import the question PDF first.");
+  const applyTsv = () => {
+    if (!tsvText.trim()) {
+      toast.error("Paste TSV first.");
       return;
     }
-    const updated = applyAnswerTextToRows(rows, text);
-    const doc = parseAnswerKeyDocument(text);
-    const filled = updated.filter((r) =>
-      r.type === "mcq"
-        ? Boolean(r.correctAnswer)
-        : r.parts.some((p) => p.acceptedAnswer.trim()),
-    ).length;
-    setRows(updated);
-    if (!filled) {
-      toast.error(`Could not parse answers from ${source}. Use the Question 1 / 1a. format.`);
-      return;
-    }
-    const detail = updated
-      .map((r, index) => {
-        const qNum = r.questionNumber ?? index + 1;
-        const parsedCount = doc.get(qNum)?.parts.length ?? 0;
-        const filledCount = r.parts.filter((p) => p.acceptedAnswer.trim()).length;
-        if (r.type === "mcq" && r.correctAnswer) return `Q${qNum}: MCQ`;
-        if (!filledCount) return null;
-        return parsedCount
-          ? `Q${qNum}: ${filledCount}/${parsedCount}`
-          : `Q${qNum}: ${filledCount}`;
-      })
-      .filter(Boolean)
-      .join(" · ");
-    toast.success(`Answers applied (${source}) — ${detail || `${filled} question(s)`}`);
+    mergeTsvIntoRows(pdfSkeletonRows, tsvText, true);
   };
 
-  const processAnswerPdf = async (file: File) => {
-    if (!rows.length) {
-      toast.error("Import the question PDF first.");
-      return;
+  const cropTargetLabel = useMemo(() => {
+    if (!cropTarget) return null;
+    const row = rows.find((r) => r.id === cropTarget.rowId);
+    if (!row) return null;
+    const base = rowLabel(row);
+    if (cropTarget.kind === "part") {
+      const part = row.parts.find(
+        (p) => p.key.trim().toLowerCase() === cropTarget.partKey.trim().toLowerCase(),
+      );
+      return part ? `${base} — part ${part.key}` : base;
     }
-    setParsing(true);
-    setParseProgress("Reading answer PDF…");
-    setAnswerPdfName(file.name);
-    try {
-      const text = await extractAnswerPdfText(file, (done, total) => {
-        setParseProgress(`Answer PDF page ${done + 1} of ${total}…`);
+    return row.parts.length >= 2 ? `${base} — shared figure` : base;
+  }, [cropTarget, rows]);
+
+  const resolveCropPageNumber = (target: CropTarget): number => {
+    const row = rows.find((r) => r.id === target.rowId);
+    if (!row) return pages[0]?.pageNumber ?? 1;
+    if (target.kind === "part") {
+      const part = row.parts.find(
+        (p) => p.key.trim().toLowerCase() === target.partKey.trim().toLowerCase(),
+      );
+      return part?.imagePageNumber ?? row.imagePageNumber ?? row.pageNumber ?? 1;
+    }
+    return row.imagePageNumber ?? row.pageNumber ?? 1;
+  };
+
+  const startCrop = (target: CropTarget) => {
+    setCropTarget(target);
+    setCropRect(FULL_CROP);
+    setCropPageNumber(resolveCropPageNumber(target));
+    if (target.kind === "row") {
+      updateRow(target.rowId, { cropping: true });
+    } else {
+      updatePart(target.rowId, target.partKey, { cropping: true });
+    }
+  };
+
+  const cancelCrop = () => {
+    if (!cropTarget) return;
+    if (cropTarget.kind === "row") {
+      updateRow(cropTarget.rowId, { cropping: false });
+    } else {
+      updatePart(cropTarget.rowId, cropTarget.partKey, { cropping: false });
+    }
+    setCropTarget(null);
+    setCropPageNumber(null);
+    setCropRect(FULL_CROP);
+  };
+
+  const applyCroppedFigure = (croppedDataUrl: string, pageNumber: number) => {
+    if (!cropTarget) return;
+    const page = pages.find((p) => p.pageNumber === pageNumber);
+    const source = page?.imageDataUrl ?? "";
+
+    if (cropTarget.kind === "row") {
+      updateRow(cropTarget.rowId, {
+        imageDataUrl: croppedDataUrl,
+        sourceImageDataUrl: source,
+        imagePageNumber: pageNumber,
+        crop: FULL_CROP,
+        cropApplied: true,
+        cropping: false,
+        useImage: true,
       });
-      applyAnswerText(text, file.name);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not read answer PDF.");
-    } finally {
-      setParsing(false);
-      setParseProgress("");
+    } else {
+      updatePart(cropTarget.rowId, cropTarget.partKey, {
+        imageDataUrl: croppedDataUrl,
+        sourceImageDataUrl: source,
+        imagePageNumber: pageNumber,
+        crop: FULL_CROP,
+        cropApplied: true,
+        cropping: false,
+      });
     }
-  };
-
-  const applyCrop = (row: ExamImportRow, cropped: string) => {
-    const urls = row.imageDataUrls?.length
-      ? row.imageDataUrls.map((url, idx) => (idx === 0 ? cropped : url))
-      : undefined;
-    setRows((prev) => applySharedPageCrop(prev, row, cropped, urls));
-    toast.success(`Crop applied for ${rowLabel(row)}.`);
+    setCropTarget(null);
+    setCropPageNumber(null);
+    setCropRect(FULL_CROP);
+    toast.success("Figure attached.");
   };
 
   const clearSubjectQuestions = async () => {
@@ -226,10 +386,7 @@ export function PdfQuestionImportPanel({
     try {
       const res = await apiFetchAdmin<{ deleted: number }>(
         API_PATHS.admin.questionsDeleteBySubject,
-        {
-          method: "POST",
-          body: JSON.stringify({ subjectId }),
-        },
+        { method: "POST", body: JSON.stringify({ subjectId }) },
       );
       purgeCustomQuestionsForSubject(subjectId);
       toast.success(`Removed ${res.deleted ?? 0} question(s) from ${subjectId}.`);
@@ -252,20 +409,17 @@ export function PdfQuestionImportPanel({
       return;
     }
 
-    const mcqIncomplete = chosen.filter(
-      (r) =>
-        r.type === "mcq" &&
-        (r.mcqOptions.length < 4 ||
-          r.mcqOptions.some((o) => !o.trim()) ||
-          !r.correctAnswer.trim()),
+    const missingAnswers = chosen.filter((r) =>
+      r.type === "mcq"
+        ? !r.correctAnswer.trim()
+        : !r.parts.some((p) => p.acceptedAnswer.trim()),
     );
-    if (mcqIncomplete.length) {
-      toast.error("MCQ rows need all four options filled and a correct answer.");
+    if (missingAnswers.length) {
+      toast.error(`${missingAnswers.length} selected question(s) still missing TSV answers.`);
       return;
     }
 
     setImporting(true);
-    const importedIds: string[] = [];
     try {
       const drafts = chosen.map((row) => {
         const topic =
@@ -280,38 +434,22 @@ export function PdfQuestionImportPanel({
       );
 
       if (result.errors.length) {
-        const failedIndices = new Set(result.errors.map((e) => e.index));
-        chosen.forEach((row, index) => {
-          if (!failedIndices.has(index)) importedIds.push(row.id);
-        });
         toast.error(
           result.imported > 0
-            ? `Imported ${result.imported}; ${result.errors.length} failed — failed rows remain in the list.`
+            ? `Imported ${result.imported}; ${result.errors.length} failed.`
             : result.errors[0]?.message ?? "Import failed.",
           { duration: 10000 },
         );
       } else if (result.imported === 0 && result.skipped > 0) {
-        toast.error(
-          `No new questions imported — ${result.skipped} duplicate(s) already in "${subjectId}".`,
-          { duration: 12000 },
-        );
+        toast.error(`No new questions — ${result.skipped} duplicate(s) in "${subjectId}".`);
       } else if (result.imported === 0) {
         toast.error("No questions were imported.");
-      } else if (result.skipped > 0) {
-        toast.success(
-          `Imported ${result.imported} question(s) into "${subjectId}" (${result.skipped} duplicate(s) skipped). Each appears separately in practice.`,
-        );
-        importedIds.push(...chosen.map((r) => r.id));
       } else {
         toast.success(
-          `Imported ${result.imported} question(s) into "${subjectId}". Each appears separately in practice.`,
+          `Imported ${result.imported} question(s) into "${subjectId}" (${result.skipped} duplicate(s) skipped).`,
         );
-        importedIds.push(...chosen.map((r) => r.id));
-      }
-
-      if (importedIds.length) {
-        const removed = new Set(importedIds);
-        setRows((prev) => prev.filter((r) => !removed.has(r.id)));
+        const importedIds = new Set(chosen.map((r) => r.id));
+        setRows((prev) => prev.filter((r) => !importedIds.has(r.id)));
         purgeCustomQuestionsForSubject(subjectId);
         await onImported?.();
       }
@@ -320,25 +458,16 @@ export function PdfQuestionImportPanel({
     }
   };
 
-  const splitModeHint = useMemo(() => {
-    switch (splitMode) {
-      case "per_question":
-        return "Best for full exams — groups pages by Question 1, Question 2, etc.";
-      case "by_marker":
-        return "Splits each page when multiple question headers appear on one page.";
-      default:
-        return "One question per PDF page.";
-    }
-  }, [splitMode]);
+  const isRowIncomplete = (row: ExamImportRow) =>
+    matchReport?.incompleteQuestions.some((q) => q.question === row.questionNumber);
 
   return (
     <Card className="surface-card">
       <CardHeader>
         <CardTitle className="font-display text-lg">Import questions</CardTitle>
         <p className="text-sm text-muted-foreground">
-          Same workflow as exam PDF import: upload the paper, optionally load answers, crop
-          figures, then import. Each question is saved separately in the practice bank (not as a
-          grouped exam).
+          Upload your TSV (Question_ID · Question · Answer) or paste tab-separated rows.
+          Upload the PDF separately for figure cropping.
         </p>
       </CardHeader>
       <CardContent className="space-y-5">
@@ -375,6 +504,77 @@ export function PdfQuestionImportPanel({
           </div>
         </div>
 
+        <div className="space-y-2 rounded-xl border border-emerald-200 bg-emerald-50/40 p-4">
+          <Label className="text-sm font-semibold">Questions + answers (TSV)</Label>
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            Supports <strong>Question_ID · Question · Answer</strong> (e.g. A1a, B_M1_Q2b) or{" "}
+            <strong>question · part · question_text · answer · marks</strong>. Upload the exam PDF
+            below to attach page images for cropping.
+          </p>
+          <Textarea
+            className="min-h-[9rem] font-mono text-xs"
+            placeholder={"question\tpart\tquestion_text\tanswer\tmarks\n1\tstem\t…\t\t0\n1\ta\t…\tanswer\t1"}
+            value={tsvText}
+            onChange={(e) => handleTsvChange(e.target.value)}
+          />
+          {tsvSourceName ? (
+            <p className="text-[11px] font-medium text-emerald-800">
+              Loaded file: {tsvSourceName}
+              {tsvText.trim() ? ` · ${tsvText.trim().split(/\r?\n/).filter(Boolean).length} lines` : ""}
+            </p>
+          ) : tsvText.trim() ? (
+            <p className="text-[11px] text-muted-foreground">TSV pasted · edit below anytime</p>
+          ) : null}
+          <input
+            ref={tsvFileRef}
+            type="file"
+            accept=".tsv,.txt,.csv,text/tab-separated-values,text/csv"
+            className="sr-only"
+            disabled={parsing || importing}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void loadTsvFile(f);
+              e.currentTarget.value = "";
+            }}
+          />
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={parsing || importing}
+              onClick={() => tsvFileRef.current?.click()}
+            >
+              {tsvSourceName ? "Replace TSV file" : "Upload TSV file"}
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={!tsvText.trim()}
+              onClick={applyTsv}
+            >
+              Reload from TSV
+            </Button>
+          </div>
+          {tsvParseHint ? (
+            <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-900">
+              {tsvParseHint}
+            </p>
+          ) : null}
+          {matchReport && matchReport.matchedQuestions > 0 ? (
+            <p className="text-[11px] text-emerald-900">
+              {matchReport.tsvRows} TSV row(s) · {matchReport.matchedQuestions} question(s) in TSV
+              {matchReport.pdfQuestions > 0
+                ? ` · ${matchReport.pdfQuestions} slots from PDF · ${matchReport.awaitingTsv} awaiting TSV`
+                : null}
+              {matchReport.incompleteQuestions.length
+                ? ` · ${matchReport.incompleteQuestions.length} incomplete`
+                : ""}
+            </p>
+          ) : null}
+        </div>
+
         <input
           ref={questionFileRef}
           type="file"
@@ -387,125 +587,35 @@ export function PdfQuestionImportPanel({
             e.currentTarget.value = "";
           }}
         />
-        <input
-          ref={answerFileRef}
-          type="file"
-          accept="application/pdf,.pdf"
-          className="sr-only"
+
+        <button
+          type="button"
           disabled={parsing || importing}
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) void processAnswerPdf(f);
-            e.currentTarget.value = "";
-          }}
-        />
+          onClick={() => questionFileRef.current?.click()}
+          className={cn(
+            "flex min-h-[8rem] w-full flex-col items-center justify-center rounded-xl border-2 border-dashed p-5 text-center transition-colors",
+            rows.length
+              ? "border-brand bg-brand/5"
+              : "border-brand/40 bg-white hover:border-brand hover:bg-brand/[0.04]",
+          )}
+        >
+          {parsing ? (
+            <Loader2 className="size-8 animate-spin text-brand" />
+          ) : (
+            <FileUp className="size-8 text-brand" />
+          )}
+          <p className="mt-2 text-sm font-semibold">Question PDF</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {pages.length
+              ? `${pdfSkeletonRows.length} slot(s) · ${pages.length} page(s) — figures only`
+              : "Optional — for cropping figures (no text extracted)"}
+          </p>
+          {parsing && parseProgress ? (
+            <p className="mt-2 text-xs text-muted-foreground">{parseProgress}</p>
+          ) : null}
+        </button>
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <button
-            type="button"
-            disabled={parsing || importing}
-            onClick={() => questionFileRef.current?.click()}
-            className={cn(
-              "group flex min-h-[9rem] flex-col items-center justify-center rounded-xl border-2 border-dashed p-5 text-center transition-colors",
-              rows.length
-                ? "border-brand bg-brand/5"
-                : "border-brand/40 bg-white hover:border-brand hover:bg-brand/[0.04]",
-            )}
-          >
-            {parsing && !answerPdfName ? (
-              <Loader2 className="size-8 animate-spin text-brand" />
-            ) : (
-              <FileUp className="size-8 text-brand" />
-            )}
-            <p className="mt-2 text-sm font-semibold">Question PDF</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {rows.length
-                ? `${rows.length} question(s) parsed — click to replace`
-                : "Exam paper or NODENT PDF"}
-            </p>
-          </button>
-
-          <button
-            type="button"
-            disabled={parsing || importing || !rows.length}
-            onClick={() => answerFileRef.current?.click()}
-            className={cn(
-              "group flex min-h-[9rem] flex-col items-center justify-center rounded-xl border-2 border-dashed p-5 text-center transition-colors",
-              !rows.length && "cursor-not-allowed opacity-50",
-              answerPdfName
-                ? "border-emerald-500 bg-emerald-50/50"
-                : "border-black/15 bg-white hover:border-emerald-400",
-            )}
-          >
-            {parsing && answerPdfName ? (
-              <Loader2 className="size-8 animate-spin text-emerald-600" />
-            ) : (
-              <FileText className="size-8 text-emerald-600" />
-            )}
-            <p className="mt-2 text-sm font-semibold">Answer PDF (optional)</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {answerPdfName ? answerPdfName : "Or paste answers below"}
-            </p>
-          </button>
-        </div>
-
-        <div className="flex flex-wrap items-end gap-4 rounded-xl border border-black/8 bg-white px-4 py-3">
-          <div className="min-w-[14rem] flex-1 space-y-1.5">
-            <Label className="text-xs">How to split questions</Label>
-            <Select
-              value={splitMode}
-              onValueChange={(v) => v && setSplitMode(v as PdfSplitMode)}
-              disabled={parsing || importing || rows.length > 0}
-            >
-              <SelectTrigger className="bg-[#fafbfc]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="per_question">By question number (recommended)</SelectItem>
-                <SelectItem value="by_marker">Multiple questions per page</SelectItem>
-                <SelectItem value="per_page">One per page</SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-[11px] text-muted-foreground">{splitModeHint}</p>
-          </div>
-          {parsing ? <p className="text-sm text-muted-foreground">{parseProgress}</p> : null}
-        </div>
-
-        {rows.length > 0 ? (
-          <div className="space-y-2 rounded-xl border border-emerald-200 bg-emerald-50/40 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <Label className="text-sm font-semibold">Answer key (paste recommended)</Label>
-              <button
-                type="button"
-                className="text-[11px] text-muted-foreground underline"
-                onClick={() => setShowAnswerPaste((v) => !v)}
-              >
-                {showAnswerPaste ? "Hide" : "Show"} paste box
-              </button>
-            </div>
-            {showAnswerPaste ? (
-              <>
-                <Textarea
-                  className="min-h-[8rem] font-mono text-xs"
-                  placeholder={`Question 1\n1a. 2\n1b.i. 11.42\n...\n\nQuestion 2\n2a. ...`}
-                  value={answerPaste}
-                  onChange={(e) => setAnswerPaste(e.target.value)}
-                />
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  disabled={!answerPaste.trim()}
-                  onClick={() => applyAnswerText(answerPaste, "paste")}
-                >
-                  Apply pasted answers
-                </Button>
-              </>
-            ) : null}
-          </div>
-        ) : null}
-
-        {parseErrors.length > 0 && rows.length === 0 ? (
+        {parseErrors.length > 0 && pdfSkeletonRows.length === 0 && !tsvText.trim() ? (
           <div className="rounded-lg border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm text-amber-950">
             <p className="font-medium">Parse warnings</p>
             <ul className="mt-2 list-inside list-disc space-y-1 text-xs">
@@ -516,11 +626,17 @@ export function PdfQuestionImportPanel({
           </div>
         ) : null}
 
-        {parseSource === "generic" && rows.length > 0 ? (
-          <p className="rounded-lg border border-blue-200 bg-blue-50/80 px-4 py-2 text-xs text-blue-950">
-            Parsed as a generic exam PDF — select questions, crop figures, then import to the
-            practice bank.
-          </p>
+        {matchReport?.unmatchedTsv.length ? (
+          <div className="rounded-lg border border-amber-200 bg-amber-50/80 px-4 py-3 text-xs text-amber-950">
+            <p className="font-medium">Unmatched TSV rows (no question in PDF)</p>
+            <ul className="mt-2 space-y-1">
+              {matchReport.unmatchedTsv.slice(0, 8).map((u, i) => (
+                <li key={`${u.question}-${u.part}-${i}`}>
+                  Q{u.question || "?"} {u.part}: {u.answer.slice(0, 40)}
+                </li>
+              ))}
+            </ul>
+          </div>
         ) : null}
 
         {rows.length > 0 ? (
@@ -543,14 +659,10 @@ export function PdfQuestionImportPanel({
                   type="button"
                   variant="outline"
                   size="sm"
-                  disabled={clearing || importing || !subjectId}
+                  disabled={clearing || importing}
                   onClick={() => void clearSubjectQuestions()}
                 >
-                  {clearing ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <Trash2 className="size-4" />
-                  )}
+                  {clearing ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
                   Clear subject
                 </Button>
                 <Button
@@ -571,103 +683,43 @@ export function PdfQuestionImportPanel({
               </div>
             </div>
 
-            {rows.map((row) => (
-              <article
-                key={row.id}
-                className={cn(
-                  "rounded-xl border bg-white p-4 shadow-sm",
-                  row.selected ? "border-brand/30" : "border-black/10 opacity-75",
-                )}
-              >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-2">
-                    <input
-                      type="checkbox"
-                      className="mt-1"
-                      checked={row.selected}
-                      onChange={(e) => updateRow(row.id, { selected: e.target.checked })}
-                    />
-                    <div className="min-w-0 space-y-1">
-                      <p className="text-sm font-semibold">
-                        {rowLabel(row)}
-                        <span className="ml-2 text-xs font-normal text-muted-foreground">
-                          {row.type === "mcq"
-                            ? "MCQ"
-                            : row.parts.length >= 2
-                              ? `${row.parts.length} parts · ${row.marks} marks`
-                              : `${row.marks} mark${row.marks === 1 ? "" : "s"}`}
-                        </span>
-                      </p>
-                      {row.question.trim() ? (
-                        <RichQuestionContent
-                          text={row.question.slice(0, 400)}
-                          className="prose prose-sm max-w-none text-muted-foreground"
-                        />
-                      ) : (
-                        <p className="text-xs italic text-muted-foreground">See figure.</p>
-                      )}
-                      {row.type !== "mcq" && row.parts.some((p) => p.acceptedAnswer.trim()) ? (
-                        <p className="text-[11px] text-emerald-700">
-                          {row.parts.filter((p) => p.acceptedAnswer.trim()).length}/
-                          {row.parts.length} answer
-                          {row.parts.length === 1 ? "" : "s"} loaded
-                        </p>
-                      ) : row.type === "mcq" && row.correctAnswer ? (
-                        <p className="text-[11px] text-emerald-700">
-                          Answer: {row.correctAnswer}
-                        </p>
-                      ) : null}
-                    </div>
-                  </label>
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(300px,38%)]">
+              <div className="max-h-[calc(100vh-10rem)] space-y-3 overflow-y-auto pr-1">
+                {rows.map((row) => (
+                  <PdfImportQuestionRow
+                    key={row.id}
+                    row={row}
+                    rowLabel={rowLabel(row)}
+                    incomplete={isRowIncomplete(row)}
+                    parseSource={parseSource}
+                    cropTarget={cropTarget}
+                    onToggleSelected={(selected) => updateRow(row.id, { selected })}
+                    onPickFigure={startCrop}
+                  />
+                ))}
+              </div>
 
-                  {row.useImage && row.imageDataUrl ? (
-                    <div className="flex shrink-0 flex-col items-end gap-2">
-                      <img
-                        src={row.imageDataUrl}
-                        alt=""
-                        className="max-h-28 max-w-[10rem] rounded-lg border border-black/10 object-contain"
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={croppingRowId === row.id}
-                        onClick={() => {
-                          setCroppingRowId(row.id);
-                          updateRow(row.id, { cropping: true });
-                        }}
-                      >
-                        Crop figure
-                      </Button>
-                    </div>
-                  ) : null}
-                </div>
-
-                {row.cropping && row.useImage ? (
-                  <div className="mt-4 rounded-lg border border-black/10 bg-[#fafbfc] p-2">
-                    <PdfPageCropEditor
-                      imageDataUrl={row.sourceImageDataUrl ?? row.imageDataUrl}
-                      crop={row.crop}
-                      onCropChange={(crop) => updateRow(row.id, { crop })}
-                      onApply={(cropped) => {
-                        setCroppingRowId(null);
-                        applyCrop(row, cropped);
-                        updateRow(row.id, { cropping: false, cropApplied: true });
-                      }}
-                      onCancel={() => {
-                        setCroppingRowId(null);
-                        updateRow(row.id, { cropping: false });
-                      }}
-                    />
-                  </div>
-                ) : null}
-              </article>
-            ))}
+              <div className="sticky top-4 h-[calc(100vh-10rem)] min-h-[20rem] overflow-hidden rounded-xl border border-black/10 bg-white shadow-sm">
+                <PdfImportScrollViewer
+                  pages={pages}
+                  cropActive={Boolean(cropTarget)}
+                  cropTargetLabel={cropTargetLabel}
+                  cropPageNumber={cropPageNumber}
+                  onSelectCropPage={(pageNumber) => {
+                    setCropPageNumber(pageNumber);
+                    setCropRect(FULL_CROP);
+                  }}
+                  crop={cropRect}
+                  onCropChange={setCropRect}
+                  onApplyCrop={applyCroppedFigure}
+                  onCancelCrop={cancelCrop}
+                />
+              </div>
+            </div>
           </div>
         ) : (
           <p className="text-center text-xs text-muted-foreground">
-            Choose split mode, upload a question PDF, then import selected rows into the practice
-            bank.
+            Upload a question PDF, match TSV answers, then pick figures from the PDF on the right.
           </p>
         )}
       </CardContent>

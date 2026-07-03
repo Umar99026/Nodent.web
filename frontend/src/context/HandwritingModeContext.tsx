@@ -6,7 +6,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { readHandwritingMode, writeHandwritingMode, handwritingAllowedForSubject } from "@/lib/handwritingMode";
+import { readHandwritingMode, writeHandwritingMode } from "@/lib/handwritingMode";
 
 type HandwritingModeContextValue = {
   enabled: boolean;
@@ -59,5 +59,6 @@ export function useHandwritingMode(): HandwritingModeContextValue {
 /** True only when handwriting mode is on AND the active subject is demo. */
 export function useHandwritingModeActive(subjectId?: string): boolean {
   const { enabled } = useHandwritingMode();
-  return enabled && handwritingAllowedForSubject(subjectId);
+  void subjectId;
+  return enabled;
 }

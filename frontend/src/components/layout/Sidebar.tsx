@@ -15,7 +15,11 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useHandwritingMode } from "@/context/HandwritingModeContext";
-import { canAccessExamsAndClassFeatures, isAdminUser } from "@/lib/constants";
+import {
+  canAccessTeacherNav,
+  canAccessTrackNav,
+  isAdminUser,
+} from "@/lib/constants";
 import { fetchClassMembership } from "@/lib/teacherClass";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -43,12 +47,14 @@ interface NavItem {
   icon: React.ElementType;
   path: string;
   adminOnly?: boolean;
+  teacherOnly?: boolean;
+  studentOnly?: boolean;
 }
 
 const navItems: NavItem[] = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
-  { label: "Track My Study", icon: Clock, path: "/track" },
-  { label: "Teacher", icon: GraduationCap, path: "/teacher", adminOnly: true },
+  { label: "Track My Study", icon: Clock, path: "/track", studentOnly: true },
+  { label: "Teacher", icon: GraduationCap, path: "/teacher", teacherOnly: true },
   { label: "Admin", icon: Shield, path: "/admin", adminOnly: true },
 ];
 
@@ -57,13 +63,8 @@ export function AppSidebar() {
   const location = useLocation();
   const { user, logout, updateAccount, setProfilePhoto } = useAuth();
   const { enabled: handwritingMode, setEnabled: setHandwritingMode } = useHandwritingMode();
-  const handwritingAvailable = /\/(practice|quiz)\/demo(\/|$)/.test(location.pathname);
-
-  useEffect(() => {
-    if (!handwritingAvailable && handwritingMode) {
-      setHandwritingMode(false);
-    }
-  }, [handwritingAvailable, handwritingMode, setHandwritingMode]);
+  // Handwriting mode is a global UI preference (not route-gated).
+  void location;
   const [accountOpen, setAccountOpen] = useState(false);
   const [username, setUsername] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
@@ -102,10 +103,8 @@ export function AppSidebar() {
     setPhotoPreview(user?.profilePhoto ?? null);
   }, [user, accountOpen]);
 
-  const showClassFeatures = canAccessExamsAndClassFeatures(user);
-
   useEffect(() => {
-    if (!user || !showClassFeatures) return;
+    if (!user) return;
     let cancelled = false;
     void fetchClassMembership()
       .then((data) => {
@@ -117,7 +116,7 @@ export function AppSidebar() {
     return () => {
       cancelled = true;
     };
-  }, [user, accountOpen, showClassFeatures]);
+  }, [user, accountOpen]);
 
   const openJoinClass = () => {
     navigate("/join-class");
@@ -207,6 +206,12 @@ export function AppSidebar() {
               if (item.adminOnly && !isAdminUser(user)) {
                 return null;
               }
+              if (item.teacherOnly && !canAccessTeacherNav(user)) {
+                return null;
+              }
+              if (item.studentOnly && !canAccessTrackNav(user)) {
+                return null;
+              }
 
               const isActive = location.pathname.startsWith(item.path);
 
@@ -259,7 +264,6 @@ export function AppSidebar() {
                 </div>
               </div>
               <DropdownMenuSeparator />
-              {handwritingAvailable ? (
               <DropdownMenuCheckboxItem
                 checked={handwritingMode}
                 onCheckedChange={(checked) => setHandwritingMode(checked === true)}
@@ -267,12 +271,7 @@ export function AppSidebar() {
               >
                 <Pencil className="size-4" />
                 <span>Handwriting answers</span>
-                <span className="ml-auto text-[10px] font-medium uppercase tracking-wide text-black/40">
-                  Demo
-                </span>
               </DropdownMenuCheckboxItem>
-              ) : null}
-              {showClassFeatures ? (
               <DropdownMenuItem
                 onClick={openJoinClass}
                 className="cursor-pointer rounded-lg px-3 py-2"
@@ -284,7 +283,6 @@ export function AppSidebar() {
                     : "Join a class"}
                 </span>
               </DropdownMenuItem>
-              ) : null}
               <DropdownMenuItem
                 onClick={() => setAccountOpen(true)}
                 className="cursor-pointer rounded-lg px-3 py-2"
@@ -366,7 +364,6 @@ export function AppSidebar() {
               />
             </div>
 
-            {showClassFeatures ? (
             <div className="space-y-3 rounded-2xl border border-black/10 bg-[#f8fafc] p-4">
               <div>
                 <p className="text-sm font-semibold text-[#0b0f19]">Class</p>
@@ -392,7 +389,6 @@ export function AppSidebar() {
                 {classMembership.enrolled ? "View class" : "Join a class"}
               </Button>
             </div>
-            ) : null}
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">

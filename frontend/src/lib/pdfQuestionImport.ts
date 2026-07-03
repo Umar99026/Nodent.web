@@ -32,6 +32,10 @@ export type PdfParsedQuestion = {
   mcqOptions?: string[];
   mcqCorrectAnswer?: string;
   rawText?: string;
+  /** Shared scenario / table intro before part a. */
+  stem?: string;
+  examSection?: string;
+  examLocalNumber?: number;
 };
 
 /** Total marks from a question header, e.g. “Question 5 (6 marks)”. */

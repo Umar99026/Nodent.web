@@ -359,7 +359,7 @@ export function repairCommonMathGlitches(text: string): string {
 }
 
 /** Repair \\left missing its opening parenthesis before dfrac/trig tokens. */
-function repairLeftRightDelimiters(text: string): string {
+export function repairLeftRightDelimiters(text: string): string {
   let out = String(text ?? "");
   out = out.replace(/\\left\\(dfrac|tfrac|frac|sin|cos|tan)/g, "\\left(\\$1");
   out = out.replace(/\\left\s+(\\(?:dfrac|tfrac|frac|sin|cos|tan))/g, "\\left($1");

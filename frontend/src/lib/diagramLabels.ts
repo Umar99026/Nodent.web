@@ -10,11 +10,17 @@ export type OverlayRect = {
 
 export type DiagramLabelPart = OverlayRect & {
   key: string;
+  /** Stable part key for matching placed boxes back to source parts. */
+  sourcePartKey?: string;
   label?: string;
   placeholder?: string;
   marks?: number;
   acceptedAnswer?: string;
   transparentInput?: boolean;
+  /** Optional per-slot figure override (used by some import flows). */
+  slotImageUrl?: string;
+  /** Optional unit suffix/prefix (legacy imports). */
+  unit?: string;
 };
 
 /** Horizontal inline answer boxes for a subquestion (not placed on an image). */
@@ -283,9 +289,9 @@ export function isMeaningfulOverlay(rect: OverlayRect): boolean {
   return rect.overlayW >= 2 && rect.overlayH >= 2;
 }
 
-export function partHasOverlay(
-  part: Partial<OverlayRect> | null | undefined,
-): part is OverlayRect {
+export function partHasOverlay<T extends Partial<OverlayRect>>(
+  part: T | null | undefined,
+): part is T & OverlayRect {
   if (!part) return false;
   return (
     typeof part.overlayX === "number" &&

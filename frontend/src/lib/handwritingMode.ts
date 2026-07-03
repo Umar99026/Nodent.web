@@ -23,9 +23,14 @@ export function usesHandwritingMarking(
   answer: string,
   parts: string[],
   isMultipart: boolean,
+  openAiEligible = false,
 ): boolean {
-  if (!handwritingAllowedForSubject(subjectId)) return false;
-  return collectHandwritingImages(answer, parts, isMultipart).length > 0;
+  void subjectId;
+  void openAiEligible;
+  // Handwriting (canvas) answers are no longer interpreted with AI.
+  // If iPad Scribble converts handwriting to text, it will be graded as normal text.
+  // Canvas-only drawings are stored for review but are not auto-read for marking.
+  return false;
 }
 
 export function handwritingResponseSummary(imageCount: number): string {
@@ -67,5 +72,8 @@ export function writeHandwritingMode(enabled: boolean): void {
 
 /** Handwriting / draw answers are only enabled in the demo subject sandbox. */
 export function handwritingAllowedForSubject(subjectId: string | undefined): boolean {
-  return String(subjectId ?? "").trim().toLowerCase() === "demo";
+  // Allow handwriting mode UI across all subjects.
+  // Note: marking remains text-first (no AI interpretation of drawings).
+  void subjectId;
+  return true;
 }

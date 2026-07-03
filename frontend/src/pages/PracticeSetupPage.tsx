@@ -18,12 +18,13 @@ import {
 import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { TopicPerformanceSelect } from "@/components/practice/TopicPerformanceSelect";
+import { CurriculumOverview } from "@/components/study/CurriculumOverview";
 import { Loader2, BookOpen, ArrowRight, FileText } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { generalMathsPracticeTopicOptions } from "@/lib/generalMathsAreaTopic";
 import { methodsPracticeTopicOptions } from "@/lib/methodsAreaTopic";
 import { specialistMathsPracticeTopicOptions } from "@/lib/specialistMathsAreaTopic";
-import { CurriculumOverview } from "@/components/study/CurriculumOverview";
 import { getTopicOverview } from "@/lib/topicOverviews";
 
 type EnglishSection = "A" | "B" | "C";
@@ -127,6 +128,11 @@ export default function PracticeSetupPage() {
     return ["all", ...fromBank];
   }, [questions, isEnglish, isMethods, isGeneralMaths, isSpecialistMaths]);
 
+  const topicOptions = useMemo(
+    () => availableTopics.filter((t) => t !== "all"),
+    [availableTopics],
+  );
+
   const overviewMarkdown = useMemo(() => {
     if (!subjectId) return null;
     if (isEnglish) {
@@ -212,22 +218,18 @@ export default function PracticeSetupPage() {
                   </Select>
                 </div>
               ) : (
-                <div className="w-full min-w-0 space-y-2 sm:min-w-[260px]">
+                <div className="w-fit min-w-0 space-y-2">
                   <p className="text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                     Topic
                   </p>
-                  <Select value={topic} onValueChange={(v) => setTopic(v ?? "all")}>
-                    <SelectTrigger className="h-11 rounded-xl border-brand-light/50 bg-brand-light/50 text-[#0b0f19]">
-                      <SelectValue placeholder="Choose topic" />
-                    </SelectTrigger>
-                    <SelectContent alignItemWithTrigger={false} className="max-h-72">
-                      {availableTopics.map((t) => (
-                        <SelectItem key={t} value={t}>
-                          {t === "all" ? "All topics" : t}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <TopicPerformanceSelect
+                    subjectId={subjectId}
+                    value={topic}
+                    onValueChange={setTopic}
+                    topics={topicOptions}
+                    includeAllOption
+                    placeholder="Choose topic"
+                  />
                 </div>
               )}
 

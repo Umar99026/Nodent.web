@@ -9,16 +9,18 @@ import {
   requestHandwritingMark,
   requestSmartMark,
   resolveAiMarking,
+  qualifiesForOpenAiHandwriting,
 } from "@/lib/questionAiMarking";
 import {
   collectFullQuestionStimulus,
-  cleanAcceptedPartAnswer,
   displayMarks,
+  formatSinglePartLabel,
   formatPartDescriptor,
+  gradeMultipartAnswers,
   hasVisibleStimulus,
   marksEarnedFromPartResults,
+  multipartAllCorrect,
   normalizePartKey,
-  normalizeMultipartAcceptedAnswers,
   partSubmitLabel,
   resolvePartMarks,
   resolveMultipartPartDisplay,
@@ -42,7 +44,7 @@ import { isExamPaperLayoutSubject } from "@/lib/examPaperLayout";
 import { RichQuestionContent } from "@/components/quiz/RichQuestionContent";
 import { useHandwritingModeActive } from "@/context/HandwritingModeContext";
 import { hasAnswerContent, usesHandwritingMarking } from "@/lib/handwritingMode";
-import { isDiagramLabelQuestion, partHasOverlay, partUsesFigureLabels, partUsesInlineInputs, inlineInputsForPart, slotIndexForPartOverlay, slotsForPart, acceptedSynonyms, expectedAnswersForQuestionSlots, type DiagramLabelPart, type PartFigureLabelSource } from "@/lib/diagramLabels";
+import { isDiagramLabelQuestion, partHasOverlay, partUsesFigureLabels, partUsesInlineInputs, inlineInputsForPart, slotIndexForPartOverlay, slotsForPart, expectedAnswersForQuestionSlots, type DiagramLabelPart, type PartFigureLabelSource } from "@/lib/diagramLabels";
 import { handwritingMarkUserError } from "@/lib/userFacingErrors";
 import { CheckCircle2, XCircle, Send, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -50,6 +52,7 @@ import {
   AiMarkingFeedbackPanel,
   AiMarkingPartFeedback,
 } from "@/components/quiz/AiMarkingFeedbackPanel";
+import { MultipartMarkBreakdown } from "@/components/quiz/MultipartMarkBreakdown";
 import type { SmartMarkResult } from "@/lib/questionAiMarking";
 
 interface ShortQuestionProps {
@@ -103,55 +106,33 @@ function formatExpectedAnswer(value: unknown): string {
   return String(value ?? "");
 }
 
-function gradeMultipartIndividually(
-  parts: string[],
-  acceptedPool: string[],
-  configuredParts: PartFigureLabelSource[] = [],
-) {
-  const slotExpected = expectedAnswersForQuestionSlots(
-    configuredParts,
-    acceptedPool.map((a) => cleanAcceptedPartAnswer(formatExpectedAnswer(a))),
-  );
-  const strictBySlot =
-    configuredParts.some((part) => partUsesInlineInputs(part) || partUsesFigureLabels(part)) ||
-    (slotExpected.some((a) => a.trim()) && slotExpected.length >= parts.length);
-
-  if (strictBySlot && parts.length > 0) {
-    return parts.map((part, idx) => {
-      const expected = slotExpected[idx]?.trim() ?? "";
-      const trimmed = (part ?? "").trim();
-      if (!trimmed) return { correct: false, dpHint: null as number | null };
-      if (!expected) return { correct: false, dpHint: null as number | null };
-      return isAnswerCorrect(trimmed, acceptedSynonyms(expected));
-    });
-  }
-
-  const expandedAccepted = normalizeMultipartAcceptedAnswers(
-    acceptedPool,
-    parts.length,
-  ).map(cleanAcceptedPartAnswer);
-  const byPosition =
-    expandedAccepted.length >= parts.length
-      ? parts.map((part, idx) =>
-          isAnswerCorrect((part ?? "").trim(), acceptedSynonyms(expandedAccepted[idx] ?? "")),
-        )
-      : null;
-  if (byPosition) return byPosition;
-  const partGrades = parts.map((part) => {
-    const trimmed = (part ?? "").trim();
-    if (!trimmed) return { correct: false, dpHint: null as number | null };
-    for (let i = 0; i < expandedAccepted.length; i += 1) {
-      const graded = isAnswerCorrect(trimmed, acceptedSynonyms(expandedAccepted[i] ?? ""));
-      if (graded.correct) {
-        return graded;
+function slotBreakdownLabels(
+  partLabels: string[],
+  partDescriptors: string[],
+  configuredParts: PartFigureLabelSource[],
+): string[] {
+  const labels: string[] = [];
+  partLabels.forEach((label, idx) => {
+    const part = configuredParts[idx];
+    const inline = inlineInputsForPart(part);
+    const descriptor = partDescriptors[idx]?.trim() || label;
+    if (inline.length) {
+      for (const box of inline) {
+        labels.push(box.label?.trim() ? `${descriptor} (${box.label})` : descriptor);
       }
+      return;
     }
-    const fallback = expandedAccepted[0]
-      ? isAnswerCorrect(trimmed, acceptedSynonyms(expandedAccepted[0]))
-      : null;
-    return { correct: false, dpHint: fallback?.dpHint ?? null };
+    if (partUsesFigureLabels(part)) {
+      for (const overlay of part?.labelOverlays ?? []) {
+        labels.push(
+          overlay.label?.trim() ? `${descriptor} (${overlay.label})` : descriptor,
+        );
+      }
+      return;
+    }
+    labels.push(descriptor);
   });
-  return partGrades;
+  return labels;
 }
 
 function detectMultipartLabels(questionText: string): string[] {
@@ -316,6 +297,12 @@ export function ShortQuestion({
     subjectId,
   });
 
+  const openAiHandwritingEligible = qualifiesForOpenAiHandwriting({
+    questionText: question.question,
+    partLabels: partDescriptors,
+    acceptedAnswers: question.acceptedAnswers,
+  });
+
   const useTextArea = useSmartMarking && !isMultipart;
 
   const displayStem =
@@ -373,6 +360,7 @@ export function ShortQuestion({
       answer,
       parts,
       isMultipart,
+      openAiHandwritingEligible,
     );
     let correct = false;
     let nextDpHint: number | null = null;
@@ -380,10 +368,10 @@ export function ShortQuestion({
 
     if (!usesHandwritingAi) {
       if (isMultipart) {
-        const gradedParts = gradeMultipartIndividually(parts, accepted, configuredParts);
+        const gradedParts = gradeMultipartAnswers(parts, accepted, configuredParts);
         partCorrectFlags = gradedParts.map((g) => g.correct);
         setPartResults(partCorrectFlags);
-        correct = partCorrectFlags.every(Boolean);
+        correct = multipartAllCorrect(partCorrectFlags);
         nextDpHint = Math.max(...gradedParts.map((g) => g.dpHint ?? 0)) || null;
       } else {
         setPartResults([]);
@@ -416,15 +404,17 @@ export function ShortQuestion({
           ai ?? buildFallbackHandwritingMark(expectedAnswersForDisplay),
           expectedAnswersForDisplay,
         );
-        finalCorrect = enriched.correct;
-        setAiMark(enriched);
         if (enriched.partResults?.length) {
           partCorrectFlags = parts.map((_, idx) => {
             const hit = enriched.partResults?.find((p) => p.index === idx);
-            return hit ? hit.correct : false;
+            return hit ? hit.correct : (partCorrectFlags[idx] ?? false);
           });
           setPartResults(partCorrectFlags);
         }
+        finalCorrect = isMultipart
+          ? multipartAllCorrect(partCorrectFlags)
+          : enriched.correct;
+        setAiMark(enriched);
       } catch (err) {
         const msg = handwritingMarkUserError(err);
         toast.error(msg);
@@ -458,19 +448,31 @@ export function ShortQuestion({
           }),
         });
         if (ai) {
-          finalCorrect = ai.correct;
           setAiMark(ai);
           if (ai.partResults?.length) {
             partCorrectFlags = parts.map((_, idx) => {
               const hit = ai.partResults?.find((p) => p.index === idx);
-              return hit ? hit.correct : partCorrectFlags[idx] ?? false;
+              return hit ? hit.correct : (partCorrectFlags[idx] ?? false);
             });
             setPartResults(partCorrectFlags);
           }
+          finalCorrect = isMultipart
+            ? multipartAllCorrect(partCorrectFlags)
+            : ai.correct;
         }
       } finally {
         setAiMarking(false);
       }
+    }
+
+    if (isMultipart) {
+      const slotCount = answerSlotCount || partLabels.length;
+      if (partCorrectFlags.length !== slotCount) {
+        const graded = gradeMultipartAnswers(parts, accepted, configuredParts);
+        partCorrectFlags = graded.map((g) => g.correct);
+      }
+      finalCorrect = multipartAllCorrect(partCorrectFlags);
+      setPartResults(partCorrectFlags);
     }
 
     setIsCorrect(finalCorrect);
@@ -584,7 +586,7 @@ export function ShortQuestion({
         ) : null}
         {handwritingMode ? (
           <p className="text-xs text-muted-foreground">
-            Handwriting mode — draw your working and answer. AI will read your full working and mark the final answer.
+            Handwriting mode — draw your answer on the pad.
           </p>
         ) : null}
         {isDiagramLabel ? (
@@ -831,8 +833,8 @@ export function ShortQuestion({
                       onKeyDown={handleKeyDown}
                       className={cn(
                         examPaper && "w-full min-w-0",
-                        submitted && isCorrect && "border-success/60 bg-success/5",
-                        submitted && !isCorrect && "border-danger/60 bg-danger/5",
+                        submitted && partResults[slotBaseIndex] === true && "border-success/60 bg-success/5",
+                        submitted && partResults[slotBaseIndex] === false && "border-danger/60 bg-danger/5",
                       )}
                     />
                   </div>
@@ -850,7 +852,10 @@ export function ShortQuestion({
                     <p className="text-[11px] text-muted-foreground">
                       Correct answer:{" "}
                       <span className="text-[13px] font-semibold text-foreground">
-                        {expectedAnswersForDisplay[slotBaseIndex]}
+                        <RichQuestionContent
+                          text={expectedAnswersForDisplay[slotBaseIndex]}
+                          className="inline prose prose-sm max-w-none prose-p:my-0 [&_p]:inline"
+                        />
                       </span>
                     </p>
                   ) : null}
@@ -935,7 +940,10 @@ export function ShortQuestion({
                 <p className="text-[11px] text-muted-foreground">
                   Correct answer:{" "}
                   <span className="text-[13px] font-semibold text-foreground">
-                    {expectedAnswersForDisplay[0]}
+                    <RichQuestionContent
+                      text={expectedAnswersForDisplay[0]}
+                      className="inline prose prose-sm max-w-none prose-p:my-0 [&_p]:inline"
+                    />
                   </span>
                 </p>
               ) : null}
@@ -956,7 +964,7 @@ export function ShortQuestion({
             {aiMarking
               ? "Marking…"
               : submitted
-                ? isCorrect
+                ? multipartAllCorrect(partResults)
                   ? "All parts correct"
                   : "Submitted"
                 : "Submit all parts"}
@@ -968,10 +976,12 @@ export function ShortQuestion({
           <div
             className={cn(
               "flex items-start gap-3 rounded-lg px-4 py-3 text-sm",
-              isCorrect ? "bg-success/10 text-success" : "bg-danger/10 text-danger",
+              multipartAllCorrect(partResults)
+                ? "bg-success/10 text-success"
+                : "bg-danger/10 text-danger",
             )}
           >
-            {isCorrect ? (
+            {multipartAllCorrect(partResults) ? (
               <>
                 <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
                 <span className="font-medium">All parts correct!</span>
@@ -979,11 +989,20 @@ export function ShortQuestion({
             ) : (
               <>
                 <XCircle className="mt-0.5 size-4 shrink-0" />
-                <span className="font-medium">Some parts need work — check each part above.</span>
+                <span className="font-medium">Some parts need work — see the mark breakdown below.</span>
               </>
             )}
           </div>
         )}
+
+        {submitted && isMultipart ? (
+          <MultipartMarkBreakdown
+            partLabels={slotBreakdownLabels(partLabels, partDescriptors, configuredParts)}
+            partResults={partResults}
+            partMarks={slotMarks.length ? slotMarks : partMarks}
+            expectedAnswers={expectedAnswersForDisplay}
+          />
+        ) : null}
 
         {submitted && !isMultipart && (
           <div

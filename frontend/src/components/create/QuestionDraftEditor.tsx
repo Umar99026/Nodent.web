@@ -44,6 +44,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { InlineInputsEditor } from "@/components/create/InlineInputsEditor";
 import { createInlineInputBox } from "@/lib/diagramLabels";
+import { PasteQuestionAnswers } from "@/components/create/PasteQuestionAnswers";
 
 const QUESTION_TYPES: { value: QuestionDraftType; label: string }[] = [
   { value: "mcq", label: "Multiple Choice" },
@@ -85,7 +86,6 @@ export function QuestionDraftEditor({
   const marks = questionDraftMarks(draft);
   const usesPartMarks =
     (supportsAnswerParts(draft.type) && draft.multipartEnabled) || draft.labelDiagramEnabled;
-  const diagramImage = draft.imageUrls[0] ?? "";
 
   const uploadPartImage = async (file: File, partIndex: number) => {
     if (!file.type.startsWith("image/")) return;

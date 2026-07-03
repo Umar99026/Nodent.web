@@ -5,7 +5,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { lazy, Suspense, type ReactNode } from "react";
 import { StudyTimerProvider } from "@/context/StudyTimerContext";
 import { HandwritingModeProvider } from "@/context/HandwritingModeContext";
-import { isAdminUser, STORAGE_KEYS } from "@/lib/constants";
+import { isAdminUser, canAccessTeacherNav, canAccessTrackNav, STORAGE_KEYS } from "@/lib/constants";
 import LandingPage from "@/pages/LandingPage";
 import FeedbackPage from "@/pages/FeedbackPage";
 
@@ -77,6 +77,26 @@ function AdminOnlyRoute({ children }: { children: ReactNode }) {
 
   const isAdmin = isAdminUser(user);
   if (!isAdmin) return <Navigate to="/dashboard" replace />;
+
+  return <>{children}</>;
+}
+
+function TeacherOnlyRoute({ children }: { children: ReactNode }) {
+  const { user, isLoading } = useAuth();
+
+  if (isLoading && hasStoredAuthToken()) return <LoadingFallback />;
+
+  if (!canAccessTeacherNav(user)) return <Navigate to="/dashboard" replace />;
+
+  return <>{children}</>;
+}
+
+function StudentOnlyRoute({ children }: { children: ReactNode }) {
+  const { user, isLoading } = useAuth();
+
+  if (isLoading && hasStoredAuthToken()) return <LoadingFallback />;
+
+  if (!canAccessTrackNav(user)) return <Navigate to="/dashboard" replace />;
 
   return <>{children}</>;
 }
@@ -252,7 +272,9 @@ function AppRoutes() {
           path="/track"
           element={
             <ProtectedRoute>
-              <TrackStudyPage />
+              <StudentOnlyRoute>
+                <TrackStudyPage />
+              </StudentOnlyRoute>
             </ProtectedRoute>
           }
         />
@@ -261,9 +283,9 @@ function AppRoutes() {
           path="/teacher"
           element={
             <ProtectedRoute>
-              <AdminOnlyRoute>
+              <TeacherOnlyRoute>
                 <TeacherPage />
-              </AdminOnlyRoute>
+              </TeacherOnlyRoute>
             </ProtectedRoute>
           }
         />
@@ -272,9 +294,9 @@ function AppRoutes() {
           path="/teacher/create"
           element={
             <ProtectedRoute>
-              <AdminOnlyRoute>
+              <TeacherOnlyRoute>
                 <CreatePage />
-              </AdminOnlyRoute>
+              </TeacherOnlyRoute>
             </ProtectedRoute>
           }
         />
@@ -285,9 +307,7 @@ function AppRoutes() {
           path="/join-class"
           element={
             <ProtectedRoute>
-              <AdminOnlyRoute>
-                <JoinClassPage />
-              </AdminOnlyRoute>
+              <JoinClassPage />
             </ProtectedRoute>
           }
         />

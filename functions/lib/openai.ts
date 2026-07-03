@@ -3,9 +3,9 @@
  * Server-side only — never expose OPENAI_API_KEY to the browser.
  *
  * Active in production:
- *   - English essay scoring (scoreEnglishResponse)
- *   - Handwriting / drawing marking (markHandwritingAnswer)
- *   - Long-answer text marking (markLongAnswer)
+ *   - English essay scoring (scoreEnglishResponse) — worded responses only
+ *   - Handwriting marking (markHandwritingAnswer) — explain/discuss/prove-style only
+ *   - Long-answer text marking (markLongAnswer) — explain/discuss/prove-style only
  *
  * Admin import helpers (questionGenerationChat, parseQuestionsFromText,
  * fillDraftQuestionAnswers) remain in this module but API routes return 503.

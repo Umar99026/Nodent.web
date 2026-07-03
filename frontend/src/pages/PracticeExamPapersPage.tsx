@@ -25,7 +25,7 @@ export default function PracticeExamPapersPage() {
   const [examMeta, setExamMeta] = useState<PracticeExamListItem[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const examYear = year && isPracticeExamYear(year) ? Number(year) : null;
+  const examYear = year && isPracticeExamYear(year) ? (Number(year) as any) : null;
 
   useEffect(() => {
     if (String(subjectId) === "demo" && !isAdmin) {

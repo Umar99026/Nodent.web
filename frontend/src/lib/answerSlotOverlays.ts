@@ -19,6 +19,9 @@ export type AnswerSlotSource = {
   questionStem?: string;
   /** MCQ option texts when importing exam solutions. */
   mcqOptions?: string[];
+  /** Exam section label from Question_ID TSV (e.g. Section A, Module 2). */
+  examSection?: string;
+  examLocalNumber?: number;
 };
 
 export function overlayPartKey(overlay: DiagramLabelPart): string {

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PdfPageCropEditor } from "@/components/admin/PdfPageCropEditor";
-import { Button } from "@/components/ui/button";
-import { FULL_CROP, type CropRect } from "@/lib/pdfImageCrop";
+import { type CropRect } from "@/lib/pdfImageCrop";
 import type { PdfPageView } from "@/lib/createPdfPageView";
 import { MousePointer2, Scissors } from "lucide-react";
 import { cn } from "@/lib/utils";

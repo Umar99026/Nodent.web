@@ -711,6 +711,10 @@ export function AdminPracticeExamPanel({
 
   const toggleMcqSeparated = (itemId: string) => {
     const item = mcqItems.find((i) => i.id === itemId);
+    if (!item) {
+      toast.error("Could not find that MCQ item.");
+      return;
+    }
     const willSeparate = !item?.mcqButtonsSeparated;
     const qn = item?.questionNumber ?? "?";
     setMcqItems((prev) =>

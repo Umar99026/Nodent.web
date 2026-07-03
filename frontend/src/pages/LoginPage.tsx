@@ -3,19 +3,20 @@ import { Link, useNavigate } from "react-router-dom";
 import { FEEDBACK_PATH } from "@/components/landing/WelcomeFeedbackSection";
 import { useAuth } from "@/context/AuthContext";
 import { ApiError, apiUnreachableMessage } from "@/lib/api";
-import { STORAGE_KEYS } from "@/lib/constants";
+import { STORAGE_KEYS, type AccountRole } from "@/lib/constants";
 import { AuthLayout } from "@/components/layout/AuthLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { passwordPolicyError } from "@/lib/passwordPolicy";
-import { Eye, EyeOff, Loader2, AlertCircle, ArrowLeft } from "lucide-react";
+import { Eye, EyeOff, Loader2, AlertCircle, ArrowLeft, GraduationCap, BookOpen } from "lucide-react";
 
 interface FieldErrors {
   username?: string;
   email?: string;
   password?: string;
+  accountRole?: string;
 }
 
 function validateEmail(email: string): boolean {
@@ -37,6 +38,7 @@ function validateSignup(
   username: string,
   email: string,
   password: string,
+  accountRole: AccountRole | "",
 ): FieldErrors {
   const errors: FieldErrors = {};
   if (!username.trim()) errors.username = "Username is required";
@@ -48,6 +50,9 @@ function validateSignup(
   else {
     const pwErr = passwordPolicyError(password);
     if (pwErr) errors.password = pwErr;
+  }
+  if (accountRole !== "student" && accountRole !== "teacher") {
+    errors.accountRole = "Please choose student or teacher";
   }
   return errors;
 }
@@ -71,6 +76,7 @@ export default function LoginPage() {
   const [signupUsername, setSignupUsername] = useState("");
   const [signupEmail, setSignupEmail] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
+  const [signupRole, setSignupRole] = useState<AccountRole | "">("");
 
   const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
@@ -101,13 +107,24 @@ export default function LoginPage() {
   const handleSignup = async (e: FormEvent) => {
     e.preventDefault();
     setServerError("");
-    const errors = validateSignup(signupUsername, signupEmail, signupPassword);
+    const errors = validateSignup(
+      signupUsername,
+      signupEmail,
+      signupPassword,
+      signupRole,
+    );
     setFieldErrors(errors);
     if (Object.keys(errors).length) return;
+    if (signupRole !== "student" && signupRole !== "teacher") return;
 
     setIsSubmitting(true);
     try {
-      await signup(signupUsername.trim(), signupEmail.trim(), signupPassword);
+      await signup(
+        signupUsername.trim(),
+        signupEmail.trim(),
+        signupPassword,
+        signupRole,
+      );
       navigate(FEEDBACK_PATH, { replace: true });
     } catch (err) {
       if (err instanceof ApiError) {
@@ -281,6 +298,49 @@ export default function LoginPage() {
                 />
                 {fieldErrors.email && (
                   <p className="text-xs text-danger">{fieldErrors.email}</p>
+                )}
+              </div>
+
+              <div className="grid gap-2">
+                <Label>I am a...</Label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setSignupRole("student")}
+                    className={[
+                      "flex min-h-24 flex-col items-center justify-center gap-2 rounded-xl border px-3 py-4 text-center transition-colors",
+                      signupRole === "student"
+                        ? "border-brand bg-brand/10 text-foreground"
+                        : "border-input bg-background text-muted-foreground hover:border-brand/40 hover:bg-muted/40",
+                    ].join(" ")}
+                    aria-pressed={signupRole === "student"}
+                  >
+                    <BookOpen className="size-5" />
+                    <span className="text-sm font-semibold">Student</span>
+                    <span className="text-xs leading-snug">
+                      Practice and track my study
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSignupRole("teacher")}
+                    className={[
+                      "flex min-h-24 flex-col items-center justify-center gap-2 rounded-xl border px-3 py-4 text-center transition-colors",
+                      signupRole === "teacher"
+                        ? "border-brand bg-brand/10 text-foreground"
+                        : "border-input bg-background text-muted-foreground hover:border-brand/40 hover:bg-muted/40",
+                    ].join(" ")}
+                    aria-pressed={signupRole === "teacher"}
+                  >
+                    <GraduationCap className="size-5" />
+                    <span className="text-sm font-semibold">Teacher</span>
+                    <span className="text-xs leading-snug">
+                      Manage my class
+                    </span>
+                  </button>
+                </div>
+                {fieldErrors.accountRole && (
+                  <p className="text-xs text-danger">{fieldErrors.accountRole}</p>
                 )}
               </div>
 

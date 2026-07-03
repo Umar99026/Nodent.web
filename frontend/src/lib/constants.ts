@@ -22,12 +22,37 @@ export const STORAGE_KEYS = {
 // Hardcoded admin credentials (requested).
 export const ADMIN_EMAIL = "nodent.app@gmail.com";
 
+export type AccountRole = "student" | "teacher";
+
 export function isAdminUser(user: { email?: string | null } | null | undefined): boolean {
   const email = String(user?.email ?? "").toLowerCase();
   return !!email && email === ADMIN_EMAIL.toLowerCase();
 }
 
-/** Past-exam browsing and class join — admin-only until public launch. */
+/** Resolved role for nav and route guards. Admin bypasses role; legacy users default to student. */
+export function resolvedAccountRole(
+  user: { email?: string | null; accountRole?: AccountRole | null } | null | undefined,
+): AccountRole | null {
+  if (isAdminUser(user)) return null;
+  if (user?.accountRole === "teacher" || user?.accountRole === "student") {
+    return user.accountRole;
+  }
+  return "student";
+}
+
+export function canAccessTeacherNav(
+  user: { email?: string | null; accountRole?: AccountRole | null } | null | undefined,
+): boolean {
+  return isAdminUser(user) || resolvedAccountRole(user) === "teacher";
+}
+
+export function canAccessTrackNav(
+  user: { email?: string | null; accountRole?: AccountRole | null } | null | undefined,
+): boolean {
+  return isAdminUser(user) || resolvedAccountRole(user) === "student";
+}
+
+/** Past-exam browsing — admin-only until public launch. */
 export function canAccessExamsAndClassFeatures(
   user: { email?: string | null } | null | undefined,
 ): boolean {

@@ -419,7 +419,7 @@ function defaultBoxLayout(index: number): DiagramLabelPart {
 
 /** Assign grid positions to boxes missing coordinates; pad to expectedCount if given. */
 export function finalizeInputBoxes(
-  boxes: DiagramLabelPart[],
+  boxes: InputBoxDraft[],
   expectedCount = 0,
 ): DiagramLabelPart[] {
   const withCoords = boxes.map((box, i) => {
@@ -488,7 +488,7 @@ function parsePartUseImage(fields: Map<string, string>, letter: string): boolean
 function parsePartNeedsInputBoxes(
   fields: Map<string, string>,
   letter: string,
-  boxes: DiagramLabelPart[],
+  boxes: InputBoxDraft[],
 ): boolean {
   if (boxes.length > 0) return true;
   if (boolMetaField(fields.get(`part_${letter}_needs_input_boxes`))) return true;
@@ -498,10 +498,12 @@ function parsePartNeedsInputBoxes(
   return Number.isFinite(count) && count > 0;
 }
 
+type InputBoxDraft = Partial<DiagramLabelPart> & { key: string };
+
 function parsePartInputBoxesFromFields(
   fields: Map<string, string>,
   letter: string,
-): DiagramLabelPart[] {
+): InputBoxDraft[] {
   const prefix = `part_${letter}_box_`;
   const boxIds = new Set<string>();
   for (const key of fields.keys()) {
@@ -518,7 +520,7 @@ function parsePartInputBoxesFromFields(
     return a.localeCompare(b);
   });
 
-  const boxes: DiagramLabelPart[] = [];
+  const boxes: InputBoxDraft[] = [];
   for (const id of sorted) {
     const p = `${prefix}${id}_`;
     const label = fields.get(`${p}label`)?.trim() ?? "";
@@ -530,13 +532,13 @@ function parsePartInputBoxesFromFields(
     const h = Number(fields.get(`${p}h`) ?? 8);
     const marks = Number(fields.get(`${p}marks`));
     if (!label && !answer && !Number.isFinite(x)) continue;
-    const base: DiagramLabelPart = {
+    const base: InputBoxDraft = {
       key: id,
       label: label || id,
       placeholder: fields.get(`${p}placeholder`)?.trim() || "",
       acceptedAnswer: answer,
       marks: Number.isFinite(marks) && marks > 0 ? Math.round(marks) : 1,
-      ...(unit ? ({ unit } as { unit?: string }) : {}),
+      ...(unit ? { unit } : {}),
     };
     if (Number.isFinite(x) && Number.isFinite(y)) {
       boxes.push({
@@ -555,7 +557,7 @@ function parsePartInputBoxesFromFields(
   return boxes;
 }
 
-function parseInputBoxesFromFields(fields: Map<string, string>): DiagramLabelPart[] {
+function parseInputBoxesFromFields(fields: Map<string, string>): InputBoxDraft[] {
   const boxIds = new Set<string>();
   for (const key of fields.keys()) {
     const num = key.match(/^box_(\d+)_/);
@@ -571,7 +573,7 @@ function parseInputBoxesFromFields(fields: Map<string, string>): DiagramLabelPar
     return a.localeCompare(b);
   });
 
-  const boxes: DiagramLabelPart[] = [];
+  const boxes: InputBoxDraft[] = [];
   for (const id of sorted) {
     const prefix = `box_${id}_`;
     const label = fields.get(`${prefix}label`)?.trim() ?? "";
@@ -583,13 +585,13 @@ function parseInputBoxesFromFields(fields: Map<string, string>): DiagramLabelPar
     const h = Number(fields.get(`${prefix}h`) ?? 8);
     const marks = Number(fields.get(`${prefix}marks`));
     if (!label && !answer && !Number.isFinite(x)) continue;
-    const base: DiagramLabelPart = {
+    const base: InputBoxDraft = {
       key: id,
       label: label || id,
       placeholder: fields.get(`${prefix}placeholder`)?.trim() || "",
       acceptedAnswer: answer,
       marks: Number.isFinite(marks) && marks > 0 ? Math.round(marks) : 1,
-      ...(unit ? ({ unit } as { unit?: string }) : {}),
+      ...(unit ? { unit } : {}),
     };
     if (Number.isFinite(x) && Number.isFinite(y)) {
       boxes.push({

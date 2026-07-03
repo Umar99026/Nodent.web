@@ -1,4 +1,9 @@
-import { stripAnswerUnits } from "@/lib/utils";
+import {
+  acceptedSynonyms,
+  expectedAnswersForQuestionSlots,
+  type PartFigureLabelSource,
+} from "@/lib/diagramLabels";
+import { isAnswerCorrect, stripAnswerUnits, type AnswerGradeResult } from "@/lib/utils";
 
 export function displayMarks(marks: number | undefined, type: "mcq" | "short" | "long"): number {
   if (typeof marks === "number" && Number.isFinite(marks) && marks > 0) {
@@ -53,6 +58,42 @@ export type AnswerScoreDetail = {
   marksEarned: number;
   marksTotal: number;
 };
+
+/**
+ * Grade each multipart answer slot strictly by index — never match one part's
+ * accepted answer against another part's response.
+ */
+export function gradeMultipartAnswers(
+  parts: string[],
+  acceptedPool: string[],
+  configuredParts: PartFigureLabelSource[] = [],
+): AnswerGradeResult[] {
+  const cleanedPool = acceptedPool
+    .map((a) => cleanAcceptedPartAnswer(String(a ?? "").trim()))
+    .filter(Boolean);
+
+  const slotExpected = expectedAnswersForQuestionSlots(configuredParts, cleanedPool);
+  const expandedByPosition = normalizeMultipartAcceptedAnswers(
+    acceptedPool.map((a) => String(a ?? "").trim()).filter(Boolean),
+    parts.length,
+  ).map(cleanAcceptedPartAnswer);
+
+  return parts.map((part, idx) => {
+    const trimmed = (part ?? "").trim();
+    if (!trimmed) return { correct: false, dpHint: null, interpretedAnswer: "" };
+
+    const expected = (slotExpected[idx]?.trim() || expandedByPosition[idx]?.trim()) ?? "";
+    if (!expected) return { correct: false, dpHint: null, interpretedAnswer: trimmed };
+
+    return isAnswerCorrect(trimmed, acceptedSynonyms(expected));
+  });
+}
+
+/** Whether every graded multipart slot is correct. */
+export function multipartAllCorrect(partResults: Array<boolean | null | undefined>): boolean {
+  if (!partResults.length) return false;
+  return partResults.every((ok) => ok === true);
+}
 
 /** Sum marks for each correct multipart sub-part. */
 export function marksEarnedFromPartResults(
@@ -367,7 +408,7 @@ export function multipartSharedStem(q: {
   question: string;
   passage?: string;
   imageUrls?: string[];
-  answerParts?: Array<{ label?: string }>;
+  answerParts?: Array<{ label?: string; key?: string }>;
 }): string {
   const parts = q.answerParts?.filter((p) => p?.label?.trim()) ?? [];
   if (parts.length < 2) return stripQuestionNumberPrefix(q.question);

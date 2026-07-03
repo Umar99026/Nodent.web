@@ -430,6 +430,7 @@ export function ExamMcqPageOverlay({
             ? groupDragDraft.optionOverlays
             : null;
         const rect = draftOverlays?.[letter] ?? storedRect;
+        if (!rect) return null;
         const display = mcqButtonDisplayRect(rect);
         const selectedLetter = (answers[itemId] ?? "").toUpperCase();
         const isChosen = selectedLetter === letter;

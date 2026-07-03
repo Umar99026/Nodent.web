@@ -21,6 +21,10 @@ import {
   openAiModel,
   scoreEnglishResponse,
 } from "../lib/openai";
+import {
+  qualifiesForOpenAiHandwriting,
+  qualifiesForOpenAiMarking,
+} from "../lib/wordedQuestion";
 
 // ---- Schema ----
 const users = pgTable("users", {
@@ -31,6 +35,7 @@ const users = pgTable("users", {
   passwordSalt: text("password_salt").notNull(),
   hashAlgorithm: text("hash_algorithm").notNull().default("pbkdf2"),
   profilePhoto: text("profile_photo"),
+  accountRole: text("account_role"),
   createdAt: text("created_at").notNull(),
 });
 
@@ -1605,7 +1610,19 @@ type Env = {
   OPENAI_API_KEY?: string;
   OPENAI_MODEL?: string;
 };
-type Vars = { user: { id: number; email: string; username: string; token: string; profilePhoto?: string | null }; db: ReturnType<typeof createDb> };
+type AccountRole = "student" | "teacher";
+
+type Vars = {
+  user: {
+    id: number;
+    email: string;
+    username: string;
+    token: string;
+    profilePhoto?: string | null;
+    accountRole?: AccountRole | null;
+  };
+  db: ReturnType<typeof createDb>;
+};
 
 const app = new Hono<{ Bindings: Env; Variables: Vars }>();
 
@@ -1620,6 +1637,7 @@ app.onError((err: unknown, c) => {
 app.get("/api/ping", (c) => c.json({ ok: true }));
 let englishResponsesConstraintDropped = false;
 let usersTablePatched = false;
+let usersAccountRolePatched = false;
 let performanceIndexesPatched = false;
 let studyTablesPatched = false;
 let classTablesPatched = false;
@@ -1677,6 +1695,18 @@ async function runDbMigrations(db: ReturnType<typeof createDb>): Promise<void> {
       /* ignore */
     } finally {
       usersTablePatched = true;
+    }
+  }
+  if (!usersAccountRolePatched) {
+    try {
+      await db.execute(sql`
+        ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS account_role text
+      `);
+    } catch {
+      /* ignore */
+    } finally {
+      usersAccountRolePatched = true;
     }
   }
   if (!englishResponsesConstraintDropped) {
@@ -2333,7 +2363,14 @@ async function authMiddleware(c: any, next: any) {
   if (!authHeader?.startsWith("Bearer ")) return c.json({ error: "Authentication required." }, 401);
   const token = authHeader.slice(7);
   const db = c.get("db");
-  const result = await db.select({ userId: users.id, email: users.email, username: users.username, profilePhoto: users.profilePhoto, expiresAt: sessions.expiresAt })
+  const result = await db.select({
+    userId: users.id,
+    email: users.email,
+    username: users.username,
+    profilePhoto: users.profilePhoto,
+    accountRole: users.accountRole,
+    expiresAt: sessions.expiresAt,
+  })
     .from(sessions).innerJoin(users, eq(sessions.userId, users.id)).where(eq(sessions.token, token)).limit(1);
   if (result.length === 0) return c.json({ error: "Invalid session." }, 401);
   if (new Date(result[0].expiresAt) < new Date()) {
@@ -2345,6 +2382,7 @@ async function authMiddleware(c: any, next: any) {
     email: result[0].email,
     username: result[0].username,
     profilePhoto: result[0].profilePhoto ?? null,
+    accountRole: normalizeAccountRole(result[0].accountRole),
     token,
   });
   await next();
@@ -2444,9 +2482,45 @@ async function ensureUniqueJoinCode(db: any): Promise<string> {
   return `${randomTeacherJoinCode(4)}${Date.now().toString(36).slice(-4).toUpperCase()}`;
 }
 
-function teacherEmailDenied(c: any): Response | null {
+function normalizeAccountRole(raw: unknown): AccountRole | null {
+  const value = String(raw ?? "").trim().toLowerCase();
+  if (value === "student" || value === "teacher") return value;
+  return null;
+}
+
+function isAdminEmail(email: unknown): boolean {
+  return String(email ?? "").trim().toLowerCase() === ADMIN_EMAIL_LC;
+}
+
+function publicUserPayload(row: {
+  id: number;
+  username?: string | null;
+  email: string;
+  profilePhoto?: string | null;
+  accountRole?: string | null;
+}) {
+  const email = String(row.email ?? "");
+  const accountRole = normalizeAccountRole(row.accountRole);
+  return {
+    id: row.id,
+    username: row.username || email,
+    email,
+    profilePhoto: row.profilePhoto ?? null,
+    accountRole: isAdminEmail(email) ? null : accountRole,
+  };
+}
+
+function isTeacherAccount(user: {
+  email?: string | null;
+  accountRole?: string | null;
+}): boolean {
+  if (isAdminEmail(user?.email)) return true;
+  return normalizeAccountRole(user?.accountRole) === "teacher";
+}
+
+function teacherAccessDenied(c: any): Response | null {
   const user = c.get("user");
-  if (String(user?.email ?? "").toLowerCase() !== ADMIN_EMAIL_LC) {
+  if (!isTeacherAccount(user)) {
     return c.json({ error: "Teacher access denied." }, 403);
   }
   return null;
@@ -2472,9 +2546,24 @@ async function getOrCreateTeacherClassRow(db: any, teacherId: number) {
   const inserted = await db.execute(sql`
     INSERT INTO teacher_classes (teacher_id, join_code, class_name, created_at)
     VALUES (${teacherId}, ${joinCode}, 'My class', ${createdAt})
+    ON CONFLICT (teacher_id) DO UPDATE SET class_name = teacher_classes.class_name
     RETURNING id, join_code, class_name, created_at
   `);
-  return (inserted.rows as any[])[0] as {
+  if ((inserted.rows as any[]).length) {
+    return (inserted.rows as any[])[0] as {
+      id: number;
+      join_code: string;
+      class_name: string;
+      created_at: string;
+    };
+  }
+  const again = await db.execute(sql`
+    SELECT id, join_code, class_name, created_at
+    FROM teacher_classes
+    WHERE teacher_id = ${teacherId}
+    LIMIT 1
+  `);
+  return (again.rows as any[])[0] as {
     id: number;
     join_code: string;
     class_name: string;
@@ -2494,60 +2583,286 @@ function pctFromMarks(correct: number, attempted: number): number {
   return Math.round((correct / attempted) * 100);
 }
 
+function topicStatKey(subjectId: string, topic: string): string {
+  return `${String(subjectId)}::${String(topic)}`;
+}
+
+async function loadPlatformTopicBenchmarks(
+  db: any,
+  subjectId?: string,
+  excludeUserIds?: number[],
+) {
+  const subjectFilter = subjectId ? sql` AND subject_id = ${subjectId} ` : sql``;
+  const excludeFilter =
+    excludeUserIds?.length
+      ? sql` AND user_id NOT IN (${sqlIntInList(excludeUserIds)}) `
+      : sql``;
+  const rows = await db.execute(sql`
+    SELECT topic, subject_id,
+           SUM(COALESCE(marks_earned, CASE WHEN is_correct = 1 THEN marks ELSE 0 END))::int AS marks_correct,
+           SUM(marks)::int AS marks_attempted,
+           COUNT(DISTINCT user_id)::int AS student_count
+    FROM question_attempts
+    WHERE 1=1 ${subjectFilter} ${excludeFilter}
+    GROUP BY topic, subject_id
+    HAVING SUM(marks) > 0
+  `);
+  const byTopic = new Map<
+    string,
+    { platformPercent: number; platformMarksAttempted: number; platformStudentCount: number }
+  >();
+  for (const r of rows.rows as any[]) {
+    const mc = Number(r.marks_correct ?? 0);
+    const ma = Number(r.marks_attempted ?? 0);
+    byTopic.set(
+      topicStatKey(String(r.subject_id ?? ""), String(r.topic ?? "General")),
+      {
+        platformPercent: pctFromMarks(mc, ma),
+        platformMarksAttempted: ma,
+        platformStudentCount: Number(r.student_count ?? 0),
+      },
+    );
+  }
+  return byTopic;
+}
+
+async function loadTopicUserPercents(db: any, subjectId?: string) {
+  const subjectFilter = subjectId ? sql` AND subject_id = ${subjectId} ` : sql``;
+  const rows = await db.execute(sql`
+    SELECT user_id, topic, subject_id,
+           SUM(COALESCE(marks_earned, CASE WHEN is_correct = 1 THEN marks ELSE 0 END))::int AS marks_correct,
+           SUM(marks)::int AS marks_attempted
+    FROM question_attempts
+    WHERE 1=1 ${subjectFilter}
+    GROUP BY user_id, topic, subject_id
+    HAVING SUM(marks) > 0
+  `);
+  const byTopic = new Map<string, { userId: number; pct: number }[]>();
+  for (const r of rows.rows as any[]) {
+    const key = topicStatKey(String(r.subject_id ?? ""), String(r.topic ?? "General"));
+    const mc = Number(r.marks_correct ?? 0);
+    const ma = Number(r.marks_attempted ?? 0);
+    if (!byTopic.has(key)) byTopic.set(key, []);
+    byTopic.get(key)!.push({
+      userId: Number(r.user_id),
+      pct: pctFromMarks(mc, ma),
+    });
+  }
+  return byTopic;
+}
+
+function topicPercentileForUser(
+  byTopic: Map<string, { userId: number; pct: number }[]>,
+  subjectId: string,
+  topic: string,
+  userId: number,
+): number | null {
+  const list = byTopic.get(topicStatKey(subjectId, topic));
+  if (!list || list.length < 2) return null;
+  const sorted = [...list].sort((a, b) => {
+    if (b.pct !== a.pct) return b.pct - a.pct;
+    return a.userId - b.userId;
+  });
+  const idx = sorted.findIndex((x) => x.userId === userId);
+  if (idx < 0) return null;
+  return cohortPercentileFromRank(idx + 1, sorted.length);
+}
+
+function enrichTopicRow(
+  row: {
+    topic: string;
+    subjectId: string;
+    marksCorrect: number;
+    marksAttempted: number;
+    percent: number;
+    studentsAttempted?: number;
+  },
+  platform: Map<
+    string,
+    { platformPercent: number; platformMarksAttempted: number; platformStudentCount: number }
+  >,
+  topicPercentile?: number | null,
+) {
+  const bench = platform.get(topicStatKey(row.subjectId, row.topic));
+  const platformPercent = bench?.platformPercent ?? null;
+  const vsPlatform = platformPercent != null ? row.percent - platformPercent : null;
+  return {
+    ...row,
+    platformPercent,
+    platformMarksAttempted: bench?.platformMarksAttempted ?? 0,
+    platformStudentCount: bench?.platformStudentCount ?? 0,
+    vsPlatform,
+    topicPercentile: topicPercentile ?? null,
+  };
+}
+
+async function loadPlatformSubjectPercents(db: any) {
+  const rows = await db.execute(sql`
+    SELECT subject_id,
+           COALESCE(SUM(COALESCE(marks_earned, CASE WHEN is_correct = 1 THEN marks ELSE 0 END)), 0)::int AS marks_correct,
+           COALESCE(SUM(marks), 0)::int AS marks_attempted
+    FROM question_attempts
+    GROUP BY subject_id
+    HAVING SUM(marks) > 0
+  `);
+  const map = new Map<string, number>();
+  for (const r of rows.rows as any[]) {
+    const mc = Number(r.marks_correct ?? 0);
+    const ma = Number(r.marks_attempted ?? 0);
+    map.set(String(r.subject_id ?? ""), pctFromMarks(mc, ma));
+  }
+  return map;
+}
+
+async function loadPlatformOverallPercent(
+  db: any,
+  subjectId?: string,
+  excludeUserIds?: number[],
+): Promise<number | null> {
+  const subjectFilter = subjectId ? sql` AND subject_id = ${subjectId} ` : sql``;
+  const excludeFilter =
+    excludeUserIds?.length
+      ? sql` AND user_id NOT IN (${sqlIntInList(excludeUserIds)}) `
+      : sql``;
+  const rows = await db.execute(sql`
+    SELECT
+      COALESCE(SUM(COALESCE(marks_earned, CASE WHEN is_correct = 1 THEN marks ELSE 0 END)), 0)::int AS marks_correct,
+      COALESCE(SUM(marks), 0)::int AS marks_attempted
+    FROM question_attempts
+    WHERE 1=1 ${subjectFilter} ${excludeFilter}
+  `);
+  const mc = Number((rows.rows as any[])[0]?.marks_correct ?? 0);
+  const ma = Number((rows.rows as any[])[0]?.marks_attempted ?? 0);
+  return ma > 0 ? pctFromMarks(mc, ma) : null;
+}
+
+async function studentOverallPercentile(
+  db: any,
+  studentId: number,
+  subjectId?: string,
+): Promise<number | null> {
+  const subjectFilter = subjectId ? sql` AND subject_id = ${subjectId} ` : sql``;
+  const rows = await db.execute(sql`
+    SELECT user_id,
+           COALESCE(SUM(COALESCE(marks_earned, CASE WHEN is_correct = 1 THEN marks ELSE 0 END)), 0)::int AS marks_correct,
+           COALESCE(SUM(marks), 0)::int AS marks_attempted,
+           COUNT(*)::int AS attempt_count
+    FROM question_attempts
+    WHERE 1=1 ${subjectFilter}
+    GROUP BY user_id
+    HAVING SUM(marks) > 0
+  `);
+  const eligible = (rows.rows as any[])
+    .map((r) => ({
+      userId: Number(r.user_id),
+      pct: pctFromMarks(Number(r.marks_correct ?? 0), Number(r.marks_attempted ?? 0)),
+      attempts: Number(r.attempt_count ?? 0),
+    }))
+    .filter((r) => r.attempts >= 3);
+  if (eligible.length < 2) return null;
+  const sorted = [...eligible].sort((a, b) => {
+    if (b.pct !== a.pct) return b.pct - a.pct;
+    return a.userId - b.userId;
+  });
+  const idx = sorted.findIndex((x) => x.userId === studentId);
+  if (idx < 0) return null;
+  return cohortPercentileFromRank(idx + 1, sorted.length);
+}
+
+/** Drizzle expands JS arrays as tuples — use IN (...) instead of ANY($n::int[]). */
+function sqlIntInList(ids: number[]) {
+  if (!ids.length) return sql`-1`;
+  return sql.join(
+    ids.map((id) => sql`${id}`),
+    sql`, `,
+  );
+}
+
 async function buildClassTopicStats(
   db: any,
   memberIds: number[],
   subjectId?: string,
 ) {
   if (!memberIds.length) {
-    return { topicStats: [] as any[], weakTopics: [] as any[], avgPercent: null as number | null };
+    return {
+      topicStats: [] as any[],
+      weakTopics: [] as any[],
+      belowAvgTopics: [] as any[],
+      avgPercent: null as number | null,
+      platformPercent: null as number | null,
+      vsPlatform: null as number | null,
+    };
   }
 
   const subjectFilter = subjectId ? sql` AND qa.subject_id = ${subjectId} ` : sql``;
-  const topicRows = await db.execute(sql`
+  const [topicRows, platform, platformPercent] = await Promise.all([
+    db.execute(sql`
     SELECT qa.topic,
            qa.subject_id,
            SUM(COALESCE(qa.marks_earned, CASE WHEN qa.is_correct = 1 THEN qa.marks ELSE 0 END))::int AS marks_correct,
            SUM(qa.marks)::int AS marks_attempted,
            COUNT(DISTINCT qa.user_id)::int AS students_attempted
     FROM question_attempts qa
-    WHERE qa.user_id = ANY(${memberIds}::int[])
+    WHERE qa.user_id IN (${sqlIntInList(memberIds)})
     ${subjectFilter}
     GROUP BY qa.topic, qa.subject_id
     HAVING SUM(qa.marks) > 0
-  `);
+  `),
+    loadPlatformTopicBenchmarks(db, subjectId, memberIds),
+    loadPlatformOverallPercent(db, subjectId, memberIds),
+  ]);
 
   const topicStats = (topicRows.rows as any[]).map((r) => {
     const marksCorrect = Number(r.marks_correct ?? 0);
     const marksAttempted = Number(r.marks_attempted ?? 0);
-    return {
-      topic: String(r.topic ?? "General"),
-      subjectId: String(r.subject_id ?? ""),
-      marksCorrect,
-      marksAttempted,
-      percent: pctFromMarks(marksCorrect, marksAttempted),
-      studentsAttempted: Number(r.students_attempted ?? 0),
-    };
+    return enrichTopicRow(
+      {
+        topic: String(r.topic ?? "General"),
+        subjectId: String(r.subject_id ?? ""),
+        marksCorrect,
+        marksAttempted,
+        percent: pctFromMarks(marksCorrect, marksAttempted),
+        studentsAttempted: Number(r.students_attempted ?? 0),
+      },
+      platform,
+    );
   });
 
-  topicStats.sort((a, b) => a.percent - b.percent);
+  topicStats.sort((a, b) => a.percent - b.percent || a.topic.localeCompare(b.topic));
+
+  const mapTopicSummary = (t: (typeof topicStats)[number]) => ({
+    topic: t.topic,
+    subjectId: t.subjectId,
+    percent: t.percent,
+    marksAttempted: t.marksAttempted,
+    platformPercent: t.platformPercent,
+    vsPlatform: t.vsPlatform,
+    studentsAttempted: t.studentsAttempted,
+  });
+
+  const belowAvgTopics = topicStats
+    .filter(
+      (t) =>
+        t.marksAttempted >= 3 &&
+        t.platformPercent != null &&
+        (t.vsPlatform ?? 0) < 0,
+    )
+    .sort((a, b) => (a.vsPlatform ?? 0) - (b.vsPlatform ?? 0))
+    .slice(0, 12)
+    .map(mapTopicSummary);
+
   const weakTopics = topicStats
-    .filter((t) => t.marksAttempted >= 5)
+    .filter((t) => t.marksAttempted >= 3)
     .slice(0, 8)
-    .map((t) => ({
-      topic: t.topic,
-      subjectId: t.subjectId,
-      percent: t.percent,
-      marksAttempted: t.marksAttempted,
-    }));
+    .map(mapTopicSummary);
 
   const totalCorrect = topicStats.reduce((sum, t) => sum + t.marksCorrect, 0);
   const totalAttempted = topicStats.reduce((sum, t) => sum + t.marksAttempted, 0);
   const avgPercent = totalAttempted > 0 ? pctFromMarks(totalCorrect, totalAttempted) : null;
+  const vsPlatform =
+    avgPercent != null && platformPercent != null ? avgPercent - platformPercent : null;
 
-  const topicStatsSorted = [...topicStats].sort((a, b) => b.percent - a.percent);
-
-  return { topicStats: topicStatsSorted, weakTopics, avgPercent };
+  return { topicStats, weakTopics, belowAvgTopics, avgPercent, platformPercent, vsPlatform };
 }
 
 async function buildStudentStats(
@@ -2556,7 +2871,9 @@ async function buildStudentStats(
   subjectId?: string,
 ) {
   const subjectFilter = subjectId ? sql` AND subject_id = ${subjectId} ` : sql``;
-  const totals = await db.execute(sql`
+  const [totals, topicRows, platform, topicUserPercents, platformPercent, overallPercentile] =
+    await Promise.all([
+      db.execute(sql`
     SELECT
       COALESCE(SUM(COALESCE(marks_earned, CASE WHEN is_correct = 1 THEN marks ELSE 0 END)), 0)::int AS marks_correct,
       COALESCE(SUM(marks), 0)::int AS marks_attempted,
@@ -2564,12 +2881,8 @@ async function buildStudentStats(
     FROM question_attempts
     WHERE user_id = ${studentId}
     ${subjectFilter}
-  `);
-  const marksCorrect = Number((totals.rows as any[])[0]?.marks_correct ?? 0);
-  const marksAttempted = Number((totals.rows as any[])[0]?.marks_attempted ?? 0);
-  const questionCount = Number((totals.rows as any[])[0]?.question_count ?? 0);
-
-  const topicRows = await db.execute(sql`
+  `),
+      db.execute(sql`
     SELECT topic, subject_id,
            SUM(COALESCE(marks_earned, CASE WHEN is_correct = 1 THEN marks ELSE 0 END))::int AS marks_correct,
            SUM(marks)::int AS marks_attempted
@@ -2578,22 +2891,40 @@ async function buildStudentStats(
     ${subjectFilter}
     GROUP BY topic, subject_id
     HAVING SUM(marks) > 0
-    ORDER BY (SUM(COALESCE(marks_earned, CASE WHEN is_correct = 1 THEN marks ELSE 0 END))::float / NULLIF(SUM(marks), 0)) ASC
-  `);
+  `),
+      loadPlatformTopicBenchmarks(db, subjectId),
+      loadTopicUserPercents(db, subjectId),
+      loadPlatformOverallPercent(db, subjectId),
+      studentOverallPercentile(db, studentId, subjectId),
+    ]);
+  const marksCorrect = Number((totals.rows as any[])[0]?.marks_correct ?? 0);
+  const marksAttempted = Number((totals.rows as any[])[0]?.marks_attempted ?? 0);
+  const questionCount = Number((totals.rows as any[])[0]?.question_count ?? 0);
+  const percent = pctFromMarks(marksCorrect, marksAttempted);
+  const vsPlatform =
+    marksAttempted > 0 && platformPercent != null ? percent - platformPercent : null;
 
   const topicStats = (topicRows.rows as any[]).map((r) => {
     const mc = Number(r.marks_correct ?? 0);
     const ma = Number(r.marks_attempted ?? 0);
-    return {
-      topic: String(r.topic ?? "General"),
-      subjectId: String(r.subject_id ?? ""),
-      marksCorrect: mc,
-      marksAttempted: ma,
-      percent: pctFromMarks(mc, ma),
-    };
+    const subject = String(r.subject_id ?? "");
+    const topic = String(r.topic ?? "General");
+    return enrichTopicRow(
+      {
+        topic,
+        subjectId: subject,
+        marksCorrect: mc,
+        marksAttempted: ma,
+        percent: pctFromMarks(mc, ma),
+      },
+      platform,
+      topicPercentileForUser(topicUserPercents, subject, topic, studentId),
+    );
   });
 
-  const weakTopics = topicStats.filter((t) => t.marksAttempted >= 3).slice(0, 6);
+  topicStats.sort((a, b) => a.percent - b.percent || a.topic.localeCompare(b.topic));
+
+  const weakTopics = topicStats.filter((t) => t.marksAttempted >= 3).slice(0, 8);
 
   const subjectRows = await db.execute(sql`
     SELECT subject_id,
@@ -2606,22 +2937,32 @@ async function buildStudentStats(
     ORDER BY subject_id ASC
   `);
 
+  const platformBySubject = await loadPlatformSubjectPercents(db);
+
   const subjects = (subjectRows.rows as any[]).map((r) => {
     const mc = Number(r.marks_correct ?? 0);
     const ma = Number(r.marks_attempted ?? 0);
+    const sid = String(r.subject_id ?? "");
+    const studentPct = pctFromMarks(mc, ma);
+    const subPlatform = platformBySubject.get(sid) ?? null;
     return {
-      subjectId: String(r.subject_id ?? ""),
+      subjectId: sid,
       marksCorrect: mc,
       marksAttempted: ma,
-      percent: pctFromMarks(mc, ma),
+      percent: studentPct,
+      platformPercent: subPlatform,
+      vsPlatform: subPlatform != null ? studentPct - subPlatform : null,
     };
   });
 
   return {
     marksCorrect,
     marksAttempted,
-    percent: pctFromMarks(marksCorrect, marksAttempted),
+    percent,
     questionCount,
+    platformPercent,
+    vsPlatform,
+    overallPercentile,
     topicStats,
     weakTopics,
     subjects,
@@ -2657,8 +2998,24 @@ app.post("/api/auth/signup", async (c) => {
   if (existingEmail.length > 0) return c.json({ error: "An account with this email already exists." }, 400);
   const existingUsername = await db.select({ id: users.id }).from(users).where(sql`LOWER(${users.username}) = LOWER(${username})`).limit(1);
   if (existingUsername.length > 0) return c.json({ error: "That username is already taken." }, 400);
+  const isAdminSignup = isAdminEmail(email);
+  const accountRole = isAdminSignup ? null : normalizeAccountRole(body.accountRole);
+  if (!isAdminSignup && !accountRole) {
+    return c.json({ error: "Please choose whether you are a student or teacher." }, 400);
+  }
   const { salt, hash } = await hashPassword(password);
-  const result = await db.insert(users).values({ username, email, passwordHash: hash, passwordSalt: salt, hashAlgorithm: "pbkdf2", createdAt: nowIso() }).returning({ id: users.id });
+  const result = await db
+    .insert(users)
+    .values({
+      username,
+      email,
+      passwordHash: hash,
+      passwordSalt: salt,
+      hashAlgorithm: "pbkdf2",
+      accountRole,
+      createdAt: nowIso(),
+    })
+    .returning({ id: users.id });
   const userId = result[0].id;
   const rememberMe = body.rememberMe !== false; // default true for signups
   const token = createToken();
@@ -2691,7 +3048,10 @@ app.post("/api/auth/signup", async (c) => {
   } catch (e) {
     console.error("[welcome-email] failed:", errorChain(e));
   }
-  return c.json({ token, user: { id: userId, username, email, profilePhoto: null } });
+  return c.json({
+    token,
+    user: publicUserPayload({ id: userId, username, email, profilePhoto: null, accountRole }),
+  });
 });
 
 app.post("/api/auth/login", async (c) => {
@@ -2713,12 +3073,7 @@ app.post("/api/auth/login", async (c) => {
   await db.insert(sessions).values({ token, userId: user.id, createdAt: nowIso(), expiresAt: sessionExpiry(rememberMe) });
   return c.json({
     token,
-    user: {
-      id: user.id,
-      username: user.username || user.email,
-      email: user.email,
-      profilePhoto: user.profilePhoto ?? null,
-    },
+    user: publicUserPayload(user),
   });
 });
 
@@ -2732,12 +3087,7 @@ app.post("/api/auth/logout", authMiddleware, async (c: any) => {
 app.get("/api/auth/session", authMiddleware, async (c: any) => {
   const user = c.get("user");
   return c.json({
-    user: {
-      id: user.id,
-      email: user.email,
-      username: user.username,
-      profilePhoto: user.profilePhoto ?? null,
-    },
+    user: publicUserPayload(user),
   });
 });
 
@@ -2958,17 +3308,13 @@ app.patch("/api/auth/account", authMiddleware, async (c: any) => {
         username: users.username,
         email: users.email,
         profilePhoto: users.profilePhoto,
+        accountRole: users.accountRole,
       })
       .from(users)
       .where(eq(users.id, user.id))
       .limit(1);
     return c.json({
-      user: {
-        id: refreshed[0].id,
-        username: refreshed[0].username || refreshed[0].email,
-        email: refreshed[0].email,
-        profilePhoto: refreshed[0].profilePhoto ?? null,
-      },
+      user: publicUserPayload(refreshed[0]),
     });
   } catch (e) {
     return c.json({ error: errorChain(e) }, 500);
@@ -3028,12 +3374,7 @@ app.get("/api/bootstrap", authMiddleware, async (c: any) => {
     ORDER BY subject_id ASC
   `);
   return c.json({
-    user: {
-      id: user.id,
-      email: user.email,
-      username: user.username,
-      profilePhoto: user.profilePhoto ?? null,
-    },
+    user: publicUserPayload(user),
     customQuestions: grouped,
     mySubjectIds: (subjRows.rows as any[]).map((r) => String(r.subject_id)),
   });
@@ -3473,7 +3814,7 @@ app.get("/api/scorecard", authMiddleware, async (c: any) => {
 
 // ---- Teacher / class ----
 app.get("/api/teacher/class", authMiddleware, async (c: any) => {
-  const denied = teacherEmailDenied(c);
+  const denied = teacherAccessDenied(c);
   if (denied) return denied;
   const user = c.get("user");
   const db = c.get("db");
@@ -3489,7 +3830,7 @@ app.get("/api/teacher/class", authMiddleware, async (c: any) => {
 });
 
 app.patch("/api/teacher/class", authMiddleware, async (c: any) => {
-  const denied = teacherEmailDenied(c);
+  const denied = teacherAccessDenied(c);
   if (denied) return denied;
   const user = c.get("user");
   const db = c.get("db");
@@ -3504,7 +3845,7 @@ app.patch("/api/teacher/class", authMiddleware, async (c: any) => {
 });
 
 app.get("/api/teacher/class/members", authMiddleware, async (c: any) => {
-  const denied = teacherEmailDenied(c);
+  const denied = teacherAccessDenied(c);
   if (denied) return denied;
   const user = c.get("user");
   const db = c.get("db");
@@ -3547,18 +3888,15 @@ app.get("/api/teacher/class/members", authMiddleware, async (c: any) => {
 });
 
 app.get("/api/teacher/class/stats", authMiddleware, async (c: any) => {
-  const denied = teacherEmailDenied(c);
+  const denied = teacherAccessDenied(c);
   if (denied) return denied;
   const user = c.get("user");
   const db = c.get("db");
   const subjectId = String(c.req.query("subjectId") ?? "").trim() || undefined;
   const classRow = await getOrCreateTeacherClassRow(db, user.id);
   const memberIds = await getClassMemberIds(db, classRow.id);
-  const { topicStats, weakTopics, avgPercent } = await buildClassTopicStats(
-    db,
-    memberIds,
-    subjectId,
-  );
+  const { topicStats, weakTopics, belowAvgTopics, avgPercent, platformPercent, vsPlatform } =
+    await buildClassTopicStats(db, memberIds, subjectId);
 
   const subjectFilter = subjectId ? sql` AND qa.subject_id = ${subjectId} ` : sql``;
   const activeRows = memberIds.length
@@ -3568,7 +3906,7 @@ app.get("/api/teacher/class/stats", authMiddleware, async (c: any) => {
                COALESCE(SUM(qa.marks), 0)::int AS marks_attempted,
                COUNT(*)::int AS question_count
         FROM question_attempts qa
-        WHERE qa.user_id = ANY(${memberIds}::int[])
+        WHERE qa.user_id IN (${sqlIntInList(memberIds)})
         ${subjectFilter}
       `)
     : { rows: [{ active_students: 0, marks_correct: 0, marks_attempted: 0, question_count: 0 }] };
@@ -3586,13 +3924,16 @@ app.get("/api/teacher/class/stats", authMiddleware, async (c: any) => {
     marksCorrect,
     marksAttempted,
     avgPercent: marksAttempted > 0 ? pctFromMarks(marksCorrect, marksAttempted) : avgPercent,
+    platformPercent,
+    vsPlatform,
     topicStats,
     weakTopics,
+    belowAvgTopics,
   });
 });
 
 app.get("/api/teacher/class/students/:studentId/stats", authMiddleware, async (c: any) => {
-  const denied = teacherEmailDenied(c);
+  const denied = teacherAccessDenied(c);
   if (denied) return denied;
   const user = c.get("user");
   const db = c.get("db");
@@ -3625,8 +3966,6 @@ app.get("/api/teacher/class/students/:studentId/stats", authMiddleware, async (c
 });
 
 app.post("/api/class/join", authMiddleware, async (c: any) => {
-  const denied = teacherEmailDenied(c);
-  if (denied) return denied;
   const user = c.get("user");
   const db = c.get("db");
   const body = await c.req.json().catch(() => ({}));
@@ -3706,8 +4045,6 @@ app.post("/api/class/join", authMiddleware, async (c: any) => {
 });
 
 app.get("/api/class/preview", authMiddleware, async (c: any) => {
-  const denied = teacherEmailDenied(c);
-  if (denied) return denied;
   const db = c.get("db");
   const joinCode = String(c.req.query("code") ?? "")
     .trim()
@@ -3738,8 +4075,6 @@ app.get("/api/class/preview", authMiddleware, async (c: any) => {
 });
 
 app.get("/api/class/membership", authMiddleware, async (c: any) => {
-  const denied = teacherEmailDenied(c);
-  if (denied) return denied;
   const user = c.get("user");
   const db = c.get("db");
   const rows = await db.execute(sql`
@@ -4467,7 +4802,7 @@ app.get("/api/written/upload-session/:token", authMiddleware, async (c: any) => 
 
 // ---- Practice exams ----
 app.get("/api/practice-exams/:subjectId", authMiddleware, async (c: any) => {
-  const denied = teacherEmailDenied(c);
+  const denied = teacherAccessDenied(c);
   if (denied) return denied;
   try {
     const db = c.get("db");
@@ -4493,7 +4828,7 @@ app.get("/api/practice-exams/:subjectId", authMiddleware, async (c: any) => {
 });
 
 app.get("/api/practice-exams/:subjectId/:year/:examNumber", authMiddleware, async (c: any) => {
-  const denied = teacherEmailDenied(c);
+  const denied = teacherAccessDenied(c);
   if (denied) return denied;
   try {
     const db = c.get("db");
@@ -4550,7 +4885,7 @@ app.get("/api/practice-exams/:subjectId/:year/:examNumber", authMiddleware, asyn
 });
 
 app.get("/api/practice-exams/:subjectId/:year/:examNumber/pages/:pageNumber", authMiddleware, async (c: any) => {
-  const denied = teacherEmailDenied(c);
+  const denied = teacherAccessDenied(c);
   if (denied) return denied;
   try {
     const db = c.get("db");
@@ -4850,6 +5185,13 @@ app.post("/api/written/:subjectId/:questionKey/mark", authMiddleware, async (c: 
                 : undefined,
         })).filter((p) => p.label)
       : undefined;
+    const partLabels = answerParts?.map((p) => p.label) ?? [];
+    const openAiGate = {
+      questionText,
+      questionType,
+      partLabels,
+      acceptedAnswers,
+    };
 
     let result;
     let storedResponseText: string;
@@ -4857,6 +5199,15 @@ app.post("/api/written/:subjectId/:questionKey/mark", authMiddleware, async (c: 
     if (handwritingImages.length > 0) {
       if (canonicalSubjectId(subjectId) !== "demo") {
         return c.json({ error: "Handwriting marking is only available in demo." }, 400);
+      }
+      if (!qualifiesForOpenAiHandwriting(openAiGate)) {
+        return c.json(
+          {
+            error:
+              "AI marking is only available for explain, discuss, prove, and similar worded questions.",
+          },
+          400,
+        );
       }
       const imageError = validateMarkingImageUrls(handwritingImages);
       if (imageError) return c.json({ error: imageError }, 400);
@@ -4879,6 +5230,15 @@ app.post("/api/written/:subjectId/:questionKey/mark", authMiddleware, async (c: 
       if (qt !== "long_answer" && qt !== "long") {
         return c.json(
           { error: "AI text marking is only available for long-answer questions." },
+          400,
+        );
+      }
+      if (!qualifiesForOpenAiMarking(openAiGate)) {
+        return c.json(
+          {
+            error:
+              "AI marking is only available for explain, discuss, prove, and similar worded questions.",
+          },
           400,
         );
       }
@@ -5424,7 +5784,7 @@ app.post("/api/admin/english/prompts/bulk-delete", adminAccessMiddleware, async 
       .filter((n: number) => Number.isFinite(n) && n > 0)
       .slice(0, 2000);
     if (!ids.length) return c.json({ error: "ids is required." }, 400);
-    await db.execute(sql`DELETE FROM english_prompts WHERE id = ANY(${ids}::int[])`);
+    await db.execute(sql`DELETE FROM english_prompts WHERE id IN (${sqlIntInList(ids)})`);
     // Clean up any empty books.
     await db.execute(sql`
       DELETE FROM english_books b
@@ -6410,7 +6770,7 @@ app.post("/api/admin/questions/bulk-delete", adminAccessMiddleware, async (c: an
       .filter((n: number) => Number.isFinite(n) && n > 0)
       .slice(0, 2000);
     if (!ids.length) return c.json({ error: "ids is required." }, 400);
-    await db.execute(sql`DELETE FROM custom_questions WHERE id = ANY(${ids}::int[])`);
+    await db.execute(sql`DELETE FROM custom_questions WHERE id IN (${sqlIntInList(ids)})`);
     return c.json({ ok: true, deleted: ids.length });
   } catch (e) {
     return c.json({ error: errorChain(e) }, 500);
@@ -6436,7 +6796,7 @@ app.post("/api/admin/questions/delete-by-subject", adminAccessMiddleware, async 
 });
 
 const ADMIN_AI_DISABLED =
-  "Admin AI features are disabled. OpenAI is used only for English scoring, handwriting marking, and long-answer marking.";
+  "Admin AI features are disabled. OpenAI is used only for English scoring and worded explain/discuss/prove-style marking.";
 
 app.get("/api/admin/ai/status", adminAccessMiddleware, async (c: any) => {
   const env = c.env as Env;
