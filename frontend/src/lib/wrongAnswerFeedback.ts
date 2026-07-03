@@ -1,4 +1,5 @@
 import { isProseModelAnswer } from "@/lib/wordedQuestion";
+import { isHandwritingValue } from "@/lib/handwritingMode";
 import {
   extractExplanationKeywords,
   normalizeAnswer,
@@ -118,7 +119,7 @@ export function buildWrongAnswerBullets(input: WrongAnswerFeedbackInput): string
 
   if (!student) {
     bullets.push("You did not enter an answer for this part.");
-  } else {
+  } else if (!isHandwritingValue(student)) {
     bullets.push(`You answered: ${student}`);
   }
 

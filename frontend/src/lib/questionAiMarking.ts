@@ -92,6 +92,7 @@ import {
   buildWrongAnswerBullets,
   bulletsToFeedbackText,
 } from "@/lib/wrongAnswerFeedback";
+import { normalizeFeedbackMathText } from "@/lib/questionMathText";
 
 export type SmartMarkResult = {
   correct: boolean;
@@ -115,6 +116,26 @@ export type SmartMarkQuestionPayload = {
     acceptedAnswer?: string;
   }>;
 };
+
+function normalizeSmartMarkFeedback(result: SmartMarkResult): SmartMarkResult {
+  return {
+    ...result,
+    feedback: normalizeFeedbackMathText(result.feedback ?? ""),
+    correctAnswers: result.correctAnswers?.map((a) => normalizeFeedbackMathText(a)),
+    partResults: result.partResults?.map((p) => ({
+      ...p,
+      partFeedback: p.partFeedback
+        ? normalizeFeedbackMathText(p.partFeedback)
+        : p.partFeedback,
+      correctAnswer: p.correctAnswer
+        ? normalizeFeedbackMathText(p.correctAnswer)
+        : p.correctAnswer,
+      studentAnswerRead: p.studentAnswerRead
+        ? normalizeFeedbackMathText(p.studentAnswerRead)
+        : p.studentAnswerRead,
+    })),
+  };
+}
 
 export async function requestSmartMark(
   subjectId: string,
@@ -168,7 +189,8 @@ export async function requestSmartMark(
         question: input.question,
       }),
     });
-    return ai?.mark ?? null;
+    const mark = ai?.mark ?? null;
+    return mark ? normalizeSmartMarkFeedback(mark) : null;
   } catch (err) {
     throw new Error(
       sanitizeUserFacingError(
@@ -214,12 +236,7 @@ export async function requestHandwritingMark(
 
 /** Prepend what we read from the drawing when the model returns it. */
 function enrichPartWithInterpretation(part: AiMarkPartResult): AiMarkPartResult {
-  const read = String(part.studentAnswerRead ?? "").trim();
-  const fb = String(part.partFeedback ?? "").trim();
-  if (!read) return part;
-  const line = `• We read your drawing as: ${read}`;
-  if (fb.includes(read)) return part;
-  return { ...part, partFeedback: fb ? `${line}\n${fb}` : line };
+  return part;
 }
 
 /** Fill in correct answers / feedback when the model omits them. */
@@ -293,7 +310,7 @@ export function enrichHandwritingMarkResult(
     };
   }
 
-  return enriched;
+  return normalizeSmartMarkFeedback(enriched);
 }
 
 /** Add client-side diagnosis when smart-marking feedback is thin. */
@@ -359,7 +376,7 @@ export function enrichSmartMarkResult(
     };
   }
 
-  return enriched;
+  return normalizeSmartMarkFeedback(enriched);
 }
 
 export function buildFallbackHandwritingMark(

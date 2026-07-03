@@ -1,5 +1,6 @@
 import { SmartMarkingBulletList } from "@/components/quiz/AiMarkingFeedbackPanel";
 import { RichQuestionContent } from "@/components/quiz/RichQuestionContent";
+import { isHandwritingValue } from "@/lib/handwritingMode";
 import { marksEarnedFromPartResults } from "@/lib/questionDisplay";
 import { cn } from "@/lib/utils";
 import { buildWrongAnswerBullets } from "@/lib/wrongAnswerFeedback";
@@ -53,7 +54,7 @@ export function MultipartMarkBreakdown({
           const expected = expectedAnswers[idx]?.trim() ?? "";
           const student = studentAnswers[idx]?.trim() ?? "";
           const wrongBullets =
-            !ok && expected
+            !ok && expected && student && !isHandwritingValue(student)
               ? buildWrongAnswerBullets({
                   studentAnswer: student,
                   expectedAnswers: [expected],

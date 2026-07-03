@@ -20,6 +20,18 @@ export type AiMarkingFeedbackPanelProps = {
 
 const SMART_MARKING_LABEL = "Smart marking";
 
+/** Remove duplicate "we read your drawing" bullets — shown separately in the UI. */
+export function stripInterpretationFromFeedback(text: string): string {
+  const lines = String(text ?? "")
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const kept = lines.filter(
+    (line) => !/^(?:•\s*)?We (?:read|interpreted) your drawing as:/i.test(line),
+  );
+  return kept.length ? kept.join("\n") : "";
+}
+
 /** Split model feedback into separate bullet lines (handles one-line • • • output). */
 export function parseMarkingBulletLines(text: string): string[] {
   const trimmed = String(text ?? "").trim();
@@ -61,6 +73,7 @@ export function SmartMarkingBulletList({
       <div className={cn("text-xs leading-relaxed text-muted-foreground", className)}>
         <RichQuestionContent
           text={items[0]!}
+          feedbackMode
           className="prose prose-sm max-w-none prose-p:my-0"
         />
       </div>
@@ -75,6 +88,7 @@ export function SmartMarkingBulletList({
           <div className="min-w-0 flex-1">
             <RichQuestionContent
               text={item}
+              feedbackMode
               className="prose prose-sm max-w-none prose-p:my-0"
             />
           </div>
@@ -89,7 +103,11 @@ function AnswerLine({ label, value }: { label: string; value: string }) {
     <div className="space-y-0.5">
       <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
       <div className="text-sm font-semibold text-foreground">
-        <RichQuestionContent text={value} className="prose prose-sm max-w-none prose-p:my-0" />
+        <RichQuestionContent
+          text={value}
+          feedbackMode
+          className="prose prose-sm max-w-none prose-p:my-0"
+        />
       </div>
     </div>
   );
@@ -106,13 +124,10 @@ export function AiMarkingPartFeedback({
   className?: string;
 }) {
   const correct = partResult?.correct;
-  const feedback = String(partResult?.partFeedback ?? "").trim();
+  const feedback = stripInterpretationFromFeedback(String(partResult?.partFeedback ?? "").trim());
   const studentRead = String(partResult?.studentAnswerRead ?? "").trim();
   const correctAnswer =
     String(partResult?.correctAnswer ?? "").trim() || String(expectedAnswer ?? "").trim();
-  const interpretationShownInFeedback = Boolean(
-    studentRead && feedback.includes(studentRead),
-  );
 
   if (!feedback && !studentRead && !correctAnswer && correct === undefined) return null;
 
@@ -129,7 +144,7 @@ export function AiMarkingPartFeedback({
       <p className="text-[11px] font-semibold uppercase tracking-wide text-foreground">
         {SMART_MARKING_LABEL}
       </p>
-      {studentRead && !interpretationShownInFeedback ? (
+      {studentRead ? (
         <AnswerLine label="We interpreted your drawing as" value={studentRead} />
       ) : null}
       {feedback ? (
@@ -186,9 +201,20 @@ export function AiMarkingFeedbackPanel({
     correctAnswers.length > 0 &&
     (wrongParts.length <= 1 && partResults.length <= 1 || (wrongParts.length === 0 && !feedback.trim()));
 
-  if (!feedback.trim() && !showSingleCorrect && wrongParts.length === 0) {
+  if (
+    !feedback.trim() &&
+    !partResults.some((p) => p.partFeedback || p.studentAnswerRead) &&
+    !showSingleCorrect &&
+    wrongParts.length === 0
+  ) {
     if (!(isWrong && correctAnswers.length > 0)) return null;
   }
+
+  const primaryPart = partResults.length === 1 ? partResults[0] : undefined;
+  const interpretedRead = String(primaryPart?.studentAnswerRead ?? "").trim();
+  const displayFeedback = primaryPart?.partFeedback
+    ? stripInterpretationFromFeedback(primaryPart.partFeedback)
+    : stripInterpretationFromFeedback(feedback);
 
   return (
     <div
@@ -200,10 +226,15 @@ export function AiMarkingFeedbackPanel({
       <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-foreground">
         {SMART_MARKING_LABEL}
       </p>
-      {feedback.trim() ? <SmartMarkingBulletList text={feedback} className="text-sm" /> : null}
+      {interpretedRead ? (
+        <AnswerLine label="We interpreted your drawing as" value={interpretedRead} />
+      ) : null}
+      {displayFeedback.trim() ? (
+        <SmartMarkingBulletList text={displayFeedback} className="text-sm" />
+      ) : null}
 
       {showSingleCorrect ? (
-        <div className={cn(feedback.trim() && "mt-3 border-t border-black/10 pt-3")}>
+        <div className={cn(displayFeedback.trim() && "mt-3 border-t border-black/10 pt-3")}>
           <AnswerLine
             label={correctAnswers.length > 1 ? "Correct answers" : "Correct answer"}
             value={correctAnswers.join(" · ")}
@@ -212,7 +243,7 @@ export function AiMarkingFeedbackPanel({
       ) : null}
 
       {wrongParts.length > 1 || (wrongParts.length === 1 && partResults.length > 1) ? (
-        <div className={cn((feedback.trim() || showSingleCorrect) && "mt-3 space-y-3 border-t border-black/10 pt-3")}>
+        <div className={cn((displayFeedback.trim() || showSingleCorrect) && "mt-3 space-y-3 border-t border-black/10 pt-3")}>
           {wrongParts.map((part) => {
             const label = partLabels[part.index]?.trim() || `Part ${part.index + 1}`;
             return (
@@ -220,6 +251,7 @@ export function AiMarkingFeedbackPanel({
                 <p className="text-xs font-semibold text-foreground">
                   <RichQuestionContent
                     text={label}
+                    feedbackMode
                     className="prose prose-sm max-w-none prose-p:my-0 prose-p:font-semibold"
                   />
                 </p>
@@ -229,7 +261,9 @@ export function AiMarkingFeedbackPanel({
                 {part.correctAnswer ? (
                   <AnswerLine label="Correct answer" value={part.correctAnswer} />
                 ) : null}
-                {part.partFeedback ? <SmartMarkingBulletList text={part.partFeedback} /> : null}
+                {part.partFeedback ? (
+                  <SmartMarkingBulletList text={stripInterpretationFromFeedback(part.partFeedback)} />
+                ) : null}
               </div>
             );
           })}

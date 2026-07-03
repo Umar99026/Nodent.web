@@ -581,11 +581,12 @@ Return JSON only:
 }
 
 For EACH part in partResults, partFeedback MUST include:
-• A line starting with "• We read your drawing as: …" (same content as studentAnswerRead)
 • Step-by-step model solution for this part
 • If wrong: the specific mistake; if right: what they did well
+(Do not repeat studentAnswerRead in partFeedback — it is shown separately in the UI.)
 
 studentAnswerRead is REQUIRED for every part — never leave it empty if anything is legible in the image.
+Use LaTeX for maths in studentAnswerRead, correctAnswer, and partFeedback: $10\\,\\text{am}$, $\\frac{dh}{dt}$, $4\\,\\text{m}$, etc.
 
 Global "feedback" is optional for multipart — put the detailed walkthrough in each part's partFeedback.
 

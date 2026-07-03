@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { cn, getQuestionTypeLabel, isAnswerCorrect } from "@/lib/utils";
 import type { ShortQuestion as ShortQuestionType } from "@/lib/subjects";
 import {
@@ -44,7 +44,7 @@ import {
 import { isExamPaperLayoutSubject } from "@/lib/examPaperLayout";
 import { RichQuestionContent } from "@/components/quiz/RichQuestionContent";
 import { useHandwritingModeActive } from "@/context/HandwritingModeContext";
-import { hasAnswerContent, usesHandwritingMarking } from "@/lib/handwritingMode";
+import { hasAnswerContent, isHandwritingValue, usesHandwritingMarking } from "@/lib/handwritingMode";
 import { isDiagramLabelQuestion, partHasOverlay, partUsesFigureLabels, partUsesInlineInputs, inlineInputsForPart, slotIndexForPartOverlay, slotsForPart, expectedAnswersForQuestionSlots, type DiagramLabelPart, type PartFigureLabelSource } from "@/lib/diagramLabels";
 import { handwritingMarkUserError } from "@/lib/userFacingErrors";
 import { flushAllHandwriting, flushHandwriting } from "@/lib/handwritingFlush";
@@ -58,6 +58,10 @@ import { MultipartMarkBreakdown } from "@/components/quiz/MultipartMarkBreakdown
 import { WrongAnswerFeedbackPanel } from "@/components/quiz/WrongAnswerFeedbackPanel";
 import { buildWrongAnswerBullets } from "@/lib/wrongAnswerFeedback";
 import type { SmartMarkResult } from "@/lib/questionAiMarking";
+import {
+  DEMO_MATHS_DEV_PLACEHOLDER_DRAWING,
+  getDemoMathsDevMockMark,
+} from "@/lib/demoMathsMockFeedback";
 
 interface ShortQuestionProps {
   question: ShortQuestionType;
@@ -74,6 +78,8 @@ interface ShortQuestionProps {
   practiceOnly?: boolean;
   /** Demo sandbox — unlimited resubmits with smart marking still enabled. */
   repeatSandbox?: boolean;
+  /** Localhost demo sandbox — preload mock wrong-answer feedback and skip OpenAI. */
+  devMockMarking?: boolean;
   questionDisplayNumber?: number;
   persistedState?: {
     answer?: string;
@@ -201,6 +207,7 @@ export function ShortQuestion({
   allowRetry = false,
   practiceOnly = false,
   repeatSandbox = false,
+  devMockMarking = false,
   questionDisplayNumber = 1,
   persistedState,
   onStateChange,
@@ -213,6 +220,7 @@ export function ShortQuestion({
   const [partResults, setPartResults] = useState<(boolean | null)[]>(persistedState?.partResults ?? []);
   const [aiMarking, setAiMarking] = useState(false);
   const [aiMark, setAiMark] = useState<SmartMarkResult | null>(null);
+  const devPreloadAppliedRef = useRef(false);
   const handwritingMode = useHandwritingModeActive(subjectId);
   const examPaper = isExamPaperLayoutSubject(subjectId);
 
@@ -344,6 +352,31 @@ export function ShortQuestion({
     }
   }, [lockedCorrect, question, partLabels.length]);
 
+  useEffect(() => {
+    if (!devMockMarking || devPreloadAppliedRef.current || persistedState?.submitted) return;
+    const mock = getDemoMathsDevMockMark(expectedAnswersForDisplay);
+    if (!mock) return;
+    const slotCount = isMultipart ? answerSlotCount || partLabels.length : 1;
+    devPreloadAppliedRef.current = true;
+    const mockParts = Array.from({ length: slotCount }, () => DEMO_MATHS_DEV_PLACEHOLDER_DRAWING);
+    setParts(mockParts);
+    const partCorrectFlags = mockParts.map((_, idx) => {
+      const hit = mock.partResults?.find((p) => p.index === idx);
+      return hit ? hit.correct : false;
+    });
+    setPartResults(partCorrectFlags);
+    setAiMark(mock);
+    setSubmitted(true);
+    setIsCorrect(false);
+  }, [
+    devMockMarking,
+    persistedState?.submitted,
+    isMultipart,
+    answerSlotCount,
+    partLabels.length,
+    expectedAnswersForDisplay,
+  ]);
+
   const compositeAnswer =
     isMultipart
       ? partLabels.map((label, idx) => `${partSubmitLabel(label)} ${parts[idx] ?? ""}`.trim()).join("; ")
@@ -423,22 +456,26 @@ export function ShortQuestion({
       setAiMark(null);
       setAiMarking(true);
       try {
-        const ai = await requestHandwritingMark(subjectId, questionKey, {
-          answer: resolvedComposite,
-          parts: resolvedParts,
-          isMultipart,
-          question: buildSmartMarkPayload(question, {
-            marks: effectiveTotalMarks,
-            partDescriptors,
-            partMarks,
-            expectedAnswers: expectedAnswersForDisplay,
-            configuredParts,
-          }),
-        });
-        const enriched = enrichHandwritingMarkResult(
-          ai ?? buildFallbackHandwritingMark(expectedAnswersForDisplay),
-          expectedAnswersForDisplay,
-        );
+        const devMock = devMockMarking
+          ? getDemoMathsDevMockMark(expectedAnswersForDisplay)
+          : null;
+        const enriched = devMock
+          ? devMock
+          : enrichHandwritingMarkResult(
+              (await requestHandwritingMark(subjectId, questionKey, {
+                answer: resolvedComposite,
+                parts: resolvedParts,
+                isMultipart,
+                question: buildSmartMarkPayload(question, {
+                  marks: effectiveTotalMarks,
+                  partDescriptors,
+                  partMarks,
+                  expectedAnswers: expectedAnswersForDisplay,
+                  configuredParts,
+                }),
+              })) ?? buildFallbackHandwritingMark(expectedAnswersForDisplay),
+              expectedAnswersForDisplay,
+            );
         if (enriched.partResults?.length) {
           partCorrectFlags = parts.map((_, idx) => {
             const hit = enriched.partResults?.find((p) => p.index === idx);
@@ -1045,8 +1082,12 @@ export function ShortQuestion({
             partResults={partResults}
             partMarks={slotMarks.length ? slotMarks : partMarks}
             expectedAnswers={expectedAnswersForDisplay}
-            studentAnswers={parts}
-            guidance={question.guidance}
+            studentAnswers={parts.map((part, idx) => {
+              const read = partMarkAt(aiMark, idx)?.studentAnswerRead?.trim();
+              if (read) return read;
+              return isHandwritingValue(part) ? "" : part;
+            })}
+            guidance={handwritingMode && aiMark ? undefined : question.guidance}
           />
         ) : null}
 

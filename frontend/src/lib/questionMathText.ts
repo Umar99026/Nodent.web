@@ -461,3 +461,53 @@ export function normalizeQuestionMathText(raw: unknown): string {
 
   return out.replace(/\s*[\r\n]+\s*/g, " ").replace(/\s+/g, " ").trim();
 }
+
+const FEEDBACK_MATH_CMD =
+  "text|mathrm|mathbf|operatorname|frac|dfrac|tfrac|sqrt|pi|cdot|times|div|pm|approx|le|ge|ne|sin|cos|tan|log|ln|left|right|infty|theta|alpha|beta|gamma|omega";
+
+function fixFeedbackMathInner(inner: string): string {
+  let out = String(inner ?? "").trim();
+  out = out.replace(new RegExp(`\\\\{2,}(${FEEDBACK_MATH_CMD})\\b`, "g"), "\\$1");
+  out = out.replace(/\\{2,},/g, "\\,");
+  return out;
+}
+
+function fixFeedbackProse(prose: string): string {
+  let out = String(prose ?? "");
+  // Models sometimes omit $...$ around number + unit/time fragments.
+  out = out.replace(
+    /(?<![$\\])(\d+(?:\.\d+)?)\s*\\,\\text\{([^}]+)\}/g,
+    "$$$1\\,\\text{$2}$",
+  );
+  out = out.replace(
+    /(?<![$\\])(\d+(?:\.\d+)?)\s*\\text\{([^}]+)\}/g,
+    "$$$1\\,\\text{$2}$",
+  );
+  return out;
+}
+
+/**
+ * Light math normalisation for AI / wrong-answer feedback — preserves $...$ segments and
+ * fixes over-escaped LaTeX from APIs without running the question OCR pipeline.
+ */
+export function normalizeFeedbackMathText(raw: unknown): string {
+  const src = String(raw ?? "").replace(/\r\n?/g, "\n").trim();
+  if (!src) return "";
+
+  const parts: string[] = [];
+  const re = /\$\$[\s\S]*?\$\$|\$(?:(?!\$).)*?\$/g;
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(src)) !== null) {
+    if (m.index > last) parts.push(fixFeedbackProse(src.slice(last, m.index)));
+    const seg = m[0];
+    if (seg.startsWith("$$")) {
+      parts.push(`$$${fixFeedbackMathInner(seg.slice(2, -2))}$$`);
+    } else {
+      parts.push(`$${fixFeedbackMathInner(seg.slice(1, -1))}$`);
+    }
+    last = m.index + seg.length;
+  }
+  if (last < src.length) parts.push(fixFeedbackProse(src.slice(last)));
+  return fixInlineMathDelimiters(parts.join(""));
+}

@@ -183,6 +183,9 @@ export default function QuizPage() {
   const isAdmin = isAdminUser(user);
   /** Demo sandbox: keep the same question(s) available after every submit. */
   const isDemoSandbox = subjectId === "demo";
+  /** Opt-in localhost preview only — `?mockFeedback=1` on /quiz/demo */
+  const useDemoMockFeedback =
+    import.meta.env.DEV && isDemoSandbox && searchParams.get("mockFeedback") === "1";
   const { setEnabled: setHandwritingMode } = useHandwritingMode();
   const { isInactive, resetInactivity } = useInactivity();
 
@@ -928,7 +931,19 @@ export default function QuizPage() {
         )}
         {isDemoSandbox && !isWrongReview && (
           <p className="rounded-lg border border-brand/25 bg-brand/5 px-4 py-3 text-sm text-foreground">
-            Maths sandbox — draw your working on the pad (one image per part). AI reads your handwriting and marks with detailed feedback. Submit as many times as you like.
+            {useDemoMockFeedback ? (
+              <>
+                Maths sandbox (mock preview) — preloaded wrong-answer feedback, no OpenAI. Remove{" "}
+                <code className="rounded bg-black/5 px-1">?mockFeedback=1</code> from the URL for
+                live AI marking.
+              </>
+            ) : (
+              <>
+                Maths sandbox — draw your working on the pad (one image per part). AI reads your
+                handwriting, shows what it interpreted, and marks with detailed formatted feedback.
+                Submit as many times as you like.
+              </>
+            )}
           </p>
         )}
 
@@ -1110,6 +1125,7 @@ export default function QuizPage() {
                               allowRetry={isWrongReview || sandboxRepeat}
                               repeatSandbox={sandboxRepeat}
                               practiceOnly={isWrongReview || sandboxRepeat}
+                              devMockMarking={useDemoMockFeedback}
                               classFullyCorrectPercent={partClass ?? null}
                               persistedState={questionUiState[qk]}
                               onStateChange={(state) => updateQuestionUiState(qk, state)}

@@ -11,6 +11,7 @@ import { RichMathText } from "@/components/quiz/QuestionStimulus";
 import { absolutizeMarkdownAssetUrls, capitalizeQuestionDisplayText } from "@/lib/questionDisplay";
 import {
   fixInlineMathDelimiters,
+  normalizeFeedbackMathText,
   normalizeQuestionMathText,
   repairCommonMathGlitches,
   repairLeftRightDelimiters,
@@ -177,6 +178,8 @@ type RichQuestionContentProps = {
   overviewMode?: boolean;
   /** VCAA exam paper — Times body, no Geist prose sizing */
   examPaperMode?: boolean;
+  /** AI / wrong-answer feedback — preserve LaTeX units like $10\\,\\text{am}$ */
+  feedbackMode?: boolean;
 };
 
 /**
@@ -189,6 +192,7 @@ export function RichQuestionContent({
   preferMarkdown = false,
   overviewMode = false,
   examPaperMode = false,
+  feedbackMode = false,
 }: RichQuestionContentProps) {
   const { forced, body: afterForce } = stripRichForcePrefix(text);
   const { usePlainFallback, body: rawBody } = stripPlainOptOut(afterForce);
@@ -198,19 +202,25 @@ export function RichQuestionContent({
   // normalizeQuestionMathText collapses all whitespace (including newlines), which destroys
   // overview markdown (tables, headings, lists). Only run it on plain imported question text.
   const preserveMarkdownStructure =
+    (feedbackMode && !examPaperMode) ||
     (preferMarkdown && !examPaperMode) ||
     overviewMode ||
     looksLikeStructuredMarkdown(displayBody);
-  let body = preserveMarkdownStructure
-    ? absolutizeMarkdownAssetUrls(displayBody)
-    : normalizeQuestionMathText(displayBody);
-  if (preserveMarkdownStructure) {
+  let body = feedbackMode
+    ? normalizeFeedbackMathText(displayBody)
+    : preserveMarkdownStructure
+      ? absolutizeMarkdownAssetUrls(displayBody)
+      : normalizeQuestionMathText(displayBody);
+  if (preserveMarkdownStructure && !feedbackMode) {
     body = repairLeftRightDelimiters(repairCommonMathGlitches(body));
   }
-  body = simplifyFragileLatexDollars(fixInlineMathDelimiters(body));
+  body = feedbackMode
+    ? fixInlineMathDelimiters(body)
+    : simplifyFragileLatexDollars(fixInlineMathDelimiters(body));
 
   // Never send structured Markdown (headings, lists, tables) through RichMathText — it blanks long notes.
   const useRichMathBranch =
+    !feedbackMode &&
     !preferMarkdown &&
     !overviewMode &&
     !forced &&
