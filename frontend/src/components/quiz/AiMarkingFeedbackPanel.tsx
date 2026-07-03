@@ -58,18 +58,26 @@ export function SmartMarkingBulletList({
 
   if (items.length === 1 && !text.includes("•") && !text.includes("\n")) {
     return (
-      <p className={cn("text-xs leading-relaxed text-muted-foreground", className)}>
-        {items[0]}
-      </p>
+      <div className={cn("text-xs leading-relaxed text-muted-foreground", className)}>
+        <RichQuestionContent
+          text={items[0]!}
+          className="prose prose-sm max-w-none prose-p:my-0"
+        />
+      </div>
     );
   }
 
   return (
-    <ul className={cn("list-none space-y-2 text-xs leading-relaxed text-muted-foreground", className)}>
+    <ul className={cn("list-none space-y-2.5 text-xs leading-relaxed text-muted-foreground", className)}>
       {items.map((item, idx) => (
         <li key={idx} className="flex gap-2.5">
           <span className="mt-[0.35em] size-1 shrink-0 rounded-full bg-current opacity-50" aria-hidden />
-          <span className="min-w-0 flex-1">{item}</span>
+          <div className="min-w-0 flex-1">
+            <RichQuestionContent
+              text={item}
+              className="prose prose-sm max-w-none prose-p:my-0"
+            />
+          </div>
         </li>
       ))}
     </ul>
@@ -209,7 +217,12 @@ export function AiMarkingFeedbackPanel({
             const label = partLabels[part.index]?.trim() || `Part ${part.index + 1}`;
             return (
               <div key={part.index} className="space-y-2 rounded-md bg-white/60 px-3 py-2">
-                <p className="text-xs font-semibold text-foreground">{label}</p>
+                <p className="text-xs font-semibold text-foreground">
+                  <RichQuestionContent
+                    text={label}
+                    className="prose prose-sm max-w-none prose-p:my-0 prose-p:font-semibold"
+                  />
+                </p>
                 {part.studentAnswerRead ? (
                   <AnswerLine label="We interpreted your drawing as" value={part.studentAnswerRead} />
                 ) : null}

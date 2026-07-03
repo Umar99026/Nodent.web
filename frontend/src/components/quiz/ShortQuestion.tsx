@@ -47,6 +47,7 @@ import { useHandwritingModeActive } from "@/context/HandwritingModeContext";
 import { hasAnswerContent, usesHandwritingMarking } from "@/lib/handwritingMode";
 import { isDiagramLabelQuestion, partHasOverlay, partUsesFigureLabels, partUsesInlineInputs, inlineInputsForPart, slotIndexForPartOverlay, slotsForPart, expectedAnswersForQuestionSlots, type DiagramLabelPart, type PartFigureLabelSource } from "@/lib/diagramLabels";
 import { handwritingMarkUserError } from "@/lib/userFacingErrors";
+import { flushAllHandwriting, flushHandwriting } from "@/lib/handwritingFlush";
 import { CheckCircle2, XCircle, Send, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -348,6 +349,28 @@ export function ShortQuestion({
       ? partLabels.map((label, idx) => `${partSubmitLabel(label)} ${parts[idx] ?? ""}`.trim()).join("; ")
       : answer;
 
+  const handwritingFlushKey = (slot: string) =>
+    questionKey ? `${questionKey}:${slot}` : "";
+
+  const resolveHandwritingState = () => {
+    flushAllHandwriting();
+    if (isMultipart) {
+      const resolvedParts = parts.map((part, idx) => {
+        const key = handwritingFlushKey(`part-${idx}`);
+        return key ? flushHandwriting(key) || part : part;
+      });
+      return {
+        answer: resolvedParts
+          .map((part, idx) => `${partSubmitLabel(partLabels[idx] ?? "")} ${part}`.trim())
+          .join("; "),
+        parts: resolvedParts,
+      };
+    }
+    const key = handwritingFlushKey("main");
+    const resolvedAnswer = key ? flushHandwriting(key) || answer : answer;
+    return { answer: resolvedAnswer, parts };
+  };
+
   const canSubmit =
     (isMultipart ? parts.every((p) => hasAnswerContent(p)) : hasAnswerContent(compositeAnswer)) &&
     !disabled &&
@@ -357,11 +380,20 @@ export function ShortQuestion({
   const handleSubmit = async () => {
     if (!canSubmit) return;
 
+    const { answer: resolvedAnswer, parts: resolvedParts } = resolveHandwritingState();
+    if (isMultipart) setParts(resolvedParts);
+    else setAnswer(resolvedAnswer);
+    const resolvedComposite = isMultipart
+      ? partLabels
+          .map((label, idx) => `${partSubmitLabel(label)} ${resolvedParts[idx] ?? ""}`.trim())
+          .join("; ")
+      : resolvedAnswer;
+
     const accepted = question.acceptedAnswers ?? [];
     const usesHandwritingAi = usesHandwritingMarking(
       subjectId,
-      answer,
-      parts,
+      resolvedAnswer,
+      resolvedParts,
       isMultipart,
       openAiHandwritingEligible,
     );
@@ -371,14 +403,14 @@ export function ShortQuestion({
 
     if (!usesHandwritingAi) {
       if (isMultipart) {
-        const gradedParts = gradeMultipartAnswers(parts, accepted, configuredParts);
+        const gradedParts = gradeMultipartAnswers(resolvedParts, accepted, configuredParts);
         partCorrectFlags = gradedParts.map((g) => g.correct);
         setPartResults(partCorrectFlags);
         correct = multipartAllCorrect(partCorrectFlags);
         nextDpHint = Math.max(...gradedParts.map((g) => g.dpHint ?? 0)) || null;
       } else {
         setPartResults([]);
-        const graded = isAnswerCorrect(compositeAnswer, accepted);
+        const graded = isAnswerCorrect(resolvedComposite, accepted);
         correct = graded.correct;
         nextDpHint = graded.dpHint;
       }
@@ -392,8 +424,8 @@ export function ShortQuestion({
       setAiMarking(true);
       try {
         const ai = await requestHandwritingMark(subjectId, questionKey, {
-          answer: compositeAnswer,
-          parts,
+          answer: resolvedComposite,
+          parts: resolvedParts,
           isMultipart,
           question: buildSmartMarkPayload(question, {
             marks: effectiveTotalMarks,
@@ -840,6 +872,7 @@ export function ShortQuestion({
                       })}
                       rows={handwritingMode ? 4 : 3}
                       handwritingSize="md"
+                      flushKey={handwritingFlushKey(`part-${slotBaseIndex}`)}
                       onKeyDown={handleKeyDown}
                       className={cn(
                         examPaper && "w-full min-w-0",
@@ -917,6 +950,7 @@ export function ShortQuestion({
                     multiline={useTextArea}
                     rows={handwritingMode ? 8 : useTextArea ? 5 : 1}
                     handwritingSize={useTextArea ? "lg" : "md"}
+                    flushKey={handwritingFlushKey("main")}
                     onKeyDown={handleKeyDown}
                     className={cn(
                       examPaper && "w-full min-w-0",

@@ -22,6 +22,8 @@ type QuizAnswerFieldProps = {
   subjectId?: string;
   /** VCE booklet: dotted ruling, Return for new line, serif typed math overlay */
   examPaperMode?: boolean;
+  /** Sync export before submit (handwriting pads). */
+  flushKey?: string;
 };
 
 export function QuizAnswerField({
@@ -37,6 +39,7 @@ export function QuizAnswerField({
   label,
   subjectId,
   examPaperMode = false,
+  flushKey,
 }: QuizAnswerFieldProps) {
   const handwritingMode = useHandwritingModeActive(subjectId);
   const textValue = typedAnswerDisplay(value);
@@ -59,6 +62,7 @@ export function QuizAnswerField({
           examPaperMode={examPaperMode}
           lines={examLines}
           label={label}
+          flushKey={flushKey}
         />
       </div>
     );

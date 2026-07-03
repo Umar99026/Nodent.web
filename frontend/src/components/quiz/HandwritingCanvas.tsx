@@ -1,7 +1,8 @@
-import type { CSSProperties } from "react";
+import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Eraser } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { registerHandwritingFlush } from "@/lib/handwritingFlush";
 import { isHandwritingValue } from "@/lib/handwritingMode";
 import { cn } from "@/lib/utils";
 
@@ -25,7 +26,8 @@ const EXPORT_JPEG_QUALITY = 0.9;
 const DEFAULT_LINE_STEP = 32;
 const DEFAULT_LINE_INSET = 12;
 const EXAM_LINE_HEIGHT = 32;
-const EXPORT_DEBOUNCE_MS = 150;
+const EXPORT_DEBOUNCE_MS = 80;
+const PALM_TOUCH_RADIUS_PX = 28;
 
 /** Custom eraser cursor (hotspot at the rubbing tip). */
 const ERASER_CURSOR = (() => {
@@ -48,6 +50,8 @@ type HandwritingCanvasProps = {
   lines?: number;
   className?: string;
   label?: string;
+  /** Stable key for synchronous flush before submit. */
+  flushKey?: string;
 };
 
 function paintRuledLines(
@@ -192,15 +196,19 @@ export function HandwritingCanvas({
   lines,
   className,
   label,
+  flushKey,
 }: HandwritingCanvasProps) {
   const padRef = useRef<HTMLDivElement | null>(null);
   const linesRef = useRef<HTMLCanvasElement | null>(null);
   const inkRef = useRef<HTMLCanvasElement | null>(null);
   const drawingRef = useRef(false);
+  const activePointerIdRef = useRef<number | null>(null);
   const lastPointRef = useRef<{ x: number; y: number } | null>(null);
   const hasInkRef = useRef(false);
   const lastSentValueRef = useRef(value);
   const exportTimerRef = useRef<number | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const pendingPointRef = useRef<{ x: number; y: number } | null>(null);
   const ruledLines = examPaperMode
     ? Math.max(6, Math.min(24, Math.round(lines ?? 10)))
     : 0;
@@ -350,13 +358,18 @@ export function HandwritingCanvas({
     lastPointRef.current = { x, y };
   };
 
-  const exportComposite = useCallback(() => {
+  const exportComposite = useCallback((): string => {
     const lines = linesRef.current;
     const ink = inkRef.current;
-    if (!lines || !ink || !hasInkRef.current) {
-      lastSentValueRef.current = "";
-      onChange("");
-      return;
+    const hasInk = ink ? canvasHasInk(ink) : false;
+    hasInkRef.current = hasInk;
+
+    if (!lines || !ink || !hasInk) {
+      if (!hasInk && !isHandwritingValue(lastSentValueRef.current)) {
+        lastSentValueRef.current = "";
+        onChange("");
+      }
+      return lastSentValueRef.current;
     }
 
     const { sx, sy, sw, sh } = inkExportRegion(ink, examPaperMode);
@@ -370,7 +383,7 @@ export function HandwritingCanvas({
     temp.width = destW;
     temp.height = destH;
     const ctx = temp.getContext("2d");
-    if (!ctx) return;
+    if (!ctx) return lastSentValueRef.current;
 
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, destW, destH);
@@ -388,17 +401,17 @@ export function HandwritingCanvas({
     const dataUrl = temp.toDataURL("image/jpeg", EXPORT_JPEG_QUALITY);
     lastSentValueRef.current = dataUrl;
     onChange(dataUrl);
+    return dataUrl;
   }, [examPaperMode, onChange]);
 
-  const scheduleExport = useCallback(() => {
-    if (exportTimerRef.current != null) {
-      window.clearTimeout(exportTimerRef.current);
-    }
-    exportTimerRef.current = window.setTimeout(() => {
-      exportTimerRef.current = null;
-      exportComposite();
-    }, EXPORT_DEBOUNCE_MS);
-  }, [exportComposite]);
+  useEffect(() => {
+    if (!flushKey) return;
+    return registerHandwritingFlush(flushKey, () => exportComposite());
+  }, [flushKey, exportComposite]);
+
+  const setDrawingActive = useCallback((active: boolean) => {
+    document.body.classList.toggle("nodent-is-drawing", active);
+  }, []);
 
   useEffect(
     () => () => {
@@ -419,38 +432,98 @@ export function HandwritingCanvas({
     }
   };
 
-  const beginDraw = (clientX: number, clientY: number) => {
-    if (disabled) return;
+  const shouldIgnorePointer = (e: ReactPointerEvent<HTMLCanvasElement>) => {
+    if (!e.isPrimary) return true;
+    if (
+      e.pointerType === "touch" &&
+      typeof e.width === "number" &&
+      e.width > PALM_TOUCH_RADIUS_PX
+    ) {
+      return true;
+    }
+    if (
+      activePointerIdRef.current != null &&
+      e.pointerId !== activePointerIdRef.current
+    ) {
+      return true;
+    }
+    return false;
+  };
+
+  const beginDraw = (e: ReactPointerEvent<HTMLCanvasElement>) => {
+    if (disabled || shouldIgnorePointer(e)) {
+      if (e.pointerType === "touch") e.preventDefault();
+      return;
+    }
     blurFocusedField();
-    const point = canvasPoint(clientX, clientY);
+    const point = canvasPoint(e.clientX, e.clientY);
     if (!point) return;
+    activePointerIdRef.current = e.pointerId;
     drawingRef.current = true;
+    setDrawingActive(true);
     lastPointRef.current = point;
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // ignore
+    }
     plotDot(point.x, point.y, eraserMode);
   };
 
-  const moveDraw = (clientX: number, clientY: number) => {
-    if (!drawingRef.current || disabled) return;
-    const point = canvasPoint(clientX, clientY);
-    if (!point) return;
+  const flushPendingMove = useCallback(() => {
+    rafRef.current = null;
+    const point = pendingPointRef.current;
+    pendingPointRef.current = null;
+    if (!point || !drawingRef.current || disabled) return;
     plotLine(point.x, point.y, eraserMode);
+  }, [disabled, eraserMode]);
+
+  const moveDraw = (e: ReactPointerEvent<HTMLCanvasElement>) => {
+    if (!drawingRef.current || disabled) return;
+    if (e.pointerId !== activePointerIdRef.current) return;
+    const point = canvasPoint(e.clientX, e.clientY);
+    if (!point) return;
+    pendingPointRef.current = point;
+    if (rafRef.current == null) {
+      rafRef.current = window.requestAnimationFrame(flushPendingMove);
+    }
   };
 
-  const endDraw = useCallback(() => {
-    if (!drawingRef.current) return;
-    drawingRef.current = false;
-    lastPointRef.current = null;
-    const ink = inkRef.current;
-    if (ink) {
-      hasInkRef.current = canvasHasInk(ink);
-    }
-    scheduleExport();
-  }, [scheduleExport]);
+  const endDraw = useCallback(
+    (pointerId?: number) => {
+      if (pointerId != null && activePointerIdRef.current !== pointerId) return;
+      if (!drawingRef.current) return;
+      drawingRef.current = false;
+      activePointerIdRef.current = null;
+      lastPointRef.current = null;
+      pendingPointRef.current = null;
+      if (rafRef.current != null) {
+        window.cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      const ink = inkRef.current;
+      if (ink) {
+        hasInkRef.current = canvasHasInk(ink);
+      }
+      setDrawingActive(false);
+      if (exportTimerRef.current != null) {
+        window.clearTimeout(exportTimerRef.current);
+        exportTimerRef.current = null;
+      }
+      exportComposite();
+    },
+    [exportComposite, setDrawingActive],
+  );
 
   useEffect(() => {
-    const onWindowMouseUp = () => endDraw();
-    window.addEventListener("mouseup", onWindowMouseUp);
-    return () => window.removeEventListener("mouseup", onWindowMouseUp);
+    const onWindowPointerUp = (e: PointerEvent) => endDraw(e.pointerId);
+    window.addEventListener("pointerup", onWindowPointerUp);
+    window.addEventListener("pointercancel", onWindowPointerUp);
+    return () => {
+      window.removeEventListener("pointerup", onWindowPointerUp);
+      window.removeEventListener("pointercancel", onWindowPointerUp);
+      document.body.classList.remove("nodent-is-drawing");
+    };
   }, [endDraw]);
 
   return (
@@ -494,42 +567,29 @@ export function HandwritingCanvas({
               disabled ? "cursor-not-allowed" : !eraserMode && "cursor-crosshair",
             )}
             style={!disabled && eraserMode ? { cursor: ERASER_CURSOR } : undefined}
-            onMouseDown={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              beginDraw(e.clientX, e.clientY);
-            }}
-            onMouseMove={(e) => {
-              if (!drawingRef.current) return;
-              e.preventDefault();
-              moveDraw(e.clientX, e.clientY);
-            }}
-            onMouseUp={() => endDraw()}
             onPointerDown={(e) => {
-              if (e.pointerType === "mouse") return;
               e.preventDefault();
               e.stopPropagation();
-              beginDraw(e.clientX, e.clientY);
-              e.currentTarget.setPointerCapture(e.pointerId);
+              beginDraw(e);
             }}
             onPointerMove={(e) => {
-              if (e.pointerType === "mouse" || !drawingRef.current) return;
+              if (!drawingRef.current) return;
               e.preventDefault();
-              moveDraw(e.clientX, e.clientY);
+              moveDraw(e);
             }}
             onPointerUp={(e) => {
-              if (e.pointerType === "mouse") return;
+              e.preventDefault();
               try {
                 e.currentTarget.releasePointerCapture(e.pointerId);
               } catch {
                 // ignore
               }
-              endDraw();
+              endDraw(e.pointerId);
             }}
             onPointerCancel={(e) => {
-              if (e.pointerType === "mouse") return;
-              endDraw();
+              endDraw(e.pointerId);
             }}
+            onContextMenu={(e) => e.preventDefault()}
           />
           {!disabled ? (
             <Button

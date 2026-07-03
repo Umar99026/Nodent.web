@@ -127,19 +127,22 @@ export async function requestSmartMark(
   },
 ): Promise<SmartMarkResult | null> {
   const q = input.question;
+  const handwritingImages = (input.responseImages ?? []).filter(isHandwritingValue);
+  const demoHandwritingMark =
+    handwritingImages.length > 0 && isDemoMathsSubject(subjectId);
   if (
     !qualifiesForOpenAiMarking({
       questionText: q.question,
       questionType: q.type,
       partLabels: q.answerParts?.map((p) => p.label),
       acceptedAnswers: q.acceptedAnswers,
-    })
+    }) &&
+    !demoHandwritingMark
   ) {
     return null;
   }
 
   try {
-    const handwritingImages = (input.responseImages ?? []).filter(isHandwritingValue);
     const compressedImages = handwritingImages.length
       ? await Promise.all(
           handwritingImages.map((img) => prepareHandwritingForMarking(img)),
@@ -363,30 +366,23 @@ export function buildFallbackHandwritingMark(
   expectedAnswers: string[],
 ): SmartMarkResult {
   const answers = expectedAnswers.map((a) => String(a ?? "").trim()).filter(Boolean);
-  const feedback = answers.length
-    ? bulletsToFeedbackText(
-        buildWrongAnswerBullets({
-          studentAnswer: "",
-          expectedAnswers: answers,
-        }),
-      )
-    : `• Could not read your drawing. Try again.`;
   return {
     correct: false,
     scorePercent: 0,
-    feedback: `• Could not read your drawing right now.\n${feedback}`,
+    feedback:
+      "• We could not read your drawing clearly — try darker strokes and a larger final answer.\n" +
+      (answers.length
+        ? `• Model answers: ${answers.join("; ")}`
+        : "• Try submitting again after lifting your stylus or finger from the pad."),
     correctAnswers: answers.length ? answers : undefined,
     partResults: answers.map((ans, index) => ({
       index,
       correct: false,
       marksAwarded: 0,
       correctAnswer: ans,
-      partFeedback: bulletsToFeedbackText(
-        buildWrongAnswerBullets({
-          studentAnswer: "",
-          expectedAnswers: [ans],
-        }),
-      ),
+      partFeedback:
+        `• We could not read this part clearly — check your strokes are dark enough to scan.\n` +
+        `• Model answer for this part: ${ans}`,
     })),
   };
 }
