@@ -86,6 +86,7 @@ export function inferUseAiMarkingForImport(input: {
 }
 
 import type { AiMarkPartResult } from "@/components/quiz/AiMarkingFeedbackPanel";
+import type { MarkBreakdown, MarkStepResult } from "@/lib/markBreakdown";
 import { handwritingMarkUserError, sanitizeUserFacingError } from "@/lib/userFacingErrors";
 import { isDemoMathsSubject } from "@/lib/handwritingMode";
 import {
@@ -100,6 +101,9 @@ export type SmartMarkResult = {
   feedback: string;
   correctAnswers?: string[];
   partResults?: AiMarkPartResult[];
+  stepResults?: MarkStepResult[];
+  marksAwarded?: number;
+  maxMarks?: number;
 };
 
 export type SmartMarkQuestionPayload = {
@@ -109,6 +113,7 @@ export type SmartMarkQuestionPayload = {
   marks: number;
   guidance?: string;
   acceptedAnswers?: string[];
+  markBreakdown?: MarkBreakdown;
   answerParts?: Array<{
     key?: string;
     label: string;
@@ -134,7 +139,36 @@ function normalizeSmartMarkFeedback(result: SmartMarkResult): SmartMarkResult {
         ? normalizeFeedbackMathText(p.studentAnswerRead)
         : p.studentAnswerRead,
     })),
+    stepResults: result.stepResults?.map((s) => ({
+      ...s,
+      label: normalizeFeedbackMathText(s.label),
+      model: s.model ? normalizeFeedbackMathText(s.model) : s.model,
+      studentText: s.studentText ? normalizeFeedbackMathText(s.studentText) : s.studentText,
+      feedback: s.feedback ? normalizeFeedbackMathText(s.feedback) : s.feedback,
+    })),
   };
+}
+
+function mapApiMarkToSmartMark(mark: {
+  correct?: boolean;
+  scorePercent?: number;
+  feedback?: string;
+  correctAnswers?: string[];
+  partResults?: AiMarkPartResult[];
+  stepResults?: MarkStepResult[];
+  marksAwarded?: number;
+  maxMarks?: number;
+}): SmartMarkResult {
+  return normalizeSmartMarkFeedback({
+    correct: Boolean(mark.correct),
+    scorePercent: Number(mark.scorePercent ?? 0),
+    feedback: String(mark.feedback ?? ""),
+    correctAnswers: mark.correctAnswers,
+    partResults: mark.partResults,
+    stepResults: mark.stepResults,
+    marksAwarded: mark.marksAwarded,
+    maxMarks: mark.maxMarks,
+  });
 }
 
 export async function requestSmartMark(
@@ -144,6 +178,7 @@ export async function requestSmartMark(
     responseText?: string;
     responseImages?: string[];
     studentParts?: string[];
+    studentSteps?: string[];
     question: SmartMarkQuestionPayload;
   },
 ): Promise<SmartMarkResult | null> {
@@ -151,6 +186,9 @@ export async function requestSmartMark(
   const handwritingImages = (input.responseImages ?? []).filter(isHandwritingValue);
   const demoHandwritingMark =
     handwritingImages.length > 0 && isDemoMathsSubject(subjectId);
+  const breakdownMark =
+    (input.studentSteps?.some((s) => String(s ?? "").trim()) ?? false) &&
+    Boolean(input.question.markBreakdown?.steps?.length);
   if (
     !qualifiesForOpenAiMarking({
       questionText: q.question,
@@ -158,7 +196,8 @@ export async function requestSmartMark(
       partLabels: q.answerParts?.map((p) => p.label),
       acceptedAnswers: q.acceptedAnswers,
     }) &&
-    !demoHandwritingMark
+    !demoHandwritingMark &&
+    !breakdownMark
   ) {
     return null;
   }
@@ -186,11 +225,13 @@ export async function requestSmartMark(
         responseText,
         responseImages: compressedImages,
         studentParts,
+        studentSteps: input.studentSteps,
+        markBreakdown: input.question.markBreakdown,
         question: input.question,
       }),
     });
     const mark = ai?.mark ?? null;
-    return mark ? normalizeSmartMarkFeedback(mark) : null;
+    return mark ? mapApiMarkToSmartMark(mark) : null;
   } catch (err) {
     throw new Error(
       sanitizeUserFacingError(
@@ -419,6 +460,7 @@ export function buildSmartMarkPayload(
     marks?: number;
     guidance?: string;
     acceptedAnswers?: string[];
+    markBreakdown?: SmartMarkQuestionPayload["markBreakdown"];
     answerParts?: AnswerPart[];
   },
   options: {
@@ -439,6 +481,8 @@ export function buildSmartMarkPayload(
     acceptedAnswers: [
       ...(Array.isArray(question.acceptedAnswers) ? question.acceptedAnswers : []),
     ].filter(Boolean),
+    markBreakdown: (question as { markBreakdown?: SmartMarkQuestionPayload["markBreakdown"] })
+      .markBreakdown,
     answerParts:
       configuredParts.length >= 2
         ? configuredParts.map((p, idx) => ({

@@ -1,4 +1,4 @@
-/** Turn raw API / OpenAI errors into short messages safe to show students. */
+/** Turn raw API / Gemini errors into short messages safe to show students. */
 export function sanitizeUserFacingError(
   raw: unknown,
   fallback = "Something went wrong. Please try again.",
@@ -22,13 +22,14 @@ export function sanitizeUserFacingError(
   ) {
     return "Too many requests. Wait a moment and try again.";
   }
-  if (lower.includes("openai error") || lower.includes("invalid json")) {
+  if (lower.includes("gemini error") || lower.includes("openai error") || lower.includes("invalid json")) {
     return fallback;
   }
   if (lower.includes("handwriting image is too large") || lower.includes("too large to mark")) {
     return "Your drawing is too large. Use a smaller area or less ink.";
   }
   if (
+    lower.includes("gemini_api_key") ||
     lower.includes("openai_api_key") ||
     lower.includes("ai marking is not configured") ||
     lower.includes("not configured")
@@ -43,11 +44,32 @@ export function sanitizeUserFacingError(
   if (text.includes("{") && (text.includes("error") || text.includes("message"))) {
     return fallback;
   }
-  if (text.length > 140 || text.includes("OpenAI error (")) {
+  if (text.length > 140 || text.includes("Gemini error (") || text.includes("OpenAI error (")) {
     return fallback;
   }
 
   return text;
+}
+
+export function questionHelpUserError(raw?: unknown): string {
+  const text = String(raw ?? "").trim();
+  const lower = text.toLowerCase();
+  if (
+    lower.includes("gemini_api_key") ||
+    lower.includes("question help is not configured")
+  ) {
+    if (typeof window !== "undefined") {
+      const host = window.location.hostname.toLowerCase();
+      if (host === "localhost" || host === "127.0.0.1" || import.meta.env.DEV) {
+        return "Question help needs a Gemini API key. Add GEMINI_API_KEY=your_key to .dev.vars in the project root (AI Studio keys may start with AIza or AQ), then restart npm run dev:all.";
+      }
+    }
+    return "Question help is not available right now.";
+  }
+  if (lower.includes("no free quota") || lower.includes("gemini-2.5-flash")) {
+    return text;
+  }
+  return sanitizeUserFacingError(raw, "Could not get help right now. Try again.");
 }
 
 export function handwritingMarkUserError(raw?: unknown): string {

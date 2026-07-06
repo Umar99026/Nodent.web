@@ -8,6 +8,7 @@ import {
 } from "react";
 import { apiFetch, ApiError, BOOTSTRAP_FETCH_TIMEOUT_MS } from "@/lib/api";
 import { STORAGE_KEYS, API_PATHS, type AccountRole } from "@/lib/constants";
+import { clearDashboardGreeting } from "@/lib/dashboardGreeting";
 
 export interface User {
   id: number;
@@ -15,6 +16,11 @@ export interface User {
   username: string;
   profilePhoto?: string | null;
   accountRole?: AccountRole | null;
+  onboardingCompletedAt?: string | null;
+  isVceStudent?: boolean | null;
+  plan?: string | null;
+  premiumUntil?: string | null;
+  isPremium?: boolean | null;
 }
 
 interface AuthState {
@@ -33,6 +39,7 @@ interface AuthContextValue extends AuthState {
     accountRole: AccountRole,
   ) => Promise<void>;
   logout: () => Promise<void>;
+  completeOnboarding: (user: User) => void;
   updateAccount: (payload: {
     username?: string;
     currentPassword?: string;
@@ -286,15 +293,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const logout = useCallback(async () => {
+    setState((prev) => {
+      if (prev.user?.id != null) clearDashboardGreeting(prev.user.id);
+      return {
+        user: null,
+        token: null,
+        isAuthenticated: false,
+        isLoading: false,
+      };
+    });
     localStorage.removeItem(STORAGE_KEYS.authToken);
     localStorage.removeItem(STORAGE_KEYS.currentUser);
-
-    setState({
-      user: null,
-      token: null,
-      isAuthenticated: false,
-      isLoading: false,
-    });
 
     void apiFetch(API_PATHS.auth.logout, { method: "POST" }).catch(() => {});
   }, []);
@@ -333,9 +342,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }));
   }, []);
 
+  const completeOnboarding = useCallback((user: User) => {
+    const next = withProfilePhoto(user);
+    persistCurrentUser(next);
+    setState((prev) => ({
+      ...prev,
+      user: next,
+    }));
+  }, []);
+
   return (
     <AuthContext.Provider
-      value={{ ...state, login, signup, logout, updateAccount, setProfilePhoto }}
+      value={{
+        ...state,
+        login,
+        signup,
+        logout,
+        completeOnboarding,
+        updateAccount,
+        setProfilePhoto,
+      }}
     >
       {children}
     </AuthContext.Provider>

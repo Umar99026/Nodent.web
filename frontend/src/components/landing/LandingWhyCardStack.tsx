@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import type { LucideIcon } from "lucide-react";
-import { LineChart, Trophy, Users } from "lucide-react";
+import { Target, Timer, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const WHY_CARDS: {
@@ -10,22 +10,22 @@ const WHY_CARDS: {
   body: string;
 }[] = [
   {
-    icon: Trophy,
-    quote: "A score tells you how you did. A rank tells you where you stand.",
-    title: "Why ranking matters",
-    body: "Ranking gives motivation and context — so every mark means something compared to other students.",
+    icon: Wallet,
+    quote: "Don't want to spend hundreds per week on a tutor? We can help.",
+    title: "Tutor-level insight, not tutor prices",
+    body: "Get targeted feedback on practice and essays without stacking another weekly bill on top of school.",
   },
   {
-    icon: LineChart,
-    quote: "Stop guessing what to revise.",
-    title: "Why progress tracking matters",
-    body: "See weak spots, watch accuracy improve, and focus where it matters most.",
+    icon: Target,
+    quote: "Stop guessing what to improve.",
+    title: "Know your weak spots",
+    body: "See which topics cost you marks, what you wrote wrong, and what to fix before your next SAC.",
   },
   {
-    icon: Users,
-    quote: "Every question can move you up the leaderboard.",
-    title: "Why competition matters",
-    body: "Revision feels different when you're actively climbing — not just passively reading notes.",
+    icon: Timer,
+    quote: "Feedback in seconds — not days.",
+    title: "Improve while it's still fresh",
+    body: "Smart marking lands right after you submit, so you can fix mistakes in the same study session.",
   },
 ];
 

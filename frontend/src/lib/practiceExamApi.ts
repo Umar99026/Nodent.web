@@ -1,4 +1,5 @@
-import { apiFetch, apiFetchAdmin } from "@/lib/api";
+import { apiFetch, apiFetchAdmin, ApiError } from "@/lib/api";
+import { isPremiumError } from "@/lib/premium";
 import { parsePracticeExamNumber, type PracticeExamNumber } from "@/lib/practiceExams";
 import type {
   PracticeExamListItem,
@@ -33,7 +34,10 @@ export async function fetchPracticeExamMeta(
 ): Promise<PracticeExamMeta | null> {
   try {
     return await apiFetch<PracticeExamMeta>(examPath(subjectId, year, examNumber));
-  } catch {
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 403 && isPremiumError(err)) {
+      throw err;
+    }
     return null;
   }
 }

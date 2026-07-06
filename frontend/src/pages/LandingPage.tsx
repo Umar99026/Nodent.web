@@ -39,9 +39,9 @@ const PRICING = [
 
     period: "during beta",
 
-    blurb: "Try Nodent and see where you stand on one subject.",
+    blurb: "Try smart practice with instant feedback — no credit card.",
 
-    perks: ["VCE-style practice", "Basic rankings", "Progress snapshot"],
+    perks: ["VCE-style practice", "Basic progress snapshot", "See what to work on next"],
 
     locked: false,
 
@@ -55,17 +55,17 @@ const PRICING = [
 
     period: "/ month",
 
-    blurb: "Full competitive revision for a serious study year.",
+    blurb: "Full revision with smart marking — less than one tutor hour.",
 
     perks: [
 
+      "AI essay & written-answer marking",
+
+      "Feedback in seconds, not days",
+
       "All maths & English subjects",
 
-      "Live rankings & percentiles",
-
-      "Progress dashboard & insights",
-
-      "Timed quiz & topic content",
+      "Rankings, percentiles & weak-topic insights",
 
     ],
 
@@ -192,9 +192,9 @@ export default function LandingPage() {
           <div className="mt-24 grid gap-12 lg:grid-cols-2 lg:items-center lg:gap-16">
             <Reveal>
               <SectionEyebrow>Why it works</SectionEyebrow>
-              <SectionTitle>Ranking, progress, and competition — together.</SectionTitle>
+              <SectionTitle>Practice smarter. Recover more marks.</SectionTitle>
               <p className="mt-4 text-lg text-slate-600">
-                Three ideas that change how revision feels when you can see where you stand.
+                Three ways Nodent replaces the guesswork — and a lot of the tutoring bill.
               </p>
             </Reveal>
 
@@ -229,13 +229,12 @@ export default function LandingPage() {
 
                 <SectionEyebrow>Demo</SectionEyebrow>
 
-                <SectionTitle>See how a session works.</SectionTitle>
+                <SectionTitle>From question to feedback in seconds.</SectionTitle>
 
                 <p className="mt-4 text-lg leading-relaxed text-slate-600">
 
-                  Choose a subject, answer VCE-style questions, get instant feedback, see your score,
-
-                  compare your rank, and track growth across sessions.
+                  Pick a subject, answer VCE-style questions, get marked instantly, and see exactly
+                  what to improve — before you wait days for a teacher or tutor to get back to you.
 
                 </p>
 
@@ -255,9 +254,8 @@ export default function LandingPage() {
 
                 <p className="text-lg leading-relaxed text-slate-600">
 
-                  Follow the journey — each step shows what students actually do in Nodent, from
-
-                  picking a subject to watching their rank and progress move over time.
+                  Follow the flow — practice, get feedback, spot weak topics, and climb the
+                  leaderboard without guessing whether you&apos;re actually improving.
 
                 </p>
 
@@ -275,7 +273,7 @@ export default function LandingPage() {
 
                 >
 
-                  See where you stand
+                  Try it free
 
                   <ArrowRight className="ml-2 size-4" />
 
@@ -329,11 +327,11 @@ export default function LandingPage() {
 
               <SectionEyebrow>Pricing</SectionEyebrow>
 
-              <SectionTitle>Start free during beta.</SectionTitle>
+              <SectionTitle>Start free. Upgrade when you&apos;re ready.</SectionTitle>
 
               <p className="mt-4 text-lg text-slate-600">
 
-                Try Nodent and see where you stand — more plans are on the way.
+                Practice smarter during beta — paid plans with full smart marking are on the way.
 
               </p>
 
@@ -557,13 +555,14 @@ export default function LandingPage() {
 
                   <h2 className="font-display text-3xl font-bold text-white sm:text-4xl">
 
-                    Start revising with clarity.
+                    Stop guessing. Start recovering marks.
 
                   </h2>
 
                   <p className="mt-4 text-white/90">
 
-                    See where you stand today — before SACs, before exams, before results land.
+                    Feedback in seconds — not days. Create your free account and see what to fix
+                    before your next SAC.
 
                   </p>
 

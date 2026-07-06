@@ -24,6 +24,8 @@ type QuizAnswerFieldProps = {
   examPaperMode?: boolean;
   /** Sync export before submit (handwriting pads). */
   flushKey?: string;
+  /** Ruled-pad hint above handwriting (default on for main answer areas). */
+  workingHint?: boolean;
 };
 
 export function QuizAnswerField({
@@ -40,6 +42,7 @@ export function QuizAnswerField({
   subjectId,
   examPaperMode = false,
   flushKey,
+  workingHint = true,
 }: QuizAnswerFieldProps) {
   const handwritingMode = useHandwritingModeActive(subjectId);
   const textValue = typedAnswerDisplay(value);
@@ -53,7 +56,7 @@ export function QuizAnswerField({
       (examPaperMode ? "lg" : multiline ? "lg" : rows >= 5 ? "lg" : "md");
     return (
       <div className={cn("space-y-1.5", className)}>
-        {examPaperMode ? <WorkingAnswerHint /> : null}
+        {examPaperMode && workingHint ? <WorkingAnswerHint /> : null}
         <HandwritingCanvas
           value={value}
           onChange={onChange}

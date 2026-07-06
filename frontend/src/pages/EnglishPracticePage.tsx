@@ -1,919 +1,408 @@
-import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { useAuth } from "@/context/AuthContext";
-import { AppShell } from "@/components/layout/AppShell";
+import { useCallback, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { API_PATHS } from "@/lib/constants";
-import { AI_FETCH_TIMEOUT_MS, apiFetch } from "@/lib/api";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { apiFetch } from "@/lib/api";
+import { PREMIUM_PATH } from "@/lib/premium";
+import { PremiumGate } from "@/components/premium/GetPremiumButton";
+import { readImportTextFile } from "@/lib/readImportTextFile";
+import type { EnglishEssayResponse } from "@/lib/englishEssay";
+import { AnnotatedEssayView } from "@/components/english/AnnotatedEssayView";
+import { EnglishCriteriaBreakdown } from "@/components/english/EnglishCriteriaBreakdown";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ExamPaperAnswerBlock } from "@/components/quiz/ExamPaperAnswerBlock";
+import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Check, Loader2, X } from "lucide-react";
-import { compressImageFileToDataUrl } from "@/lib/imageCompressor";
-import { toast } from "sonner";
-import { RichQuestionContent } from "@/components/quiz/RichQuestionContent";
 import {
-  cleanSectionAPromptText,
-  cleanSectionBPromptText,
-  formatSectionBPromptDisplay,
-  sectionBFramework,
-  sectionBPromptInstruction,
-  sectionBTitle,
-  shouldShowSectionBPrompt,
-} from "@/lib/sectionBPrompts";
+  FileText,
+  Loader2,
+  MessageSquareQuote,
+  PenLine,
+  SendHorizontal,
+  Sparkles,
+  Upload,
+} from "lucide-react";
+import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
-type Book = { id: number; title: string; promptCount: number };
-type Section = "A" | "B" | "C";
-type Prompt = { id: number; bookId: number; bookTitle: string; prompt: string; section: Section };
-type ResponseRow = {
-  id: number;
-  promptId: number;
-  prompt: string;
-  userId: number;
-  username: string;
-  responseType: "essay" | "paragraph";
-  responseText: string;
-  imageUrls: string[];
-  updatedAt: string;
-  aiScore: number | null;
-  aiFeedback: string | null;
-  section: Section;
+type SubmitResult = {
+  ok: boolean;
+  id?: number;
+  aiScore?: {
+    score: number;
+    summary: string;
+    criteria: EnglishEssayResponse["aiCriteria"];
+    highlights: EnglishEssayResponse["aiHighlights"];
+  } | null;
+  aiScoringPending?: boolean;
+  aiConfigured?: boolean;
+  premiumBlocked?: boolean;
+  premiumMessage?: string | null;
 };
 
-function dedupePrompts(list: Prompt[]): Prompt[] {
-  const seen = new Set<string>();
-  const out: Prompt[] = [];
-  for (const p of list) {
-    const key = String(p.prompt ?? "")
-      .toLowerCase()
-      .replace(/\s+/g, " ")
-      .replace(/[“”]/g, '"')
-      .replace(/[‘’]/g, "'")
-      .trim();
-    if (!key || seen.has(key)) continue;
-    seen.add(key);
-    out.push(p);
-  }
-  return out;
+function mergeResponse(
+  base: EnglishEssayResponse | null,
+  patch: Partial<EnglishEssayResponse>,
+): EnglishEssayResponse | null {
+  if (!base && !patch.id) return null;
+  return {
+    id: patch.id ?? base?.id ?? 0,
+    promptId: patch.promptId ?? base?.promptId ?? null,
+    customPrompt: patch.customPrompt ?? base?.customPrompt ?? null,
+    prompt: patch.prompt ?? base?.prompt ?? "",
+    userId: patch.userId ?? base?.userId ?? 0,
+    username: patch.username ?? base?.username ?? "",
+    responseType: patch.responseType ?? base?.responseType ?? "essay",
+    responseText: patch.responseText ?? base?.responseText ?? "",
+    imageUrls: patch.imageUrls ?? base?.imageUrls ?? [],
+    updatedAt: patch.updatedAt ?? base?.updatedAt ?? "",
+    aiScore: patch.aiScore !== undefined ? patch.aiScore : (base?.aiScore ?? null),
+    aiFeedback: patch.aiFeedback !== undefined ? patch.aiFeedback : (base?.aiFeedback ?? null),
+    aiCriteria: patch.aiCriteria !== undefined ? patch.aiCriteria : (base?.aiCriteria ?? null),
+    aiHighlights: patch.aiHighlights ?? base?.aiHighlights ?? [],
+    aiScoredAt: patch.aiScoredAt !== undefined ? patch.aiScoredAt : (base?.aiScoredAt ?? null),
+  };
 }
 
-function englishResponsesQuery(section: Section, promptId: number, bookId?: number): string {
-  const params = new URLSearchParams({
-    section,
-    promptId: String(promptId),
-  });
-  if (section === "A" && bookId != null && Number.isFinite(bookId) && bookId > 0) {
-    params.set("bookId", String(bookId));
-  }
-  return `?${params.toString()}`;
-}
-
-function englishPromptsQuery(section: Section, bookId?: number, promptId?: number): string {
-  if (promptId != null && Number.isFinite(promptId) && promptId > 0) {
-    return `?promptId=${encodeURIComponent(promptId)}`;
-  }
-  if (section === "A" && bookId != null && Number.isFinite(bookId) && bookId > 0) {
-    return `?section=A&bookId=${encodeURIComponent(bookId)}`;
-  }
-  return `?section=${encodeURIComponent(section)}`;
-}
-
-function formatEnglishPromptForSection(section: Section, raw: string): string {
-  const base = cleanSectionBPromptText(raw);
-  if (!base.trim()) return "";
-  if (section === "A") return cleanSectionAPromptText(base);
-  if (section === "B") return formatSectionBPromptDisplay(base);
-  return base;
+async function loadEssayResponse(id: number): Promise<EnglishEssayResponse> {
+  const data = await apiFetch<{ response: EnglishEssayResponse }>(
+    `${API_PATHS.english.responses}/${id}`,
+  );
+  return data.response;
 }
 
 export function EnglishPracticePanel() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const [books, setBooks] = useState<Book[]>([]);
-  const [section, setSection] = useState<Section>("A");
-  const [selectedBookId, setSelectedBookId] = useState<string>("");
-  const [prompts, setPrompts] = useState<Prompt[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [submittingPromptId, setSubmittingPromptId] = useState<number | null>(null);
+  const [essayText, setEssayText] = useState("");
+  const [customPrompt, setCustomPrompt] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const [result, setResult] = useState<EnglishEssayResponse | null>(null);
+  const [polling, setPolling] = useState(false);
+  const [quotaMessage, setQuotaMessage] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [textByPrompt, setTextByPrompt] = useState<Record<number, string>>({});
-  const [imagesByPrompt, setImagesByPrompt] = useState<Record<number, string[]>>({});
-  const [activePromptIndex, setActivePromptIndex] = useState(0);
-  const [submittedPromptIds, setSubmittedPromptIds] = useState<Record<number, true>>({});
-
-  const numericBookId = Number(selectedBookId);
-  const effectiveBookId =
-    Number.isFinite(numericBookId) && numericBookId > 0
-      ? numericBookId
-      : books[0]?.id ?? Number.NaN;
-
-  // Allow deep-linking from PracticeSetup: /quiz/english?section=B
-  useEffect(() => {
-    const s = String(searchParams.get("section") ?? "")
-      .trim()
-      .toUpperCase();
-    if (!s) return;
-    const next: Section = s === "B" ? "B" : s === "C" ? "C" : "A";
-    setSection(next);
-  }, [searchParams]);
-
-  async function loadBooks(currentSection: Section) {
-    const data = await apiFetch<{ books: Book[] }>(
-      `${API_PATHS.english.books}?section=${encodeURIComponent(currentSection)}`,
+  const ingestFiles = useCallback(async (files: FileList | File[]) => {
+    const list = Array.from(files).filter(
+      (f) =>
+        f.type.startsWith("text/") ||
+        /\.(txt|md)$/i.test(f.name) ||
+        f.type === "application/octet-stream",
     );
-    const nextBooks = data.books || [];
-    setBooks(nextBooks);
-    if (currentSection === "A") {
-      setSelectedBookId((prev) => {
-        if (!nextBooks.length) return "";
-        if (!prev) return String(nextBooks[0].id);
-        return nextBooks.some((b) => String(b.id) === prev) ? prev : String(nextBooks[0].id);
-      });
-    } else {
-      setSelectedBookId("");
-    }
-  }
-
-  async function loadBookData(id: number, currentSection: Section) {
-    const resolvedBookId =
-      currentSection === "A" && (!Number.isFinite(id) || id <= 0)
-        ? (books[0]?.id ?? Number.NaN)
-        : id;
-    const suffix =
-      currentSection === "A"
-        ? Number.isFinite(resolvedBookId) && resolvedBookId > 0
-          ? `?section=A&bookId=${encodeURIComponent(resolvedBookId)}`
-          : `?section=A`
-        : `?section=${encodeURIComponent(currentSection)}`;
-    const p = await apiFetch<{ prompts: Prompt[] }>(`${API_PATHS.english.prompts}${suffix}`);
-    setPrompts(p.prompts || []);
-  }
-
-  useEffect(() => {
-    (async () => {
-      try {
-        setLoading(true);
-        await loadBooks(section);
-      } catch {
-        toast.error("Could not load English setup.");
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [section]);
-
-  useEffect(() => {
-    if (section === "A" && (!Number.isFinite(effectiveBookId) || effectiveBookId <= 0)) return;
-    (async () => {
-      try {
-        await loadBookData(effectiveBookId, section);
-        setActivePromptIndex(0);
-      } catch {
-        toast.error("Could not load prompts/responses.");
-      }
-    })();
-  }, [effectiveBookId, section, books]);
-
-  const visiblePrompts = useMemo(() => {
-    const cleaned = prompts.map((p) => {
-      const nextPrompt =
-        section === "A"
-          ? cleanSectionAPromptText(p.prompt)
-          : formatSectionBPromptDisplay(p.prompt);
-      return { ...p, prompt: nextPrompt };
-    });
-    if (section === "B") {
-      return dedupePrompts(cleaned.filter((p) => shouldShowSectionBPrompt(p.prompt)));
-    }
-    return dedupePrompts(cleaned);
-  }, [prompts, section]);
-  const selectedBook = useMemo(
-    () => books.find((b) => String(b.id) === selectedBookId) ?? null,
-    [books, selectedBookId],
-  );
-
-  useEffect(() => {
-    if (activePromptIndex < visiblePrompts.length) return;
-    setActivePromptIndex(0);
-  }, [activePromptIndex, visiblePrompts.length]);
-
-  const activePrompt = visiblePrompts[activePromptIndex] ?? null;
-
-  const handleFiles = async (promptId: number, files: FileList | null) => {
-    const list = Array.from(files ?? []).filter((f) => f.type.startsWith("image/")).slice(0, 6);
-    if (!list.length) return;
-    const urls = await Promise.all(
-      list.map((f) =>
-        compressImageFileToDataUrl(f, {
-          maxWidth: 1800,
-          maxHeight: 1800,
-          quality: 0.72,
-          outputType: "image/jpeg",
-        }),
-      ),
-    );
-    setImagesByPrompt((prev) => ({ ...prev, [promptId]: [...(prev[promptId] ?? []), ...urls] }));
-  };
-
-  const submitResponse = async (prompt: Prompt) => {
-    const responseText = (textByPrompt[prompt.id] ?? "").trim();
-    const imageUrls = imagesByPrompt[prompt.id] ?? [];
-    if (!responseText && imageUrls.length === 0) {
-      toast.error("Write something or upload at least one image.");
+    if (!list.length) {
+      toast.error("Drop a text file (.txt or .md), or paste your essay.");
       return;
     }
-    setSubmittingPromptId(prompt.id);
     try {
-      const submitResult = await apiFetch<{
-        ok: boolean;
-        id?: number;
-        aiScore?: { score: number; feedback: string } | null;
-        aiScoringPending?: boolean;
-        aiConfigured?: boolean;
-      }>(API_PATHS.english.responses, {
+      const parts = await Promise.all(list.slice(0, 3).map((f) => readImportTextFile(f)));
+      const merged = parts.join("\n\n").trim();
+      if (!merged) {
+        toast.error("Could not read text from that file.");
+        return;
+      }
+      setEssayText((prev) => (prev.trim() ? `${prev.trim()}\n\n${merged}` : merged));
+      toast.success("Essay loaded from file.");
+    } catch {
+      toast.error("Could not read that file.");
+    }
+  }, []);
+
+  const pollForScore = useCallback(async (responseId: number) => {
+    setPolling(true);
+    try {
+      for (let attempt = 0; attempt < 30; attempt += 1) {
+        await new Promise((r) => setTimeout(r, 2000));
+        const row = await loadEssayResponse(responseId);
+        setResult((prev) => mergeResponse(prev, row));
+        if (row.aiScore != null) {
+          toast.success(`Marked: ${row.aiScore}/10`);
+          return;
+        }
+      }
+      toast.message("Marking is taking longer than usual. Check back shortly.");
+    } catch {
+      toast.error("Could not load marking results.");
+    } finally {
+      setPolling(false);
+    }
+  }, []);
+
+  const handleSubmit = async () => {
+    const responseText = essayText.trim();
+    if (!responseText) {
+      toast.error("Paste or upload your essay first.");
+      return;
+    }
+    setSubmitting(true);
+    setQuotaMessage(null);
+    try {
+      const submitResult = await apiFetch<SubmitResult>(API_PATHS.english.responses, {
         method: "POST",
         body: JSON.stringify({
-          promptId: prompt.id,
+          customPrompt: customPrompt.trim() || undefined,
           responseType: "essay",
           responseText,
-          imageUrls,
         }),
       });
-      if (submitResult.aiScore?.score != null) {
-        toast.success(`Smart mark: ${submitResult.aiScore.score}/10`, {
-          description: submitResult.aiScore.feedback?.slice(0, 240) || undefined,
-          duration: 10000,
+
+      const base: EnglishEssayResponse = {
+        id: submitResult.id ?? 0,
+        promptId: null,
+        customPrompt: customPrompt.trim() || null,
+        prompt: customPrompt.trim(),
+        userId: 0,
+        username: "",
+        responseType: "essay",
+        responseText,
+        imageUrls: [],
+        updatedAt: new Date().toISOString(),
+        aiScore: submitResult.aiScore?.score ?? null,
+        aiFeedback: submitResult.aiScore?.summary ?? null,
+        aiCriteria: submitResult.aiScore?.criteria ?? null,
+        aiHighlights: submitResult.aiScore?.highlights ?? [],
+        aiScoredAt: submitResult.aiScore ? new Date().toISOString() : null,
+      };
+      setResult(base);
+      setEssayText("");
+      setCustomPrompt("");
+
+      if (submitResult.premiumBlocked) {
+        const msg =
+          submitResult.premiumMessage ??
+          "Free accounts get 1 AI-marked English response every 3 days.";
+        setQuotaMessage(msg);
+        toast.message("Essay saved without AI marking.", { description: msg });
+      } else if (submitResult.aiScore?.score != null) {
+        toast.success(`Marked: ${submitResult.aiScore.score}/10`);
+      } else if (submitResult.aiScoringPending && submitResult.id) {
+        toast.message("Essay submitted. Marking in progress…");
+        void pollForScore(submitResult.id);
+      } else if (responseText.length < 20) {
+        toast.success("Essay saved. Write at least 20 characters for marking.");
+      } else if (submitResult.aiConfigured === false) {
+        toast.success("Essay saved.", {
+          description: "AI marking is not configured on the server yet.",
         });
-      } else if (submitResult.aiScoringPending) {
-        toast.success("Response uploaded. Smart marking in progress…", { duration: 6000 });
-      } else if (responseText.length >= 20 && submitResult.aiConfigured === false) {
-        toast.success("Response uploaded.", {
-          description: "Smart marking is not configured on the server yet.",
-          duration: 8000,
-        });
-      } else if (responseText.length > 0 && responseText.length < 20) {
-        toast.success("Response uploaded. Write at least 20 characters for smart marking.");
-      } else if (!responseText && imageUrls.length > 0) {
-        toast.success("Response uploaded. Smart marking needs typed text (image-only uploads are not scored yet).");
       } else {
-        toast.success("Response uploaded to shared space.");
+        toast.success("Essay submitted.");
       }
-      setSubmittedPromptIds((prev) => ({ ...prev, [prompt.id]: true }));
-      setTextByPrompt((prev) => ({ ...prev, [prompt.id]: "" }));
-      setImagesByPrompt((prev) => ({ ...prev, [prompt.id]: [] }));
-      const bookQuery =
-        section === "A" && Number.isFinite(numericBookId) && numericBookId > 0
-          ? `&bookId=${numericBookId}`
-          : "";
-      const openQuery =
-        submitResult.id != null && submitResult.id > 0 ? `&open=${submitResult.id}` : "";
-      navigate(
-        `/quiz/english/prompt/${prompt.id}/responses?section=${section}${bookQuery}${openQuery}`,
-      );
     } catch (e) {
-      const message =
-        e instanceof Error && e.message ? e.message : "Could not submit response.";
-      toast.error(message);
+      const msg = e instanceof Error ? e.message : "Could not submit essay.";
+      if (msg.toLowerCase().includes("premium")) {
+        setQuotaMessage(msg);
+        navigate(PREMIUM_PATH);
+      }
+      toast.error(msg);
     } finally {
-      setSubmittingPromptId(null);
+      setSubmitting(false);
     }
   };
 
-  const sectionDisplayLabel =
-    section === "A" ? "Section A" : section === "B" ? "Section B" : "Section C";
+  const charCount = essayText.trim().length;
+  const isEmpty = charCount === 0;
 
   return (
-      <div className="space-y-6">
-        <Card className="practice-card">
-          <div className="practice-card-accent" aria-hidden>
-            <div className="practice-card-accent-black" />
-            <div className="practice-card-accent-pill" />
+    <div className="mx-auto w-full max-w-6xl space-y-14 px-4 py-2 sm:px-8 lg:px-10 lg:py-4">
+      {/* Hero */}
+      <header className="space-y-4 border-b border-black/8 pb-10">
+        <div className="flex items-start gap-5">
+          <span className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-[#0b0f19] text-white shadow-lg shadow-[#0b0f19]/15">
+            <PenLine className="size-7" strokeWidth={1.5} aria-hidden />
+          </span>
+          <div className="min-w-0 space-y-2 pt-0.5">
+            <h2 className="font-display text-3xl font-semibold tracking-tight text-[#0b0f19] sm:text-4xl">
+              Essay studio
+            </h2>
+            <p className="max-w-2xl font-exam-serif text-base leading-relaxed text-[#64748b] sm:text-lg">
+              Upload your writing, receive a grade out of ten, and explore inline feedback on
+              structure, evidence, expression, and relevance.
+            </p>
           </div>
-          <div className="practice-card-header">
-            <p className="practice-card-header-title">English Practice</p>
-            {section !== "A" ? (
-              <p className="practice-card-header-meta">
-                {section === "B" ? "Creative writing practice" : "Section C writing practice"}
-              </p>
-            ) : null}
-          </div>
-          <CardContent className="space-y-4 px-4 py-4 sm:px-7 sm:py-5">
-            <div className="w-full max-w-xs">
-              <Select value={section} onValueChange={(v) => setSection((v as Section) ?? "A")}>
-                <SelectTrigger className="h-11 border-brand-light/50 bg-brand-light/50 font-medium text-[#0b0f19]">
-                  <SelectValue placeholder="Choose your section">{sectionDisplayLabel}</SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="A">Section A - Book prompts</SelectItem>
-                  <SelectItem value="B">Section B - Creative stimulus</SelectItem>
-                  <SelectItem value="C">Section C - Writing prompts</SelectItem>
-                </SelectContent>
-              </Select>
+        </div>
+      </header>
+
+      {/* Upload */}
+      <section className="space-y-8">
+        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.65fr)] lg:gap-12">
+          <div className="space-y-3 lg:pt-2">
+            <div className="flex items-center gap-2.5">
+              <MessageSquareQuote className="size-5 text-brand" aria-hidden />
+              <Label
+                htmlFor="english-prompt"
+                className="font-display text-sm font-semibold uppercase tracking-[0.12em] text-[#0b0f19]"
+              >
+                Prompt
+              </Label>
             </div>
-
-            {section === "A" ? (
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <div className="w-full max-w-md">
-                  <Select
-                    value={selectedBookId}
-                    onValueChange={(v) => setSelectedBookId(v ?? "")}
-                  >
-                    <SelectTrigger className="h-11 border-brand-light/50 bg-brand-light/50 text-[#0b0f19]">
-                      <SelectValue placeholder={loading ? "Loading..." : "Choose your text"}>
-                        {selectedBook?.title ?? (loading ? "Loading..." : "Choose your text")}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {books.map((b) => (
-                        <SelectItem key={b.id} value={String(b.id)}>
-                          {b.title}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            ) : null}
-          </CardContent>
-        </Card>
-
-        <Card className="practice-card">
-          <div className="practice-card-accent" aria-hidden>
-            <div className="practice-card-accent-black" />
-            <div className="practice-card-accent-pill" />
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              Optional — add the question or topic you responded to so marking can check relevance.
+            </p>
+            <Input
+              id="english-prompt"
+              value={customPrompt}
+              onChange={(e) => setCustomPrompt(e.target.value)}
+              placeholder="e.g. How does the author explore identity in…"
+              className="h-12 rounded-xl border-black/12 bg-white px-4 font-exam-serif text-base shadow-sm"
+            />
           </div>
-          {activePrompt ? (
-            <div className="practice-card-header">
-              <p className="practice-card-header-title">Writing prompt</p>
+
+          <div className="space-y-3">
+            <div className="flex items-center gap-2.5">
+              <FileText className="size-5 text-brand" aria-hidden />
+              <Label
+                htmlFor="english-essay"
+                className="font-display text-sm font-semibold uppercase tracking-[0.12em] text-[#0b0f19]"
+              >
+                Your essay
+              </Label>
             </div>
-          ) : null}
-          <CardContent className="space-y-5 bg-[#f3f4f6]/25 p-4 sm:p-6">
-            {!visiblePrompts.length ? (
-              <p className="rounded-lg border border-dashed border-black/15 bg-black/[0.02] p-5 text-sm text-muted-foreground">
-                {section === "A" ? "No prompts for this book yet." : "No prompts in this section yet."}
-              </p>
-            ) : (
-              <div className="space-y-6 rounded-2xl border border-black/8 bg-[#f3f4f6]/40 p-6 sm:p-8">
-                {section !== "C" ? (
-                  <div className="flex justify-end">
-                    <div className="flex gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="border-black/15 bg-white hover:bg-brand-light/20"
-                        onClick={() => setActivePromptIndex((i) => Math.max(0, i - 1))}
-                        disabled={activePromptIndex <= 0}
-                      >
-                        Previous
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="accent"
-                        onClick={() => setActivePromptIndex((i) => Math.min(visiblePrompts.length - 1, i + 1))}
-                        disabled={activePromptIndex >= visiblePrompts.length - 1}
-                      >
-                        Next
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <span />
-                )}
-
-                {activePrompt ? (
-                  <>
-                    {section !== "B" ? (
-                      <div className="min-h-[220px] rounded-2xl border border-black/20 bg-[#0b0f19] p-6 shadow-sm sm:min-h-[280px] sm:p-8">
-                        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-white/60">
-                          Prompt
-                        </p>
-                        <p className="text-xl font-semibold leading-relaxed whitespace-pre-wrap text-white sm:text-2xl sm:leading-relaxed md:text-3xl md:leading-snug">
-                          {activePrompt.prompt}
-                        </p>
-                      </div>
-                    ) : null}
-                    {section === "B" ? (
-                      <div className="min-h-[280px] space-y-4 rounded-2xl border border-black/20 bg-[#0b0f19] p-6 shadow-sm sm:min-h-[340px] sm:p-8">
-                        <p className="text-base font-medium text-white/85 sm:text-lg">
-                          Respond with a creative piece on the following prompt.
-                        </p>
-                        {sectionBFramework(activePrompt.prompt) ? (
-                          <p className="text-sm font-semibold uppercase tracking-wide text-white/60">
-                            {sectionBFramework(activePrompt.prompt)!.framework}
-                          </p>
-                        ) : null}
-                        <p className="text-2xl font-semibold text-white sm:text-3xl">
-                          title: {sectionBFramework(activePrompt.prompt)?.title ?? sectionBTitle(activePrompt.prompt)}.
-                        </p>
-                        {sectionBPromptInstruction(activePrompt.prompt) ? (
-                          <p className="text-lg font-medium leading-relaxed whitespace-pre-wrap text-white/80 sm:text-xl sm:leading-relaxed">
-                            {sectionBPromptInstruction(activePrompt.prompt)}
-                          </p>
-                        ) : null}
-                        {sectionBFramework(activePrompt.prompt) ? (
-                          <>
-                            <ul className="list-disc space-y-2 pl-5 text-base text-white/70 sm:text-lg">
-                              {sectionBFramework(activePrompt.prompt)!.instructions.map((ins) => (
-                                <li key={ins}>{ins}</li>
-                              ))}
-                            </ul>
-                            <div className="rounded-xl border border-black/10 bg-white p-5 text-base leading-relaxed shadow-sm sm:p-6 sm:text-lg">
-                              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                                Stimulus
-                              </p>
-                              <p className="mt-3 text-[#243042]">
-                                {sectionBFramework(activePrompt.prompt)!.stimulus}
-                              </p>
-                            </div>
-                          </>
-                        ) : null}
-                      </div>
-                    ) : null}
-                    <ExamPaperAnswerBlock
-                      value={textByPrompt[activePrompt.id] ?? ""}
-                      onChange={(v) =>
-                        setTextByPrompt((m) => ({ ...m, [activePrompt.id]: v }))
-                      }
-                      lines={section === "C" ? 14 : 12}
-                      className="min-h-[220px]"
-                    />
-                    {section === "C" ? (
-                      <div className="rounded-xl border border-black/8 bg-[#f3f4f6]/60 p-4">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                          Section C Writing
-                        </p>
-                        <p className="mt-2 text-sm text-muted-foreground">
-                          Respond directly to the prompt. Build a clear contention, develop your ideas, and use strong language choices.
-                        </p>
-                      </div>
-                    ) : null}
-                    <div className="space-y-2">
-                      <Label className="text-sm font-semibold text-[#172033]">Upload handwritten photo(s)</Label>
-                      <Input
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        onChange={(e) => void handleFiles(activePrompt.id, e.target.files)}
-                        className="border-black/15 bg-white"
-                      />
-                      {(imagesByPrompt[activePrompt.id] ?? []).length ? (
-                        <p className="text-xs text-muted-foreground">
-                          {imagesByPrompt[activePrompt.id]!.length} image(s) attached.
-                        </p>
-                      ) : null}
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        type="button"
-                        variant="accent"
-                        onClick={() => void submitResponse(activePrompt)}
-                        disabled={submittingPromptId === activePrompt.id}
-                        className="gap-2"
-                      >
-                        {submittingPromptId === activePrompt.id ? <Loader2 className="size-4 animate-spin" /> : null}
-                        {submittedPromptIds[activePrompt.id] ? (
-                          <>
-                            <Check className="size-4" />
-                            Submitted
-                          </>
-                        ) : (
-                          "Smart marking"
-                        )}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="border-black/15 bg-white hover:bg-black/[0.03]"
-                        onClick={() =>
-                          navigate(
-                            `/quiz/english/prompt/${activePrompt.id}/responses?section=${section}${
-                              section === "A" && Number.isFinite(numericBookId) && numericBookId > 0
-                                ? `&bookId=${numericBookId}`
-                                : ""
-                            }`,
-                          )
-                        }
-                      >
-                        View all responses
-                      </Button>
-                    </div>
-                  </>
-                ) : null}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-  );
-}
-
-export function EnglishPromptResponsesPage() {
-  const { user } = useAuth();
-  const { promptId } = useParams<{ promptId: string }>();
-  const [searchParams] = useSearchParams();
-  const section = ((searchParams.get("section") ?? "A").toUpperCase() as Section);
-  const bookId = Number(searchParams.get("bookId"));
-  const numericPromptId = Number(promptId);
-  const [loading, setLoading] = useState(true);
-  const [responses, setResponses] = useState<ResponseRow[]>([]);
-  const [catalogPromptRaw, setCatalogPromptRaw] = useState("");
-  const [resolvedSection, setResolvedSection] = useState<Section>(section);
-  const [openResponseId, setOpenResponseId] = useState<number | null>(null);
-  const [scoringResponseId, setScoringResponseId] = useState<number | null>(null);
-  const [pollingAiScore, setPollingAiScore] = useState(false);
-
-  const openFromQuery = Number(searchParams.get("open"));
-
-  const validBookId =
-    section === "A" && Number.isFinite(bookId) && bookId > 0 ? bookId : undefined;
-
-  const promptsQuerySuffix = englishPromptsQuery(section, validBookId, numericPromptId);
-  const responsesQuerySuffix = englishResponsesQuery(section, numericPromptId, validBookId);
-
-  const loadResponses = async () => {
-    const r = await apiFetch<{
-      responses: ResponseRow[];
-      prompt?: { id: number; prompt: string; section: Section; bookId: number | null } | null;
-    }>(`${API_PATHS.english.responses}${responsesQuerySuffix}`);
-    if (r.prompt?.prompt) {
-      setCatalogPromptRaw(String(r.prompt.prompt));
-      if (r.prompt.section === "A" || r.prompt.section === "B" || r.prompt.section === "C") {
-        setResolvedSection(r.prompt.section);
-      }
-    }
-    const displaySection =
-      r.prompt?.section === "A" || r.prompt?.section === "B" || r.prompt?.section === "C"
-        ? r.prompt.section
-        : resolvedSection;
-    return (r.responses ?? []).map((x) => ({
-      ...x,
-      prompt: formatEnglishPromptForSection(displaySection, x.prompt),
-    }));
-  };
-
-  useEffect(() => {
-    if (!Number.isFinite(numericPromptId) || numericPromptId <= 0) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const p = await apiFetch<{ prompts: { id: number; prompt: string; section?: Section }[] }>(
-          `${API_PATHS.english.prompts}${promptsQuerySuffix}`,
-        );
-        if (cancelled) return;
-        const hit = (p.prompts ?? []).find((x) => Number(x.id) === numericPromptId) ?? p.prompts?.[0];
-        const raw = String(hit?.prompt ?? "");
-        if (raw) setCatalogPromptRaw(raw);
-        if (hit?.section === "A" || hit?.section === "B" || hit?.section === "C") {
-          setResolvedSection(hit.section);
-        }
-      } catch {
-        if (!cancelled) setCatalogPromptRaw("");
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [numericPromptId, promptsQuerySuffix]);
-
-  useEffect(() => {
-    if (!Number.isFinite(numericPromptId) || numericPromptId <= 0) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        setLoading(true);
-        const rows = await loadResponses();
-        if (!cancelled) setResponses(rows);
-      } catch {
-        if (!cancelled) toast.error("Could not load responses for this prompt.");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [section, validBookId, numericPromptId, responsesQuerySuffix]);
-
-  useEffect(() => {
-    if (!Number.isFinite(openFromQuery) || openFromQuery <= 0 || loading) return;
-    const target = responses.find((r) => r.id === openFromQuery);
-    if (!target || target.aiScore != null) return;
-    if ((target.responseText?.trim().length ?? 0) < 20) return;
-
-    let cancelled = false;
-    setPollingAiScore(true);
-    (async () => {
-      for (let attempt = 0; attempt < 30 && !cancelled; attempt++) {
-        await new Promise((resolve) => window.setTimeout(resolve, 2000));
-        try {
-          const rows = await loadResponses();
-          if (cancelled) return;
-          setResponses(rows);
-          const updated = rows.find((r) => r.id === openFromQuery);
-          if (updated?.aiScore != null) {
-            toast.success(`Smart mark: ${updated.aiScore}/10`, {
-              description: updated.aiFeedback?.slice(0, 240) || undefined,
-              duration: 10000,
-            });
-            break;
-          }
-        } catch {
-          break;
-        }
-      }
-      if (!cancelled) setPollingAiScore(false);
-    })();
-    return () => {
-      cancelled = true;
-      setPollingAiScore(false);
-    };
-  }, [openFromQuery, loading, responsesQuerySuffix]);
-
-  useEffect(() => {
-    if (!Number.isFinite(openFromQuery) || openFromQuery <= 0 || loading) return;
-    if (responses.some((r) => r.id === openFromQuery)) {
-      setOpenResponseId(openFromQuery);
-    }
-  }, [openFromQuery, loading, responses]);
-
-  const requestAiScore = async (responseId: number) => {
-    setScoringResponseId(responseId);
-    try {
-      const result = await apiFetch<{
-        ok: boolean;
-        aiScore?: { score: number; feedback: string };
-        aiScoringPending?: boolean;
-      }>(API_PATHS.english.aiScoreResponse(responseId), {
-        method: "POST",
-        timeoutMs: AI_FETCH_TIMEOUT_MS,
-      });
-      if (result.aiScoringPending) {
-        setPollingAiScore(true);
-        for (let attempt = 0; attempt < 30; attempt++) {
-          await new Promise((resolve) => window.setTimeout(resolve, 2000));
-          const rows = await loadResponses();
-          setResponses(rows);
-          const updated = rows.find((r) => r.id === responseId);
-          if (updated?.aiScore != null) {
-            toast.success(`Smart mark: ${updated.aiScore}/10`, {
-              description: updated.aiFeedback?.slice(0, 240) || undefined,
-              duration: 10000,
-            });
-            return;
-          }
-        }
-        toast.error("Smart marking is taking longer than expected. Try refreshing in a moment.");
-        return;
-      }
-      if (!result.aiScore) {
-        toast.error("Could not score response.");
-        return;
-      }
-      setResponses((prev) =>
-        prev.map((row) =>
-          row.id === responseId
-            ? { ...row, aiScore: result.aiScore!.score, aiFeedback: result.aiScore!.feedback }
-            : row,
-        ),
-      );
-      toast.success(`Smart mark: ${result.aiScore.score}/10`, {
-        description: result.aiScore.feedback?.slice(0, 240) || undefined,
-        duration: 10000,
-      });
-    } catch (e) {
-      const message = e instanceof Error && e.message ? e.message : "Could not score response.";
-      toast.error(message);
-    } finally {
-      setScoringResponseId(null);
-      setPollingAiScore(false);
-    }
-  };
-
-  const resolvedPromptFormatted = useMemo(() => {
-    const fromRows = responses.map((row) => row.prompt).find((t) => String(t ?? "").trim()) ?? "";
-    const raw = String(catalogPromptRaw ?? "").trim() || fromRows;
-    return formatEnglishPromptForSection(resolvedSection, raw);
-  }, [catalogPromptRaw, responses, resolvedSection]);
-
-  const openResponse = responses.find((r) => r.id === openResponseId) ?? null;
-
-  return (
-    <AppShell
-      title="Prompt Responses"
-      subtitle="All responses for this exact prompt."
-      edgeToEdgeHeader
-      edgeToEdgeMain
-      edgeToEdgeHeaderClassName="px-0 sm:px-1 lg:px-2"
-    >
-      <div className="space-y-6">
-        <Card className="practice-card">
-          <div className="practice-card-accent" aria-hidden>
-            <div className="practice-card-accent-black" />
-            <div className="practice-card-accent-pill" />
-          </div>
-          <div className="practice-card-header">
-            <p className="practice-card-header-title">Prompt</p>
-            {!loading && responses.length > 0 ? (
-              <p className="practice-card-header-meta">
-                {responses.length} {responses.length === 1 ? "response" : "responses"}
-              </p>
-            ) : null}
-          </div>
-          <CardContent className="p-4 sm:p-6">
-            <div className="rounded-xl border border-black/20 bg-[#0b0f19] px-4 py-4 sm:px-5 sm:py-5">
-              {resolvedPromptFormatted.trim() ? (
-                <RichQuestionContent
-                  text={resolvedPromptFormatted}
-                  preferMarkdown
-                  className="max-w-none !text-base leading-[1.65] text-white sm:!text-lg sm:leading-[1.7] prose prose-base sm:prose-lg prose-p:my-2 prose-p:text-inherit prose-headings:mb-2 prose-headings:mt-3 prose-headings:font-semibold prose-li:text-inherit prose-headings:text-white"
-                />
-              ) : (
-                <p className="text-base text-muted-foreground sm:text-lg">
-                  Prompt text is unavailable. Try refreshing the page.
-                </p>
+            <div
+              className={cn(
+                "relative overflow-hidden rounded-2xl border-2 border-dashed transition-all duration-200",
+                dragOver
+                  ? "border-brand bg-brand-light/25 shadow-inner"
+                  : "border-black/12 bg-[#fefdfb] shadow-sm",
               )}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="practice-card">
-          <div className="practice-card-accent" aria-hidden>
-            <div className="practice-card-accent-black" />
-            <div className="practice-card-accent-pill" />
-          </div>
-          <div className="practice-card-header">
-            <p className="practice-card-header-title">Responses</p>
-          </div>
-          <CardHeader className="pt-4">
-            <CardTitle className="font-display text-lg text-[#0b0f19]">Peer responses</CardTitle>
-            <CardDescription>Tap a response to read it and see smart marking feedback.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {!responses.length ? (
-              <p className="text-sm text-muted-foreground">No responses yet for this prompt.</p>
-            ) : (
-              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7">
-                {responses.map((r) => {
-                  const isMine = user?.id != null && Number(user.id) === Number(r.userId);
-                  return (
-                    <div
-                      key={r.id}
-                      className="group relative aspect-square overflow-hidden rounded-md border border-black/10 bg-white shadow-sm"
-                    >
-                      <button
-                        type="button"
-                        className="absolute inset-x-0 top-0 bottom-12 z-[1]"
-                        onClick={() => setOpenResponseId(r.id)}
-                        aria-label={`Open response by ${r.username}`}
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-br from-slate-50 via-white to-slate-100" />
-                      <div className="absolute inset-0 flex items-center justify-center p-1.5">
-                        <div className="w-full rounded-sm border border-black/10 bg-white/60 p-1.5 backdrop-blur-sm">
-                          <p className="line-clamp-3 whitespace-pre-wrap text-center text-[10px] leading-tight text-[#111827]/85 blur-[1.6px] select-none">
-                            {(r.responseText || "Handwritten response").trim()}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="absolute inset-x-0 top-0 flex items-center justify-between gap-1 border-b border-black/10 bg-white/88 px-1.5 py-1 backdrop-blur">
-                        <span className="truncate text-[10px] font-semibold text-[#0f172a]">@{r.username}</span>
-                        <div className="flex shrink-0 items-center gap-1">
-                          {r.aiScore != null && (
-                            <Badge variant="secondary" className="border border-brand-light/50 bg-brand-light/50 px-1.5 py-0 text-[10px] text-[#0b0f19]">
-                              Smart {r.aiScore}/10
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="absolute inset-x-0 bottom-0 z-[2] border-t border-black/10 bg-white/92 px-1.5 py-1.5 backdrop-blur">
-                        <p className="text-[10px] font-medium text-muted-foreground">
-                          {isMine ? "Your response" : "Tap to view"}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-      {openResponse ? (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-          onClick={() => setOpenResponseId(null)}
-        >
-          <div
-            className="relative w-full max-w-3xl rounded-xl border border-black/10 bg-white p-4 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Always-visible close button on the tile (not hover-only). */}
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              className="absolute right-3 top-3 z-50 border-black/25 bg-white text-[#0b0f19] opacity-100 shadow-sm ring-1 ring-black/5 hover:bg-white"
-              onClick={() => setOpenResponseId(null)}
-              aria-label="Close response"
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDragOver(true);
+              }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragOver(false);
+                void ingestFiles(e.dataTransfer.files);
+              }}
             >
-              <X className="size-4.5" />
-            </Button>
-            <div className="sticky top-0 z-20 -m-4 mb-3 border-b border-black/10 bg-white/95 p-4 backdrop-blur">
-              <div className="flex flex-wrap items-center justify-between gap-3 pr-12">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-[#0f172a]">@{openResponse.username}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {openResponse.aiScore != null ? (
-                      <span className="font-medium text-[#0f172a]">Smart mark: {openResponse.aiScore}/10</span>
-                    ) : (
-                      "Not smart marked yet"
-                    )}
-                    {pollingAiScore && openResponse.aiScore == null ? (
-                      <span className="ml-2 inline-flex items-center gap-1 text-[#0f172a]">
-                        <Loader2 className="size-3 animate-spin" />
-                        Scoring…
-                      </span>
-                    ) : null}
+              {isEmpty ? (
+                <div className="pointer-events-none flex flex-col items-center justify-center gap-3 px-6 py-14 text-center">
+                  <span className="flex size-16 items-center justify-center rounded-full bg-black/[0.04]">
+                    <Upload className="size-7 text-[#64748b]" strokeWidth={1.5} aria-hidden />
+                  </span>
+                  <p className="font-display text-sm font-medium text-[#334155]">
+                    Drag & drop a .txt file
+                  </p>
+                  <p className="font-exam-serif text-sm text-muted-foreground">
+                    or paste directly below
                   </p>
                 </div>
-                {user?.id != null && Number(user.id) === Number(openResponse.userId) &&
-                openResponse.aiScore == null &&
-                (openResponse.responseText?.trim().length ?? 0) >= 20 ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="h-7 text-xs"
-                    disabled={scoringResponseId === openResponse.id}
-                    onClick={() => void requestAiScore(openResponse.id)}
-                  >
-                    {scoringResponseId === openResponse.id ? (
-                      <Loader2 className="mr-1 size-3 animate-spin" />
-                    ) : null}
-                    Smart marking
-                  </Button>
-                ) : null}
-              </div>
-            </div>
-            <div className="max-h-[70vh] overflow-y-auto rounded-lg border border-black/10 bg-slate-50 p-4">
-              <div className="mb-4 rounded-lg border border-black/10 bg-white p-3">
-                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Prompt
+              ) : null}
+              <Textarea
+                id="english-essay"
+                value={essayText}
+                onChange={(e) => setEssayText(e.target.value)}
+                placeholder="Begin your essay here…"
+                rows={isEmpty ? 8 : 18}
+                className={cn(
+                  "min-h-[320px] resize-y border-0 bg-transparent px-6 py-5 font-exam-serif text-[17px] leading-[1.85] shadow-none focus-visible:ring-0 sm:min-h-[380px] sm:text-[18px]",
+                  isEmpty && "min-h-[120px]",
+                )}
+              />
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-black/8 bg-white/70 px-5 py-3.5 backdrop-blur-sm">
+                <p className="font-display text-xs tabular-nums text-muted-foreground">
+                  {charCount > 0
+                    ? `${charCount.toLocaleString()} characters`
+                    : "Supports .txt and .md"}
                 </p>
-                <RichQuestionContent
-                  text={
-                    resolvedPromptFormatted.trim() ||
-                    "Prompt text is unavailable. Try refreshing the page."
-                  }
-                  preferMarkdown
-                  className="prose max-w-none"
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".txt,.md,text/plain,text/markdown"
+                  className="hidden"
+                  onChange={(e) => {
+                    if (e.target.files?.length) void ingestFiles(e.target.files);
+                    e.target.value = "";
+                  }}
                 />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-9 gap-2 rounded-lg border-black/12 bg-white font-display text-xs"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <Upload className="size-3.5" />
+                  Upload file
+                </Button>
               </div>
-              <p className="whitespace-pre-wrap text-sm leading-relaxed text-[#111827]">
-                {openResponse.responseText || "No typed response text."}
-              </p>
-              {openResponse.aiScore != null ? (
-                <div className="mt-4 rounded-lg border border-[#0f172a]/15 bg-[#0f172a]/[0.04] p-4">
-                  <p className="text-lg font-semibold text-[#0f172a]">Smart mark: {openResponse.aiScore}/10</p>
-                  {openResponse.aiFeedback ? (
-                    <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{openResponse.aiFeedback}</p>
-                  ) : null}
-                </div>
-              ) : openResponse.aiFeedback ? (
-                <div className="mt-4 rounded-lg border border-black/10 bg-white p-3 text-sm text-muted-foreground">
-                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-[#0f172a]">Smart marking feedback</p>
-                  <p className="leading-relaxed">{openResponse.aiFeedback}</p>
-                </div>
-              ) : null}
-              {openResponse.imageUrls?.length ? (
-                <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                  {openResponse.imageUrls.map((u, i) => (
-                    <img key={`${openResponse.id}-${i}`} src={u} alt={`response-${openResponse.id}-${i + 1}`} className="w-full rounded border border-black/10" />
-                  ))}
-                </div>
-              ) : null}
             </div>
           </div>
         </div>
+
+        <div className="flex flex-col items-end gap-4 border-t border-black/6 pt-8">
+          {quotaMessage ? (
+            <div className="w-full max-w-xl">
+              <PremiumGate allowed={false} message={quotaMessage} />
+            </div>
+          ) : null}
+          <Button
+            type="button"
+            variant="accent"
+            size="lg"
+            className="h-12 gap-2.5 rounded-xl px-8 font-display text-base shadow-md"
+            disabled={submitting || polling}
+            onClick={() => void handleSubmit()}
+          >
+            {submitting || polling ? (
+              <Loader2 className="size-5 animate-spin" />
+            ) : (
+              <SendHorizontal className="size-5" />
+            )}
+            Submit for marking
+          </Button>
+        </div>
+      </section>
+
+      {/* Feedback */}
+      {result ? (
+        <section className="space-y-10 border-t border-black/8 pt-12">
+          <div className="flex items-center gap-3">
+            <span className="flex size-11 items-center justify-center rounded-xl bg-brand/15 text-brand">
+              <Sparkles className="size-5" aria-hidden />
+            </span>
+            <div>
+              <h3 className="font-display text-2xl font-semibold tracking-tight text-[#0b0f19]">
+                Your feedback
+              </h3>
+              {result.customPrompt ? (
+                <p className="mt-1 max-w-3xl font-exam-serif text-base italic text-[#64748b]">
+                  “{result.customPrompt}”
+                </p>
+              ) : null}
+            </div>
+          </div>
+
+          {result.aiScore != null || result.aiCriteria ? (
+            <EnglishCriteriaBreakdown
+              overall={result.aiScore}
+              criteria={result.aiCriteria}
+              summary={result.aiFeedback}
+            />
+          ) : polling ? (
+            <div className="flex items-center gap-3 rounded-2xl border border-black/8 bg-[#f8fafc] px-6 py-8">
+              <Loader2 className="size-5 animate-spin text-brand" />
+              <p className="font-display text-sm text-[#475569]">Marking your essay…</p>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Waiting for marking…</p>
+          )}
+
+          <div className="rounded-2xl border border-black/10 bg-white p-8 shadow-[0_8px_30px_rgba(15,23,42,0.06)] sm:p-10 lg:p-12">
+            <p className="mb-6 font-display text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+              Annotated essay
+            </p>
+            <AnnotatedEssayView text={result.responseText} highlights={result.aiHighlights} />
+          </div>
+        </section>
       ) : null}
-    </AppShell>
+    </div>
   );
+}
+
+/** Legacy route — peer responses removed. */
+export function EnglishPromptResponsesPage() {
+  return <EnglishPracticePanel />;
 }
 
 export default function EnglishPracticePage() {
-  return (
-    <AppShell
-      title="English Practice"
-      subtitle="Book prompts, writing uploads, and smart marking."
-      edgeToEdgeHeader
-      edgeToEdgeMain
-    >
-      <EnglishPracticePanel />
-    </AppShell>
-  );
+  return <EnglishPracticePanel />;
 }
-

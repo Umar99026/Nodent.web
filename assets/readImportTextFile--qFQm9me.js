@@ -1,0 +1,1 @@
+async function e(e){let t=await e.arrayBuffer(),n=new Uint8Array(t);return n.length>=2&&n[0]===255&&n[1]===254?new TextDecoder(`utf-16le`).decode(t):n.length>=2&&n[0]===254&&n[1]===255?new TextDecoder(`utf-16be`).decode(t):new TextDecoder(`utf-8`).decode(t)}export{e as t};

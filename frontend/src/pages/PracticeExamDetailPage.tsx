@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { DiagramLabelInputs } from "@/components/quiz/DiagramLabelInputs";
 import { ExamMcqPageOverlay } from "@/components/quiz/ExamMcqPageOverlay";
+import { isPremiumError } from "@/lib/premium";
+import { PremiumGate } from "@/components/premium/GetPremiumButton";
 import { isAdminUser } from "@/lib/constants";
 import {
   defaultMcqCount,
@@ -304,9 +306,15 @@ export default function PracticeExamDetailPage() {
               <p className="mt-4 font-display text-lg font-semibold text-[#0b0f19]">
                 {examTitle}
               </p>
-              <p className="mt-2 text-sm text-muted-foreground">
-                {error || "This exam is not available yet."}
-              </p>
+              {error && isPremiumError(error) ? (
+                <div className="mx-auto mt-4 max-w-md text-left">
+                  <PremiumGate allowed={false} message={error} />
+                </div>
+              ) : (
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {error || "This exam is not available yet."}
+                </p>
+              )}
             </CardContent>
           </Card>
         ) : (

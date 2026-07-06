@@ -1,6 +1,6 @@
 /**
- * OpenAI Chat Completions for Cloudflare Workers / Pages Functions.
- * Server-side only — never expose OPENAI_API_KEY to the browser.
+ * Google Gemini generateContent for Cloudflare Workers / Pages Functions.
+ * Server-side only — never expose GEMINI_API_KEY to the browser.
  *
  * Active in production:
  *   - English essay scoring (scoreEnglishResponse) — worded responses only
@@ -11,44 +11,61 @@
  * fillDraftQuestionAnswers) remain in this module but API routes return 503.
  *
  * Env:
- *   OPENAI_API_KEY  (required for AI features)
- *   OPENAI_MODEL         (optional, default gpt-4o-mini — text marking)
- *   OPENAI_VISION_MODEL  (optional, default gpt-4o — handwriting / images)
+ *   GEMINI_API_KEY       (required for AI features)
+ *   GEMINI_MODEL         (optional, default gemini-2.0-flash — text marking)
+ *   GEMINI_VISION_MODEL  (optional, default gemini-2.0-flash — handwriting / images)
  */
 
 export type OpenAiEnv = {
-  OPENAI_API_KEY?: string;
-  OPENAI_MODEL?: string;
-  OPENAI_VISION_MODEL?: string;
+  GEMINI_API_KEY?: string;
+  GEMINI_MODEL?: string;
+  GEMINI_VISION_MODEL?: string;
 };
 
-const DEFAULT_MODEL = "gpt-4o-mini";
-const DEFAULT_VISION_MODEL = "gpt-4o";
+const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
+const DEFAULT_MODEL = "gemini-2.5-flash";
+const DEFAULT_VISION_MODEL = "gemini-2.5-flash";
+
+function geminiGenerateContentUrl(model: string): string {
+  return `${GEMINI_API_BASE}/models/${encodeURIComponent(model)}:generateContent`;
+}
+
+/** Native Gemini auth — header works for both legacy AIza and new AQ auth keys. */
+function geminiRequestHeaders(apiKey: string): Record<string, string> {
+  return {
+    "Content-Type": "application/json",
+    "x-goog-api-key": apiKey,
+  };
+}
 
 function trim(s: string | undefined): string {
   return String(s ?? "").trim();
 }
 
 export function openAiConfigured(env: OpenAiEnv): boolean {
-  return !!trim(env.OPENAI_API_KEY);
+  return !!trim(env.GEMINI_API_KEY);
 }
 
 export function requireOpenAiKey(env: OpenAiEnv): string {
-  const key = trim(env.OPENAI_API_KEY);
-  if (!key) throw new Error("OPENAI_API_KEY is not configured.");
+  const key = trim(env.GEMINI_API_KEY);
+  if (!key) throw new Error("GEMINI_API_KEY is not configured.");
   return key;
 }
 
 export function openAiModel(env: OpenAiEnv): string {
-  return trim(env.OPENAI_MODEL) || DEFAULT_MODEL;
+  return trim(env.GEMINI_MODEL) || DEFAULT_MODEL;
 }
 
-/** Stronger model for reading handwritten images (ChatGPT-class vision). */
+/** Vision-capable model for reading handwritten images. */
 export function openAiVisionModel(env: OpenAiEnv): string {
-  return trim(env.OPENAI_VISION_MODEL) || DEFAULT_VISION_MODEL;
+  return trim(env.GEMINI_VISION_MODEL) || DEFAULT_VISION_MODEL;
 }
 
 type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
+
+type GeminiPart =
+  | { text: string }
+  | { inlineData: { mimeType: string; data: string } };
 
 type VisionContentPart =
   | { type: "text"; text: string }
@@ -59,41 +76,204 @@ type VisionChatMessage = {
   content: string | VisionContentPart[];
 };
 
-async function chatJson(
+function parseDataUrl(url: string): { mimeType: string; data: string } | null {
+  const match = String(url ?? "").trim().match(/^data:([^;]+);base64,(.+)$/i);
+  if (!match) return null;
+  return { mimeType: match[1]!, data: match[2]! };
+}
+
+function visionPartToGemini(part: VisionContentPart): GeminiPart | null {
+  if (part.type === "text") {
+    const text = String(part.text ?? "").trim();
+    return text ? { text } : null;
+  }
+  const parsed = parseDataUrl(part.image_url.url);
+  if (!parsed) return null;
+  return { inlineData: { mimeType: parsed.mimeType, data: parsed.data } };
+}
+
+function splitGeminiMessages(messages: ChatMessage[]): {
+  systemInstruction?: string;
+  contents: { role: "user" | "model"; parts: GeminiPart[] }[];
+} {
+  const systemParts: string[] = [];
+  const contents: { role: "user" | "model"; parts: GeminiPart[] }[] = [];
+
+  for (const message of messages) {
+    const text = String(message.content ?? "").trim();
+    if (!text) continue;
+    if (message.role === "system") {
+      systemParts.push(text);
+      continue;
+    }
+    const role = message.role === "assistant" ? "model" : "user";
+    const last = contents[contents.length - 1];
+    if (last?.role === role) {
+      last.parts.push({ text });
+    } else {
+      contents.push({ role, parts: [{ text }] });
+    }
+  }
+
+  if (!contents.length) {
+    contents.push({ role: "user", parts: [{ text: "Respond in JSON." }] });
+  }
+
+  return {
+    systemInstruction: systemParts.length ? systemParts.join("\n\n") : undefined,
+    contents,
+  };
+}
+
+function splitGeminiVisionMessages(messages: VisionChatMessage[]): {
+  systemInstruction?: string;
+  contents: { role: "user" | "model"; parts: GeminiPart[] }[];
+} {
+  const systemParts: string[] = [];
+  const contents: { role: "user" | "model"; parts: GeminiPart[] }[] = [];
+
+  for (const message of messages) {
+    if (message.role === "system") {
+      const text =
+        typeof message.content === "string"
+          ? String(message.content).trim()
+          : message.content
+              .filter((p): p is { type: "text"; text: string } => p.type === "text")
+              .map((p) => p.text.trim())
+              .filter(Boolean)
+              .join("\n");
+      if (text) systemParts.push(text);
+      continue;
+    }
+
+    const role = message.role === "assistant" ? "model" : "user";
+    const parts: GeminiPart[] =
+      typeof message.content === "string"
+        ? [{ text: String(message.content).trim() }].filter((p) => p.text)
+        : message.content
+            .map((part) => visionPartToGemini(part))
+            .filter((part): part is GeminiPart => part != null);
+
+    if (!parts.length) continue;
+    const last = contents[contents.length - 1];
+    if (last?.role === role) {
+      last.parts.push(...parts);
+    } else {
+      contents.push({ role, parts });
+    }
+  }
+
+  if (!contents.length) {
+    contents.push({ role: "user", parts: [{ text: "Respond in JSON." }] });
+  }
+
+  return {
+    systemInstruction: systemParts.length ? systemParts.join("\n\n") : undefined,
+    contents,
+  };
+}
+
+async function geminiGenerateJson(
   apiKey: string,
   model: string,
-  messages: ChatMessage[],
+  input: {
+    systemInstruction?: string;
+    contents: { role: "user" | "model"; parts: GeminiPart[] }[];
+  },
 ): Promise<Record<string, unknown>> {
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+  const url = geminiGenerateContentUrl(model);
+  const res = await fetch(url, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
+    headers: geminiRequestHeaders(apiKey),
     body: JSON.stringify({
-      model,
-      messages,
-      temperature: 0.2,
-      response_format: { type: "json_object" },
+      systemInstruction: input.systemInstruction
+        ? { parts: [{ text: input.systemInstruction }] }
+        : undefined,
+      contents: input.contents,
+      generationConfig: {
+        temperature: 0.2,
+        responseMimeType: "application/json",
+      },
     }),
   });
 
   if (!res.ok) {
     const errText = await res.text();
-    throw new Error(`OpenAI error (${res.status}): ${errText.slice(0, 600)}`);
+    throw new Error(`Gemini error (${res.status}): ${errText.slice(0, 600)}`);
   }
 
   const data = (await res.json()) as {
-    choices?: { message?: { content?: string } }[];
+    candidates?: { content?: { parts?: { text?: string }[] } }[];
+    error?: { message?: string };
   };
-  const content = data?.choices?.[0]?.message?.content;
-  if (!content) throw new Error("OpenAI returned an empty response.");
+  if (data.error?.message) {
+    throw new Error(`Gemini error: ${String(data.error.message).slice(0, 600)}`);
+  }
+
+  const content = data.candidates?.[0]?.content?.parts
+    ?.map((part) => String(part.text ?? "").trim())
+    .filter(Boolean)
+    .join("\n");
+  if (!content) throw new Error("Gemini returned an empty response.");
 
   try {
     return JSON.parse(content) as Record<string, unknown>;
   } catch {
-    throw new Error("OpenAI returned invalid JSON.");
+    throw new Error("Gemini returned invalid JSON.");
   }
+}
+
+async function geminiGenerateText(
+  apiKey: string,
+  model: string,
+  input: {
+    systemInstruction?: string;
+    contents: { role: "user" | "model"; parts: GeminiPart[] }[];
+  },
+): Promise<string> {
+  const url = geminiGenerateContentUrl(model);
+  const res = await fetch(url, {
+    method: "POST",
+    headers: geminiRequestHeaders(apiKey),
+    body: JSON.stringify({
+      systemInstruction: input.systemInstruction
+        ? { parts: [{ text: input.systemInstruction }] }
+        : undefined,
+      contents: input.contents,
+      generationConfig: {
+        temperature: 0.45,
+      },
+    }),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Gemini error (${res.status}): ${errText.slice(0, 600)}`);
+  }
+
+  const data = (await res.json()) as {
+    candidates?: { content?: { parts?: { text?: string }[] } }[];
+    error?: { message?: string };
+  };
+  if (data.error?.message) {
+    throw new Error(`Gemini error: ${String(data.error.message).slice(0, 600)}`);
+  }
+
+  const content = data.candidates?.[0]?.content?.parts
+    ?.map((part) => String(part.text ?? "").trim())
+    .filter(Boolean)
+    .join("\n");
+  if (!content) throw new Error("Gemini returned an empty response.");
+  return content;
+}
+
+async function chatJson(
+  apiKey: string,
+  model: string,
+  messages: ChatMessage[],
+): Promise<Record<string, unknown>> {
+  const { systemInstruction, contents } = splitGeminiMessages(messages);
+  return geminiGenerateJson(apiKey, model, { systemInstruction, contents });
 }
 
 async function chatJsonWithVision(
@@ -101,36 +281,8 @@ async function chatJsonWithVision(
   model: string,
   messages: VisionChatMessage[],
 ): Promise<Record<string, unknown>> {
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      messages,
-      temperature: 0.2,
-      response_format: { type: "json_object" },
-    }),
-  });
-
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`OpenAI error (${res.status}): ${errText.slice(0, 600)}`);
-  }
-
-  const data = (await res.json()) as {
-    choices?: { message?: { content?: string } }[];
-  };
-  const content = data?.choices?.[0]?.message?.content;
-  if (!content) throw new Error("OpenAI returned an empty response.");
-
-  try {
-    return JSON.parse(content) as Record<string, unknown>;
-  } catch {
-    throw new Error("OpenAI returned invalid JSON.");
-  }
+  const { systemInstruction, contents } = splitGeminiVisionMessages(messages);
+  return geminiGenerateJson(apiKey, model, { systemInstruction, contents });
 }
 
 function parseLongAnswerMarkResult(
@@ -167,6 +319,19 @@ function parseLongAnswerMarkResult(
       }))
     : [];
 
+  const stepResults: LongAnswerMarkResult["stepResults"] = Array.isArray(parsed.stepResults)
+    ? (parsed.stepResults as Record<string, unknown>[]).map((s, idx) => ({
+        index: Number.isFinite(Number(s.index)) ? Number(s.index) : idx,
+        marks: Math.max(1, Math.round(Number(s.marks ?? 1) || 1)),
+        marksAwarded: Math.max(0, Number(s.marksAwarded ?? 0)),
+        label: String(s.label ?? "").trim().slice(0, 500),
+        model: s.model != null ? String(s.model).trim().slice(0, 500) : undefined,
+        studentText: s.studentText != null ? String(s.studentText).trim().slice(0, 500) : undefined,
+        awarded: Boolean(s.awarded ?? Number(s.marksAwarded ?? 0) > 0),
+        feedback: s.feedback != null ? String(s.feedback).trim().slice(0, 2000) : undefined,
+      }))
+    : [];
+
   const correctAnswersRaw = parsed.correctAnswers ?? parsed.correct_answers;
   const correctAnswers = Array.isArray(correctAnswersRaw)
     ? correctAnswersRaw.map((a) => String(a ?? "").trim()).filter(Boolean).slice(0, 12)
@@ -184,6 +349,7 @@ function parseLongAnswerMarkResult(
     feedback: String(parsed.feedback ?? "").trim().slice(0, feedbackLimit),
     correctAnswers,
     partResults,
+    stepResults,
   };
 }
 
@@ -405,6 +571,31 @@ Rules:
   return normalizeParsedQuestions(rows, defaultSubjectId);
 }
 
+export type SubjectMarkingContext = {
+  promptText: string;
+  resources: string[];
+};
+
+export function formatSubjectMarkingContextBlock(ctx?: SubjectMarkingContext | null): string {
+  if (!ctx) return "";
+  const parts: string[] = [];
+  const prompt = String(ctx.promptText ?? "").trim();
+  if (prompt) parts.push(`SUBJECT MARKING GUIDANCE:\n${prompt.slice(0, 12000)}`);
+  const resources = (ctx.resources ?? []).map((r) => String(r ?? "").trim()).filter(Boolean);
+  if (resources.length) {
+    parts.push(
+      `REFERENCE RESOURCES:\n${resources.map((r, i) => `[${i + 1}] ${r.slice(0, 8000)}`).join("\n\n")}`,
+    );
+  }
+  return parts.length ? `\n\n${parts.join("\n\n")}` : "";
+}
+
+export type MarkBreakdownStepInput = {
+  marks: number;
+  label: string;
+  model?: string;
+};
+
 export type LongAnswerMarkInput = {
   questionText: string;
   questionType: string;
@@ -415,6 +606,10 @@ export type LongAnswerMarkInput = {
   answerParts?: { label: string; marks?: number; acceptedAnswer?: string }[];
   studentResponse: string;
   studentParts?: string[];
+  studentSteps?: string[];
+  markBreakdown?: { steps: MarkBreakdownStepInput[] };
+  subjectContext?: SubjectMarkingContext;
+  breakdownMode?: boolean;
 };
 
 export type LongAnswerMarkResult = {
@@ -433,6 +628,16 @@ export type LongAnswerMarkResult = {
     correctAnswer?: string;
     partFeedback?: string;
   }[];
+  stepResults?: {
+    index: number;
+    marks: number;
+    marksAwarded: number;
+    label: string;
+    model?: string;
+    studentText?: string;
+    awarded: boolean;
+    feedback?: string;
+  }[];
 };
 
 export async function markLongAnswer(
@@ -441,6 +646,7 @@ export async function markLongAnswer(
 ): Promise<LongAnswerMarkResult> {
   const apiKey = requireOpenAiKey(env);
   const model = openAiModel(env);
+  const subjectBlock = formatSubjectMarkingContextBlock(input.subjectContext);
 
   const payload = {
     questionText: input.questionText.slice(0, 4000),
@@ -452,12 +658,41 @@ export async function markLongAnswer(
     answerParts: (input.answerParts ?? []).slice(0, 12),
     studentResponse: input.studentResponse.slice(0, 12000),
     studentParts: (input.studentParts ?? []).map((p) => p.slice(0, 4000)),
+    studentSteps: (input.studentSteps ?? []).map((s) => s.slice(0, 2000)),
+    markBreakdown: input.markBreakdown ?? null,
+    breakdownMode: Boolean(input.breakdownMode),
   };
 
-  const parsed = await chatJson(apiKey, model, [
-    {
-      role: "system",
-      content: `You mark student responses for VCE-style questions.
+  const breakdownPrompt = input.breakdownMode
+    ? `You mark using a VCAA-style MARK BREAKDOWN — each step earns its own mark(s).
+Return JSON only:
+{
+  "correct": boolean (true only if all marks earned),
+  "scorePercent": 0-100,
+  "marksAwarded": number (sum of step marksAwarded),
+  "maxMarks": number,
+  "feedback": "1-2 bullet overview when wrong",
+  "correctAnswers": ["final model answer(s)"],
+  "stepResults": [{
+    "index": 0,
+    "marks": 1,
+    "marksAwarded": 0,
+    "label": "criterion label from rubric",
+    "model": "model working for this mark",
+    "studentText": "what the student wrote for this step",
+    "awarded": false,
+    "feedback": "2-4 bullets comparing student vs model for THIS mark only — use LaTeX $...$ for maths"
+  }],
+  "partResults": []
+}
+
+Rules for stepResults:
+• One entry per markBreakdown step, same order and index.
+• studentText MUST quote/paraphrase the student's step from studentSteps.
+• If awarded is false, feedback MUST say exactly what was missing vs the model.
+• Use LaTeX in feedback: $10\\,\\text{am}$, $\\frac{dh}{dt}$, etc.
+• Be fair — accept equivalent correct methods.`
+    : `You mark student responses for VCE-style questions.
 Return JSON only:
 {
   "correct": boolean (true if broadly correct for full credit),
@@ -485,7 +720,12 @@ When the student is WRONG, feedback MUST be specific and detailed:
 When correct: still give 2-3 bullets on what they did well.
 
 Be fair: accept equivalent methods and reasonable rounding. For multipart, grade each part.
-Use guidance and acceptedAnswers as the rubric when provided; prefer those over inventing answers.`,
+Use guidance and acceptedAnswers as the rubric when provided; prefer those over inventing answers.`;
+
+  const parsed = await chatJson(apiKey, model, [
+    {
+      role: "system",
+      content: `${breakdownPrompt}${subjectBlock}`,
     },
     {
       role: "user",
@@ -505,6 +745,7 @@ export type HandwritingMarkInput = {
   acceptedAnswers?: string[];
   answerParts?: { label: string; marks?: number; acceptedAnswer?: string }[];
   images: string[];
+  subjectContext?: SubjectMarkingContext;
 };
 
 export async function markHandwritingAnswer(
@@ -561,6 +802,7 @@ export async function markHandwritingAnswer(
       content: `You mark handwritten student responses on ruled paper for VCE-style maths questions.
 Carefully READ every stroke in each image — numbers, operators, graphs, lists of edges, and working lines.
 The final answer is usually on the last line of each image.
+${formatSubjectMarkingContextBlock(input.subjectContext)}
 
 Return JSON only:
 {
@@ -606,78 +848,136 @@ Use guidance and acceptedAnswers as the rubric; prefer those over inventing answ
   return parseLongAnswerMarkResult(parsed, input.marks, { maxFeedbackChars: 2000 });
 }
 
-export type EnglishScoreInput = {
-  promptText: string;
-  section: string;
-  responseType: string;
-  responseText: string;
-};
+export async function generateMarkBreakdown(
+  env: OpenAiEnv,
+  input: {
+    questionText: string;
+    topic?: string;
+    marks: number;
+    guidance?: string;
+    acceptedAnswers?: string[];
+    subjectContext?: SubjectMarkingContext;
+  },
+): Promise<{ steps: MarkBreakdownStepInput[] }> {
+  const apiKey = requireOpenAiKey(env);
+  const model = openAiModel(env);
+  const parsed = await chatJson(apiKey, model, [
+    {
+      role: "system",
+      content: `You create VCAA-style mark breakdowns for exam questions.
+Return JSON only: {"steps":[{"marks":1,"label":"what earns this mark","model":"model working/answer for this mark"}]}
+${formatSubjectMarkingContextBlock(input.subjectContext)}
 
-export type EnglishScoreResult = {
+Rules:
+• Total marks across steps must equal maxMarks (${input.marks}).
+• Each step is one line of working or one criterion (e.g. "State both equations", "Substitute correctly", "Correct final answers").
+• Use LaTeX in model fields where helpful: $...$
+• Prefer 1 mark per step unless exam guide groups marks.`,
+    },
+    {
+      role: "user",
+      content: JSON.stringify({
+        questionText: input.questionText.slice(0, 4000),
+        topic: input.topic ?? "",
+        maxMarks: input.marks,
+        guidance: input.guidance ?? "",
+        acceptedAnswers: (input.acceptedAnswers ?? []).slice(0, 12),
+      }),
+    },
+  ]);
+  const stepsRaw = Array.isArray(parsed.steps) ? parsed.steps : [];
+  const steps: MarkBreakdownStepInput[] = stepsRaw
+    .map((s: Record<string, unknown>) => ({
+      marks: Math.max(1, Math.round(Number(s.marks ?? 1) || 1)),
+      label: String(s.label ?? s.criterion ?? "").trim(),
+      model: String(s.model ?? s.expected ?? "").trim() || undefined,
+    }))
+    .filter((s) => s.label)
+    .slice(0, 24);
+  if (!steps.length) throw new Error("Could not generate mark breakdown.");
+  return { steps };
+}
+
+export type EnglishCriterionKey = "structure" | "evidence" | "expression" | "relevance";
+
+export type EnglishCriterionScore = {
   score: number;
   feedback: string;
 };
 
-/** VCAA VCE English criteria + expected qualities (Study Design 2024–2027). Embedded in smart-marking prompt. */
-const ENGLISH_SMART_MARKING_RUBRIC = `
-ASSESSMENT CRITERIA (apply the section that matches the student's section field)
+export type EnglishHighlight = {
+  quote: string;
+  type: "strength" | "improvement";
+  criterion?: EnglishCriterionKey;
+  feedback: string;
+};
 
-Section A:
-- knowledge and understanding of the text, its structure, and the ideas, concerns and values it explores
-- development of a coherent analysis in response to the topic
-- use of evidence from the text to support the analysis
-- use of fluent expression through appropriate use of vocabulary and conventions of Standard Australian English
+export type EnglishScoreInput = {
+  promptText: string;
+  responseText: string;
+  subjectContext?: SubjectMarkingContext;
+};
 
-Section B:
-- use of relevant idea(s) drawn from one Framework of Ideas, the title provided and at least one piece of stimulus material
-- creation of a cohesive text that connects to a clear purpose(s) and incorporates an appropriate voice
-- use of suitable text structure(s) and language features to create a text
-- use of fluent expression, including the appropriate use of vocabulary
+export type EnglishScoreResult = {
+  score: number;
+  summary: string;
+  criteria: Record<EnglishCriterionKey, EnglishCriterionScore>;
+  highlights: EnglishHighlight[];
+};
 
-Section C:
-- understanding of contention, argument(s), and point of view
-- analysis of the ways in which written and spoken language and visuals are used to present an argument(s) and to persuade an intended audience
-- use of evidence from the text to support the analysis
-- use of fluent expression through appropriate use of vocabulary and conventions of Standard Australian English
+const ENGLISH_CRITERIA_RUBRIC = `
+MARK ON FOUR CRITERIA (each 0–10):
+1. structure — clear introduction, body paragraphs, conclusion; logical flow; cohesive sequencing of ideas
+2. evidence — use of textual evidence, examples, or supporting detail; how well evidence is integrated
+3. expression — vocabulary, sentence variety, grammar, spelling, and conventions of Standard Australian English
+4. relevance — engagement with the prompt/topic; focus and appropriateness of ideas to the task
 
-MARKING APPROACH:
-- Mark holistically, relating student performance to the published criteria and ranking over the full range of marks (0–10).
-- Use the "Expected qualities" descriptors below to determine the mark. Match the student's response to the band whose qualities best describe their work overall.
-- For Section B, consider Framework of Ideas, textual form, audience and purpose (VCE English Study Design 2024–2027).
+OVERALL score (0–10): holistic VCE-style mark informed by the four criteria — do not simply average them.
 
-EXPECTED QUALITIES – SECTION A
-9–10: Close perceptive reading; complexities of ideas/concerns/values via structure and language; clear understanding of topic implications with appropriate strategy; cogent, controlled, well-substantiated discussion; precise expressive language.
-8: Thoughtful reading; explores ideas/concerns/values via structure and language; understands topic implications from the text; detailed substantiated coherent discussion; fluent confident language.
-7: Detailed knowledge throughout including ideas/concerns/values; acknowledges structure and language; understands topic; sustained well-supported response; organised writing; accurate appropriate language.
-6: Clear knowledge including some ideas/concerns/values; some awareness of structure and language; response to topic supported by appropriate evidence; generally organised; mostly accurate language.
-5: Adequate knowledge; some reference to ideas/concerns/values; understands topic with evidence from text; communicates adequately with some organisation.
-4: Basic knowledge; limited reference to ideas/concerns/values; some understanding of topic; adequate expression and language control.
-3: Familiarity with text; limited awareness of topic; basic expression and language control.
-1–2: Limited familiarity with text; very limited awareness of topic; language not always clear.
-0: No knowledge of text and/or no attempt to engage with topic and/or minimal language control.
-
-EXPECTED QUALITIES – SECTION B
-9–10: Insightful consideration of title and stimulus in connection with a Framework of Ideas; cohesive text with explicit purpose(s) and appropriate voice; sophisticated control of language and structure; rich vocabulary and language features.
-8: Astute exploration of title/stimulus and Framework; coherent text with explicit purpose(s) and voice; confident control; thoughtful vocabulary and features.
-7: Detailed connection to title/stimulus and Framework; coordinated text with clear purpose(s) and voice; sound control; clear vocabulary and features.
-6: Clear connection to title/stimulus with reference to Framework; connected text with clear purpose(s) and voice; clear control; effective vocabulary and features.
-5: Adequate connection to title/stimulus and Framework; organised text linked to purpose(s) with appropriate voice; adequate control; some vocabulary and features.
-4: Basic connection to title/stimulus; some purpose and voice awareness; basic control; simple vocabulary and features.
-3: Limited connection to title/stimulus; limited purpose or voice; limited control.
-1–2: Little/no connection to title/stimulus; little awareness of purpose; language not always clear.
-0: No knowledge of task and/or no attempt to engage.
-
-EXPECTED QUALITIES – SECTION C
-9–10: Perceptive understanding of contention, argument development and point of view; sophisticated insight into language/visuals persuading audience; sophisticated precise language.
-8: Thoughtful understanding of contention, arguments and POV; sound insight into language/visuals building argument and persuading; confident language.
-7: Detailed understanding of contention, arguments and POV; insight into language/visuals persuading audience; fluent expression.
-6: Clear understanding of contention, arguments and POV; some awareness of language/visuals persuading; competent expression.
-5: Adequate understanding of contention, arguments and POV; basic awareness of language/visuals; adequate language.
-4: Basic understanding of contention, arguments and POV; describes language/visuals persuading; basic language.
-3: Limited knowledge of arguments or POV; limited knowledge of language/visuals; attempts basic language.
-1–2: Little understanding of material; minimal knowledge of task; language not always clear.
-0: No understanding of task requirements.
+HIGHLIGHTS: Return 8–16 inline annotations on exact phrases copied verbatim from the student's essay.
+- type "strength" for effective writing (green in UI)
+- type "improvement" for weaknesses (red in UI)
+- Each highlight quote MUST appear exactly in the essay (copy-paste, preserve punctuation)
+- feedback: 1–3 sentences explaining why this phrase works or how to improve it
 `.trim();
+
+function clampCriterionScore(raw: unknown): number {
+  return Math.min(10, Math.max(0, Math.round(Number(raw ?? 0))));
+}
+
+function parseCriterionRow(raw: unknown): EnglishCriterionScore {
+  const row = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  return {
+    score: clampCriterionScore(row.score),
+    feedback: String(row.feedback ?? "").trim().slice(0, 800),
+  };
+}
+
+function parseEnglishHighlights(raw: unknown): EnglishHighlight[] {
+  if (!Array.isArray(raw)) return [];
+  const validCriteria = new Set<EnglishCriterionKey>([
+    "structure",
+    "evidence",
+    "expression",
+    "relevance",
+  ]);
+  return raw
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const row = item as Record<string, unknown>;
+      const quote = String(row.quote ?? "").trim().slice(0, 500);
+      const typeRaw = String(row.type ?? "").trim().toLowerCase();
+      const type = typeRaw === "strength" ? "strength" : typeRaw === "improvement" ? "improvement" : null;
+      if (!quote || !type) return null;
+      const criterionRaw = String(row.criterion ?? "").trim().toLowerCase() as EnglishCriterionKey;
+      const criterion = validCriteria.has(criterionRaw) ? criterionRaw : undefined;
+      const feedback = String(row.feedback ?? "").trim().slice(0, 600);
+      if (!feedback) return null;
+      return { quote, type, criterion, feedback };
+    })
+    .filter((h): h is EnglishHighlight => h != null)
+    .slice(0, 20);
+}
 
 export async function scoreEnglishResponse(
   env: OpenAiEnv,
@@ -685,39 +985,60 @@ export async function scoreEnglishResponse(
 ): Promise<EnglishScoreResult> {
   const apiKey = requireOpenAiKey(env);
   const model = openAiModel(env);
-  const section = String(input.section ?? "A").trim().toUpperCase().slice(0, 1) || "A";
+  const promptText = String(input.promptText ?? "").trim();
 
   const parsed = await chatJson(apiKey, model, [
     {
       role: "system",
-      content: `You are a VCE English assessor using official VCAA criteria and expected qualities (Study Design 2024–2027).
+      content: `You are a VCE English essay assessor (Study Design 2024–2027).
+${formatSubjectMarkingContextBlock(input.subjectContext)}
 
-Return JSON only: {"score": integer 0-10, "feedback": "3-5 sentences"}
+Return JSON only:
+{
+  "score": integer 0-10,
+  "summary": "2-4 sentence overall assessment",
+  "criteria": {
+    "structure": { "score": 0-10, "feedback": "2-3 sentences" },
+    "evidence": { "score": 0-10, "feedback": "2-3 sentences" },
+    "expression": { "score": 0-10, "feedback": "2-3 sentences" },
+    "relevance": { "score": 0-10, "feedback": "2-3 sentences" }
+  },
+  "highlights": [
+    {
+      "quote": "exact substring from essay",
+      "type": "strength" | "improvement",
+      "criterion": "structure" | "evidence" | "expression" | "relevance",
+      "feedback": "specific feedback for this phrase"
+    }
+  ]
+}
 
-Score on the full VCAA range 0–10. Use the expected-qualities descriptors for the student's section to choose the mark band holistically — do not inflate marks.
+${ENGLISH_CRITERIA_RUBRIC}
 
-In feedback:
-- Briefly name 1–2 strengths relative to the section criteria.
-- Briefly name 1–2 priorities for improvement tied to the criteria/descriptors.
-- Use assessor tone: constructive, specific, not generic praise.
-
-${ENGLISH_SMART_MARKING_RUBRIC}`,
+If no prompt was provided, assess relevance against the essay's own stated topic and internal coherence.
+Be fair, constructive, and specific — quote the student's words in highlights.`,
     },
     {
       role: "user",
       content: JSON.stringify({
-        section,
-        responseType: input.responseType,
-        prompt: input.promptText.slice(0, 6000),
+        prompt: promptText.slice(0, 6000) || "(No prompt provided — assess the essay on its own terms.)",
         response: input.responseText.slice(0, 20000),
       }),
     },
   ]);
 
+  const criteria = {
+    structure: parseCriterionRow((parsed.criteria as Record<string, unknown> | undefined)?.structure),
+    evidence: parseCriterionRow((parsed.criteria as Record<string, unknown> | undefined)?.evidence),
+    expression: parseCriterionRow((parsed.criteria as Record<string, unknown> | undefined)?.expression),
+    relevance: parseCriterionRow((parsed.criteria as Record<string, unknown> | undefined)?.relevance),
+  };
   const score = Math.min(10, Math.max(0, Math.round(Number(parsed.score ?? 0))));
   return {
     score,
-    feedback: String(parsed.feedback ?? "").trim().slice(0, 2000),
+    summary: String(parsed.summary ?? parsed.feedback ?? "").trim().slice(0, 2000),
+    criteria,
+    highlights: parseEnglishHighlights(parsed.highlights),
   };
 }
 
@@ -861,4 +1182,62 @@ Rules:
     parts,
     message: String(parsed.message ?? "").trim().slice(0, 500) || undefined,
   };
+}
+
+export type QuestionHelpTurn = { role: "user" | "assistant"; content: string };
+
+export type QuestionHelpInput = {
+  subjectId: string;
+  question: Record<string, unknown>;
+  messages: QuestionHelpTurn[];
+  subjectContext?: SubjectMarkingContext;
+};
+
+export async function questionHelpChat(
+  env: OpenAiEnv,
+  input: QuestionHelpInput,
+): Promise<{ reply: string }> {
+  const apiKey = requireOpenAiKey(env);
+  const model = openAiModel(env);
+  const questionBlock = JSON.stringify(input.question, null, 2);
+  const subjectBlock = formatSubjectMarkingContextBlock(input.subjectContext);
+
+  const systemContent = `You are Nodent, a private VCE tutor helping a student with ONE practice question.
+
+CURRENT QUESTION (no model answers included):
+${questionBlock}
+${subjectBlock ? `\nSUBJECT NOTES:\n${subjectBlock}` : ""}
+
+Rules:
+- Only help with this question and its underlying topic. Briefly redirect off-topic questions.
+- Do NOT restate, summarise, or rephrase the question — the student can already read it.
+- Never open with "This question asks you to…" or quiz them with "Do you recall…?"
+- Give one concrete hint or first step they can do right now (e.g. identify givens, write a formula with their values, sketch a diagram, state what to substitute).
+- On the first reply: one focused starting move only — actionable, not a lecture.
+- Follow-ups: answer their specific question with the next small step.
+- Do NOT state the final numerical answer or the correct MCQ letter unless the student has clearly attempted the question and explicitly asks what they are missing — even then, prefer the next step over a full solution.
+- Never reveal mark-scheme model answers or accepted-answer lists.
+- Use Australian VCE terminology. Keep replies concise (2–4 short sentences or 2–3 bullets max).
+- Use LaTeX for maths: $...$ inline, $$...$$ display.`;
+
+  const chatMessages: ChatMessage[] = [{ role: "system", content: systemContent }];
+  for (const turn of input.messages.slice(-24)) {
+    const content = String(turn.content ?? "").trim().slice(0, 4000);
+    if (!content) continue;
+    chatMessages.push({
+      role: turn.role === "assistant" ? "assistant" : "user",
+      content,
+    });
+  }
+
+  if (chatMessages.length === 1) {
+    chatMessages.push({
+      role: "user",
+      content: "Give me one hint — a concrete first step to get started. Do not restate the question.",
+    });
+  }
+
+  const { systemInstruction, contents } = splitGeminiMessages(chatMessages);
+  const reply = await geminiGenerateText(apiKey, model, { systemInstruction, contents });
+  return { reply: reply.trim().slice(0, 8000) };
 }

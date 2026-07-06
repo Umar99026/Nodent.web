@@ -68,12 +68,12 @@ export function LandingDashboardMockup({ className, compact }: LandingDashboardM
           <div className="landing-mockup-card glass-card absolute -bottom-6 -left-4 hidden w-44 rounded-xl border border-white/70 p-3 shadow-xl sm:block">
             <div className="flex items-center gap-2">
               <Trophy className="size-4 text-brand" />
-              <p className="text-xs font-semibold text-[#0b0f19]">Live rankings</p>
+              <p className="text-xs font-semibold text-[#0b0f19]">Marked in seconds</p>
             </div>
           </div>
           <div className="landing-mockup-card-alt glass-card absolute -right-2 top-8 hidden w-40 rounded-xl border border-white/70 p-3 shadow-xl sm:block">
             <p className="text-[10px] text-slate-500">This session</p>
-            <p className="text-sm font-semibold text-[#0b0f19]">8 / 10 correct</p>
+            <p className="text-sm font-semibold text-[#0b0f19]">Know what to fix</p>
           </div>
         </>
       ) : null}

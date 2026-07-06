@@ -17,6 +17,7 @@ import {
 import { subjectsForUser } from "@/lib/subjects";
 import type { Question, Subject } from "@/lib/subjects";
 import { isAdminUser } from "@/lib/constants";
+import { isPremiumUser, PREMIUM_PATH } from "@/lib/premium";
 import {
   getStableQuestionIndex,
   normalizeAnswerMap,
@@ -47,11 +48,10 @@ import { AppShell } from "@/components/layout/AppShell";
 import { McqQuestion } from "@/components/quiz/McqQuestion";
 import { ShortQuestion } from "@/components/quiz/ShortQuestion";
 import { LongQuestion } from "@/components/quiz/LongQuestion";
-import { CommentThread } from "@/components/quiz/CommentThread";
+import { QuestionHelpChat } from "@/components/quiz/QuestionHelpChat";
 import { AdminQuestionEditLink } from "@/components/admin/AdminQuestionEditLink";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { EnglishPracticePanel } from "@/pages/EnglishPracticePage";
 import { TopicPerformanceSelect } from "@/components/practice/TopicPerformanceSelect";
@@ -68,14 +68,17 @@ import {
 import { useInactivity } from "@/hooks/useInactivity";
 import { useHandwritingMode } from "@/context/HandwritingModeContext";
 import {
+  readBreakdownModePreference,
+  writeBreakdownModePreference,
+} from "@/lib/markBreakdown";
+import {
   ChevronLeft,
   ChevronRight,
   RotateCcw,
   Clock,
   BookOpen,
   Loader2,
-  MessageSquare,
-  X,
+  ListChecks,
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
@@ -181,20 +184,28 @@ export default function QuizPage() {
   const wrongOnlyKeyParam = searchParams.get("key");
   const { user } = useAuth();
   const isAdmin = isAdminUser(user);
+  const premium = isPremiumUser(user);
   /** Demo sandbox: keep the same question(s) available after every submit. */
   const isDemoSandbox = subjectId === "demo";
   /** Opt-in localhost preview only — `?mockFeedback=1` on /quiz/demo */
   const useDemoMockFeedback =
     import.meta.env.DEV && isDemoSandbox && searchParams.get("mockFeedback") === "1";
+  const [breakdownMode, setBreakdownMode] = useState(() => readBreakdownModePreference());
   const { setEnabled: setHandwritingMode } = useHandwritingMode();
   const { isInactive, resetInactivity } = useInactivity();
+
+  useEffect(() => {
+    if (!premium && breakdownMode) {
+      setBreakdownMode(false);
+      writeBreakdownModePreference(false);
+    }
+  }, [premium, breakdownMode]);
 
   useEffect(() => {
     if (isDemoSandbox && !isWrongReview) setHandwritingMode(true);
   }, [isDemoSandbox, isWrongReview, setHandwritingMode]);
 
   const [showInactivityDialog, setShowInactivityDialog] = useState(false);
-  const [discussionOpen, setDiscussionOpen] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, boolean | null>>({});
   const [initialized, setInitialized] = useState(false);
@@ -813,8 +824,8 @@ export default function QuizPage() {
   if (subjectId === "english") {
     return (
       <AppShell
-        title="English Practice"
-        subtitle="Select a book, write responses, and rate peers."
+        title="English"
+        subtitle="Essay studio — upload, mark, and refine."
         edgeToEdgeHeader
         edgeToEdgeMain
       >
@@ -979,53 +990,61 @@ export default function QuizPage() {
           </div>
 
           <div className="flex justify-end gap-2">
+            {!isWrongReview && (
+              <Button
+                type="button"
+                variant={breakdownMode ? "accent" : "outline"}
+                className="gap-2"
+                aria-pressed={breakdownMode}
+                aria-label={
+                  breakdownMode
+                    ? "Breakdown mode on — one working line per mark"
+                    : "Switch to mark breakdown mode"
+                }
+                onClick={() => {
+                  if (!breakdownMode && !premium) {
+                    navigate(PREMIUM_PATH);
+                    return;
+                  }
+                  setBreakdownMode((prev) => {
+                    const next = !prev;
+                    writeBreakdownModePreference(next);
+                    return next;
+                  });
+                }}
+              >
+                <ListChecks className="size-4" />
+                <span className="hidden sm:inline">
+                  {breakdownMode ? "Breakdown mode" : "Normal mode"}
+                </span>
+                <span className="sm:hidden">{breakdownMode ? "Steps" : "Normal"}</span>
+              </Button>
+            )}
             <Button
-              type="button"
-              variant={discussionOpen ? "accent" : "outline"}
-              onClick={() => setDiscussionOpen((open) => !open)}
-              className="gap-2"
-              aria-expanded={discussionOpen}
-            >
-              <MessageSquare className="size-4" />
-              <span className="hidden sm:inline">
-                {discussionOpen ? "Hide discussion" : "Discussion"}
-              </span>
-              <span className="sm:hidden">{discussionOpen ? "Hide" : "Chat"}</span>
-            </Button>
-            <Tooltip>
-              <TooltipTrigger>
-                <Button
-                  variant="accent"
-                  disabled={!currentQuestionTopic}
-                  onClick={() => {
-                    if (!subjectId || !currentQuestionTopic) return;
-                    navigate(
-                      `/practice/${subjectId}?topic=${encodeURIComponent(currentQuestionTopic)}`,
-                    );
-                  }}
-                  className="gap-2 disabled:opacity-50"
-                >
-                  <BookOpen className="size-4" />
-                  Content
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" align="end">
-                {currentQuestionTopic
+              variant="accent"
+              disabled={!currentQuestionTopic}
+              title={
+                currentQuestionTopic
                   ? `Topic overview: ${currentQuestionTopic}`
-                  : "Topic overview for this question"}
-              </TooltipContent>
-            </Tooltip>
+                  : "Topic overview for this question"
+              }
+              onClick={() => {
+                if (!subjectId || !currentQuestionTopic) return;
+                navigate(
+                  `/practice/${subjectId}?topic=${encodeURIComponent(currentQuestionTopic)}`,
+                );
+              }}
+              className="gap-2 disabled:opacity-50"
+            >
+              <BookOpen className="size-4" />
+              Content
+            </Button>
           </div>
         </div>
 
-        {/* Question + optional discussion sidebar */}
-        <div
-          className={cn(
-            "grid gap-6 transition-[grid-template-columns] duration-300 ease-out",
-            discussionOpen && "lg:grid-cols-[minmax(0,1fr)_340px]",
-          )}
-        >
-          {/* Question column — full width until discussion opens */}
+        {/* Question + help sidebar */}
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+          {/* Question column */}
           <div className="min-w-0 space-y-6">
             <Card className="practice-card">
               <div className="practice-card-accent" aria-hidden>
@@ -1126,6 +1145,7 @@ export default function QuizPage() {
                               repeatSandbox={sandboxRepeat}
                               practiceOnly={isWrongReview || sandboxRepeat}
                               devMockMarking={useDemoMockFeedback}
+                              breakdownMode={breakdownMode}
                               classFullyCorrectPercent={partClass ?? null}
                               persistedState={questionUiState[qk]}
                               onStateChange={(state) => updateQuestionUiState(qk, state)}
@@ -1190,57 +1210,19 @@ export default function QuizPage() {
             </div>
           </div>
 
-          {/* Discussion sidebar (desktop) */}
-          {discussionOpen ? (
-            <div className="hidden min-w-0 lg:block">
-              <div className="sticky top-[calc(3.5rem+0.75rem)]">
-                {focusPart && subjectId ? (
-                  <CommentThread
-                    key={focusQKey}
-                    subjectId={subjectId}
-                    questionKey={focusQKey}
-                  />
-                ) : null}
-              </div>
+          <div className="min-w-0">
+            <div className="lg:sticky lg:top-[calc(3.5rem+0.75rem)]">
+              {focusPart && subjectId && focusQKey ? (
+                <QuestionHelpChat
+                  key={focusQKey}
+                  subjectId={subjectId}
+                  questionKey={focusQKey}
+                  question={focusPart}
+                />
+              ) : null}
             </div>
-          ) : null}
+          </div>
         </div>
-
-        {/* Discussion drawer (mobile / tablet) */}
-        {discussionOpen ? (
-          <>
-            <button
-              type="button"
-              className="fixed inset-0 z-40 bg-black/45 lg:hidden"
-              aria-label="Close discussion"
-              onClick={() => setDiscussionOpen(false)}
-            />
-            <div className="fixed inset-y-0 right-0 z-50 flex w-[min(340px,100vw)] flex-col border-l border-black/10 bg-[#f3f4f6] shadow-2xl lg:hidden">
-              <div className="flex shrink-0 items-center justify-between border-b border-black/10 bg-white px-4 py-3">
-                <p className="font-display text-sm font-semibold text-[#0b0f19]">Discussion</p>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="size-8"
-                  onClick={() => setDiscussionOpen(false)}
-                  aria-label="Close discussion"
-                >
-                  <X className="size-4" />
-                </Button>
-              </div>
-              <div className="min-h-0 flex-1 overflow-y-auto p-4">
-                {focusPart && subjectId ? (
-                  <CommentThread
-                    key={`mobile-${focusQKey}`}
-                    subjectId={subjectId}
-                    questionKey={focusQKey}
-                  />
-                ) : null}
-              </div>
-            </div>
-          </>
-        ) : null}
       </div>
 
       {/* Inactivity dialog */}

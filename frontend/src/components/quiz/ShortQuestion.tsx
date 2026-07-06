@@ -1,4 +1,6 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/context/AuthContext";
 import { cn, getQuestionTypeLabel, isAnswerCorrect } from "@/lib/utils";
 import type { ShortQuestion as ShortQuestionType } from "@/lib/subjects";
 import {
@@ -47,6 +49,7 @@ import { useHandwritingModeActive } from "@/context/HandwritingModeContext";
 import { hasAnswerContent, isHandwritingValue, usesHandwritingMarking } from "@/lib/handwritingMode";
 import { isDiagramLabelQuestion, partHasOverlay, partUsesFigureLabels, partUsesInlineInputs, inlineInputsForPart, slotIndexForPartOverlay, slotsForPart, expectedAnswersForQuestionSlots, type DiagramLabelPart, type PartFigureLabelSource } from "@/lib/diagramLabels";
 import { handwritingMarkUserError } from "@/lib/userFacingErrors";
+import { isPremiumUser, PREMIUM_PATH } from "@/lib/premium";
 import { flushAllHandwriting, flushHandwriting } from "@/lib/handwritingFlush";
 import { CheckCircle2, XCircle, Send, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -62,6 +65,15 @@ import {
   DEMO_MATHS_DEV_PLACEHOLDER_DRAWING,
   getDemoMathsDevMockMark,
 } from "@/lib/demoMathsMockFeedback";
+import {
+  emptyStepAnswers,
+  resolveMarkBreakdown,
+  type MarkStepResult,
+} from "@/lib/markBreakdown";
+import {
+  MarkBreakdownFeedbackPanel,
+  MarkBreakdownInputs,
+} from "@/components/quiz/MarkBreakdownFields";
 
 interface ShortQuestionProps {
   question: ShortQuestionType;
@@ -80,6 +92,8 @@ interface ShortQuestionProps {
   repeatSandbox?: boolean;
   /** Localhost demo sandbox — preload mock wrong-answer feedback and skip OpenAI. */
   devMockMarking?: boolean;
+  /** VCAA mark-scheme mode — one working line per mark. */
+  breakdownMode?: boolean;
   questionDisplayNumber?: number;
   persistedState?: {
     answer?: string;
@@ -208,10 +222,13 @@ export function ShortQuestion({
   practiceOnly = false,
   repeatSandbox = false,
   devMockMarking = false,
+  breakdownMode = false,
   questionDisplayNumber = 1,
   persistedState,
   onStateChange,
 }: ShortQuestionProps) {
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const [answer, setAnswer] = useState(persistedState?.answer ?? "");
   const [parts, setParts] = useState<string[]>(persistedState?.parts ?? []);
   const [submitted, setSubmitted] = useState(Boolean(persistedState?.submitted));
@@ -220,6 +237,7 @@ export function ShortQuestion({
   const [partResults, setPartResults] = useState<(boolean | null)[]>(persistedState?.partResults ?? []);
   const [aiMarking, setAiMarking] = useState(false);
   const [aiMark, setAiMark] = useState<SmartMarkResult | null>(null);
+  const [stepAnswers, setStepAnswers] = useState<string[]>([]);
   const devPreloadAppliedRef = useRef(false);
   const handwritingMode = useHandwritingModeActive(subjectId);
   const examPaper = isExamPaperLayoutSubject(subjectId);
@@ -278,6 +296,11 @@ export function ShortQuestion({
   const effectiveTotalMarks = isMultipart
     ? partMarks.reduce((sum, m) => sum + m, 0)
     : baseMarks;
+  const markBreakdown = useMemo(
+    () => resolveMarkBreakdown({ ...question, marks: effectiveTotalMarks }),
+    [question, effectiveTotalMarks],
+  );
+  const breakdownActive = breakdownMode && !isMultipart;
   const hasExplicitPartMarks =
     isMultipart &&
     configuredParts.length >= 1 &&
@@ -330,6 +353,15 @@ export function ShortQuestion({
       return Array.from({ length: need }, (_, i) => prev[i] ?? "");
     });
   }, [isMultipart, answerSlotCount, partLabels.length]);
+
+  useEffect(() => {
+    if (!breakdownActive) return;
+    setStepAnswers((prev) => {
+      const need = markBreakdown.steps.length;
+      if (prev.length === need) return prev;
+      return emptyStepAnswers(need);
+    });
+  }, [breakdownActive, markBreakdown.steps.length]);
 
   useEffect(() => {
     onStateChange?.({
@@ -387,6 +419,13 @@ export function ShortQuestion({
 
   const resolveHandwritingState = () => {
     flushAllHandwriting();
+    if (breakdownActive) {
+      const resolvedSteps = stepAnswers.map((step, idx) => {
+        const key = handwritingFlushKey(`step-${idx}`);
+        return key ? flushHandwriting(key) || step : step;
+      });
+      return { answer, parts, stepAnswers: resolvedSteps };
+    }
     if (isMultipart) {
       const resolvedParts = parts.map((part, idx) => {
         const key = handwritingFlushKey(`part-${idx}`);
@@ -397,15 +436,20 @@ export function ShortQuestion({
           .map((part, idx) => `${partSubmitLabel(partLabels[idx] ?? "")} ${part}`.trim())
           .join("; "),
         parts: resolvedParts,
+        stepAnswers,
       };
     }
     const key = handwritingFlushKey("main");
     const resolvedAnswer = key ? flushHandwriting(key) || answer : answer;
-    return { answer: resolvedAnswer, parts };
+    return { answer: resolvedAnswer, parts, stepAnswers };
   };
 
   const canSubmit =
-    (isMultipart ? parts.every((p) => hasAnswerContent(p)) : hasAnswerContent(compositeAnswer)) &&
+    (breakdownActive
+      ? stepAnswers.every((p) => hasAnswerContent(p))
+      : isMultipart
+        ? parts.every((p) => hasAnswerContent(p))
+        : hasAnswerContent(compositeAnswer)) &&
     !disabled &&
     !aiMarking &&
     (!submitted || (allowRetry && !isCorrect) || repeatSandbox);
@@ -413,8 +457,17 @@ export function ShortQuestion({
   const handleSubmit = async () => {
     if (!canSubmit) return;
 
-    const { answer: resolvedAnswer, parts: resolvedParts } = resolveHandwritingState();
+    const requirePremiumForAi = () => {
+      if (isPremiumUser(user)) return true;
+      toast.error("AI marking requires Premium.");
+      navigate(PREMIUM_PATH);
+      return false;
+    };
+
+    const { answer: resolvedAnswer, parts: resolvedParts, stepAnswers: resolvedSteps } =
+      resolveHandwritingState();
     if (isMultipart) setParts(resolvedParts);
+    else if (breakdownActive) setStepAnswers(resolvedSteps);
     else setAnswer(resolvedAnswer);
     const resolvedComposite = isMultipart
       ? partLabels
@@ -434,7 +487,7 @@ export function ShortQuestion({
     let nextDpHint: number | null = null;
     let partCorrectFlags: boolean[] = [];
 
-    if (!usesHandwritingAi) {
+    if (!usesHandwritingAi && !breakdownActive) {
       if (isMultipart) {
         const gradedParts = gradeMultipartAnswers(resolvedParts, accepted, configuredParts);
         partCorrectFlags = gradedParts.map((g) => g.correct);
@@ -453,6 +506,7 @@ export function ShortQuestion({
     let finalCorrect = correct;
 
     if (usesHandwritingAi && subjectId && questionKey) {
+      if (!requirePremiumForAi()) return;
       setAiMark(null);
       setAiMarking(true);
       try {
@@ -497,12 +551,54 @@ export function ShortQuestion({
         setAiMarking(false);
       }
     } else if (
+      breakdownActive &&
+      subjectId &&
+      questionKey &&
+      (!practiceOnly || repeatSandbox)
+    ) {
+      if (!requirePremiumForAi()) return;
+      setAiMark(null);
+      setAiMarking(true);
+      try {
+        const smartPayload = {
+          ...buildSmartMarkPayload(question, {
+            marks: effectiveTotalMarks,
+            partDescriptors,
+            partMarks,
+            expectedAnswers: expectedAnswersForDisplay,
+            configuredParts,
+          }),
+          markBreakdown,
+        };
+        const ai = await requestSmartMark(subjectId, questionKey, {
+          responseText: resolvedSteps.map((s, i) => `${i + 1}. ${s}`).join("\n"),
+          studentSteps: resolvedSteps,
+          question: smartPayload,
+        });
+        if (ai) {
+          setAiMark(ai);
+          finalCorrect = ai.correct;
+          if (ai.stepResults?.length) {
+            partCorrectFlags = ai.stepResults.map((s) => s.awarded);
+            setPartResults(partCorrectFlags);
+          } else {
+            setPartResults([]);
+          }
+        }
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Could not mark your answer.");
+        finalCorrect = false;
+      } finally {
+        setAiMarking(false);
+      }
+    } else if (
       useSmartMarking &&
       (!practiceOnly || repeatSandbox) &&
       subjectId &&
       questionKey &&
       !correct
     ) {
+      if (!requirePremiumForAi()) return;
       setAiMarking(true);
       try {
         const responseText = isMultipart
@@ -658,21 +754,6 @@ export function ShortQuestion({
 
       {/* Answer input */}
       <div className="space-y-3">
-        {useSmartMarking ? (
-          <p className="text-xs text-muted-foreground">
-            Smart marking — write in full sentences where needed.
-          </p>
-        ) : null}
-        {handwritingMode ? (
-          <p className="text-xs text-muted-foreground">
-            Handwriting mode — draw your answer on the pad.
-          </p>
-        ) : null}
-        {isDiagramLabel ? (
-          <p className="text-xs text-muted-foreground">
-            Type labels on the diagram, then submit to mark all fields.
-          </p>
-        ) : null}
         {isDiagramLabel && diagramImageUrl ? (
           <>
           <DiagramLabelInputs
@@ -945,6 +1026,38 @@ export function ShortQuestion({
                 </div>
               ))}
             </div>
+          ) : breakdownActive ? (
+            <div className="space-y-3">
+              <MarkBreakdownInputs
+                breakdown={markBreakdown}
+                values={stepAnswers}
+                onChange={(idx, value) =>
+                  setStepAnswers((prev) => {
+                    const next = [...prev];
+                    next[idx] = value;
+                    return next;
+                  })
+                }
+                disabled={disabled || (submitted && !allowRetry && !repeatSandbox)}
+                submitted={submitted}
+                stepResults={aiMark?.stepResults?.map((s) => s.awarded)}
+                subjectId={subjectId}
+                examPaperMode={examPaper}
+                flushKeyPrefix={questionKey}
+              />
+              <Button
+                onClick={() => void handleSubmit()}
+                disabled={!canSubmit}
+                className="btn-accent w-full gap-2 sm:w-auto"
+              >
+                {aiMarking ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Send className="size-4" />
+                )}
+                {aiMarking ? "Marking…" : submitted ? "Submitted" : "Submit mark breakdown"}
+              </Button>
+            </div>
           ) : (
             <div className="space-y-1">
               {(() => {
@@ -1091,7 +1204,11 @@ export function ShortQuestion({
           />
         ) : null}
 
-        {submitted && !isMultipart && !isCorrect && !aiMark ? (
+        {submitted && breakdownActive && aiMark?.stepResults?.length ? (
+          <MarkBreakdownFeedbackPanel stepResults={aiMark.stepResults as MarkStepResult[]} />
+        ) : null}
+
+        {submitted && !isMultipart && !isCorrect && !aiMark && !breakdownActive ? (
           <WrongAnswerFeedbackPanel
             bullets={buildWrongAnswerBullets({
               studentAnswer: compositeAnswer,

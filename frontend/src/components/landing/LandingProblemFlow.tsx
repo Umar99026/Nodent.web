@@ -67,13 +67,13 @@ export function LandingProblemFlow() {
   return (
     <div className="mx-auto max-w-2xl text-center">
       <Reveal>
-        <SectionEyebrow>The problem</SectionEyebrow>
+        <SectionEyebrow>Sound familiar?</SectionEyebrow>
         <SectionTitle>
-          Most students only find out where they stand after results are already out.
+          You&apos;re working hard — but still guessing what to fix.
         </SectionTitle>
         <p className="mt-4 text-lg leading-relaxed text-slate-600">
-          Students revise without knowing if they&apos;re improving, falling behind, or actually
-          competitive. Results arrive too late to change course.
+          Tutors can cost hundreds of dollars a week. Teacher feedback often takes days. By then
+          you&apos;ve moved on — and the same mistakes show up again on SACs and exams.
         </p>
       </Reveal>
 
@@ -87,13 +87,13 @@ export function LandingProblemFlow() {
           showFix && "landing-reveal-visible landing-reveal-delayed",
         )}
       >
-        <SectionEyebrow>How did we fix this</SectionEyebrow>
+        <SectionEyebrow>How Nodent helps</SectionEyebrow>
         <SectionTitle as="h3">
-          Revise, compete, and measure your performance in one place.
+          Feedback in seconds. Clarity on what to improve.
         </SectionTitle>
         <p className="mt-4 text-lg text-slate-600">
-          Answer VCE-style questions, get instant scoring, see your rank and percentiles, and track
-          weak topics — so you know where you stand before results land.
+          Practice VCE-style questions, get smart marking on written work, and see exactly where to
+          recover marks — without booking another tutoring session.
         </p>
         <Link
           to="/login"

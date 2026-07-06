@@ -5,7 +5,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { lazy, Suspense, type ReactNode } from "react";
 import { StudyTimerProvider } from "@/context/StudyTimerContext";
 import { HandwritingModeProvider } from "@/context/HandwritingModeContext";
-import { isAdminUser, canAccessTeacherNav, canAccessTrackNav, STORAGE_KEYS } from "@/lib/constants";
+import { isAdminUser, canAccessTeacherNav, canAccessTrackNav, needsStudentOnboarding, STORAGE_KEYS } from "@/lib/constants";
 import LandingPage from "@/pages/LandingPage";
 import FeedbackPage from "@/pages/FeedbackPage";
 
@@ -14,6 +14,8 @@ const LoginPage = lazy(() => import("@/pages/LoginPage"));
 const ForgotPasswordPage = lazy(() => import("@/pages/ForgotPasswordPage"));
 const ResetPasswordPage = lazy(() => import("@/pages/ResetPasswordPage"));
 const DashboardPage = lazy(() => import("@/pages/DashboardPage"));
+const OnboardingPage = lazy(() => import("@/pages/OnboardingPage"));
+const PremiumPage = lazy(() => import("@/pages/PremiumPage"));
 const QuizPage = lazy(() => import("@/pages/QuizPage"));
 const SummaryPage = lazy(() => import("@/pages/SummaryPage"));
 const TrackStudyPage = lazy(() => import("@/pages/TrackStudyPageNew"));
@@ -101,25 +103,53 @@ function StudentOnlyRoute({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
-/**
- * Redirects authenticated users away from guest-only pages (e.g. /login).
- */
-function GuestRoute({ children }: { children: ReactNode }) {
-  const { isAuthenticated, isLoading } = useAuth();
+function StudentOnboardingGate({ children }: { children: ReactNode }) {
+  const { user, isLoading } = useAuth();
 
-  if (isLoading && hasStoredAuthToken()) {
-    return <LoadingFallback />;
+  if (isLoading && hasStoredAuthToken()) return <LoadingFallback />;
+
+  if (needsStudentOnboarding(user)) {
+    return <Navigate to="/onboarding" replace />;
   }
 
-  if (isAuthenticated) {
+  return <>{children}</>;
+}
+
+function OnboardingOnlyRoute({ children }: { children: ReactNode }) {
+  const { user, isLoading } = useAuth();
+
+  if (isLoading && hasStoredAuthToken()) return <LoadingFallback />;
+
+  if (!needsStudentOnboarding(user)) {
     return <Navigate to="/dashboard" replace />;
   }
 
   return <>{children}</>;
 }
 
+function authHomePath(user: Parameters<typeof needsStudentOnboarding>[0]) {
+  return needsStudentOnboarding(user) ? "/onboarding" : "/dashboard";
+}
+
+/**
+ * Redirects authenticated users away from guest-only pages (e.g. /login).
+ */
+function GuestRoute({ children }: { children: ReactNode }) {
+  const { isAuthenticated, isLoading, user } = useAuth();
+
+  if (isLoading && hasStoredAuthToken()) {
+    return <LoadingFallback />;
+  }
+
+  if (isAuthenticated) {
+    return <Navigate to={authHomePath(user)} replace />;
+  }
+
+  return <>{children}</>;
+}
+
 function RootRedirect() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
   const [searchParams] = useSearchParams();
 
   if (searchParams.get("welcome") === "1") {
@@ -131,7 +161,7 @@ function RootRedirect() {
   }
 
   if (isAuthenticated) {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to={authHomePath(user)} replace />;
   }
 
   return <LandingPage />;
@@ -173,10 +203,23 @@ function AppRoutes() {
         />
 
         <Route
+          path="/onboarding"
+          element={
+            <ProtectedRoute>
+              <OnboardingOnlyRoute>
+                <OnboardingPage />
+              </OnboardingOnlyRoute>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
           path="/dashboard"
           element={
             <ProtectedRoute>
-              <DashboardPage />
+              <StudentOnboardingGate>
+                <DashboardPage />
+              </StudentOnboardingGate>
             </ProtectedRoute>
           }
         />
@@ -191,12 +234,19 @@ function AppRoutes() {
         />
 
         <Route
+          path="/premium"
+          element={
+            <ProtectedRoute>
+              <PremiumPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
           path="/practice/:subjectId/exams"
           element={
             <ProtectedRoute>
-              <AdminOnlyRoute>
-                <PracticeExamsPage />
-              </AdminOnlyRoute>
+              <PracticeExamsPage />
             </ProtectedRoute>
           }
         />
@@ -205,9 +255,7 @@ function AppRoutes() {
           path="/practice/:subjectId/exams/:year"
           element={
             <ProtectedRoute>
-              <AdminOnlyRoute>
-                <PracticeExamPapersPage />
-              </AdminOnlyRoute>
+              <PracticeExamPapersPage />
             </ProtectedRoute>
           }
         />
@@ -216,9 +264,7 @@ function AppRoutes() {
           path="/practice/:subjectId/exams/:year/:examNumber"
           element={
             <ProtectedRoute>
-              <AdminOnlyRoute>
-                <PracticeExamDetailPage />
-              </AdminOnlyRoute>
+              <PracticeExamDetailPage />
             </ProtectedRoute>
           }
         />

@@ -218,7 +218,7 @@ export function AiQuestionImportPanel({
       <CardContent className="space-y-4">
         {configured === false && (
           <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-            OpenAI is not configured. Add <code className="text-xs">OPENAI_API_KEY</code> to{" "}
+            Gemini is not configured. Add <code className="text-xs">GEMINI_API_KEY</code> to{" "}
             <code className="text-xs">.dev.vars</code> (local) or Cloudflare Pages secrets (production).
           </p>
         )}

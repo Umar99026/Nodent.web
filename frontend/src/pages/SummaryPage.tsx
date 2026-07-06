@@ -24,6 +24,9 @@ import { subjectsForUser } from "@/lib/subjects";
 import type { Question, Subject } from "@/lib/subjects";
 import { isAdminUser } from "@/lib/constants";
 import { formatPercentileBadge } from "@/lib/percentileDisplay";
+import type { EnglishEssayResponse } from "@/lib/englishEssay";
+import { AnnotatedEssayView } from "@/components/english/AnnotatedEssayView";
+import { EnglishCriteriaBreakdown } from "@/components/english/EnglishCriteriaBreakdown";
 import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
 import {
@@ -102,20 +105,7 @@ interface CompetitionStats {
   minRankedAttempts?: number;
 }
 
-type EnglishResponse = {
-  id: number;
-  promptId: number;
-  prompt: string;
-  userId: number;
-  username: string;
-  responseType: "essay" | "paragraph";
-  responseText: string;
-  imageUrls: string[];
-  updatedAt: string;
-  aiScore: number | null;
-  aiFeedback: string | null;
-  section?: "A" | "B" | "C";
-};
+type EnglishResponse = EnglishEssayResponse;
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -386,21 +376,10 @@ export default function SummaryPage() {
   const fetchEnglishResponses = useMemo(
     () => async () => {
       if (subjectId !== "english" || !user) return;
-      const [a, b, c] = await Promise.all([
-        apiFetch<{ responses: EnglishResponse[] }>(
-          `${API_PATHS.english.responses}?section=A`,
-        ),
-        apiFetch<{ responses: EnglishResponse[] }>(
-          `${API_PATHS.english.responses}?section=B`,
-        ),
-        apiFetch<{ responses: EnglishResponse[] }>(
-          `${API_PATHS.english.responses}?section=C`,
-        ),
-      ]);
-      const merged = [...(a.responses || []), ...(b.responses || []), ...(c.responses || [])];
-      const byId = new Map<number, EnglishResponse>();
-      for (const row of merged) byId.set(Number(row.id), row);
-      setEnglishResponses(Array.from(byId.values()));
+      const data = await apiFetch<{ responses: EnglishEssayResponse[] }>(
+        `${API_PATHS.english.responses}?mine=1`,
+      );
+      setEnglishResponses(data.responses ?? []);
     },
     [subjectId, user],
   );
@@ -738,7 +717,10 @@ export default function SummaryPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="font-display text-lg">Your submitted passages/essays</CardTitle>
+              <CardTitle className="font-display text-lg">Your essays</CardTitle>
+              <CardDescription>
+                Past submissions with AI marks and inline feedback.
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               {myRows.length ? (
@@ -764,7 +746,7 @@ export default function SummaryPage() {
                       </div>
                       <div className="absolute inset-x-0 top-0 flex items-center justify-between gap-1 border-b border-black/10 bg-white/88 px-1.5 py-1 backdrop-blur">
                         <span className="truncate text-[10px] font-semibold text-[#0f172a]">
-                          {r.section ? `Section ${r.section}` : "Section —"}
+                          Essay
                         </span>
                         {r.aiScore != null ? (
                           <Badge variant="default" className="shrink-0 bg-[#0f172a] px-1 py-0 text-[9px] text-white">
@@ -810,25 +792,22 @@ export default function SummaryPage() {
                   </p>
                 </div>
               </div>
-              <div className="max-h-[70vh] overflow-y-auto rounded-lg border border-black/10 bg-slate-50 p-4">
-                <p className="mb-3 whitespace-pre-wrap text-sm font-medium leading-relaxed text-[#111827]">
-                  {openEnglishResponse.prompt}
-                </p>
-                <p className="whitespace-pre-wrap text-sm leading-relaxed text-[#111827]">
-                  {openEnglishResponse.responseText || "No typed response text."}
-                </p>
-                {openEnglishResponse.aiScore != null ? (
-                  <div className="mt-4 rounded-lg border border-[#0f172a]/15 bg-[#0f172a]/[0.04] p-4">
-                    <p className="text-lg font-semibold text-[#0f172a]">
-                      Smart mark: {openEnglishResponse.aiScore}/10
-                    </p>
-                    {openEnglishResponse.aiFeedback ? (
-                      <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                        {openEnglishResponse.aiFeedback}
-                      </p>
-                    ) : null}
-                  </div>
+              <div className="max-h-[70vh] space-y-5 overflow-y-auto rounded-lg border border-black/10 bg-slate-50 p-4">
+                {openEnglishResponse.customPrompt || openEnglishResponse.prompt ? (
+                  <p className="text-sm font-medium leading-relaxed text-[#111827]">
+                    <span className="text-muted-foreground">Prompt: </span>
+                    {openEnglishResponse.customPrompt || openEnglishResponse.prompt}
+                  </p>
                 ) : null}
+                <EnglishCriteriaBreakdown
+                  overall={openEnglishResponse.aiScore}
+                  criteria={openEnglishResponse.aiCriteria}
+                  summary={openEnglishResponse.aiFeedback}
+                />
+                <AnnotatedEssayView
+                  text={openEnglishResponse.responseText || "No essay text."}
+                  highlights={openEnglishResponse.aiHighlights ?? []}
+                />
                 {openEnglishResponse.imageUrls?.length ? (
                   <div className="mt-4 grid gap-2 sm:grid-cols-2">
                     {openEnglishResponse.imageUrls.map((u, i) => (
@@ -1069,7 +1048,7 @@ export default function SummaryPage() {
                 </CardTitle>
                 <CardDescription>
                   Your mark-weighted % vs. class on each topic, plus your percentile among
-                  everyone who attempted that topic.
+                  everyone who attempted that topic. Click a topic to practice it.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-5">
@@ -1090,7 +1069,17 @@ export default function SummaryPage() {
                           Weakest topic
                         </div>
                         <div className="text-sm text-foreground">
-                          <span className="font-semibold">{weakestTopicInfo.topic}</span>
+                          <button
+                            type="button"
+                            className="font-semibold underline-offset-2 hover:underline"
+                            onClick={() =>
+                              navigate(
+                                `/quiz/${subjectId}?topic=${encodeURIComponent(weakestTopicInfo.topic)}`,
+                              )
+                            }
+                          >
+                            {weakestTopicInfo.topic}
+                          </button>
                           <span className="text-muted-foreground">
                             {" "}
                             —{" "}
@@ -1127,7 +1116,16 @@ export default function SummaryPage() {
                       tp != null ? formatPercentileBadge(tp) : null;
 
                     return (
-                      <div key={topic.topic} className="space-y-2">
+                      <button
+                        key={topic.topic}
+                        type="button"
+                        onClick={() =>
+                          navigate(
+                            `/quiz/${subjectId}?topic=${encodeURIComponent(topic.topic)}`,
+                          )
+                        }
+                        className="block w-full space-y-2 rounded-lg px-2 py-1 text-left transition-colors hover:bg-black/[0.04]"
+                      >
                         <div className="flex items-center justify-between">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="text-sm font-medium text-foreground">
@@ -1177,7 +1175,7 @@ export default function SummaryPage() {
                             />
                           </div>
                         </div>
-                      </div>
+                      </button>
                     );
                   })}
                   </>

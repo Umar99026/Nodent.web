@@ -19,8 +19,21 @@ import {
   markHandwritingAnswer,
   openAiConfigured,
   openAiModel,
+  questionHelpChat,
   scoreEnglishResponse,
+  generateMarkBreakdown,
+  type SubjectMarkingContext,
 } from "../lib/openai";
+import {
+  canRunEnglishAiMark,
+  ensurePracticeExamUsage,
+  getPremiumUsageSummary,
+  hasPracticeExamAccess,
+  isPremiumAccount,
+  premiumRequiredResponse,
+  PREMIUM_REQUIRED,
+  recordUsage,
+} from "../lib/premium";
 import {
   qualifiesForOpenAiHandwriting,
   qualifiesForOpenAiMarking,
@@ -36,6 +49,10 @@ const users = pgTable("users", {
   hashAlgorithm: text("hash_algorithm").notNull().default("pbkdf2"),
   profilePhoto: text("profile_photo"),
   accountRole: text("account_role"),
+  onboardingCompletedAt: text("onboarding_completed_at"),
+  isVceStudent: integer("is_vce_student"),
+  plan: text("plan").notNull().default("free"),
+  premiumUntil: text("premium_until"),
   createdAt: text("created_at").notNull(),
 });
 
@@ -87,6 +104,7 @@ const customQuestions = pgTable("custom_questions", {
   answer: text("answer"),
   acceptedAnswers: text("accepted_answers"),
   answerPartsJson: text("answer_parts_json"),
+  markBreakdownJson: text("mark_breakdown_json"),
   guidance: text("guidance"),
   passage: text("passage"),
   marks: integer("marks").notNull().default(1),
@@ -1039,6 +1057,36 @@ function errorChain(e: unknown): string {
   return parts.filter(Boolean).join(" — ");
 }
 
+/** Safe student-facing message for question-help failures. */
+function userFacingHelpError(e: unknown): string {
+  const raw = errorChain(e);
+  const lower = raw.toLowerCase();
+  const fallback = "Could not get help right now. Try again.";
+
+  if (
+    lower.includes("insufficient_quota") ||
+    lower.includes("exceeded your current quota") ||
+    lower.includes("billing") ||
+    /\b429\b/.test(lower)
+  ) {
+    if (lower.includes("limit: 0") || lower.includes("free_tier")) {
+      return "This Gemini model has no free quota on your account. Set GEMINI_MODEL=gemini-2.5-flash in .dev.vars (or enable billing), then restart npm run dev:all.";
+    }
+    return "Gemini quota exceeded. Wait a bit, check ai.dev/rate-limit, or enable billing.";
+  }
+  if (lower.includes("rate limit") || lower.includes("too many requests")) {
+    return "Too many requests. Wait a moment and try again.";
+  }
+  if (lower.includes("gemini_api_key") || lower.includes("not configured")) {
+    return "Question help is not configured (GEMINI_API_KEY missing).";
+  }
+  if (lower.includes("gemini error") || raw.includes("{")) {
+    return fallback;
+  }
+  if (raw.length > 140) return fallback;
+  return raw || fallback;
+}
+
 /** Safe student-facing message for written-answer / handwriting marking failures. */
 function userFacingMarkError(e: unknown, handwriting = false): string {
   const raw = errorChain(e);
@@ -1057,13 +1105,13 @@ function userFacingMarkError(e: unknown, handwriting = false): string {
   if (lower.includes("rate limit") || /\b429\b/.test(lower)) {
     return "Too many requests. Wait a moment and try again.";
   }
-  if (lower.includes("openai_api_key") || lower.includes("not configured")) {
+  if (lower.includes("gemini_api_key") || lower.includes("openai_api_key") || lower.includes("not configured")) {
     return "AI marking is not available right now.";
   }
   if (lower.includes("handwriting image is too large") || lower.includes("too large to mark")) {
     return "Your drawing is too large. Use a smaller area or less ink.";
   }
-  if (lower.includes("openai error") || raw.includes("{")) {
+  if (lower.includes("gemini error") || lower.includes("openai error") || raw.includes("{")) {
     return fallback;
   }
   if (raw.length > 140) return fallback;
@@ -1606,9 +1654,10 @@ type Env = {
   GOOGLE_SHEETS_TAB_NAME?: string;
   GOOGLE_SERVICE_ACCOUNT_JSON?: string;
   GOOGLE_SHEETS_SUBJECT_FROM_TAB?: string;
-  /** OpenAI (optional) — question import, long-answer marking, English scoring */
-  OPENAI_API_KEY?: string;
-  OPENAI_MODEL?: string;
+  /** Google Gemini (optional) — long-answer marking, English scoring, handwriting */
+  GEMINI_API_KEY?: string;
+  GEMINI_MODEL?: string;
+  GEMINI_VISION_MODEL?: string;
 };
 type AccountRole = "student" | "teacher";
 
@@ -1620,6 +1669,10 @@ type Vars = {
     token: string;
     profilePhoto?: string | null;
     accountRole?: AccountRole | null;
+    onboardingCompletedAt?: string | null;
+    isVceStudent?: boolean | null;
+    plan?: string | null;
+    premiumUntil?: string | null;
   };
   db: ReturnType<typeof createDb>;
 };
@@ -1643,6 +1696,9 @@ let studyTablesPatched = false;
 let classTablesPatched = false;
 let coreTablesPatched = false;
 let uniqueStemIndexPatched = false;
+let markBreakdownPatched = false;
+let onboardingPatched = false;
+let premiumPatched = false;
 let lastSessionCleanupAt = 0;
 /** One migration at a time — parallel requests must not each run ensureCoreTables. */
 let dbInitPromise: Promise<void> | null = null;
@@ -1791,6 +1847,75 @@ async function runDbMigrations(db: ReturnType<typeof createDb>): Promise<void> {
       classTablesPatched = true;
     }
   }
+  if (!premiumPatched) {
+    try {
+      await db.execute(sql`
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS plan text NOT NULL DEFAULT 'free'
+      `);
+      await db.execute(sql`
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS premium_until text
+      `);
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS user_usage_events (
+          id serial PRIMARY KEY,
+          user_id integer NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+          kind text NOT NULL,
+          ref_key text,
+          created_at text NOT NULL
+        )
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS user_usage_events_user_kind_idx
+        ON user_usage_events (user_id, kind, created_at)
+      `);
+    } catch {
+      /* ignore */
+    } finally {
+      premiumPatched = true;
+    }
+  }
+  if (!onboardingPatched) {
+    try {
+      await db.execute(sql`
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_completed_at text
+      `);
+      await db.execute(sql`
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS is_vce_student integer
+      `);
+      await db.execute(sql`
+        ALTER TABLE user_subjects ADD COLUMN IF NOT EXISTS confidence_rank integer
+      `);
+      await db.execute(sql`
+        UPDATE users
+        SET onboarding_completed_at = created_at
+        WHERE onboarding_completed_at IS NULL
+          AND id IN (SELECT DISTINCT user_id FROM user_subjects)
+      `);
+    } catch {
+      /* ignore */
+    } finally {
+      onboardingPatched = true;
+    }
+  }
+  if (!markBreakdownPatched) {
+    try {
+      await db.execute(sql`
+        ALTER TABLE custom_questions ADD COLUMN IF NOT EXISTS mark_breakdown_json text
+      `);
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS subject_marking_context (
+          subject_id text PRIMARY KEY,
+          prompt_text text NOT NULL DEFAULT '',
+          resources_json text NOT NULL DEFAULT '[]',
+          updated_at text NOT NULL
+        )
+      `);
+    } catch {
+      /* ignore */
+    } finally {
+      markBreakdownPatched = true;
+    }
+  }
   if (!uniqueStemIndexPatched) {
     try {
       await db.execute(sql`
@@ -1930,6 +2055,17 @@ async function ensureCoreTables(db: any) {
     ALTER TABLE custom_questions ADD COLUMN IF NOT EXISTS ai_marking_enabled integer
   `);
   await db.execute(sql`
+    ALTER TABLE custom_questions ADD COLUMN IF NOT EXISTS mark_breakdown_json text
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS subject_marking_context (
+      subject_id text PRIMARY KEY,
+      prompt_text text NOT NULL DEFAULT '',
+      resources_json text NOT NULL DEFAULT '[]',
+      updated_at text NOT NULL
+    )
+  `);
+  await db.execute(sql`
     CREATE TABLE IF NOT EXISTS english_books (
       id serial PRIMARY KEY,
       title text NOT NULL UNIQUE,
@@ -1975,6 +2111,18 @@ async function ensureCoreTables(db: any) {
   `);
   await db.execute(sql`
     ALTER TABLE english_responses ADD COLUMN IF NOT EXISTS ai_scored_at text
+  `);
+  await db.execute(sql`
+    ALTER TABLE english_responses ADD COLUMN IF NOT EXISTS custom_prompt_text text
+  `);
+  await db.execute(sql`
+    ALTER TABLE english_responses ADD COLUMN IF NOT EXISTS ai_criteria_json text
+  `);
+  await db.execute(sql`
+    ALTER TABLE english_responses ADD COLUMN IF NOT EXISTS ai_highlights_json text
+  `);
+  await db.execute(sql`
+    ALTER TABLE english_responses ALTER COLUMN prompt_id DROP NOT NULL
   `);
   await db.execute(sql`
     ALTER TABLE written_responses ADD COLUMN IF NOT EXISTS ai_correct integer
@@ -2369,6 +2517,10 @@ async function authMiddleware(c: any, next: any) {
     username: users.username,
     profilePhoto: users.profilePhoto,
     accountRole: users.accountRole,
+    onboardingCompletedAt: users.onboardingCompletedAt,
+    isVceStudent: users.isVceStudent,
+    plan: users.plan,
+    premiumUntil: users.premiumUntil,
     expiresAt: sessions.expiresAt,
   })
     .from(sessions).innerJoin(users, eq(sessions.userId, users.id)).where(eq(sessions.token, token)).limit(1);
@@ -2383,6 +2535,15 @@ async function authMiddleware(c: any, next: any) {
     username: result[0].username,
     profilePhoto: result[0].profilePhoto ?? null,
     accountRole: normalizeAccountRole(result[0].accountRole),
+    onboardingCompletedAt: result[0].onboardingCompletedAt ?? null,
+    isVceStudent:
+      result[0].isVceStudent === 1
+        ? true
+        : result[0].isVceStudent === 0
+          ? false
+          : null,
+    plan: result[0].plan ?? "free",
+    premiumUntil: result[0].premiumUntil ?? null,
     token,
   });
   await next();
@@ -2498,15 +2659,34 @@ function publicUserPayload(row: {
   email: string;
   profilePhoto?: string | null;
   accountRole?: string | null;
+  onboardingCompletedAt?: string | null;
+  isVceStudent?: number | boolean | null;
+  plan?: string | null;
+  premiumUntil?: string | null;
 }) {
   const email = String(row.email ?? "");
   const accountRole = normalizeAccountRole(row.accountRole);
+  const isVceRaw = row.isVceStudent;
+  const isVceStudent =
+    isVceRaw === true || isVceRaw === 1
+      ? true
+      : isVceRaw === false || isVceRaw === 0
+        ? false
+        : null;
+  const plan = String(row.plan ?? "free").trim() || "free";
+  const premiumUntil = row.premiumUntil ?? null;
+  const premium = isPremiumAccount({ id: row.id, email, plan, premiumUntil });
   return {
     id: row.id,
     username: row.username || email,
     email,
     profilePhoto: row.profilePhoto ?? null,
     accountRole: isAdminEmail(email) ? null : accountRole,
+    onboardingCompletedAt: row.onboardingCompletedAt ?? null,
+    isVceStudent,
+    plan,
+    premiumUntil,
+    isPremium: premium,
   };
 }
 
@@ -3091,6 +3271,14 @@ app.get("/api/auth/session", authMiddleware, async (c: any) => {
   });
 });
 
+app.get("/api/premium/usage", authMiddleware, async (c: any) => {
+  const user = c.get("user");
+  const db = c.get("db");
+  const premium = isPremiumAccount(user);
+  const usage = await getPremiumUsageSummary(db, user.id, premium);
+  return c.json(usage);
+});
+
 app.post("/api/feedback", async (c) => {
   const limited = rateLimitResponse(c, "feedback");
   if (limited) return limited;
@@ -3347,6 +3535,9 @@ app.get("/api/bootstrap", authMiddleware, async (c: any) => {
     const marks =
       Number.isFinite(marksNum) && marksNum > 0 ? Math.round(marksNum) : 1;
     const parts = safeJsonParse(row.answerPartsJson) as unknown[] | undefined;
+    const markBreakdown = safeJsonParse(
+      (row as { markBreakdownJson?: string | null }).markBreakdownJson ?? null,
+    );
     const aiRaw = (row as { aiMarkingEnabled?: number | null }).aiMarkingEnabled;
     const useAiMarking =
       aiRaw === 0 ? false : aiRaw === 1 ? true : undefined;
@@ -3361,6 +3552,8 @@ app.get("/api/bootstrap", authMiddleware, async (c: any) => {
       answer: row.answer || undefined,
       acceptedAnswers: acc,
       answerParts: Array.isArray(parts) ? parts : undefined,
+      markBreakdown:
+        markBreakdown && typeof markBreakdown === "object" ? markBreakdown : undefined,
       guidance: row.guidance || undefined,
       passage: row.passage || undefined,
       marks,
@@ -3385,12 +3578,20 @@ app.get("/api/subjects/my", authMiddleware, async (c: any) => {
   const user = c.get("user");
   const db = c.get("db");
   const rows = await db.execute(sql`
-    SELECT subject_id
+    SELECT subject_id, confidence_rank
     FROM user_subjects
     WHERE user_id = ${user.id}
-    ORDER BY subject_id ASC
+    ORDER BY COALESCE(confidence_rank, 9999) ASC, subject_id ASC
   `);
-  return c.json({ subjectIds: (rows.rows as any[]).map((r) => String(r.subject_id)) });
+  const subjects = (rows.rows as any[]).map((r) => ({
+    subjectId: String(r.subject_id),
+    confidenceRank:
+      r.confidence_rank == null ? null : Number(r.confidence_rank),
+  }));
+  return c.json({
+    subjectIds: subjects.map((s) => s.subjectId),
+    subjects,
+  });
 });
 
 app.put("/api/subjects/my", authMiddleware, async (c: any) => {
@@ -3405,15 +3606,96 @@ app.put("/api/subjects/my", authMiddleware, async (c: any) => {
         .filter((x: string) => x.length > 0 && x.length <= 80),
     ),
   );
+  const rankById = new Map<string, number>();
+  if (Array.isArray(body?.subjects)) {
+    for (const row of body.subjects) {
+      const sid = String(row?.subjectId ?? "").trim();
+      const rank = Number(row?.confidenceRank);
+      if (sid && Number.isFinite(rank) && rank > 0) rankById.set(sid, Math.round(rank));
+    }
+  } else if (body?.confidenceRanks && typeof body.confidenceRanks === "object") {
+    for (const [sid, rank] of Object.entries(body.confidenceRanks as Record<string, unknown>)) {
+      const n = Number(rank);
+      if (sid && Number.isFinite(n) && n > 0) rankById.set(sid, Math.round(n));
+    }
+  }
   await db.execute(sql`DELETE FROM user_subjects WHERE user_id = ${user.id}`);
   for (const sid of subjectIds) {
+    const confidenceRank = rankById.get(sid) ?? null;
     await db.execute(sql`
-      INSERT INTO user_subjects (user_id, subject_id, created_at)
-      VALUES (${user.id}, ${sid}, ${nowIso()})
+      INSERT INTO user_subjects (user_id, subject_id, created_at, confidence_rank)
+      VALUES (${user.id}, ${sid}, ${nowIso()}, ${confidenceRank})
       ON CONFLICT(user_id, subject_id) DO NOTHING
     `);
   }
   return c.json({ ok: true, subjectIds });
+});
+
+app.post("/api/onboarding/complete", authMiddleware, async (c: any) => {
+  const user = c.get("user");
+  const db = c.get("db");
+  const body = await c.req.json().catch(() => ({} as any));
+
+  const isVceRaw = body?.isVceStudent;
+  const isVceStudent =
+    isVceRaw === true || isVceRaw === 1 || String(isVceRaw).toLowerCase() === "yes"
+      ? 1
+      : isVceRaw === false || isVceRaw === 0 || String(isVceRaw).toLowerCase() === "no"
+        ? 0
+        : null;
+
+  const rowsRaw = Array.isArray(body?.subjects) ? body.subjects : [];
+  const subjectRows = rowsRaw
+    .map((row: any, idx: number) => {
+      const subjectId = String(row?.subjectId ?? row?.id ?? "").trim();
+      const rank = Number(row?.confidenceRank ?? idx + 1);
+      if (!subjectId) return null;
+      return {
+        subjectId,
+        confidenceRank: Number.isFinite(rank) && rank > 0 ? Math.round(rank) : idx + 1,
+      };
+    })
+    .filter(Boolean) as { subjectId: string; confidenceRank: number }[];
+
+  if (subjectRows.length === 0) {
+    return c.json({ error: "Pick at least one subject." }, 400);
+  }
+
+  const uniqueIds = Array.from(new Set(subjectRows.map((r) => r.subjectId)));
+  if (uniqueIds.length !== subjectRows.length) {
+    return c.json({ error: "Duplicate subjects in ranking." }, 400);
+  }
+
+  await db.execute(sql`DELETE FROM user_subjects WHERE user_id = ${user.id}`);
+  for (const row of subjectRows) {
+    await db.execute(sql`
+      INSERT INTO user_subjects (user_id, subject_id, created_at, confidence_rank)
+      VALUES (${user.id}, ${row.subjectId}, ${nowIso()}, ${row.confidenceRank})
+    `);
+  }
+
+  const completedAt = nowIso();
+  await db.execute(sql`
+    UPDATE users
+    SET onboarding_completed_at = ${completedAt},
+        is_vce_student = ${isVceStudent}
+    WHERE id = ${user.id}
+  `);
+
+  return c.json({
+    ok: true,
+    user: publicUserPayload({
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      profilePhoto: user.profilePhoto ?? null,
+      accountRole: user.accountRole,
+      onboardingCompletedAt: completedAt,
+      isVceStudent,
+    }),
+    subjectIds: subjectRows.map((r) => r.subjectId),
+    subjects: subjectRows,
+  });
 });
 
 // ---- Study (Track My Study cross-device persistence) ----
@@ -4672,16 +4954,53 @@ app.post("/api/comments/:subjectId/:questionKey", authMiddleware, async (c: any)
   return c.json({ comment: { id: result[0].id, parentCommentId, text, time: nowIso(), username: user.username, userId: user.id } });
 });
 
+async function loadSubjectMarkingContext(
+  db: any,
+  subjectId: string,
+): Promise<SubjectMarkingContext | undefined> {
+  const sid = canonicalSubjectId(subjectId);
+  const rows = await db.execute(sql`
+    SELECT prompt_text, resources_json
+    FROM subject_marking_context
+    WHERE subject_id = ${sid}
+    LIMIT 1
+  `);
+  const row = (rows.rows as any[])?.[0];
+  if (!row) return undefined;
+  const promptText = String(row.prompt_text ?? "").trim();
+  const resourcesRaw = safeJsonParse(row.resources_json);
+  const resources = Array.isArray(resourcesRaw)
+    ? resourcesRaw
+        .map((r) => {
+          if (typeof r === "string") return r.trim();
+          if (r && typeof r === "object") {
+            const o = r as Record<string, unknown>;
+            return String(o.content ?? o.text ?? o.name ?? "").trim();
+          }
+          return "";
+        })
+        .filter(Boolean)
+        .slice(0, 20)
+    : [];
+  if (!promptText && !resources.length) return undefined;
+  return { promptText, resources };
+}
+
 async function runEnglishAiScore(
   db: any,
   env: Env,
   responseId: number,
-): Promise<{ score: number; feedback: string } | null> {
+): Promise<{
+  score: number;
+  summary: string;
+  criteria: Record<string, { score: number; feedback: string }>;
+  highlights: { quote: string; type: string; criterion?: string; feedback: string }[];
+} | null> {
   if (!openAiConfigured(env)) return null;
   const rows = await db.execute(sql`
-    SELECT r.response_text, r.response_type, p.prompt_text, p.section
+    SELECT r.response_text, r.custom_prompt_text, p.prompt_text
     FROM english_responses r
-    JOIN english_prompts p ON p.id = r.prompt_id
+    LEFT JOIN english_prompts p ON p.id = r.prompt_id
     WHERE r.id = ${responseId}
     LIMIT 1
   `);
@@ -4690,20 +5009,68 @@ async function runEnglishAiScore(
   const responseText = String(row.response_text ?? "").trim();
   if (responseText.length < 20) return null;
 
+  const promptText = String(row.custom_prompt_text ?? row.prompt_text ?? "").trim();
   const result = await scoreEnglishResponse(env, {
-    promptText: String(row.prompt_text ?? ""),
-    section: normalizeEnglishSection(row.section),
-    responseType: String(row.response_type ?? "essay"),
+    promptText,
     responseText,
+    subjectContext: await loadSubjectMarkingContext(db, "english"),
   });
 
   const now = nowIso();
   await db.execute(sql`
     UPDATE english_responses
-    SET ai_score = ${result.score}, ai_feedback = ${result.feedback}, ai_scored_at = ${now}
+    SET ai_score = ${result.score},
+        ai_feedback = ${result.summary},
+        ai_criteria_json = ${JSON.stringify(result.criteria)},
+        ai_highlights_json = ${JSON.stringify(result.highlights)},
+        ai_scored_at = ${now}
     WHERE id = ${responseId}
   `);
   return result;
+}
+
+function parseEnglishCriteriaJson(raw: unknown): Record<string, { score: number; feedback: string }> | null {
+  if (raw == null || raw === "") return null;
+  try {
+    const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+    if (!parsed || typeof parsed !== "object") return null;
+    return parsed as Record<string, { score: number; feedback: string }>;
+  } catch {
+    return null;
+  }
+}
+
+function parseEnglishHighlightsJson(raw: unknown): { quote: string; type: string; criterion?: string; feedback: string }[] {
+  if (raw == null || raw === "") return [];
+  try {
+    const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function mapEnglishResponseRow(r: Record<string, unknown>) {
+  const customPrompt = r.custom_prompt_text != null ? String(r.custom_prompt_text) : "";
+  const catalogPrompt = r.prompt_text != null ? String(r.prompt_text) : "";
+  return {
+    id: Number(r.id),
+    promptId: r.prompt_id != null ? Number(r.prompt_id) : null,
+    customPrompt: customPrompt || null,
+    prompt: customPrompt || catalogPrompt || "",
+    section: r.section != null ? normalizeEnglishSection(r.section) : null,
+    userId: Number(r.user_id),
+    username: String(r.username || ""),
+    responseType: String(r.response_type || "essay"),
+    responseText: String(r.response_text || ""),
+    imageUrls: safeJsonColumn(r.image_urls) || [],
+    updatedAt: String(r.updated_at || ""),
+    aiScore: r.ai_score != null ? Number(r.ai_score) : null,
+    aiFeedback: r.ai_feedback != null ? String(r.ai_feedback) : null,
+    aiCriteria: parseEnglishCriteriaJson(r.ai_criteria_json),
+    aiHighlights: parseEnglishHighlightsJson(r.ai_highlights_json),
+    aiScoredAt: r.ai_scored_at != null ? String(r.ai_scored_at) : null,
+  };
 }
 
 // ---- Phone QR upload (Create / quiz answer images) ----
@@ -4802,8 +5169,6 @@ app.get("/api/written/upload-session/:token", authMiddleware, async (c: any) => 
 
 // ---- Practice exams ----
 app.get("/api/practice-exams/:subjectId", authMiddleware, async (c: any) => {
-  const denied = teacherAccessDenied(c);
-  if (denied) return denied;
   try {
     const db = c.get("db");
     await ensurePracticeExamTables(db);
@@ -4828,8 +5193,6 @@ app.get("/api/practice-exams/:subjectId", authMiddleware, async (c: any) => {
 });
 
 app.get("/api/practice-exams/:subjectId/:year/:examNumber", authMiddleware, async (c: any) => {
-  const denied = teacherAccessDenied(c);
-  if (denied) return denied;
   try {
     const db = c.get("db");
     await ensurePracticeExamTables(db);
@@ -4838,6 +5201,15 @@ app.get("/api/practice-exams/:subjectId/:year/:examNumber", authMiddleware, asyn
     const year = Math.round(Number(c.req.param("year")));
     const examNumber = Math.round(Number(c.req.param("examNumber"))) === 2 ? 2 : 1;
     if (!year || year < 2000 || year > 2100) return c.json({ error: "Invalid year." }, 400);
+
+    const examRef = `${subjectId}:${year}:${examNumber}`;
+    if (!isPremiumAccount(user)) {
+      const access = await hasPracticeExamAccess(db, user.id, examRef);
+      if (!access.allowed) {
+        return c.json({ ...premiumRequiredResponse(), error: access.reason ?? premiumRequiredResponse().error }, 403);
+      }
+      await ensurePracticeExamUsage(db, user.id, examRef);
+    }
 
     const rows = await db.execute(sql`
       SELECT id, slots_json, published, transparent_inputs, layout, mcq_count, mcq_json
@@ -4885,8 +5257,6 @@ app.get("/api/practice-exams/:subjectId/:year/:examNumber", authMiddleware, asyn
 });
 
 app.get("/api/practice-exams/:subjectId/:year/:examNumber/pages/:pageNumber", authMiddleware, async (c: any) => {
-  const denied = teacherAccessDenied(c);
-  if (denied) return denied;
   try {
     const db = c.get("db");
     await ensurePracticeExamTables(db);
@@ -4896,6 +5266,14 @@ app.get("/api/practice-exams/:subjectId/:year/:examNumber/pages/:pageNumber", au
     const examNumber = Math.round(Number(c.req.param("examNumber"))) === 2 ? 2 : 1;
     const pageNumber = Math.round(Number(c.req.param("pageNumber")));
     if (!year || !pageNumber || pageNumber < 1) return c.json({ error: "Invalid request." }, 400);
+
+    const examRef = `${subjectId}:${year}:${examNumber}`;
+    if (!isPremiumAccount(user)) {
+      const access = await hasPracticeExamAccess(db, user.id, examRef);
+      if (!access.allowed) {
+        return c.json({ ...premiumRequiredResponse(), error: access.reason ?? premiumRequiredResponse().error }, 403);
+      }
+    }
 
     const examRows = await db.execute(sql`
       SELECT id, published FROM practice_exams
@@ -5156,6 +5534,9 @@ app.post("/api/written/:subjectId/:questionKey/mark", authMiddleware, async (c: 
     }
     const user = c.get("user");
     const db = c.get("db");
+    if (!isPremiumAccount(user)) {
+      return c.json(premiumRequiredResponse(), 403);
+    }
     const body = await c.req.json();
     const subjectId = c.req.param("subjectId");
     const questionKey = c.req.param("questionKey");
@@ -5193,10 +5574,45 @@ app.post("/api/written/:subjectId/:questionKey/mark", authMiddleware, async (c: 
       acceptedAnswers,
     };
 
+    const subjectContext = await loadSubjectMarkingContext(db, subjectId);
+    const markBreakdownRaw = body?.markBreakdown ?? q.markBreakdown;
+    const markBreakdown =
+      markBreakdownRaw && typeof markBreakdownRaw === "object"
+        ? markBreakdownRaw
+        : typeof markBreakdownRaw === "string"
+          ? safeJsonParse(markBreakdownRaw)
+          : undefined;
+    const studentSteps = Array.isArray(body?.studentSteps)
+      ? body.studentSteps.map((s: unknown) => String(s ?? "").trim()).slice(0, 24)
+      : undefined;
+    const breakdownMark = Boolean(
+      studentSteps?.length &&
+        markBreakdown &&
+        typeof markBreakdown === "object" &&
+        Array.isArray((markBreakdown as { steps?: unknown }).steps) &&
+        ((markBreakdown as { steps: unknown[] }).steps.length ?? 0) > 0,
+    );
+
     let result;
     let storedResponseText: string;
 
-    if (handwritingImages.length > 0) {
+    if (breakdownMark) {
+      result = await markLongAnswer(env, {
+        questionText,
+        questionType,
+        topic: q.topic ? cleanText(String(q.topic), 240) : undefined,
+        marks,
+        guidance,
+        acceptedAnswers,
+        answerParts,
+        studentResponse: studentSteps!.join("\n"),
+        studentSteps,
+        markBreakdown: markBreakdown as { steps: { marks: number; label: string; model?: string }[] },
+        subjectContext,
+        breakdownMode: true,
+      });
+      storedResponseText = studentSteps!.join("\n");
+    } else if (handwritingImages.length > 0) {
       if (canonicalSubjectId(subjectId) !== "demo") {
         return c.json({ error: "Handwriting marking is only available in the Maths sandbox." }, 400);
       }
@@ -5212,6 +5628,7 @@ app.post("/api/written/:subjectId/:questionKey/mark", authMiddleware, async (c: 
         acceptedAnswers,
         answerParts,
         images: handwritingImages,
+        subjectContext,
       });
       storedResponseText = `[handwritten answer — ${handwritingImages.length} image(s)]`;
     } else {
@@ -5247,6 +5664,7 @@ app.post("/api/written/:subjectId/:questionKey/mark", authMiddleware, async (c: 
         answerParts,
         studentResponse: responseText,
         studentParts,
+        subjectContext,
       });
       storedResponseText = responseText;
     }
@@ -5274,11 +5692,99 @@ app.post("/api/written/:subjectId/:questionKey/mark", authMiddleware, async (c: 
         feedback: result.feedback,
         correctAnswers: result.correctAnswers,
         partResults: result.partResults,
+        stepResults: result.stepResults,
       },
     });
   } catch (e) {
     console.error("[written/mark]", errorChain(e));
     return c.json({ error: userFacingMarkError(e, isHandwritingMark) }, 500);
+  }
+});
+
+function sanitizeQuestionForHelp(q: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {
+    type: q.type != null ? String(q.type).trim() : undefined,
+    question: q.question ?? q.questionText,
+    topic: q.topic != null ? String(q.topic).trim() : undefined,
+    marks: Number.isFinite(Number(q.marks)) ? Math.round(Number(q.marks)) : undefined,
+    guidance: q.guidance != null ? String(q.guidance).trim() : undefined,
+    passage: q.passage != null ? String(q.passage).trim() : undefined,
+  };
+  if (Array.isArray(q.options)) {
+    out.options = q.options.map((o) => String(o ?? "").trim()).filter(Boolean).slice(0, 12);
+  }
+  if (Array.isArray(q.answerParts)) {
+    out.answerParts = (q.answerParts as Record<string, unknown>[])
+      .map((p) => ({
+        label: String(p.label ?? "").trim(),
+        marks: Number.isFinite(Number(p.marks)) ? Math.round(Number(p.marks)) : undefined,
+        placeholder: p.placeholder != null ? String(p.placeholder).trim() : undefined,
+      }))
+      .filter((p) => p.label);
+  }
+  const markBreakdownRaw = q.markBreakdown;
+  if (markBreakdownRaw && typeof markBreakdownRaw === "object") {
+    const mb = markBreakdownRaw as { steps?: unknown[]; source?: string };
+    out.markBreakdown = {
+      source: mb.source != null ? String(mb.source).trim() : undefined,
+      steps: Array.isArray(mb.steps)
+        ? mb.steps
+            .map((s) => {
+              const step = s as Record<string, unknown>;
+              return {
+                marks: Number.isFinite(Number(step.marks)) ? Math.round(Number(step.marks)) : 1,
+                label: String(step.label ?? "").trim(),
+              };
+            })
+            .filter((s) => s.label)
+        : undefined,
+    };
+  }
+  return out;
+}
+
+app.post("/api/written/:subjectId/:questionKey/help", authMiddleware, async (c: any) => {
+  try {
+    const env = c.env as Env;
+    if (!openAiConfigured(env)) {
+      return c.json(
+        { error: "Question help is not configured (GEMINI_API_KEY missing)." },
+        503,
+      );
+    }
+    const user = c.get("user");
+    if (!isPremiumAccount(user)) {
+      return c.json(premiumRequiredResponse(), 403);
+    }
+    const body = await c.req.json();
+    const q = (body?.question ?? {}) as Record<string, unknown>;
+    const questionText = cleanText(String(q.question ?? q.questionText ?? ""), 4000);
+    if (!questionText) return c.json({ error: "question.question is required." }, 400);
+
+    const messagesRaw = Array.isArray(body?.messages) ? body.messages : [];
+    const messages = messagesRaw
+      .filter((m: unknown) => m && typeof m === "object")
+      .map((m: Record<string, unknown>) => ({
+        role: m.role === "assistant" ? ("assistant" as const) : ("user" as const),
+        content: cleanText(String(m.content ?? ""), 4000),
+      }))
+      .filter((m: { content: string }) => m.content)
+      .slice(-24);
+
+    const subjectId = c.req.param("subjectId");
+    const subjectContext = await loadSubjectMarkingContext(c.get("db"), subjectId);
+    const result = await questionHelpChat(env, {
+      subjectId,
+      question: sanitizeQuestionForHelp({ ...q, question: questionText }),
+      messages,
+      subjectContext,
+    });
+    return c.json(result);
+  } catch (e) {
+    console.error("[written/help]", errorChain(e));
+    const msg = userFacingHelpError(e);
+    const status = /\b429\b/.test(errorChain(e).toLowerCase()) ? 429 : 500;
+    return c.json({ error: msg }, status);
   }
 });
 
@@ -5979,6 +6485,7 @@ app.post("/api/english/responses", authMiddleware, async (c: any) => {
     const user = c.get("user");
     const body = await c.req.json();
     const promptId = Number(body?.promptId);
+    const customPrompt = cleanText(body?.customPrompt ?? body?.promptText, 6000);
     const responseTypeRaw = cleanText(body?.responseType, 40).toLowerCase();
     const responseType = responseTypeRaw === "paragraph" ? "paragraph" : "essay";
     const responseText = cleanText(body?.responseText, 20000);
@@ -5986,43 +6493,76 @@ app.post("/api/english/responses", authMiddleware, async (c: any) => {
       ? body.imageUrls.map((u: unknown) => String(u ?? "").trim()).filter(Boolean).slice(0, 8)
       : [];
 
-    if (!Number.isFinite(promptId) || promptId <= 0) return c.json({ error: "promptId is required." }, 400);
     if (!responseText && imageUrls.length === 0) {
-      return c.json({ error: "Provide response text or at least one image." }, 400);
+      return c.json({ error: "Provide your essay text or upload a file." }, 400);
     }
 
-    const exists = await db
-      .select({ id: englishPrompts.id })
-      .from(englishPrompts)
-      .where(eq(englishPrompts.id, promptId))
-      .limit(1);
-    if (!exists.length) return c.json({ error: "Prompt not found." }, 404);
+    let resolvedPromptId: number | null = null;
+    if (Number.isFinite(promptId) && promptId > 0) {
+      const exists = await db
+        .select({ id: englishPrompts.id })
+        .from(englishPrompts)
+        .where(eq(englishPrompts.id, promptId))
+        .limit(1);
+      if (!exists.length) return c.json({ error: "Prompt not found." }, 404);
+      resolvedPromptId = promptId;
+    }
 
     const imageUrlsJson = imageUrls.length ? JSON.stringify(imageUrls) : null;
     const now = nowIso();
     const inserted = await db.execute(sql`
-      INSERT INTO english_responses (prompt_id, user_id, response_type, response_text, image_urls, created_at, updated_at)
-      VALUES (${promptId}, ${user.id}, ${responseType}, ${responseText || ""}, ${imageUrlsJson}, ${now}, ${now})
+      INSERT INTO english_responses (
+        prompt_id, user_id, response_type, response_text, image_urls,
+        custom_prompt_text, created_at, updated_at
+      )
+      VALUES (
+        ${resolvedPromptId}, ${user.id}, ${responseType}, ${responseText || ""}, ${imageUrlsJson},
+        ${customPrompt || null}, ${now}, ${now}
+      )
       RETURNING id
     `);
     const responseId = Number((inserted.rows as any[])[0]?.id ?? 0);
 
     const env = c.env as Env;
     const aiConfigured = openAiConfigured(env);
-    let aiScore: { score: number; feedback: string } | null = null;
+    let aiScore: Awaited<ReturnType<typeof runEnglishAiScore>> = null;
     let aiScoringPending = false;
+    let premiumBlocked = false;
+    let premiumMessage: string | null = null;
+    let canAiScore = false;
     if (responseId > 0 && responseText.length >= 20 && aiConfigured) {
+      if (isPremiumAccount(user)) {
+        canAiScore = true;
+      } else {
+        const check = await canRunEnglishAiMark(db, user.id);
+        canAiScore = check.allowed;
+        if (!check.allowed) {
+          premiumBlocked = true;
+          premiumMessage =
+            check.reason ??
+            "Free accounts get 1 AI-marked English response every 3 days.";
+        }
+      }
+    }
+    if (canAiScore) {
       const execCtx = c.executionCtx as { waitUntil?: (p: Promise<unknown>) => void } | undefined;
+      const afterScore = async () => {
+        const result = await runEnglishAiScore(db, env, responseId);
+        if (result && !isPremiumAccount(user)) {
+          await recordUsage(db, user.id, "english_ai_mark", String(responseId));
+        }
+        return result;
+      };
       if (execCtx?.waitUntil) {
         aiScoringPending = true;
         execCtx.waitUntil(
-          runEnglishAiScore(db, env, responseId).catch((err) => {
+          afterScore().catch((err) => {
             console.error("[english/responses POST ai-score async]", errorChain(err));
           }),
         );
       } else {
         try {
-          aiScore = await runEnglishAiScore(db, env, responseId);
+          aiScore = await afterScore();
         } catch (err) {
           console.error("[english/responses POST ai-score]", errorChain(err));
         }
@@ -6035,7 +6575,44 @@ app.post("/api/english/responses", authMiddleware, async (c: any) => {
       aiScore,
       aiScoringPending,
       aiConfigured,
+      premiumBlocked,
+      premiumMessage,
     });
+  } catch (e) {
+    return c.json({ error: errorChain(e) }, 500);
+  }
+});
+
+app.get("/api/english/responses/:id", authMiddleware, async (c: any) => {
+  try {
+    const db = c.get("db");
+    const user = c.get("user");
+    const responseId = Number(c.req.param("id"));
+    if (!Number.isFinite(responseId) || responseId <= 0) {
+      return c.json({ error: "response id is required." }, 400);
+    }
+
+    const rows = await db.execute(sql`
+      SELECT r.id, r.prompt_id, r.user_id, r.response_type, r.response_text, r.image_urls,
+             r.custom_prompt_text, r.updated_at, r.ai_score, r.ai_feedback, r.ai_criteria_json,
+             r.ai_highlights_json, r.ai_scored_at,
+             p.prompt_text, p.section, u.username
+      FROM english_responses r
+      LEFT JOIN english_prompts p ON p.id = r.prompt_id
+      JOIN users u ON u.id = r.user_id
+      WHERE r.id = ${responseId}
+      LIMIT 1
+    `);
+    const row = (rows.rows as Record<string, unknown>[])[0];
+    if (!row) return c.json({ error: "Response not found." }, 404);
+
+    const isOwner = Number(row.user_id) === Number(user.id);
+    const isAdmin = String(user.email ?? "").toLowerCase() === ADMIN_EMAIL_LC;
+    if (!isOwner && !isAdmin) {
+      return c.json({ error: "Not allowed to view this response." }, 403);
+    }
+
+    return c.json({ response: mapEnglishResponseRow(row) });
   } catch (e) {
     return c.json({ error: errorChain(e) }, 500);
   }
@@ -6044,6 +6621,27 @@ app.post("/api/english/responses", authMiddleware, async (c: any) => {
 app.get("/api/english/responses", authMiddleware, async (c: any) => {
   try {
     const db = c.get("db");
+    const user = c.get("user");
+    const mineOnly = String(c.req.query("mine") ?? "").trim() === "1";
+
+    if (mineOnly) {
+      const rows = await db.execute(sql`
+        SELECT r.id, r.prompt_id, r.user_id, r.response_type, r.response_text, r.image_urls,
+               r.custom_prompt_text, r.updated_at, r.ai_score, r.ai_feedback, r.ai_criteria_json,
+               r.ai_highlights_json, r.ai_scored_at,
+               p.prompt_text, p.section, u.username
+        FROM english_responses r
+        LEFT JOIN english_prompts p ON p.id = r.prompt_id
+        JOIN users u ON u.id = r.user_id
+        WHERE r.user_id = ${user.id}
+        ORDER BY r.updated_at DESC
+        LIMIT 100
+      `);
+      return c.json({
+        responses: (rows.rows as Record<string, unknown>[]).map(mapEnglishResponseRow),
+      });
+    }
+
     const promptIdFilter = Number(c.req.query("promptId"));
     let section = normalizeEnglishSection(c.req.query("section"));
     let bookId = Number(c.req.query("bookId"));
@@ -6151,21 +6749,7 @@ app.get("/api/english/responses", authMiddleware, async (c: any) => {
 
     return c.json({
       prompt: promptMeta,
-      responses: (rows.rows as any[]).map((r) => ({
-        id: Number(r.id),
-        promptId: Number(r.prompt_id),
-        prompt: String(r.prompt_text || ""),
-        section: normalizeEnglishSection(r.section),
-        userId: Number(r.user_id),
-        username: String(r.username || ""),
-        responseType: String(r.response_type || "essay"),
-        responseText: String(r.response_text || ""),
-        imageUrls: safeJsonColumn(r.image_urls) || [],
-        updatedAt: String(r.updated_at || ""),
-        aiScore: r.ai_score != null ? Number(r.ai_score) : null,
-        aiFeedback: r.ai_feedback != null ? String(r.ai_feedback) : null,
-        aiScoredAt: r.ai_scored_at != null ? String(r.ai_scored_at) : null,
-      })),
+      responses: (rows.rows as any[]).map((r) => mapEnglishResponseRow(r)),
     });
   } catch (e) {
     return c.json({ error: errorChain(e) }, 500);
@@ -6176,7 +6760,7 @@ app.post("/api/english/responses/:id/ai-score", authMiddleware, async (c: any) =
   try {
     const env = c.env as Env;
     if (!openAiConfigured(env)) {
-      return c.json({ error: "AI scoring is not configured (OPENAI_API_KEY missing)." }, 503);
+      return c.json({ error: "AI scoring is not configured (GEMINI_API_KEY missing)." }, 503);
     }
     const db = c.get("db");
     const user = c.get("user");
@@ -6198,17 +6782,31 @@ app.post("/api/english/responses/:id/ai-score", authMiddleware, async (c: any) =
       return c.json({ error: "Not allowed to score this response." }, 403);
     }
 
+    if (!isPremiumAccount(user)) {
+      const check = await canRunEnglishAiMark(db, user.id);
+      if (!check.allowed) {
+        return c.json({ ...premiumRequiredResponse(), error: check.reason ?? premiumRequiredResponse().error }, 403);
+      }
+    }
+
     const execCtx = c.executionCtx as { waitUntil?: (p: Promise<unknown>) => void } | undefined;
+    const afterScore = async () => {
+      const result = await runEnglishAiScore(db, env, responseId);
+      if (result && !isPremiumAccount(user)) {
+        await recordUsage(db, user.id, "english_ai_mark", String(responseId));
+      }
+      return result;
+    };
     if (execCtx?.waitUntil) {
       execCtx.waitUntil(
-        runEnglishAiScore(db, env, responseId).catch((err) => {
+        afterScore().catch((err) => {
           console.error("[english/responses ai-score async]", errorChain(err));
         }),
       );
       return c.json({ ok: true, aiScoringPending: true });
     }
 
-    const result = await runEnglishAiScore(db, env, responseId);
+    const result = await afterScore();
     if (!result) return c.json({ error: "Could not score response (text too short or missing)." }, 400);
     return c.json({ ok: true, aiScore: result });
   } catch (e) {
@@ -6291,6 +6889,18 @@ function parseCustomQuestionPayload(body: Record<string, unknown>) {
     else if (Array.isArray(raw)) answerPartsJson = JSON.stringify(raw);
   }
 
+  let markBreakdownJson: string | null = null;
+  if (body.markBreakdown != null) {
+    markBreakdownJson =
+      typeof body.markBreakdown === "string"
+        ? body.markBreakdown.trim()
+        : JSON.stringify(body.markBreakdown);
+  } else if (body.mark_breakdown_json != null) {
+    const raw = body.mark_breakdown_json;
+    if (typeof raw === "string" && raw.trim()) markBreakdownJson = raw.trim();
+    else if (raw && typeof raw === "object") markBreakdownJson = JSON.stringify(raw);
+  }
+
   if (answerPartsJson) {
     try {
       const parts = JSON.parse(answerPartsJson) as Array<{ marks?: unknown }>;
@@ -6316,6 +6926,7 @@ function parseCustomQuestionPayload(body: Record<string, unknown>) {
     optionsJson,
     acceptedAnswersJson,
     answerPartsJson,
+    markBreakdownJson,
     imageUrlsJson,
     answerImageUrlsJson,
     answer,
@@ -6349,6 +6960,7 @@ async function insertCustomQuestionRow(
         answer: p.answer,
         acceptedAnswers: p.acceptedAnswersJson,
         answerPartsJson: p.answerPartsJson,
+        markBreakdownJson: p.markBreakdownJson,
         guidance: p.guidance,
         passage: p.passage,
         marks: p.marks,
@@ -6787,7 +7399,103 @@ app.post("/api/admin/questions/delete-by-subject", adminAccessMiddleware, async 
 });
 
 const ADMIN_AI_DISABLED =
-  "Admin AI features are disabled. OpenAI is used only for English scoring and worded explain/discuss/prove-style marking.";
+  "Admin AI features are disabled. Gemini is used only for English scoring and worded explain/discuss/prove-style marking.";
+
+app.get("/api/admin/prompting", adminAccessMiddleware, async (c: any) => {
+  const db = c.get("db");
+  const rows = await db.execute(sql`
+    SELECT subject_id, prompt_text, resources_json, updated_at
+    FROM subject_marking_context
+    ORDER BY subject_id ASC
+  `);
+  const contexts = (rows.rows as any[]).map((row) => {
+    const resourcesRaw = safeJsonParse(row.resources_json);
+    const resources = Array.isArray(resourcesRaw)
+      ? resourcesRaw.map((r: unknown) => {
+          if (typeof r === "string") return { name: "Resource", content: r };
+          const o = (r ?? {}) as Record<string, unknown>;
+          return {
+            name: String(o.name ?? "Resource"),
+            content: String(o.content ?? o.text ?? ""),
+          };
+        })
+      : [];
+    return {
+      subjectId: String(row.subject_id ?? ""),
+      promptText: String(row.prompt_text ?? ""),
+      resources,
+      updatedAt: String(row.updated_at ?? ""),
+    };
+  });
+  return c.json({ contexts });
+});
+
+app.put("/api/admin/prompting/:subjectId", adminAccessMiddleware, async (c: any) => {
+  try {
+    const db = c.get("db");
+    const subjectId = canonicalSubjectId(c.req.param("subjectId"));
+    if (!subjectId) return c.json({ error: "subjectId is required." }, 400);
+    const body = await c.req.json();
+    const promptText = cleanText(String(body?.promptText ?? body?.prompt_text ?? ""), 50000);
+    const resources = Array.isArray(body?.resources)
+      ? body.resources
+          .map((r: unknown) => {
+            const o = (r ?? {}) as Record<string, unknown>;
+            const name = cleanText(String(o.name ?? "Resource"), 240);
+            const content = cleanText(String(o.content ?? o.text ?? ""), 50000);
+            if (!name && !content) return null;
+            return { name: name || "Resource", content };
+          })
+          .filter(Boolean)
+          .slice(0, 20)
+      : [];
+    const now = nowIso();
+    await db.execute(sql`
+      INSERT INTO subject_marking_context (subject_id, prompt_text, resources_json, updated_at)
+      VALUES (${subjectId}, ${promptText}, ${JSON.stringify(resources)}, ${now})
+      ON CONFLICT(subject_id) DO UPDATE SET
+        prompt_text = EXCLUDED.prompt_text,
+        resources_json = EXCLUDED.resources_json,
+        updated_at = EXCLUDED.updated_at
+    `);
+    return c.json({ ok: true, subjectId });
+  } catch (e) {
+    return c.json({ error: errorChain(e) }, 500);
+  }
+});
+
+app.post("/api/admin/ai/generate-mark-breakdown", adminAccessMiddleware, async (c: any) => {
+  try {
+    const env = c.env as Env;
+    if (!openAiConfigured(env)) {
+      return c.json({ error: "Gemini is not configured." }, 503);
+    }
+    const body = await c.req.json();
+    const subjectId = canonicalSubjectId(cleanText(String(body?.subjectId ?? ""), 80));
+    const questionText = cleanText(String(body?.questionText ?? body?.question ?? ""), 4000);
+    if (!questionText) return c.json({ error: "questionText is required." }, 400);
+    const marks = Math.max(1, Math.round(Number(body?.marks ?? 1) || 1));
+    const db = c.get("db");
+    const subjectContext = subjectId
+      ? await loadSubjectMarkingContext(db, subjectId)
+      : undefined;
+    const generated = await generateMarkBreakdown(env, {
+      questionText,
+      topic: body?.topic ? cleanText(String(body.topic), 240) : undefined,
+      marks,
+      guidance: body?.guidance ? cleanText(String(body.guidance), 2000) : undefined,
+      acceptedAnswers: Array.isArray(body?.acceptedAnswers)
+        ? body.acceptedAnswers.map((a: unknown) => String(a ?? "").trim()).filter(Boolean)
+        : undefined,
+      subjectContext,
+    });
+    return c.json({
+      markBreakdown: { steps: generated.steps, source: "ai" },
+    });
+  } catch (e) {
+    return c.json({ error: errorChain(e) }, 500);
+  }
+});
 
 app.get("/api/admin/ai/status", adminAccessMiddleware, async (c: any) => {
   const env = c.env as Env;

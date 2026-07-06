@@ -1,4 +1,6 @@
 import { useEffect, useState, Fragment } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/context/AuthContext";
 import { cn, getQuestionTypeLabel, isAnswerCorrect } from "@/lib/utils";
 import type { LongQuestion as LongQuestionType } from "@/lib/subjects";
 import { apiFetch } from "@/lib/api";
@@ -60,6 +62,7 @@ import { MultipartMarkBreakdown } from "@/components/quiz/MultipartMarkBreakdown
 import { WrongAnswerFeedbackPanel } from "@/components/quiz/WrongAnswerFeedbackPanel";
 import { buildWrongAnswerBullets } from "@/lib/wrongAnswerFeedback";
 import { toast } from "sonner";
+import { isPremiumUser, PREMIUM_PATH } from "@/lib/premium";
 import { AiMarkingFeedbackPanel, AiMarkingPartFeedback } from "@/components/quiz/AiMarkingFeedbackPanel";
 import {
   ExamPaperPartPrompt,
@@ -224,6 +227,8 @@ export function LongQuestion({
   persistedState,
   onStateChange,
 }: LongQuestionProps) {
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const configuredParts: LongQuestionType["answerParts"] =
     question.answerParts?.filter(
       (p) =>
@@ -407,6 +412,13 @@ export function LongQuestion({
 
     if (!hasContent || saving || disabled || (!practiceOnly && saved)) return;
 
+    const requirePremiumForAi = () => {
+      if (isPremiumUser(user)) return true;
+      toast.error("AI marking requires Premium.");
+      navigate(PREMIUM_PATH);
+      return false;
+    };
+
     setSaving(true);
     try {
       if (!practiceOnly) {
@@ -461,6 +473,10 @@ export function LongQuestion({
         result !== true;
 
       if (usesHandwritingAi) {
+        if (!requirePremiumForAi()) {
+          setSaving(false);
+          return;
+        }
         setAiMark(null);
         setAiMarking(true);
         try {
@@ -503,6 +519,10 @@ export function LongQuestion({
           setAiMarking(false);
         }
       } else if (shouldAiMark) {
+        if (!requirePremiumForAi()) {
+          setSaving(false);
+          return;
+        }
         setAiMarking(true);
         try {
           const ai = await requestSmartMark(subjectId, questionKey, {
@@ -686,16 +706,6 @@ export function LongQuestion({
       ) : (
       <Fragment>
       <div className="space-y-3">
-        {handwritingMode && !examPaper ? (
-          <p className="text-xs text-muted-foreground">
-            Handwriting mode — draw your answer on the pad.
-          </p>
-        ) : null}
-        {isMultipart && !examPaper ? (
-          <p className="text-xs text-muted-foreground">
-            Answer each part below, then submit once to mark all parts.
-          </p>
-        ) : null}
         {isMultipart ? (
           <div className={cn("flex flex-col gap-4", !examPaper && "border-t border-black/8 pt-4")}>
             {partLabels.map((label, idx) => (

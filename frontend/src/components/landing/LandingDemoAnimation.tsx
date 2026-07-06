@@ -130,7 +130,7 @@ export function LandingDemoAnimation({
                 </div>
               ))}
               <p className="pt-2 text-center text-xs text-slate-500">
-                A score tells you how you did. A rank tells you where you stand.
+                Stop guessing what to improve — see where you stand.
               </p>
             </div>
           )}

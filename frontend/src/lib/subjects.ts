@@ -1,4 +1,5 @@
 import type { DiagramLabelPart, InlineInputBox } from "@/lib/diagramLabels";
+import type { MarkBreakdown } from "@/lib/markBreakdown";
 
 export type QuestionType = "mcq" | "short" | "long";
 
@@ -41,6 +42,8 @@ export interface BaseQuestion {
   id?: number;
   /** Explicit multipart answer schema (preferred over text parsing). */
   answerParts?: AnswerPart[];
+  /** VCAA-style mark scheme — one row per mark or mark group. */
+  markBreakdown?: MarkBreakdown;
 }
 
 export interface McqQuestion extends BaseQuestion {

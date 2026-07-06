@@ -17,6 +17,8 @@ import {
 } from "@/lib/questionDisplay";
 import { GOOGLE_SHEETS_TOPIC_LABELS, topicTaxonomySubjectId } from "@/lib/mathSubjectTopics";
 import { normalizeQuestionMathText } from "@/lib/questionMathText";
+import { parseMarkBreakdown } from "@/lib/markBreakdown";
+import { displayTopicLabel, isPracticeExamTopic } from "@/lib/topicDisplay";
 
 function topicLabelListForSubject(subjectId: string): readonly string[] | undefined {
   const key = topicTaxonomySubjectId(canonicalSubjectId(subjectId));
@@ -85,6 +87,7 @@ function normalizeTopicLabel(raw: unknown): string {
   if (!topic) return "General";
   // Hide legacy placeholder topic names from old PDF test imports.
   if (/^(?:test(?:\s*pdf)?|pdf\s*test)$/i.test(topic)) return "General";
+  if (isPracticeExamTopic(topic)) return "Practice exam";
   return topic;
 }
 
@@ -535,6 +538,11 @@ export function normalizeCustomQuestion(raw: unknown, subjectIdHint?: string): Q
       (String(q.answer ?? "").trim() ? 1 : 0),
   );
   const resolvedAnswerParts = answerParts ?? inferredAnswerParts;
+  const markBreakdown =
+    parseMarkBreakdown((q as { markBreakdown?: unknown }).markBreakdown) ??
+    parseMarkBreakdown((q as { mark_breakdown?: unknown }).mark_breakdown) ??
+    parseMarkBreakdown((q as { mark_breakdown_json?: unknown }).mark_breakdown_json);
+  const markBreakdownField = markBreakdown ? { markBreakdown } : {};
   if (resolvedAnswerParts && resolvedAnswerParts.length >= 2) {
     questionText = repairMultipartQuestionStem(questionText, resolvedAnswerParts);
     if (!questionText.trim()) {
@@ -593,6 +601,7 @@ export function normalizeCustomQuestion(raw: unknown, subjectIdHint?: string): Q
         ? { answerParts: answerParts ?? inferredAnswerParts }
         : {}),
       ...(groupId ? { groupId } : {}),
+      ...markBreakdownField,
       ...resolveUseAiMarkingForLoad(useAiMarking, {
         ...aiMarkingCtx,
         typeRaw,
@@ -628,6 +637,7 @@ export function normalizeCustomQuestion(raw: unknown, subjectIdHint?: string): Q
         ? { answerParts: answerParts ?? inferredAnswerParts }
         : {}),
       ...(groupId ? { groupId } : {}),
+      ...markBreakdownField,
     };
   }
 
@@ -656,6 +666,7 @@ export function normalizeCustomQuestion(raw: unknown, subjectIdHint?: string): Q
           ? { answerParts: answerParts ?? inferredAnswerParts }
           : {}),
         ...(groupId ? { groupId } : {}),
+      ...markBreakdownField,
         ...resolveUseAiMarkingForLoad(useAiMarking, {
           ...aiMarkingCtx,
           typeRaw,
@@ -677,6 +688,7 @@ export function normalizeCustomQuestion(raw: unknown, subjectIdHint?: string): Q
         ? { answerParts: answerParts ?? inferredAnswerParts }
         : {}),
       ...(groupId ? { groupId } : {}),
+      ...markBreakdownField,
       ...resolveUseAiMarkingForLoad(useAiMarking, {
         ...aiMarkingCtx,
         typeRaw,
@@ -708,6 +720,7 @@ export function normalizeCustomQuestion(raw: unknown, subjectIdHint?: string): Q
         id,
         answerParts: resolvedAnswerParts,
         ...(groupId ? { groupId } : {}),
+      ...markBreakdownField,
         useAiMarking: false,
       });
     }
@@ -727,6 +740,7 @@ export function normalizeCustomQuestion(raw: unknown, subjectIdHint?: string): Q
         ? { answerParts: answerParts ?? inferredAnswerParts }
         : {}),
       ...(groupId ? { groupId } : {}),
+      ...markBreakdownField,
       ...resolveUseAiMarkingForLoad(useAiMarking, {
         ...aiMarkingCtx,
         typeRaw,

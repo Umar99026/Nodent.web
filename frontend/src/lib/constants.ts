@@ -52,7 +52,31 @@ export function canAccessTrackNav(
   return isAdminUser(user) || resolvedAccountRole(user) === "student";
 }
 
-/** Past-exam browsing — admin-only until public launch. */
+/** New students must complete VCE + subjects + confidence setup before the dashboard. */
+export function needsStudentOnboarding(
+  user:
+    | {
+        email?: string | null;
+        accountRole?: AccountRole | null;
+        onboardingCompletedAt?: string | null;
+      }
+    | null
+    | undefined,
+): boolean {
+  if (!user) return false;
+  if (isAdminUser(user)) return false;
+  if (resolvedAccountRole(user) === "teacher") return false;
+  return !user.onboardingCompletedAt;
+}
+
+/** Past-exam browsing — available to all signed-in users (free tier has weekly limit). */
+export function canAccessPracticeExams(
+  user: { email?: string | null } | null | undefined,
+): boolean {
+  return !!user;
+}
+
+/** Class / admin-only exam tooling until public launch. */
 export function canAccessExamsAndClassFeatures(
   user: { email?: string | null } | null | undefined,
 ): boolean {
@@ -70,7 +94,15 @@ export const API_PATHS = {
     resetPassword: "/api/auth/reset-password",
   },
   bootstrap: "/api/bootstrap",
-  subjects: "/api/subjects",
+  onboarding: {
+    complete: "/api/onboarding/complete",
+  },
+  premium: {
+    usage: "/api/premium/usage",
+  },
+  subjects: {
+    my: "/api/subjects/my",
+  },
   questions: (subjectId: number | string) =>
     `/api/subjects/${subjectId}/questions`,
   submitAnswer: "/api/quiz/submit",
@@ -147,11 +179,15 @@ export const API_PATHS = {
   written: {
     mark: (subjectId: string, questionKey: string) =>
       `/api/written/${encodeURIComponent(subjectId)}/${encodeURIComponent(questionKey)}/mark`,
+    help: (subjectId: string, questionKey: string) =>
+      `/api/written/${encodeURIComponent(subjectId)}/${encodeURIComponent(questionKey)}/help`,
   },
   english: {
     books: "/api/english/books",
     prompts: "/api/english/prompts",
     responses: "/api/english/responses",
+    response: (responseId: number | string) =>
+      `/api/english/responses/${encodeURIComponent(String(responseId))}`,
     aiScoreResponse: (responseId: number | string) =>
       `/api/english/responses/${responseId}/ai-score`,
   },

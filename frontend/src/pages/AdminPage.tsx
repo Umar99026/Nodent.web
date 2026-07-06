@@ -65,6 +65,7 @@ import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
 import { PdfQuestionImportPanel } from "@/components/admin/PdfQuestionImportPanel";
 import { AdminPracticeExamPanel } from "@/components/admin/AdminPracticeExamPanel";
+import { AdminPromptingPanel } from "@/components/admin/AdminPromptingPanel";
 import { AdminFeedbackPanel } from "@/components/admin/AdminFeedbackPanel";
 import { AdminQuestionImageEditor } from "@/components/admin/AdminQuestionImageEditor";
 import {
@@ -1853,6 +1854,8 @@ export default function AdminPage() {
         </Card>
 
         <AdminFeedbackPanel />
+
+        <AdminPromptingPanel />
 
         <AdminPracticeExamPanel
           subjects={visibleSubjects.map((s) => ({ id: s.id, name: s.name }))}

@@ -1,6 +1,5 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { FEEDBACK_PATH } from "@/components/landing/WelcomeFeedbackSection";
 import { useAuth } from "@/context/AuthContext";
 import { ApiError, apiUnreachableMessage } from "@/lib/api";
 import { STORAGE_KEYS, type AccountRole } from "@/lib/constants";
@@ -125,7 +124,11 @@ export default function LoginPage() {
         signupPassword,
         signupRole,
       );
-      navigate(FEEDBACK_PATH, { replace: true });
+      if (signupRole === "student") {
+        navigate("/onboarding", { replace: true });
+      } else {
+        navigate("/dashboard", { replace: true });
+      }
     } catch (err) {
       if (err instanceof ApiError) {
         setServerError(err.status === 0 ? apiUnreachableMessage() : err.message);
