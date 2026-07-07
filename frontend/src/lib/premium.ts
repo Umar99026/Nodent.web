@@ -26,7 +26,16 @@ export function isPremiumUser(user: PremiumUser | null | undefined): boolean {
 
 export function isPremiumError(err: unknown): boolean {
   const msg = String(err instanceof Error ? err.message : err ?? "").toLowerCase();
-  return msg.includes("premium") || msg.includes(PREMIUM_REQUIRED_CODE);
+  return (
+    msg.includes("premium") ||
+    msg.includes(PREMIUM_REQUIRED_CODE) ||
+    msg.includes("per day")
+  );
 }
 
 export const PREMIUM_PATH = "/premium";
+
+/** Past practice exams — premium only (admin included). */
+export function canAccessPracticeExams(user: PremiumUser | null | undefined): boolean {
+  return isPremiumUser(user);
+}

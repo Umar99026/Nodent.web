@@ -4,6 +4,10 @@ export function isHandwritingValue(value: string): boolean {
   return value.trim().startsWith("data:image/");
 }
 
+/** Lightweight marker so submit enables before JPEG export finishes. */
+export const HANDWRITING_INK_PLACEHOLDER =
+  "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+
 /** Handwriting exports must not appear as text in typed answer fields. */
 export function typedAnswerDisplay(value: string): string {
   return isHandwritingValue(value) ? "" : value;

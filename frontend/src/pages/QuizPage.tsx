@@ -66,7 +66,6 @@ import {
   AlertDialogCancel,
 } from "@/components/ui/alert-dialog";
 import { useInactivity } from "@/hooks/useInactivity";
-import { useHandwritingMode } from "@/context/HandwritingModeContext";
 import {
   readBreakdownModePreference,
   writeBreakdownModePreference,
@@ -191,8 +190,8 @@ export default function QuizPage() {
   const useDemoMockFeedback =
     import.meta.env.DEV && isDemoSandbox && searchParams.get("mockFeedback") === "1";
   const [breakdownMode, setBreakdownMode] = useState(() => readBreakdownModePreference());
-  const { setEnabled: setHandwritingMode } = useHandwritingMode();
   const { isInactive, resetInactivity } = useInactivity();
+  const [showInactivityDialog, setShowInactivityDialog] = useState(false);
 
   useEffect(() => {
     if (!premium && breakdownMode) {
@@ -201,11 +200,6 @@ export default function QuizPage() {
     }
   }, [premium, breakdownMode]);
 
-  useEffect(() => {
-    if (isDemoSandbox && !isWrongReview) setHandwritingMode(true);
-  }, [isDemoSandbox, isWrongReview, setHandwritingMode]);
-
-  const [showInactivityDialog, setShowInactivityDialog] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, boolean | null>>({});
   const [initialized, setInitialized] = useState(false);
@@ -825,7 +819,7 @@ export default function QuizPage() {
     return (
       <AppShell
         title="English"
-        subtitle="Essay studio — upload, mark, and refine."
+        subtitle="Mark your essay — upload, mark, and refine."
         edgeToEdgeHeader
         edgeToEdgeMain
       >

@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { resolveQuestionImageSrc } from "@/lib/practiceQuestions";
-import { HandwritingCanvas } from "@/components/quiz/HandwritingCanvas";
 import { ExamPaperRuledField } from "@/components/quiz/ExamPaperRuledField";
 import { QuizAnswerField } from "@/components/quiz/QuizAnswerField";
-import { useHandwritingModeActive } from "@/context/HandwritingModeContext";
 import {
   clampOverlay,
   finalizeDrawnOverlay,
@@ -99,7 +97,6 @@ export function DiagramLabelInputs({
   preciseOverlayDraw = false,
   subjectId,
 }: DiagramLabelInputsProps) {
-  const handwritingMode = useHandwritingModeActive(subjectId);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{
     index: number;
@@ -239,46 +236,6 @@ export function DiagramLabelInputs({
     dragRef.current = null;
     resizeRef.current = null;
   };
-
-  const labeledParts = parts
-    .map((part, idx) => ({ part, idx }))
-    .filter(({ part }) => partHasOverlay(part));
-
-  if (handwritingMode && !editorMode) {
-    return (
-      <div className="space-y-4">
-        <div className="relative mx-auto w-full max-w-3xl overflow-hidden rounded-xl border border-black/10 bg-[#f3f4f6]">
-          <img
-            src={src}
-            alt="Diagram to label"
-            className="block w-full select-none object-contain"
-            draggable={false}
-            decoding="async"
-          />
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2">
-          {labeledParts.map(({ part, idx }) => {
-            const result = partResults[idx];
-            const showResult = submitted && result != null;
-            return (
-              <HandwritingCanvas
-                key={`${part.key}-${idx}`}
-                value={values[idx] ?? ""}
-                onChange={(value) => onChange?.(idx, value)}
-                disabled={disabled}
-                size="md"
-                label={part.label?.trim() || `Label ${idx + 1}`}
-                className={cn(
-                  showResult && result === true && "rounded-lg ring-2 ring-success/40",
-                  showResult && result === false && "rounded-lg ring-2 ring-danger/40",
-                )}
-              />
-            );
-          })}
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div

@@ -180,7 +180,7 @@ export function EnglishPracticePanel() {
         toast.success("Essay saved. Write at least 20 characters for marking.");
       } else if (submitResult.aiConfigured === false) {
         toast.success("Essay saved.", {
-          description: "AI marking is not configured on the server yet.",
+          description: "AI marking is not configured on the server yet (OPENAI_API_KEY).",
         });
       } else {
         toast.success("Essay submitted.");
@@ -210,7 +210,7 @@ export function EnglishPracticePanel() {
           </span>
           <div className="min-w-0 space-y-2 pt-0.5">
             <h2 className="font-display text-3xl font-semibold tracking-tight text-[#0b0f19] sm:text-4xl">
-              Essay studio
+              Mark your essay
             </h2>
             <p className="max-w-2xl font-exam-serif text-base leading-relaxed text-[#64748b] sm:text-lg">
               Upload your writing, receive a grade out of ten, and explore inline feedback on
@@ -274,17 +274,20 @@ export function EnglishPracticePanel() {
               }}
             >
               {isEmpty ? (
-                <div className="pointer-events-none flex flex-col items-center justify-center gap-3 px-6 py-14 text-center">
-                  <span className="flex size-16 items-center justify-center rounded-full bg-black/[0.04]">
-                    <Upload className="size-7 text-[#64748b]" strokeWidth={1.5} aria-hidden />
-                  </span>
-                  <p className="font-display text-sm font-medium text-[#334155]">
-                    Drag & drop a .txt file
-                  </p>
-                  <p className="font-exam-serif text-sm text-muted-foreground">
-                    or paste directly below
-                  </p>
-                </div>
+                <>
+                  <div className="pointer-events-none flex flex-col items-center justify-center gap-3 px-6 py-14 text-center">
+                    <span className="flex size-16 items-center justify-center rounded-full bg-black/[0.04]">
+                      <Upload className="size-7 text-[#64748b]" strokeWidth={1.5} aria-hidden />
+                    </span>
+                    <p className="font-display text-sm font-medium text-[#334155]">
+                      Drag & drop a .txt file
+                    </p>
+                    <p className="font-exam-serif text-sm text-muted-foreground">
+                      or paste directly below
+                    </p>
+                  </div>
+                  <div className="mx-6 border-b border-black/8" aria-hidden />
+                </>
               ) : null}
               <Textarea
                 id="english-essay"

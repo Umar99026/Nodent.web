@@ -18,6 +18,7 @@ const OnboardingPage = lazy(() => import("@/pages/OnboardingPage"));
 const PremiumPage = lazy(() => import("@/pages/PremiumPage"));
 const QuizPage = lazy(() => import("@/pages/QuizPage"));
 const SummaryPage = lazy(() => import("@/pages/SummaryPage"));
+const ReportPage = lazy(() => import("@/pages/ReportPage"));
 const TrackStudyPage = lazy(() => import("@/pages/TrackStudyPageNew"));
 const QuestionForumThreadPage = lazy(
   () => import("@/pages/QuestionForumThreadPage"),
@@ -219,6 +220,17 @@ function AppRoutes() {
             <ProtectedRoute>
               <StudentOnboardingGate>
                 <DashboardPage />
+              </StudentOnboardingGate>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/report"
+          element={
+            <ProtectedRoute>
+              <StudentOnboardingGate>
+                <ReportPage />
               </StudentOnboardingGate>
             </ProtectedRoute>
           }

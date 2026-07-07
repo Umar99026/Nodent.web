@@ -1,7 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/geist/index.css";
+@import "@fontsource-variable/inter/index.css";
 @import "@fontsource/tinos/400.css";
 @import "@fontsource/tinos/400-italic.css";
 @import "@fontsource/tinos/700.css";
@@ -11,8 +11,9 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --font-display: 'Geist Variable', system-ui, -apple-system, sans-serif;
-  --font-sans: 'Geist Variable', system-ui, -apple-system, sans-serif;
+  --font-display: 'Inter Variable', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-sans: 'Inter Variable', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-brand: 'Caveat', cursive;
   --font-exam-sans: Arimo, Arial, 'Helvetica Neue', Helvetica, sans-serif;
   --font-exam-serif: Tinos, 'Times New Roman', Times, 'Liberation Serif', Georgia, serif;
   --vce-font-size: 17.5pt;
@@ -89,8 +90,8 @@
   --primary-foreground: #ffffff;
   --secondary: #f1f5f9;
   --secondary-foreground: #1e293b;
-  --muted: #f1f0ed;
-  --muted-foreground: #64748b;
+  --muted: #eceff3;
+  --muted-foreground: #4b5563;
   --accent: #56abe6;
   --accent-foreground: #ffffff;
   --destructive: #ef4444;
@@ -123,6 +124,10 @@
     overflow-x: clip;
     -webkit-text-size-adjust: 100%;
     font-size: 16px;
+    font-family: var(--font-sans);
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
   }
   @media (min-width: 640px) {
     html {
@@ -134,20 +139,47 @@
       font-size: 20px;
     }
   }
+  body,
+  #root,
+  button,
+  input,
+  textarea,
+  select,
+  optgroup {
+    font-family: inherit;
+  }
   body {
-    @apply bg-background text-foreground antialiased;
+    @apply bg-background text-foreground font-sans antialiased;
     overflow-x: clip;
     background: #f3f4f6;
     background-attachment: scroll;
+    line-height: 1.5;
+    letter-spacing: -0.011em;
   }
   @media (min-width: 1024px) {
     body {
       background-attachment: fixed;
     }
   }
-  h1, h2, h3 {
-    font-family: var(--font-display);
-    letter-spacing: -0.01em;
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-sans);
+    letter-spacing: -0.025em;
+    line-height: 1.2;
+    font-weight: 600;
+  }
+  .prose {
+    --tw-prose-body: var(--font-sans);
+    --tw-prose-headings: var(--font-sans);
+    --tw-prose-bold: var(--font-sans);
+    --tw-prose-counters: var(--font-sans);
+    --tw-prose-bullets: var(--font-sans);
+    --tw-prose-quotes: var(--font-sans);
+    font-family: var(--font-sans);
   }
 }
 
@@ -695,10 +727,25 @@
   -webkit-touch-callout: none;
   -webkit-tap-highlight-color: transparent;
   touch-action: none;
+  overscroll-behavior: contain;
 }
 
 .handwriting-canvas-pad canvas {
   touch-action: none;
+}
+
+/* Handwriting mode — block stray text selection from palm while writing answers */
+body.nodent-handwriting-mode {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+body.nodent-handwriting-mode input,
+body.nodent-handwriting-mode textarea,
+body.nodent-handwriting-mode [contenteditable="true"] {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 /* While drawing — block stray text selection from palm / second finger */
@@ -706,6 +753,7 @@ body.nodent-is-drawing {
   -webkit-user-select: none;
   user-select: none;
   -webkit-touch-callout: none;
+  overscroll-behavior: none;
 }
 
 body.nodent-is-drawing *:not(.handwriting-canvas-pad):not(.handwriting-canvas-pad *) {
@@ -1016,7 +1064,7 @@ textarea.exam-paper-input-field:focus-visible {
   font-weight: 700;
 }
 
-/* Override Tailwind typography (Geist) inside exam questions */
+/* Override default prose fonts inside exam questions */
 .vce-question-paper .prose,
 .vce-question-paper .rich-question-content,
 .vce-question-paper .vce-question-paper__prose {

@@ -58,7 +58,7 @@ export function AppShell({
                   ? "pl-1 pr-4 sm:pl-2 sm:pr-6 lg:pl-3 lg:pr-8"
                   : "mx-auto max-w-[1600px] px-4 sm:px-6 lg:px-8"
           } ${
-            isDashboard ? "min-h-12 py-3" : "min-h-14 py-4"
+            isDashboard ? "min-h-14 py-3" : "min-h-14 py-4"
           }`}
         >
           {compactHeader && !isDashboard && !hideBackButton ? (
@@ -135,11 +135,13 @@ export function AppShell({
                   {subtitle && (
                     <div
                       className={`${hideTitle ? "" : "truncate text-left "} ${
-                        isDashboard
-                          ? "text-sm font-medium text-muted-foreground"
-                          : isTrackStudy
+                        isDashboard && hideTitle
+                          ? ""
+                          : isDashboard
                             ? "text-sm font-medium text-muted-foreground"
-                            : "text-xs text-muted-foreground sm:text-sm"
+                            : isTrackStudy
+                              ? "text-sm font-medium text-muted-foreground"
+                              : "text-xs text-muted-foreground sm:text-sm"
                       } ${subtitleClassName ?? ""}`}
                     >
                       {subtitle}

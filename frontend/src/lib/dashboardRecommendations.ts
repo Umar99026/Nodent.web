@@ -19,18 +19,26 @@ export type DashboardAction = {
 
 export type DashboardScorecard = {
   studyStreak?: number;
+  overallRank?: number | null;
   overallPercentile?: number | null;
   weakestSubjectId?: string | null;
   bestSubjectId?: string | null;
   reportSubjects?: Array<{
     subjectId: string;
     attempts: number;
+    rank: number | null;
+    rankedStudents: number;
     percentile: number | null;
-    weakestTopic: { topic: string; percent: number } | null;
-    strongestTopic: { topic: string; percent: number } | null;
+    subjectPercent: number;
+    weakestTopic: { topic: string; percent: number; percentile: number | null } | null;
+    strongestTopic: { topic: string; percent: number; percentile: number | null } | null;
   }>;
 };
 
+/** Minimum recommendations shown on the dashboard. */
+const MIN_DASHBOARD_RECOMMENDATIONS = 5;
+/** Maximum recommendations shown on the dashboard. */
+const MAX_DASHBOARD_RECOMMENDATIONS = 8;
 /** Topic score below this → urgent practice recommendation. */
 const WEAK_TOPIC_PERCENT = 55;
 /** Subject cohort percentile below this → focus practice on weakest topic. */
@@ -42,6 +50,82 @@ function subjectName(subjects: Subject[], id: string): string {
 
 function practiceCtaForTopic(topic: string): string {
   return isPracticeExamTopic(topic) ? "Open practice exam" : "Practice now";
+}
+
+function defaultFillerActions(subjects: Subject[]): DashboardAction[] {
+  const fillers: DashboardAction[] = [];
+
+  for (const subject of subjects) {
+    fillers.push({
+      id: `filler-subject-${subject.id}`,
+      title: `Practice ${subject.name}`,
+      subtitle: "Pick a topic and work through questions at your own pace",
+      cta: "Open practice",
+      href: `/practice/${subject.id}`,
+      tone: "steady",
+    });
+    fillers.push({
+      id: `filler-stats-${subject.id}`,
+      title: `Review ${subject.name} stats`,
+      subtitle: "See topic breakdowns and where to improve next",
+      cta: "View stats",
+      href: `/quiz/${subject.id}/summary`,
+      tone: "steady",
+    });
+  }
+
+  fillers.push(
+    {
+      id: "filler-essay",
+      title: "Mark your essay",
+      subtitle: "Upload writing and get AI feedback on structure and expression",
+      cta: "Mark essay",
+      href: "/quiz/english",
+      tone: "steady",
+    },
+    {
+      id: "filler-track-habit",
+      title: "Build a study habit",
+      subtitle: "Log a short session to keep momentum through the week",
+      cta: "Track study",
+      href: "/track",
+      tone: "steady",
+    },
+  );
+
+  if (subjects[0]) {
+    fillers.push({
+      id: "filler-exams",
+      title: "Try a practice exam",
+      subtitle: `Browse past papers for ${subjects[0].name}`,
+      cta: "View exams",
+      href: `/practice/${subjects[0].id}/exams`,
+      tone: "steady",
+    });
+  }
+
+  if (!subjects.length) {
+    fillers.push(
+      {
+        id: "filler-explore",
+        title: "Add your subjects",
+        subtitle: "Choose VCE subjects to unlock personalised practice",
+        cta: "Open dashboard",
+        href: "/dashboard",
+        tone: "steady",
+      },
+      {
+        id: "filler-english-start",
+        title: "Try English essay marking",
+        subtitle: "Upload a response and get structured feedback",
+        cta: "Mark essay",
+        href: "/quiz/english",
+        tone: "steady",
+      },
+    );
+  }
+
+  return fillers;
 }
 
 export function buildDashboardActions(input: {
@@ -185,6 +269,11 @@ export function buildDashboardActions(input: {
     tone: "steady",
   });
 
+  for (const filler of defaultFillerActions(subjects)) {
+    if (actions.length >= MIN_DASHBOARD_RECOMMENDATIONS) break;
+    push(filler);
+  }
+
   const toneOrder: Record<DashboardActionTone, number> = {
     urgent: 0,
     focus: 1,
@@ -194,5 +283,5 @@ export function buildDashboardActions(input: {
 
   return actions
     .sort((a, b) => toneOrder[a.tone] - toneOrder[b.tone])
-    .slice(0, 8);
+    .slice(0, MAX_DASHBOARD_RECOMMENDATIONS);
 }

@@ -1,11 +1,16 @@
 import type { KeyboardEvent } from "react";
+import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { AnswerInputToolbar, type AnswerInputMode } from "@/components/quiz/AnswerInputToolbar";
 import { ExamPaperAnswerBlock } from "@/components/quiz/ExamPaperAnswerBlock";
 import { HandwritingCanvas, type HandwritingSize } from "@/components/quiz/HandwritingCanvas";
 import { WorkingAnswerHint } from "@/components/quiz/WorkingAnswerHint";
-import { useHandwritingModeActive } from "@/context/HandwritingModeContext";
-import { typedAnswerDisplay } from "@/lib/handwritingMode";
+import {
+  handwritingAllowedForSubject,
+  isHandwritingValue,
+  typedAnswerDisplay,
+} from "@/lib/handwritingMode";
 import { cn } from "@/lib/utils";
 
 type QuizAnswerFieldProps = {
@@ -28,6 +33,10 @@ type QuizAnswerFieldProps = {
   workingHint?: boolean;
 };
 
+function initialInputMode(value: string): AnswerInputMode {
+  return isHandwritingValue(value) ? "pencil" : "text";
+}
+
 export function QuizAnswerField({
   value,
   onChange,
@@ -44,73 +53,130 @@ export function QuizAnswerField({
   flushKey,
   workingHint = true,
 }: QuizAnswerFieldProps) {
-  const handwritingMode = useHandwritingModeActive(subjectId);
+  const handwritingAvailable = handwritingAllowedForSubject(subjectId);
+  const [inputMode, setInputMode] = useState<AnswerInputMode>(() => initialInputMode(value));
   const textValue = typedAnswerDisplay(value);
+  const drawMode = inputMode === "pencil" || inputMode === "eraser";
 
-  if (handwritingMode) {
-    const examLines = examPaperMode
-      ? Math.max(6, multiline ? Math.max(rows, 10) : 8)
-      : undefined;
-    const size =
-      handwritingSize ??
-      (examPaperMode ? "lg" : multiline ? "lg" : rows >= 5 ? "lg" : "md");
-    return (
-      <div className={cn("space-y-1.5", className)}>
-        {examPaperMode && workingHint ? <WorkingAnswerHint /> : null}
-        <HandwritingCanvas
-          value={value}
+  if (!handwritingAvailable) {
+    if (examPaperMode) {
+      const lines = multiline ? Math.max(2, rows) : 2;
+      return (
+        <ExamPaperAnswerBlock
+          value={textValue}
           onChange={onChange}
           disabled={disabled}
-          size={size}
-          examPaperMode={examPaperMode}
-          lines={examLines}
-          label={label}
-          flushKey={flushKey}
+          lines={lines}
+          className={cn("w-full min-w-0", className)}
         />
-      </div>
-    );
-  }
+      );
+    }
 
-  if (examPaperMode) {
-    const lines = multiline ? Math.max(2, rows) : 2;
+    if (multiline) {
+      return (
+        <Textarea
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          disabled={disabled}
+          rows={rows}
+          onKeyDown={onKeyDown}
+          className={cn(
+            className?.includes("exam-paper-input-field")
+              ? "border-0 bg-transparent p-0 shadow-none focus-visible:ring-0"
+              : "bg-white/60 text-sm leading-relaxed",
+            className,
+          )}
+        />
+      );
+    }
+
     return (
-      <ExamPaperAnswerBlock
+      <Input
         value={textValue}
-        onChange={onChange}
-        disabled={disabled}
-        lines={lines}
-        className={cn("w-full min-w-0", className)}
-      />
-    );
-  }
-
-  if (multiline) {
-    return (
-      <Textarea
-        value={value}
         onChange={(e) => onChange(e.target.value)}
+        onKeyDown={onKeyDown}
         placeholder={placeholder}
         disabled={disabled}
-        rows={rows}
-        onKeyDown={onKeyDown}
-        className={cn(
-          className?.includes("exam-paper-input-field")
-            ? "border-0 bg-transparent p-0 shadow-none focus-visible:ring-0"
-            : "bg-white/60 text-sm leading-relaxed",
-          className,
-        )}
+        className={cn("bg-white/60 text-base", className)}
       />
     );
   }
 
+  const examLines = examPaperMode
+    ? Math.max(6, multiline ? Math.max(rows, 10) : 8)
+    : undefined;
+  const size =
+    handwritingSize ??
+    (examPaperMode ? "lg" : multiline ? "lg" : rows >= 5 ? "lg" : "md");
+
   return (
-    <Input
-      value={textValue}
-      onChange={(e) => onChange(e.target.value)}
-      onKeyDown={onKeyDown}
-      placeholder={placeholder}
-      disabled={disabled}
-      className={cn("bg-white/60 text-base", className)}
-    />
+    <div className={cn("w-full space-y-1.5", className)}>
+      {label ? (
+        <p className="text-[11px] font-medium text-muted-foreground">{label}</p>
+      ) : null}
+      <div
+        className={cn(
+          "answer-input-box overflow-hidden rounded-md border-2 border-[#0b0f19] bg-white",
+          disabled && "opacity-60",
+        )}
+      >
+        <AnswerInputToolbar
+          mode={inputMode}
+          onModeChange={setInputMode}
+          disabled={disabled}
+        />
+        {drawMode ? (
+          <div className="relative">
+            {examPaperMode && workingHint ? (
+              <div className="px-3 pt-2">
+                <WorkingAnswerHint />
+              </div>
+            ) : null}
+            <HandwritingCanvas
+              value={value}
+              onChange={onChange}
+              disabled={disabled}
+              size={size}
+              examPaperMode={examPaperMode}
+              lines={examLines}
+              flushKey={flushKey}
+              toolMode={inputMode === "eraser" ? "eraser" : "pencil"}
+              embedded
+            />
+          </div>
+        ) : examPaperMode ? (
+          <ExamPaperAnswerBlock
+            value={textValue}
+            onChange={onChange}
+            disabled={disabled}
+            lines={multiline ? Math.max(2, rows) : 2}
+            className="w-full min-w-0 border-0"
+          />
+        ) : multiline ? (
+          <Textarea
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder={placeholder}
+            disabled={disabled}
+            rows={rows}
+            onKeyDown={onKeyDown}
+            className={cn(
+              "min-h-[5rem] resize-y border-0 bg-transparent px-3 py-2.5 text-sm leading-relaxed shadow-none focus-visible:ring-0",
+              className?.includes("exam-paper-input-field") && "exam-paper-input-field",
+            )}
+          />
+        ) : (
+          <Input
+            value={textValue}
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={onKeyDown}
+            placeholder={placeholder}
+            disabled={disabled}
+            className="border-0 bg-transparent px-3 text-base shadow-none focus-visible:ring-0"
+          />
+        )}
+      </div>
+    </div>
   );
 }

@@ -78,14 +78,15 @@ export function TopicPerformanceSelect({
     <div className={cn("w-[min(100%,12.5rem)] sm:w-[min(100%,13.5rem)]", className)}>
       <Select value={value} onValueChange={(v) => v && onValueChange(v)}>
         <SelectTrigger
+          size="lg"
           hideDefaultIcon
           title={selectedLabel}
           className={cn(
-            "topic-performance-select-trigger h-10 w-full gap-0 rounded-xl border border-black/10 bg-brand-light p-0 text-sm text-[#0b0f19] shadow-none",
+            "topic-performance-select-trigger h-12 min-h-12 w-full gap-0 rounded-2xl border border-black/10 bg-brand-light/50 p-0 text-base font-medium text-[#0b0f19] shadow-none",
             "focus-visible:border-black/15 focus-visible:ring-0",
           )}
         >
-          <span className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left">
+          <span className="flex min-h-12 min-w-0 flex-1 items-center gap-2 px-4 text-left">
             {value !== "all" ? (
               <span
                 className={cn(
@@ -101,7 +102,7 @@ export function TopicPerformanceSelect({
             <SelectValue placeholder={placeholder} className="min-w-0 truncate" />
           </span>
           <span
-            className="flex h-10 w-10 shrink-0 items-center justify-center border-l border-black/10"
+            className="flex h-12 min-h-12 w-12 shrink-0 items-center justify-center self-stretch border-l border-black/10"
             aria-hidden
           >
             <ChevronDown className="size-5 stroke-[2.5] text-[#0b0f19]/80" />

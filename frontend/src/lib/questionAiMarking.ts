@@ -288,10 +288,6 @@ export function enrichHandwritingMarkResult(
   const answers = expectedAnswers.map((a) => String(a ?? "").trim()).filter(Boolean);
   let enriched: SmartMarkResult = { ...ai };
 
-  if (!ai.correct && !ai.correctAnswers?.length && answers.length) {
-    enriched = { ...enriched, correctAnswers: answers };
-  }
-
   if (answers.length) {
     if (enriched.partResults?.length) {
       enriched = {
@@ -299,7 +295,7 @@ export function enrichHandwritingMarkResult(
         partResults: enriched.partResults.map((p, idx) =>
           enrichPartWithInterpretation({
             ...p,
-            correctAnswer: p.correctAnswer ?? answers[p.index ?? idx],
+            // Don't inject correct answers into feedback payload.
           }),
         ),
       };
@@ -310,7 +306,6 @@ export function enrichHandwritingMarkResult(
           index,
           correct: false,
           marksAwarded: 0,
-          correctAnswer: ans,
         })),
       };
     }
@@ -326,7 +321,6 @@ export function enrichHandwritingMarkResult(
             index,
             correct: Boolean(ai.correct),
             marksAwarded: 0,
-            correctAnswer: ans,
             partFeedback: ai.correct
               ? "• Your working and answer look correct."
               : undefined,
@@ -337,14 +331,13 @@ export function enrichHandwritingMarkResult(
   }
 
   if (!String(enriched.feedback ?? "").trim() && !ai.correct) {
-    const ans = enriched.correctAnswers ?? answers;
     enriched = {
       ...enriched,
-      feedback: ans.length
+      feedback: answers.length
         ? bulletsToFeedbackText(
             buildWrongAnswerBullets({
               studentAnswer: "",
-              expectedAnswers: ans,
+              expectedAnswers: answers,
             }),
           )
         : `• Incorrect. Review the model solution and compare each step of your method.`,
@@ -369,10 +362,6 @@ export function enrichSmartMarkResult(
 
   const answers = input.expectedAnswers.map((a) => String(a ?? "").trim()).filter(Boolean);
   let enriched: SmartMarkResult = { ...ai };
-
-  if (!ai.correctAnswers?.length && answers.length) {
-    enriched = { ...enriched, correctAnswers: answers };
-  }
 
   const feedback = String(enriched.feedback ?? "").trim();
   const supplemental = buildWrongAnswerBullets({
@@ -428,19 +417,15 @@ export function buildFallbackHandwritingMark(
     correct: false,
     scorePercent: 0,
     feedback:
-      "• We could not read your drawing clearly — try darker strokes and a larger final answer.\n" +
-      (answers.length
-        ? `• Model answers: ${answers.join("; ")}`
-        : "• Try submitting again after lifting your stylus or finger from the pad."),
-    correctAnswers: answers.length ? answers : undefined,
+      "• We could not read your drawing clearly — try darker strokes and make your final answer larger.\n" +
+      "• Re-submit after lifting your stylus or finger from the pad.",
     partResults: answers.map((ans, index) => ({
       index,
       correct: false,
       marksAwarded: 0,
-      correctAnswer: ans,
       partFeedback:
         `• We could not read this part clearly — check your strokes are dark enough to scan.\n` +
-        `• Model answer for this part: ${ans}`,
+        `• Re-write the final answer clearly on its own line.`,
     })),
   };
 }

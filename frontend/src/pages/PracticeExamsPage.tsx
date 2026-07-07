@@ -5,6 +5,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { isAdminUser } from "@/lib/constants";
+import { canAccessPracticeExams, PREMIUM_PATH } from "@/lib/premium";
 import { baseSubjects, subjectsForUser } from "@/lib/subjects";
 import { PRACTICE_EXAM_YEARS, practiceExamLabel } from "@/lib/practiceExams";
 import { fetchPracticeExamList } from "@/lib/practiceExamApi";
@@ -19,6 +20,12 @@ export default function PracticeExamsPage() {
 
   const [examMeta, setExamMeta] = useState<PracticeExamListItem[]>([]);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (user && !canAccessPracticeExams(user)) {
+      navigate(PREMIUM_PATH, { replace: true });
+    }
+  }, [user, navigate]);
 
   useEffect(() => {
     if (String(subjectId) === "demo" && !isAdmin) {

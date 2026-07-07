@@ -2,6 +2,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -18,6 +19,13 @@ const HandwritingModeContext = createContext<HandwritingModeContextValue | null>
 
 export function HandwritingModeProvider({ children }: { children: ReactNode }) {
   const [enabled, setEnabledState] = useState(readHandwritingMode);
+
+  useEffect(() => {
+    document.body.classList.toggle("nodent-handwriting-mode", enabled);
+    return () => {
+      document.body.classList.remove("nodent-handwriting-mode");
+    };
+  }, [enabled]);
 
   const setEnabled = useCallback((next: boolean) => {
     setEnabledState(next);

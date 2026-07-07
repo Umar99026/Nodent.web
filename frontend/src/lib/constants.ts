@@ -69,11 +69,22 @@ export function needsStudentOnboarding(
   return !user.onboardingCompletedAt;
 }
 
-/** Past-exam browsing — available to all signed-in users (free tier has weekly limit). */
+/** @deprecated Use `canAccessPracticeExams` from `@/lib/premium`. */
 export function canAccessPracticeExams(
-  user: { email?: string | null } | null | undefined,
+  user: { email?: string | null; plan?: string | null; premiumUntil?: string | null; isPremium?: boolean | null } | null | undefined,
 ): boolean {
-  return !!user;
+  if (!user) return false;
+  if (isAdminUser(user)) return true;
+  if (user.isPremium === true) return true;
+  const plan = String(user.plan ?? "free").trim().toLowerCase();
+  if (plan === "premium" || plan === "paid") {
+    const until = String(user.premiumUntil ?? "").trim();
+    if (!until) return true;
+    const t = Date.parse(until);
+    if (!Number.isFinite(t)) return true;
+    return t > Date.now();
+  }
+  return false;
 }
 
 /** Class / admin-only exam tooling until public launch. */

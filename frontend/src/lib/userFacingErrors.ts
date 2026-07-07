@@ -61,10 +61,10 @@ export function questionHelpUserError(raw?: unknown): string {
     if (typeof window !== "undefined") {
       const host = window.location.hostname.toLowerCase();
       if (host === "localhost" || host === "127.0.0.1" || import.meta.env.DEV) {
-        return "Question help needs a Gemini API key. Add GEMINI_API_KEY=your_key to .dev.vars in the project root (AI Studio keys may start with AIza or AQ), then restart npm run dev:all.";
+        return "Ask AI needs a Gemini API key. Add GEMINI_API_KEY=your_key to .dev.vars in the project root (AI Studio keys may start with AIza or AQ), then restart npm run dev:all.";
       }
     }
-    return "Question help is not available right now.";
+    return "Ask AI is not available right now.";
   }
   if (lower.includes("no free quota") || lower.includes("gemini-2.5-flash")) {
     return text;

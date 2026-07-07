@@ -10,11 +10,12 @@ import { PassageBlock, QuestionImageGrid } from "@/components/quiz/QuestionStimu
 import { RichQuestionContent } from "@/components/quiz/RichQuestionContent";
 import { HorizontalInputFields } from "@/components/quiz/HorizontalInputFields";
 import { QuizAnswerField } from "@/components/quiz/QuizAnswerField";
-import { useHandwritingModeActive } from "@/context/HandwritingModeContext";
 import {
   collectHandwritingImages,
   hasAnswerContent,
+  handwritingAllowedForSubject,
   handwritingResponseSummary,
+  isHandwritingValue,
   usesHandwritingMarking,
 } from "@/lib/handwritingMode";
 import {
@@ -62,7 +63,7 @@ import { MultipartMarkBreakdown } from "@/components/quiz/MultipartMarkBreakdown
 import { WrongAnswerFeedbackPanel } from "@/components/quiz/WrongAnswerFeedbackPanel";
 import { buildWrongAnswerBullets } from "@/lib/wrongAnswerFeedback";
 import { toast } from "sonner";
-import { isPremiumUser, PREMIUM_PATH } from "@/lib/premium";
+import { isPremiumError, PREMIUM_PATH } from "@/lib/premium";
 import { AiMarkingFeedbackPanel, AiMarkingPartFeedback } from "@/components/quiz/AiMarkingFeedbackPanel";
 import {
   ExamPaperPartPrompt,
@@ -255,6 +256,7 @@ export function LongQuestion({
     partLabels: partDescriptors,
     acceptedAnswers: question.acceptedAnswers,
   });
+
   const partPlaceholders =
     configuredParts.length >= 1
       ? configuredParts.map((p) => p.placeholder?.trim() || "")
@@ -311,8 +313,16 @@ export function LongQuestion({
   }>({ average: null, count: 0 });
   const [aiMark, setAiMark] = useState<SmartMarkResult | null>(null);
   const [aiMarking, setAiMarking] = useState(false);
-  const handwritingMode = useHandwritingModeActive(subjectId);
+  const handwritingUi = handwritingAllowedForSubject(subjectId);
   const examPaper = examPaperLayoutProp ?? isExamPaperLayoutSubject(subjectId);
+
+  const usesHandwritingAi = usesHandwritingMarking(
+    subjectId,
+    response,
+    parts,
+    isMultipart,
+    openAiHandwritingEligible,
+  );
 
   useEffect(() => {
     onStateChange?.({
@@ -412,13 +422,6 @@ export function LongQuestion({
 
     if (!hasContent || saving || disabled || (!practiceOnly && saved)) return;
 
-    const requirePremiumForAi = () => {
-      if (isPremiumUser(user)) return true;
-      toast.error("AI marking requires Premium.");
-      navigate(PREMIUM_PATH);
-      return false;
-    };
-
     setSaving(true);
     try {
       if (!practiceOnly) {
@@ -473,10 +476,6 @@ export function LongQuestion({
         result !== true;
 
       if (usesHandwritingAi) {
-        if (!requirePremiumForAi()) {
-          setSaving(false);
-          return;
-        }
         setAiMark(null);
         setAiMarking(true);
         try {
@@ -511,6 +510,7 @@ export function LongQuestion({
         } catch (err) {
           const msg = handwritingMarkUserError(err);
           toast.error(msg);
+          if (isPremiumError(err)) navigate(PREMIUM_PATH);
           const fallback = buildFallbackHandwritingMark(expectedAnswersForDisplay);
           finalResult = false;
           setAutoMarkResult(false);
@@ -519,10 +519,6 @@ export function LongQuestion({
           setAiMarking(false);
         }
       } else if (shouldAiMark) {
-        if (!requirePremiumForAi()) {
-          setSaving(false);
-          return;
-        }
         setAiMarking(true);
         try {
           const ai = await requestSmartMark(subjectId, questionKey, {
@@ -557,8 +553,10 @@ export function LongQuestion({
               : enriched.correct;
             setAutoMarkResult(finalResult);
           }
-        } catch {
-          // Keep client-side result if AI is unavailable.
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "Could not mark your answer.";
+          toast.error(msg);
+          if (isPremiumError(err)) navigate(PREMIUM_PATH);
         } finally {
           setAiMarking(false);
         }
@@ -793,22 +791,24 @@ export function LongQuestion({
                   />
                 </div>
                 )}
-                {(practiceOnly ? submitted : saved) && handwritingMode && aiMark && !hasInlineInputs ? (
+                {(practiceOnly ? submitted : saved) && isHandwritingValue(parts[idx] ?? "") && aiMark && !hasInlineInputs ? (
                   <AiMarkingPartFeedback
                     partResult={partMarkAt(aiMark, idx)}
-                    expectedAnswer={expectedAnswersForDisplay[idx]}
                   />
                 ) : submitted &&
                   !hasInlineInputs &&
                   partResults[idx] === false &&
                   expectedAnswersForDisplay[idx] &&
-                  !handwritingMode ? (
-                  <p className="text-[11px] text-muted-foreground">
-                    Correct answer:{" "}
-                    <span className="text-[13px] font-semibold text-foreground">
-                      {expectedAnswersForDisplay[idx]}
-                    </span>
-                  </p>
+                  !isHandwritingValue(parts[idx] ?? "") ? (
+                  <WrongAnswerFeedbackPanel
+                    title="Feedback"
+                    bullets={buildWrongAnswerBullets({
+                      studentAnswer: parts[idx] ?? "",
+                      expectedAnswers: [expectedAnswersForDisplay[idx] ?? ""].filter(Boolean),
+                      guidance: question.guidance,
+                      questionText: question.question,
+                    })}
+                  />
                 ) : null}
                     </>
                   );
@@ -827,21 +827,24 @@ export function LongQuestion({
                   : "Write your response here…"
               }
               multiline
-              rows={examPaper ? 14 : handwritingMode ? 10 : 12}
+              rows={examPaper ? 14 : handwritingUi ? 10 : 12}
               handwritingSize="lg"
               disabled={disabled || (!practiceOnly && saved)}
               subjectId={subjectId}
               examPaperMode={examPaper}
               className={cn("w-full min-w-0 resize-y", saved && !examPaper && "border-success/40")}
             />
-            {submitted && autoMarkResult === false && expectedAnswersForDisplay[0] ? (
-                <p className="text-[11px] text-muted-foreground">
-                  Correct answer:{" "}
-                  <span className="text-[13px] font-semibold text-foreground">
-                    {expectedAnswersForDisplay[0]}
-                  </span>
-                </p>
-              ) : null}
+            {submitted && autoMarkResult === false ? (
+              <WrongAnswerFeedbackPanel
+                title="Feedback"
+                bullets={buildWrongAnswerBullets({
+                  studentAnswer: response,
+                  expectedAnswers: expectedAnswersForDisplay.filter(Boolean),
+                  guidance: question.guidance,
+                  questionText: question.question,
+                })}
+              />
+            ) : null}
           </div>
         )}
 
@@ -931,7 +934,7 @@ export function LongQuestion({
             <span className="font-medium">Correct! Well done.</span>
           </div>
         )}
-        {aiMark && (practiceOnly ? submitted : saved) && !(isMultipart && handwritingMode) ? (
+        {aiMark && (practiceOnly ? submitted : saved) && !(isMultipart && usesHandwritingAi) ? (
           <AiMarkingFeedbackPanel
             feedback={aiMark.feedback}
             correct={aiMark.correct}

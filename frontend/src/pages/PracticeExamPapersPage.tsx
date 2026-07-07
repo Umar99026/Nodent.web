@@ -5,6 +5,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { isAdminUser } from "@/lib/constants";
+import { canAccessPracticeExams, PREMIUM_PATH } from "@/lib/premium";
 import { baseSubjects, subjectsForUser } from "@/lib/subjects";
 import {
   isPracticeExamYear,
@@ -26,6 +27,12 @@ export default function PracticeExamPapersPage() {
   const [loading, setLoading] = useState(true);
 
   const examYear = year && isPracticeExamYear(year) ? (Number(year) as any) : null;
+
+  useEffect(() => {
+    if (user && !canAccessPracticeExams(user)) {
+      navigate(PREMIUM_PATH, { replace: true });
+    }
+  }, [user, navigate]);
 
   useEffect(() => {
     if (String(subjectId) === "demo" && !isAdmin) {

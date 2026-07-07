@@ -123,10 +123,6 @@ export function buildWrongAnswerBullets(input: WrongAnswerFeedbackInput): string
     bullets.push(`You answered: ${student}`);
   }
 
-  if (expected) {
-    bullets.push(`Correct answer: ${expected}`);
-  }
-
   const diagnoses = [
     diagnoseUnitMismatch(student, expected),
     diagnoseNumericMismatch(student, expected),
@@ -164,12 +160,6 @@ export function buildMcqWrongFeedback(input: McqWrongFeedbackInput): string[] {
   const bullets: string[] = [];
   const correctIdx = input.options.findIndex((opt) => opt === input.correctOption);
   const letter = correctIdx >= 0 ? String.fromCharCode(65 + correctIdx) : "";
-
-  if (letter) {
-    bullets.push(`The correct option is ${letter}: ${input.correctOption.replace(/^\(?\[?[A-H]\]?\)?\s*[\).:\-–—]?\s*/i, "").trim() || input.correctOption}`);
-  } else {
-    bullets.push(`The correct answer is: ${input.correctOption}`);
-  }
 
   if (input.selectedOption && input.selectedOption !== input.correctOption) {
     const selectedIdx = input.options.findIndex((opt) => opt === input.selectedOption);

@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import {
   LayoutDashboard,
+  BarChart3,
   Clock,
   Settings,
   LogOut,
@@ -10,11 +11,10 @@ import {
   Camera,
   Shield,
   GraduationCap,
-  Pencil,
   Users,
+  Sparkles,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
-import { useHandwritingMode } from "@/context/HandwritingModeContext";
 import {
   canAccessTeacherNav,
   canAccessTrackNav,
@@ -25,7 +25,6 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuCheckboxItem,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -53,6 +52,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
+  { label: "Report", icon: BarChart3, path: "/report" },
   { label: "Track My Study", icon: Clock, path: "/track", studentOnly: true },
   { label: "Teacher", icon: GraduationCap, path: "/teacher", teacherOnly: true },
   { label: "Admin", icon: Shield, path: "/admin", adminOnly: true },
@@ -62,8 +62,6 @@ export function AppSidebar() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout, updateAccount, setProfilePhoto } = useAuth();
-  const { enabled: handwritingMode, setEnabled: setHandwritingMode } = useHandwritingMode();
-  // Handwriting mode is a global UI preference (not route-gated).
   void location;
   const [accountOpen, setAccountOpen] = useState(false);
   const [username, setUsername] = useState("");
@@ -264,14 +262,6 @@ export function AppSidebar() {
                 </div>
               </div>
               <DropdownMenuSeparator />
-              <DropdownMenuCheckboxItem
-                checked={handwritingMode}
-                onCheckedChange={(checked) => setHandwritingMode(checked === true)}
-                className="cursor-pointer rounded-lg px-3 py-2"
-              >
-                <Pencil className="size-4" />
-                <span>Handwriting answers</span>
-              </DropdownMenuCheckboxItem>
               <DropdownMenuItem
                 onClick={openJoinClass}
                 className="cursor-pointer rounded-lg px-3 py-2"
@@ -282,6 +272,13 @@ export function AppSidebar() {
                     ? `My class · ${classMembership.className ?? "Class"}`
                     : "Join a class"}
                 </span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => navigate("/premium")}
+                className="cursor-pointer rounded-lg px-3 py-2"
+              >
+                <Sparkles className="size-4" />
+                <span>Plan & limits</span>
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => setAccountOpen(true)}

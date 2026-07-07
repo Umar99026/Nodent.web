@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { DiagramLabelInputs } from "@/components/quiz/DiagramLabelInputs";
 import { ExamMcqPageOverlay } from "@/components/quiz/ExamMcqPageOverlay";
-import { isPremiumError } from "@/lib/premium";
+import { isPremiumError, canAccessPracticeExams, PREMIUM_PATH } from "@/lib/premium";
 import { PremiumGate } from "@/components/premium/GetPremiumButton";
 import { isAdminUser } from "@/lib/constants";
 import {
@@ -137,6 +137,12 @@ export default function PracticeExamDetailPage() {
         : pages,
     [pages, writtenSlots, mcqItems, isMcqThenWritten],
   );
+
+  useEffect(() => {
+    if (user && !canAccessPracticeExams(user)) {
+      navigate(PREMIUM_PATH, { replace: true });
+    }
+  }, [user, navigate]);
 
   useEffect(() => {
     if (String(subjectId) === "demo" && !isAdmin) {

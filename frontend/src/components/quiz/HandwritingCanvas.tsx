@@ -1,9 +1,10 @@
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Eraser } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { useCallback, useEffect, useRef } from "react";
 import { registerHandwritingFlush } from "@/lib/handwritingFlush";
-import { isHandwritingValue } from "@/lib/handwritingMode";
+import {
+  HANDWRITING_INK_PLACEHOLDER,
+  isHandwritingValue,
+} from "@/lib/handwritingMode";
 import { cn } from "@/lib/utils";
 
 export type HandwritingSize = "sm" | "md" | "lg" | "xl";
@@ -26,8 +27,8 @@ const EXPORT_JPEG_QUALITY = 0.9;
 const DEFAULT_LINE_STEP = 32;
 const DEFAULT_LINE_INSET = 12;
 const EXAM_LINE_HEIGHT = 32;
-const EXPORT_DEBOUNCE_MS = 80;
-const PALM_TOUCH_RADIUS_PX = 28;
+const EXPORT_DEBOUNCE_MS = 200;
+const PALM_TOUCH_RADIUS_PX = 22;
 
 /** Custom eraser cursor (hotspot at the rubbing tip). */
 const ERASER_CURSOR = (() => {
@@ -52,6 +53,10 @@ type HandwritingCanvasProps = {
   label?: string;
   /** Stable key for synchronous flush before submit. */
   flushKey?: string;
+  /** Draw tool — controlled by parent toolbar. */
+  toolMode?: "pencil" | "eraser";
+  /** Nested inside answer field — no outer border. */
+  embedded?: boolean;
 };
 
 function paintRuledLines(
@@ -121,15 +126,61 @@ function syncCanvasBuffer(canvas: HTMLCanvasElement, cssW: number, cssH: number)
 }
 
 function canvasHasInk(canvas: HTMLCanvasElement): boolean {
-  const ctx = canvas.getContext("2d");
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
   if (!ctx) return false;
   const { width, height } = canvas;
   if (width < 1 || height < 1) return false;
   const data = ctx.getImageData(0, 0, width, height).data;
-  for (let i = 3; i < data.length; i += 16) {
+  for (let i = 3; i < data.length; i += 32) {
     if (data[i]! > 8) return true;
   }
   return false;
+}
+
+type InkBounds = { minX: number; minY: number; maxX: number; maxY: number };
+
+function expandInkBounds(bounds: InkBounds | null, x: number, y: number, radius: number): InkBounds {
+  const pad = Math.max(1, radius);
+  if (!bounds) {
+    return { minX: x - pad, minY: y - pad, maxX: x + pad, maxY: y + pad };
+  }
+  return {
+    minX: Math.min(bounds.minX, x - pad),
+    minY: Math.min(bounds.minY, y - pad),
+    maxX: Math.max(bounds.maxX, x + pad),
+    maxY: Math.max(bounds.maxY, y + pad),
+  };
+}
+
+function boundsFromInkRegion(
+  ink: HTMLCanvasElement,
+  bounds: InkBounds | null,
+  examPaperMode: boolean,
+): { sx: number; sy: number; sw: number; sh: number } {
+  const { width, height } = ink;
+  if (!bounds) return inkExportRegion(ink, examPaperMode);
+
+  const dpr = window.devicePixelRatio || 1;
+  const pad = Math.round(20 * dpr);
+  let minX = Math.max(0, Math.floor(bounds.minX - pad));
+  let minY = Math.max(0, Math.floor(bounds.minY - pad));
+  let maxX = Math.min(width - 1, Math.ceil(bounds.maxX + pad));
+  let maxY = Math.min(height - 1, Math.ceil(bounds.maxY + pad));
+
+  if (maxX < minX || maxY < minY) {
+    return { sx: 0, sy: 0, sw: width, sh: height };
+  }
+
+  if (examPaperMode) {
+    return { sx: 0, sy: minY, sw: width, sh: maxY - minY + 1 };
+  }
+
+  return {
+    sx: minX,
+    sy: minY,
+    sw: maxX - minX + 1,
+    sh: maxY - minY + 1,
+  };
 }
 
 /** Crop export to ink region (+ padding) so empty ruled lines don't bloat the image. */
@@ -197,6 +248,8 @@ export function HandwritingCanvas({
   className,
   label,
   flushKey,
+  toolMode = "pencil",
+  embedded = false,
 }: HandwritingCanvasProps) {
   const padRef = useRef<HTMLDivElement | null>(null);
   const linesRef = useRef<HTMLCanvasElement | null>(null);
@@ -205,22 +258,22 @@ export function HandwritingCanvas({
   const activePointerIdRef = useRef<number | null>(null);
   const lastPointRef = useRef<{ x: number; y: number } | null>(null);
   const hasInkRef = useRef(false);
+  const inkBoundsRef = useRef<InkBounds | null>(null);
+  const touchPointersRef = useRef<Set<number>>(new Set());
   const lastSentValueRef = useRef(value);
   const exportTimerRef = useRef<number | null>(null);
-  const rafRef = useRef<number | null>(null);
-  const pendingPointRef = useRef<{ x: number; y: number } | null>(null);
+  const eraserMode = toolMode === "eraser";
   const ruledLines = examPaperMode
     ? Math.max(6, Math.min(24, Math.round(lines ?? 10)))
     : 0;
   const padHeight = examPaperMode
     ? ruledLines * EXAM_LINE_HEIGHT
     : HEIGHT_PX[size];
-  const [eraserMode, setEraserMode] = useState(false);
 
   const getInkContext = () => {
     const canvas = inkRef.current;
     if (!canvas) return null;
-    return canvas.getContext("2d");
+    return canvas.getContext("2d", { willReadFrequently: true });
   };
 
   const layoutCanvases = useCallback(() => {
@@ -269,6 +322,11 @@ export function HandwritingCanvas({
 
   useEffect(() => {
     if (value === lastSentValueRef.current) return;
+    if (value === HANDWRITING_INK_PLACEHOLDER) {
+      lastSentValueRef.current = value;
+      hasInkRef.current = true;
+      return;
+    }
 
     lastSentValueRef.current = value;
     const ink = inkRef.current;
@@ -280,6 +338,7 @@ export function HandwritingCanvas({
     if (!value) {
       inkCtx.clearRect(0, 0, ink.width, ink.height);
       hasInkRef.current = false;
+      inkBoundsRef.current = null;
       return;
     }
 
@@ -310,13 +369,15 @@ export function HandwritingCanvas({
     if (!ctx) return;
     const dpr = window.devicePixelRatio || 1;
     if (erase) {
+      const radius = Math.max(14, 8 * dpr);
       ctx.save();
       ctx.globalCompositeOperation = "destination-out";
       ctx.fillStyle = "rgba(0,0,0,1)";
       ctx.beginPath();
-      ctx.arc(x, y, Math.max(14, 8 * dpr), 0, Math.PI * 2);
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
+      inkBoundsRef.current = expandInkBounds(inkBoundsRef.current, x, y, radius);
     } else {
       const r = Math.max(1.5, dpr * 1.25);
       ctx.fillStyle = "#0b0f19";
@@ -324,6 +385,7 @@ export function HandwritingCanvas({
       ctx.arc(x, y, r, 0, Math.PI * 2);
       ctx.fill();
       hasInkRef.current = true;
+      inkBoundsRef.current = expandInkBounds(inkBoundsRef.current, x, y, r);
     }
   };
 
@@ -333,10 +395,11 @@ export function HandwritingCanvas({
     if (!ctx || !last) return;
     const dpr = window.devicePixelRatio || 1;
     if (erase) {
+      const halfWidth = Math.max(24, 12 * dpr) / 2;
       ctx.save();
       ctx.globalCompositeOperation = "destination-out";
       ctx.strokeStyle = "rgba(0,0,0,1)";
-      ctx.lineWidth = Math.max(24, 12 * dpr);
+      ctx.lineWidth = halfWidth * 2;
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
       ctx.beginPath();
@@ -344,9 +407,12 @@ export function HandwritingCanvas({
       ctx.lineTo(x, y);
       ctx.stroke();
       ctx.restore();
+      inkBoundsRef.current = expandInkBounds(inkBoundsRef.current, last.x, last.y, halfWidth);
+      inkBoundsRef.current = expandInkBounds(inkBoundsRef.current, x, y, halfWidth);
     } else {
+      const halfWidth = (2.5 * dpr) / 2;
       ctx.strokeStyle = "#0b0f19";
-      ctx.lineWidth = 2.5 * dpr;
+      ctx.lineWidth = halfWidth * 2;
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
       ctx.beginPath();
@@ -354,6 +420,8 @@ export function HandwritingCanvas({
       ctx.lineTo(x, y);
       ctx.stroke();
       hasInkRef.current = true;
+      inkBoundsRef.current = expandInkBounds(inkBoundsRef.current, last.x, last.y, halfWidth);
+      inkBoundsRef.current = expandInkBounds(inkBoundsRef.current, x, y, halfWidth);
     }
     lastPointRef.current = { x, y };
   };
@@ -361,7 +429,7 @@ export function HandwritingCanvas({
   const exportComposite = useCallback((): string => {
     const lines = linesRef.current;
     const ink = inkRef.current;
-    const hasInk = ink ? canvasHasInk(ink) : false;
+    const hasInk = hasInkRef.current || (ink ? canvasHasInk(ink) : false);
     hasInkRef.current = hasInk;
 
     if (!lines || !ink || !hasInk) {
@@ -372,7 +440,7 @@ export function HandwritingCanvas({
       return lastSentValueRef.current;
     }
 
-    const { sx, sy, sw, sh } = inkExportRegion(ink, examPaperMode);
+    const { sx, sy, sw, sh } = boundsFromInkRegion(ink, inkBoundsRef.current, examPaperMode);
     let destW = Math.max(1, Math.round(sw * EXPORT_SUPERSAMPLE));
     let destH = Math.max(1, Math.round(sh * EXPORT_SUPERSAMPLE));
     const cap = Math.min(MAX_EXPORT_WIDTH / destW, MAX_EXPORT_HEIGHT / destH, 1);
@@ -406,12 +474,28 @@ export function HandwritingCanvas({
 
   useEffect(() => {
     if (!flushKey) return;
-    return registerHandwritingFlush(flushKey, () => exportComposite());
+    return registerHandwritingFlush(flushKey, () => {
+      if (exportTimerRef.current != null) {
+        window.clearTimeout(exportTimerRef.current);
+        exportTimerRef.current = null;
+      }
+      return exportComposite();
+    });
   }, [flushKey, exportComposite]);
 
   const setDrawingActive = useCallback((active: boolean) => {
     document.body.classList.toggle("nodent-is-drawing", active);
   }, []);
+
+  const scheduleExport = useCallback(() => {
+    if (exportTimerRef.current != null) {
+      window.clearTimeout(exportTimerRef.current);
+    }
+    exportTimerRef.current = window.setTimeout(() => {
+      exportTimerRef.current = null;
+      exportComposite();
+    }, EXPORT_DEBOUNCE_MS);
+  }, [exportComposite]);
 
   useEffect(
     () => () => {
@@ -432,15 +516,41 @@ export function HandwritingCanvas({
     }
   };
 
-  const shouldIgnorePointer = (e: ReactPointerEvent<HTMLCanvasElement>) => {
-    if (!e.isPrimary) return true;
-    if (
-      e.pointerType === "touch" &&
-      typeof e.width === "number" &&
-      e.width > PALM_TOUCH_RADIUS_PX
-    ) {
-      return true;
+  const touchContactSize = (e: ReactPointerEvent<HTMLElement>) => {
+    const w = typeof e.width === "number" ? e.width : 0;
+    const h = typeof e.height === "number" ? e.height : 0;
+    return Math.max(w, h);
+  };
+
+  const isPalmTouch = (e: ReactPointerEvent<HTMLElement>) => {
+    if (e.pointerType !== "touch") return false;
+    const size = touchContactSize(e);
+    return size > PALM_TOUCH_RADIUS_PX;
+  };
+
+  const trackPadPointerDown = (e: ReactPointerEvent<HTMLElement>) => {
+    if (e.pointerType === "touch") {
+      touchPointersRef.current.add(e.pointerId);
     }
+    blurFocusedField();
+    setDrawingActive(true);
+    e.preventDefault();
+  };
+
+  const trackPadPointerUp = (e: ReactPointerEvent<HTMLElement>) => {
+    if (e.pointerType === "touch") {
+      touchPointersRef.current.delete(e.pointerId);
+    }
+    if (touchPointersRef.current.size === 0 && !drawingRef.current) {
+      setDrawingActive(false);
+    }
+  };
+
+  const shouldIgnorePointer = (e: ReactPointerEvent<HTMLCanvasElement>) => {
+    if (e.pointerType === "pen") return false;
+    if (!e.isPrimary) return true;
+    if (isPalmTouch(e)) return true;
+    if (e.pointerType === "touch" && touchPointersRef.current.size > 1) return true;
     if (
       activePointerIdRef.current != null &&
       e.pointerId !== activePointerIdRef.current
@@ -451,11 +561,13 @@ export function HandwritingCanvas({
   };
 
   const beginDraw = (e: ReactPointerEvent<HTMLCanvasElement>) => {
-    if (disabled || shouldIgnorePointer(e)) {
-      if (e.pointerType === "touch") e.preventDefault();
+    if (disabled) return;
+    if (shouldIgnorePointer(e)) {
+      if (touchPointersRef.current.size > 1 && drawingRef.current) {
+        endDraw(activePointerIdRef.current ?? undefined);
+      }
       return;
     }
-    blurFocusedField();
     const point = canvasPoint(e.clientX, e.clientY);
     if (!point) return;
     activePointerIdRef.current = e.pointerId;
@@ -470,22 +582,25 @@ export function HandwritingCanvas({
     plotDot(point.x, point.y, eraserMode);
   };
 
-  const flushPendingMove = useCallback(() => {
-    rafRef.current = null;
-    const point = pendingPointRef.current;
-    pendingPointRef.current = null;
-    if (!point || !drawingRef.current || disabled) return;
-    plotLine(point.x, point.y, eraserMode);
-  }, [disabled, eraserMode]);
-
   const moveDraw = (e: ReactPointerEvent<HTMLCanvasElement>) => {
     if (!drawingRef.current || disabled) return;
     if (e.pointerId !== activePointerIdRef.current) return;
-    const point = canvasPoint(e.clientX, e.clientY);
-    if (!point) return;
-    pendingPointRef.current = point;
-    if (rafRef.current == null) {
-      rafRef.current = window.requestAnimationFrame(flushPendingMove);
+    if (e.pointerType === "touch" && touchPointersRef.current.size > 1) {
+      endDraw(e.pointerId);
+      return;
+    }
+    e.preventDefault();
+
+    const native = e.nativeEvent;
+    const events =
+      typeof native.getCoalescedEvents === "function"
+        ? native.getCoalescedEvents()
+        : [native];
+
+    for (const ev of events) {
+      const point = canvasPoint(ev.clientX, ev.clientY);
+      if (!point) continue;
+      plotLine(point.x, point.y, eraserMode);
     }
   };
 
@@ -496,35 +611,42 @@ export function HandwritingCanvas({
       drawingRef.current = false;
       activePointerIdRef.current = null;
       lastPointRef.current = null;
-      pendingPointRef.current = null;
-      if (rafRef.current != null) {
-        window.cancelAnimationFrame(rafRef.current);
-        rafRef.current = null;
+      setDrawingActive(touchPointersRef.current.size > 0);
+      if (hasInkRef.current && !isHandwritingValue(lastSentValueRef.current)) {
+        lastSentValueRef.current = HANDWRITING_INK_PLACEHOLDER;
+        onChange(HANDWRITING_INK_PLACEHOLDER);
       }
-      const ink = inkRef.current;
-      if (ink) {
-        hasInkRef.current = canvasHasInk(ink);
-      }
-      setDrawingActive(false);
-      if (exportTimerRef.current != null) {
-        window.clearTimeout(exportTimerRef.current);
-        exportTimerRef.current = null;
-      }
-      exportComposite();
+      scheduleExport();
     },
-    [exportComposite, setDrawingActive],
+    [onChange, scheduleExport, setDrawingActive],
   );
 
   useEffect(() => {
-    const onWindowPointerUp = (e: PointerEvent) => endDraw(e.pointerId);
+    const onWindowPointerUp = (e: PointerEvent) => {
+      if (e.pointerType === "touch") {
+        touchPointersRef.current.delete(e.pointerId);
+      }
+      endDraw(e.pointerId);
+      if (touchPointersRef.current.size === 0 && !drawingRef.current) {
+        setDrawingActive(false);
+      }
+    };
+    const blockSelect = (e: Event) => {
+      if (document.body.classList.contains("nodent-is-drawing")) {
+        e.preventDefault();
+      }
+    };
     window.addEventListener("pointerup", onWindowPointerUp);
     window.addEventListener("pointercancel", onWindowPointerUp);
+    document.addEventListener("selectstart", blockSelect);
     return () => {
       window.removeEventListener("pointerup", onWindowPointerUp);
       window.removeEventListener("pointercancel", onWindowPointerUp);
+      document.removeEventListener("selectstart", blockSelect);
       document.body.classList.remove("nodent-is-drawing");
+      touchPointersRef.current.clear();
     };
-  }, [endDraw]);
+  }, [endDraw, setDrawingActive]);
 
   return (
     <div className={cn("w-full space-y-1.5", className)}>
@@ -537,7 +659,9 @@ export function HandwritingCanvas({
             "handwriting-canvas-pad relative w-full overflow-hidden bg-white",
             examPaperMode
               ? "exam-paper-handwriting-pad"
-              : "rounded-md border-2 border-[#0b0f19]",
+              : embedded
+                ? "border-0"
+                : "rounded-md border-2 border-[#0b0f19]",
             disabled && "opacity-60",
           )}
           style={
@@ -548,6 +672,9 @@ export function HandwritingCanvas({
                 } as CSSProperties)
               : { height: padHeight }
           }
+          onPointerDownCapture={trackPadPointerDown}
+          onPointerUpCapture={trackPadPointerUp}
+          onPointerCancelCapture={trackPadPointerUp}
         >
           {examPaperMode ? (
             <div className="exam-paper-input-ruling" aria-hidden="true" />
@@ -574,7 +701,6 @@ export function HandwritingCanvas({
             }}
             onPointerMove={(e) => {
               if (!drawingRef.current) return;
-              e.preventDefault();
               moveDraw(e);
             }}
             onPointerUp={(e) => {
@@ -591,27 +717,6 @@ export function HandwritingCanvas({
             }}
             onContextMenu={(e) => e.preventDefault()}
           />
-          {!disabled ? (
-            <Button
-              type="button"
-              variant={eraserMode ? "default" : "outline"}
-              size="sm"
-              className={cn(
-                "absolute right-2 top-2 z-[2] h-8 gap-1.5 px-2.5 text-xs shadow-sm",
-                eraserMode
-                  ? "border-[#0b0f19] bg-[#0b0f19] text-white hover:bg-[#0b0f19]/90"
-                  : "border-[#0b0f19]/30 bg-white hover:bg-white",
-              )}
-              onMouseDown={(e) => e.stopPropagation()}
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={() => setEraserMode((on) => !on)}
-              aria-pressed={eraserMode}
-              aria-label={eraserMode ? "Eraser on — click to draw" : "Eraser — click to erase"}
-            >
-              <Eraser className="size-3.5" />
-              Eraser
-            </Button>
-          ) : null}
       </div>
     </div>
   );

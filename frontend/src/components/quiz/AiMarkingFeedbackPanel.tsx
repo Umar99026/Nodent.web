@@ -116,20 +116,16 @@ function AnswerLine({ label, value }: { label: string; value: string }) {
 /** Inline feedback shown directly under a multipart answer field (draw mode). */
 export function AiMarkingPartFeedback({
   partResult,
-  expectedAnswer,
   className,
 }: {
   partResult?: AiMarkPartResult;
-  expectedAnswer?: string;
   className?: string;
 }) {
   const correct = partResult?.correct;
   const feedback = stripInterpretationFromFeedback(String(partResult?.partFeedback ?? "").trim());
   const studentRead = String(partResult?.studentAnswerRead ?? "").trim();
-  const correctAnswer =
-    String(partResult?.correctAnswer ?? "").trim() || String(expectedAnswer ?? "").trim();
 
-  if (!feedback && !studentRead && !correctAnswer && correct === undefined) return null;
+  if (!feedback && !studentRead && correct === undefined) return null;
 
   return (
     <div
@@ -149,15 +145,8 @@ export function AiMarkingPartFeedback({
       ) : null}
       {feedback ? (
         <SmartMarkingBulletList text={feedback} />
-      ) : correct === false && correctAnswer ? (
-        <SmartMarkingBulletList
-          text={`• Check your method and final answer.\n• Correct answer: ${correctAnswer}`}
-        />
       ) : correct === true ? (
         <SmartMarkingBulletList text="• Your working and answer look correct." />
-      ) : null}
-      {correct === false && correctAnswer && feedback ? (
-        <AnswerLine label="Correct answer" value={correctAnswer} />
       ) : null}
     </div>
   );
@@ -166,7 +155,6 @@ export function AiMarkingPartFeedback({
 export function AiMarkingFeedbackPanel({
   feedback,
   correct,
-  correctAnswers = [],
   partResults = [],
   partLabels = [],
   className,
@@ -178,36 +166,17 @@ export function AiMarkingFeedbackPanel({
     if (partResults.length > 0) {
       return partResults
         .filter((p) => !p.correct)
-        .map((p) => ({
-          ...p,
-          correctAnswer: p.correctAnswer ?? correctAnswers[p.index],
-        }))
-        .filter((p) => p.correctAnswer || p.studentAnswerRead || p.partFeedback);
-    }
-    if (correctAnswers.length > 0) {
-      return correctAnswers.map((ans, index) => ({
-        index,
-        correct: false,
-        correctAnswer: ans,
-        studentAnswerRead: undefined,
-        partFeedback: undefined,
-      }));
+        .filter((p) => p.studentAnswerRead || p.partFeedback);
     }
     return [];
   })();
 
-  const showSingleCorrect =
-    isWrong &&
-    correctAnswers.length > 0 &&
-    (wrongParts.length <= 1 && partResults.length <= 1 || (wrongParts.length === 0 && !feedback.trim()));
-
   if (
     !feedback.trim() &&
     !partResults.some((p) => p.partFeedback || p.studentAnswerRead) &&
-    !showSingleCorrect &&
     wrongParts.length === 0
   ) {
-    if (!(isWrong && correctAnswers.length > 0)) return null;
+    return null;
   }
 
   const primaryPart = partResults.length === 1 ? partResults[0] : undefined;
@@ -233,17 +202,8 @@ export function AiMarkingFeedbackPanel({
         <SmartMarkingBulletList text={displayFeedback} className="text-sm" />
       ) : null}
 
-      {showSingleCorrect ? (
-        <div className={cn(displayFeedback.trim() && "mt-3 border-t border-black/10 pt-3")}>
-          <AnswerLine
-            label={correctAnswers.length > 1 ? "Correct answers" : "Correct answer"}
-            value={correctAnswers.join(" · ")}
-          />
-        </div>
-      ) : null}
-
       {wrongParts.length > 1 || (wrongParts.length === 1 && partResults.length > 1) ? (
-        <div className={cn((displayFeedback.trim() || showSingleCorrect) && "mt-3 space-y-3 border-t border-black/10 pt-3")}>
+        <div className={cn(displayFeedback.trim() && "mt-3 space-y-3 border-t border-black/10 pt-3")}>
           {wrongParts.map((part) => {
             const label = partLabels[part.index]?.trim() || `Part ${part.index + 1}`;
             return (
@@ -257,9 +217,6 @@ export function AiMarkingFeedbackPanel({
                 </p>
                 {part.studentAnswerRead ? (
                   <AnswerLine label="We interpreted your drawing as" value={part.studentAnswerRead} />
-                ) : null}
-                {part.correctAnswer ? (
-                  <AnswerLine label="Correct answer" value={part.correctAnswer} />
                 ) : null}
                 {part.partFeedback ? (
                   <SmartMarkingBulletList text={stripInterpretationFromFeedback(part.partFeedback)} />

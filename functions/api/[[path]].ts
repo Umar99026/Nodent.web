@@ -17,22 +17,29 @@ import {
 import {
   markLongAnswer,
   markHandwritingAnswer,
+  aiProviderPoolSize,
   openAiConfigured,
   openAiModel,
   questionHelpChat,
-  scoreEnglishResponse,
   generateMarkBreakdown,
   type SubjectMarkingContext,
 } from "../lib/openai";
+import { englishAiConfigured, scoreEnglishResponse } from "../lib/englishOpenAi";
 import {
   canRunEnglishAiMark,
+  canRunHandwritingAiMark,
+  canRunProseAiMark,
   ensurePracticeExamUsage,
   getPremiumUsageSummary,
   hasPracticeExamAccess,
   isPremiumAccount,
   premiumRequiredResponse,
   PREMIUM_REQUIRED,
+  quotaExceededResponse,
   recordUsage,
+  USAGE_KIND_HANDWRITING_AI,
+  USAGE_KIND_PROSE_AI,
+  USAGE_KIND_ENGLISH_ESSAY_AI,
 } from "../lib/premium";
 import {
   qualifiesForOpenAiHandwriting,
@@ -310,7 +317,7 @@ function collectHandwritingImages(body: Record<string, unknown>): string[] {
     for (const part of body.studentParts) push(part);
   }
   push(body.responseText);
-  return images.slice(0, 12);
+  return images.slice(0, 4);
 }
 
 function validateMarkingImageUrls(urls: string[]): string | null {
@@ -1654,10 +1661,18 @@ type Env = {
   GOOGLE_SHEETS_TAB_NAME?: string;
   GOOGLE_SERVICE_ACCOUNT_JSON?: string;
   GOOGLE_SHEETS_SUBJECT_FROM_TAB?: string;
-  /** Google Gemini (optional) — long-answer marking, English scoring, handwriting */
+  /** Google Gemini + xAI Grok — long-answer marking, English scoring, handwriting */
   GEMINI_API_KEY?: string;
+  GEMINI_API_KEY_2?: string;
+  GROQ_API_KEY?: string;
+  GROQ_API_KEY_1?: string;
+  GROQ_API_KEY_2?: string;
   GEMINI_MODEL?: string;
   GEMINI_VISION_MODEL?: string;
+  GROQ_MODEL?: string;
+  /** OpenAI — English essay marking only (gpt-4o-mini by default) */
+  OPENAI_API_KEY?: string;
+  OPENAI_ENGLISH_MODEL?: string;
 };
 type AccountRole = "student" | "teacher";
 
@@ -3274,8 +3289,10 @@ app.get("/api/auth/session", authMiddleware, async (c: any) => {
 app.get("/api/premium/usage", authMiddleware, async (c: any) => {
   const user = c.get("user");
   const db = c.get("db");
+  const env = c.env as Env;
   const premium = isPremiumAccount(user);
-  const usage = await getPremiumUsageSummary(db, user.id, premium);
+  const providerCount = aiProviderPoolSize(env);
+  const usage = await getPremiumUsageSummary(db, user.id, premium, providerCount);
   return c.json(usage);
 });
 
@@ -3961,9 +3978,24 @@ app.get("/api/scorecard", authMiddleware, async (c: any) => {
   const reportSubjects: Array<{
     subjectId: string;
     attempts: number;
+    rank: number | null;
+    rankedStudents: number;
     percentile: number | null;
-    weakestTopic: { topic: string; percent: number; marksCorrect: number; marksAttempted: number } | null;
-    strongestTopic: { topic: string; percent: number; marksCorrect: number; marksAttempted: number } | null;
+    subjectPercent: number;
+    weakestTopic: {
+      topic: string;
+      percent: number;
+      percentile: number | null;
+      marksCorrect: number;
+      marksAttempted: number;
+    } | null;
+    strongestTopic: {
+      topic: string;
+      percent: number;
+      percentile: number | null;
+      marksCorrect: number;
+      marksAttempted: number;
+    } | null;
   }> = [];
 
   const attemptedBySubjectRows = await db.execute(sql`
@@ -4050,12 +4082,66 @@ app.get("/api/scorecard", authMiddleware, async (c: any) => {
       if (!strongest || t.percent > strongest.percent) strongest = t;
     }
 
+    const getTopicPercentile = async (topic: string | null) => {
+      if (!topic) return null;
+      const topicRank = await db.execute(sql`
+        WITH by_user AS (
+          SELECT user_id,
+                 COALESCE(SUM(COALESCE(marks_earned, CASE WHEN is_correct = 1 THEN marks ELSE 0 END)), 0)::int AS marks_correct,
+                 COALESCE(SUM(marks), 0)::int AS marks_attempted
+          FROM question_attempts
+          WHERE subject_id = ${sid} AND topic = ${topic}
+          GROUP BY user_id
+        ),
+        scored AS (
+          SELECT user_id,
+                 CASE WHEN marks_attempted > 0
+                   THEN (marks_correct::float / marks_attempted::float)
+                   ELSE NULL
+                 END AS pct
+          FROM by_user
+          WHERE marks_attempted > 0
+        ),
+        ranked AS (
+          SELECT user_id,
+                 DENSE_RANK() OVER (ORDER BY pct DESC) AS rnk,
+                 COUNT(*) OVER () AS cnt
+          FROM scored
+        )
+        SELECT rnk, cnt
+        FROM ranked
+        WHERE user_id = ${user.id}
+        LIMIT 1
+      `);
+      const topicRankValue = topicRank.rows?.length
+        ? Number((topicRank.rows as any[])[0]?.rnk ?? null)
+        : null;
+      const topicTotal = topicRank.rows?.length
+        ? Number((topicRank.rows as any[])[0]?.cnt ?? 0)
+        : 0;
+      return topicRankValue != null && topicTotal > 1
+        ? cohortPercentileFromRank(topicRankValue, topicTotal)
+        : null;
+    };
+
+    const weakestTopicPercentile = await getTopicPercentile(weakest?.topic ?? null);
+    const strongestTopicPercentile = await getTopicPercentile(strongest?.topic ?? null);
+
     reportSubjects.push({
       subjectId: sid,
       attempts: attemptedBySubject.get(sid) ?? 0,
+      rank,
+      rankedStudents: total,
       percentile,
-      weakestTopic: weakest,
-      strongestTopic: strongest,
+      subjectPercent:
+        perSubject.find((row) => row.subjectId === sid)?.pct ??
+        0,
+      weakestTopic: weakest
+        ? { ...weakest, percentile: weakestTopicPercentile }
+        : null,
+      strongestTopic: strongest
+        ? { ...strongest, percentile: strongestTopicPercentile }
+        : null,
     });
   }
 
@@ -4996,7 +5082,7 @@ async function runEnglishAiScore(
   criteria: Record<string, { score: number; feedback: string }>;
   highlights: { quote: string; type: string; criterion?: string; feedback: string }[];
 } | null> {
-  if (!openAiConfigured(env)) return null;
+  if (!englishAiConfigured(env)) return null;
   const rows = await db.execute(sql`
     SELECT r.response_text, r.custom_prompt_text, p.prompt_text
     FROM english_responses r
@@ -5172,6 +5258,13 @@ app.get("/api/practice-exams/:subjectId", authMiddleware, async (c: any) => {
   try {
     const db = c.get("db");
     await ensurePracticeExamTables(db);
+    const user = c.get("user");
+    if (!isPremiumAccount(user)) {
+      return c.json(
+        { ...premiumRequiredResponse(), error: "Past practice exams require Premium." },
+        403,
+      );
+    }
     const subjectId = canonicalSubjectId(c.req.param("subjectId"));
     const rows = await db.execute(sql`
       SELECT pe.year, pe.exam_number, pe.published,
@@ -5202,13 +5295,11 @@ app.get("/api/practice-exams/:subjectId/:year/:examNumber", authMiddleware, asyn
     const examNumber = Math.round(Number(c.req.param("examNumber"))) === 2 ? 2 : 1;
     if (!year || year < 2000 || year > 2100) return c.json({ error: "Invalid year." }, 400);
 
-    const examRef = `${subjectId}:${year}:${examNumber}`;
     if (!isPremiumAccount(user)) {
-      const access = await hasPracticeExamAccess(db, user.id, examRef);
-      if (!access.allowed) {
-        return c.json({ ...premiumRequiredResponse(), error: access.reason ?? premiumRequiredResponse().error }, 403);
-      }
-      await ensurePracticeExamUsage(db, user.id, examRef);
+      return c.json(
+        { ...premiumRequiredResponse(), error: "Past practice exams require Premium." },
+        403,
+      );
     }
 
     const rows = await db.execute(sql`
@@ -5267,12 +5358,11 @@ app.get("/api/practice-exams/:subjectId/:year/:examNumber/pages/:pageNumber", au
     const pageNumber = Math.round(Number(c.req.param("pageNumber")));
     if (!year || !pageNumber || pageNumber < 1) return c.json({ error: "Invalid request." }, 400);
 
-    const examRef = `${subjectId}:${year}:${examNumber}`;
     if (!isPremiumAccount(user)) {
-      const access = await hasPracticeExamAccess(db, user.id, examRef);
-      if (!access.allowed) {
-        return c.json({ ...premiumRequiredResponse(), error: access.reason ?? premiumRequiredResponse().error }, 403);
-      }
+      return c.json(
+        { ...premiumRequiredResponse(), error: "Past practice exams require Premium." },
+        403,
+      );
     }
 
     const examRows = await db.execute(sql`
@@ -5534,9 +5624,6 @@ app.post("/api/written/:subjectId/:questionKey/mark", authMiddleware, async (c: 
     }
     const user = c.get("user");
     const db = c.get("db");
-    if (!isPremiumAccount(user)) {
-      return c.json(premiumRequiredResponse(), 403);
-    }
     const body = await c.req.json();
     const subjectId = c.req.param("subjectId");
     const questionKey = c.req.param("questionKey");
@@ -5548,6 +5635,14 @@ app.post("/api/written/:subjectId/:questionKey/mark", authMiddleware, async (c: 
     if (!questionText) return c.json({ error: "question.question is required." }, 400);
 
     const questionType = cleanText(String(q.type ?? "long_answer"), 40) || "long_answer";
+    const qt = questionType.toLowerCase();
+    const isShortType = qt === "short" || qt === "short_answer" || qt === "mcq";
+    if (isShortType) {
+      return c.json(
+        { error: "Short-answer questions use instant keyword matching, not AI marking." },
+        400,
+      );
+    }
     const marksParsed = Math.round(Number(q.marks ?? 2));
     const marks = Number.isFinite(marksParsed) ? Math.max(1, marksParsed) : 2;
     const guidance = q.guidance ? cleanText(String(q.guidance), 2000) : undefined;
@@ -5592,6 +5687,21 @@ app.post("/api/written/:subjectId/:questionKey/mark", authMiddleware, async (c: 
         Array.isArray((markBreakdown as { steps?: unknown }).steps) &&
         ((markBreakdown as { steps: unknown[] }).steps.length ?? 0) > 0,
     );
+
+    if (!isPremiumAccount(user)) {
+      const providerCount = aiProviderPoolSize(env);
+      if (handwritingImages.length > 0 || breakdownMark) {
+        const check = await canRunHandwritingAiMark(db, user.id, providerCount);
+        if (!check.allowed) {
+          return c.json({ ...quotaExceededResponse(check.reason ?? ""), error: check.reason }, 403);
+        }
+      } else {
+        const check = await canRunProseAiMark(db, user.id, providerCount);
+        if (!check.allowed) {
+          return c.json({ ...quotaExceededResponse(check.reason ?? ""), error: check.reason }, 403);
+        }
+      }
+    }
 
     let result;
     let storedResponseText: string;
@@ -5682,6 +5792,14 @@ app.post("/api/written/:subjectId/:questionKey/mark", authMiddleware, async (c: 
         ai_marked_at = EXCLUDED.ai_marked_at
     `);
 
+    if (!isPremiumAccount(user)) {
+      const usageKind =
+        handwritingImages.length > 0 || breakdownMark
+          ? USAGE_KIND_HANDWRITING_AI
+          : USAGE_KIND_PROSE_AI;
+      await recordUsage(db, user.id, usageKind, `${subjectId}:${questionKey}`);
+    }
+
     return c.json({
       ok: true,
       mark: {
@@ -5766,10 +5884,10 @@ app.post("/api/written/:subjectId/:questionKey/help", authMiddleware, async (c: 
       .filter((m: unknown) => m && typeof m === "object")
       .map((m: Record<string, unknown>) => ({
         role: m.role === "assistant" ? ("assistant" as const) : ("user" as const),
-        content: cleanText(String(m.content ?? ""), 4000),
+        content: cleanText(String(m.content ?? ""), 600),
       }))
       .filter((m: { content: string }) => m.content)
-      .slice(-24);
+      .slice(-6);
 
     const subjectId = c.req.param("subjectId");
     const subjectContext = await loadSubjectMarkingContext(c.get("db"), subjectId);
@@ -6524,7 +6642,7 @@ app.post("/api/english/responses", authMiddleware, async (c: any) => {
     const responseId = Number((inserted.rows as any[])[0]?.id ?? 0);
 
     const env = c.env as Env;
-    const aiConfigured = openAiConfigured(env);
+    const aiConfigured = englishAiConfigured(env);
     let aiScore: Awaited<ReturnType<typeof runEnglishAiScore>> = null;
     let aiScoringPending = false;
     let premiumBlocked = false;
@@ -6540,7 +6658,7 @@ app.post("/api/english/responses", authMiddleware, async (c: any) => {
           premiumBlocked = true;
           premiumMessage =
             check.reason ??
-            "Free accounts get 1 AI-marked English response every 3 days.";
+            "Free accounts get 1 AI-marked English essay every 3 days.";
         }
       }
     }
@@ -6549,7 +6667,7 @@ app.post("/api/english/responses", authMiddleware, async (c: any) => {
       const afterScore = async () => {
         const result = await runEnglishAiScore(db, env, responseId);
         if (result && !isPremiumAccount(user)) {
-          await recordUsage(db, user.id, "english_ai_mark", String(responseId));
+          await recordUsage(db, user.id, USAGE_KIND_ENGLISH_ESSAY_AI, String(responseId));
         }
         return result;
       };
@@ -6759,8 +6877,8 @@ app.get("/api/english/responses", authMiddleware, async (c: any) => {
 app.post("/api/english/responses/:id/ai-score", authMiddleware, async (c: any) => {
   try {
     const env = c.env as Env;
-    if (!openAiConfigured(env)) {
-      return c.json({ error: "AI scoring is not configured (GEMINI_API_KEY missing)." }, 503);
+    if (!englishAiConfigured(env)) {
+      return c.json({ error: "AI scoring is not configured (OPENAI_API_KEY missing)." }, 503);
     }
     const db = c.get("db");
     const user = c.get("user");
@@ -6793,7 +6911,7 @@ app.post("/api/english/responses/:id/ai-score", authMiddleware, async (c: any) =
     const afterScore = async () => {
       const result = await runEnglishAiScore(db, env, responseId);
       if (result && !isPremiumAccount(user)) {
-        await recordUsage(db, user.id, "english_ai_mark", String(responseId));
+        await recordUsage(db, user.id, USAGE_KIND_ENGLISH_ESSAY_AI, String(responseId));
       }
       return result;
     };

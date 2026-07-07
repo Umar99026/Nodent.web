@@ -69,13 +69,13 @@ export function QuestionHelpChat({ subjectId, questionKey, question }: QuestionH
       <div className="flex min-h-0 max-w-full flex-col gap-3 overflow-hidden">
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-black/10 bg-white shadow-sm">
           <div className="practice-card-header shrink-0">
-            <p className="practice-card-header-title">Question help</p>
+            <p className="practice-card-header-title">Ask AI</p>
             <p className="practice-card-header-meta">AI tutor for this question</p>
           </div>
           <div className="p-4 sm:p-5">
             <PremiumGate
               allowed={false}
-              message="Question help is included with Premium."
+              message="Ask AI is included with Premium."
             />
           </div>
         </div>
@@ -87,7 +87,7 @@ export function QuestionHelpChat({ subjectId, questionKey, question }: QuestionH
     <div className="flex min-h-0 max-w-full flex-col gap-3 overflow-hidden">
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-black/10 bg-white shadow-sm">
         <div className="practice-card-header shrink-0">
-          <p className="practice-card-header-title">Question help</p>
+          <p className="practice-card-header-title">Ask AI</p>
           <p className="practice-card-header-meta">AI tutor for this question</p>
         </div>
 

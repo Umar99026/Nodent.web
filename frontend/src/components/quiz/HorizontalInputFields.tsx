@@ -1,6 +1,5 @@
 import type { InlineInputBox } from "@/lib/diagramLabels";
 import { QuizAnswerField } from "@/components/quiz/QuizAnswerField";
-import { useHandwritingModeActive } from "@/context/HandwritingModeContext";
 import { cn } from "@/lib/utils";
 
 export type HorizontalInputFieldsProps = {
@@ -28,36 +27,7 @@ export function HorizontalInputFields({
   subjectId,
   examPaperMode = false,
 }: HorizontalInputFieldsProps) {
-  const handwritingMode = useHandwritingModeActive(subjectId);
-
   if (!boxes.length) return null;
-
-  if (handwritingMode) {
-    return (
-      <div className="grid gap-4 sm:grid-cols-2">
-        {boxes.map((box, index) => {
-          const result = partResults[index];
-          const showResult = submitted && result != null;
-          return (
-            <QuizAnswerField
-              key={`${box.key}-${index}`}
-              value={values[index] ?? ""}
-              onChange={(value) => onChange?.(index, value)}
-              disabled={disabled}
-              label={box.label?.trim() || `Answer ${index + 1}`}
-              handwritingSize="md"
-              subjectId={subjectId}
-              examPaperMode={examPaperMode}
-              className={cn(
-                showResult && result === true && "border-success/60",
-                showResult && result === false && "border-danger/60",
-              )}
-            />
-          );
-        })}
-      </div>
-    );
-  }
 
   return (
     <div className={cn("flex flex-wrap items-end gap-3", examPaperMode && "w-full flex-col")}>

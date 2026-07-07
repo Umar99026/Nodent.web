@@ -1,8 +1,9 @@
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { canAccessTrackNav } from "@/lib/constants";
+import { PremiumPlanPanel } from "@/components/premium/PremiumPlanPanel";
 import { cn } from "@/lib/utils";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Flame } from "lucide-react";
 
 type HotFeature = {
   id: string;
@@ -11,11 +12,7 @@ type HotFeature = {
   onClick: () => void;
 };
 
-type DashboardHotFeaturesProps = {
-  onOpenStats: () => void;
-};
-
-export function DashboardHotFeatures({ onOpenStats }: DashboardHotFeaturesProps) {
+export function DashboardHotFeatures() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
@@ -25,12 +22,6 @@ export function DashboardHotFeatures({ onOpenStats }: DashboardHotFeaturesProps)
       label: "Essay marking",
       description: "Upload writing and get feedback",
       onClick: () => navigate("/quiz/english"),
-    },
-    {
-      id: "view-stats",
-      label: "View stats",
-      description: "Report card and subject breakdowns",
-      onClick: onOpenStats,
     },
   ];
 
@@ -44,10 +35,14 @@ export function DashboardHotFeatures({ onOpenStats }: DashboardHotFeaturesProps)
   }
 
   return (
-    <aside className="overflow-hidden rounded-3xl border border-black/8 bg-white shadow-sm">
+    <div className="flex flex-col gap-4">
+      <PremiumPlanPanel compact />
+      <aside className="overflow-hidden rounded-3xl border border-black/8 bg-white shadow-sm">
       <div className="practice-card-header !min-h-0 !py-3.5 sm:!py-4">
-        <p className="practice-card-header-title">Shortcuts</p>
-        <p className="practice-card-header-meta">Popular tools</p>
+        <div className="flex items-center gap-2">
+          <Flame className="size-4 shrink-0 text-gold" aria-hidden />
+          <p className="practice-card-header-title">What&apos;s hot</p>
+        </div>
       </div>
 
       <div className="divide-y divide-black/8">
@@ -72,5 +67,6 @@ export function DashboardHotFeatures({ onOpenStats }: DashboardHotFeaturesProps)
         ))}
       </div>
     </aside>
+    </div>
   );
 }

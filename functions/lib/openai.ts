@@ -1,23 +1,33 @@
 /**
- * Google Gemini generateContent for Cloudflare Workers / Pages Functions.
- * Server-side only — never expose GEMINI_API_KEY to the browser.
+ * Google Gemini + xAI Grok for Cloudflare Workers / Pages Functions.
+ * Server-side only — never expose API keys to the browser.
  *
  * Active in production:
- *   - English essay scoring (scoreEnglishResponse) — worded responses only
  *   - Handwriting marking (markHandwritingAnswer) — explain/discuss/prove-style only
  *   - Long-answer text marking (markLongAnswer) — explain/discuss/prove-style only
+ *
+ * English essays use OpenAI separately — see englishOpenAi.ts.
  *
  * Admin import helpers (questionGenerationChat, parseQuestionsFromText,
  * fillDraftQuestionAnswers) remain in this module but API routes return 503.
  *
  * Env:
- *   GEMINI_API_KEY       (required for AI features)
- *   GEMINI_MODEL         (optional, default gemini-2.0-flash — text marking)
- *   GEMINI_VISION_MODEL  (optional, default gemini-2.0-flash — handwriting / images)
+ *   GEMINI_API_KEY, GEMINI_API_KEY_2
+ *   GROQ_API_KEY_1 (alias GROQ_API_KEY), GROQ_API_KEY_2
+ *   GEMINI_MODEL, GEMINI_VISION_MODEL, GROQ_MODEL
  */
 
-export type OpenAiEnv = {
-  GEMINI_API_KEY?: string;
+import {
+  aiProviderPoolSize,
+  collectAiProviders,
+  groqGenerateJson,
+  groqGenerateText,
+  groqModel,
+  withAiProviderPool,
+  type AiProviderEnv,
+} from "./aiProviders";
+
+export type OpenAiEnv = AiProviderEnv & {
   GEMINI_MODEL?: string;
   GEMINI_VISION_MODEL?: string;
 };
@@ -25,6 +35,12 @@ export type OpenAiEnv = {
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
 const DEFAULT_MODEL = "gemini-2.5-flash";
 const DEFAULT_VISION_MODEL = "gemini-2.5-flash";
+
+/** Hard caps on model output tokens — keeps marking/help cheap. */
+const OUTPUT_CAP_MARK = 512;
+const OUTPUT_CAP_HANDWRITING = 640;
+const OUTPUT_CAP_HELP = 220;
+const MAX_HANDWRITING_IMAGES = 4;
 
 function geminiGenerateContentUrl(model: string): string {
   return `${GEMINI_API_BASE}/models/${encodeURIComponent(model)}:generateContent`;
@@ -43,11 +59,13 @@ function trim(s: string | undefined): string {
 }
 
 export function openAiConfigured(env: OpenAiEnv): boolean {
-  return !!trim(env.GEMINI_API_KEY);
+  return aiProviderPoolSize(env) > 0;
 }
 
+export { aiProviderPoolSize, collectAiProviders };
+
 export function requireOpenAiKey(env: OpenAiEnv): string {
-  const key = trim(env.GEMINI_API_KEY);
+  const key = collectAiProviders(env)[0]?.apiKey;
   if (!key) throw new Error("GEMINI_API_KEY is not configured.");
   return key;
 }
@@ -180,6 +198,7 @@ async function geminiGenerateJson(
     systemInstruction?: string;
     contents: { role: "user" | "model"; parts: GeminiPart[] }[];
   },
+  maxOutputTokens = OUTPUT_CAP_MARK,
 ): Promise<Record<string, unknown>> {
   const url = geminiGenerateContentUrl(model);
   const res = await fetch(url, {
@@ -193,6 +212,7 @@ async function geminiGenerateJson(
       generationConfig: {
         temperature: 0.2,
         responseMimeType: "application/json",
+        maxOutputTokens,
       },
     }),
   });
@@ -230,6 +250,7 @@ async function geminiGenerateText(
     systemInstruction?: string;
     contents: { role: "user" | "model"; parts: GeminiPart[] }[];
   },
+  maxOutputTokens = OUTPUT_CAP_HELP,
 ): Promise<string> {
   const url = geminiGenerateContentUrl(model);
   const res = await fetch(url, {
@@ -241,7 +262,8 @@ async function geminiGenerateText(
         : undefined,
       contents: input.contents,
       generationConfig: {
-        temperature: 0.45,
+        temperature: 0.35,
+        maxOutputTokens,
       },
     }),
   });
@@ -268,21 +290,69 @@ async function geminiGenerateText(
 }
 
 async function chatJson(
-  apiKey: string,
-  model: string,
+  env: OpenAiEnv,
   messages: ChatMessage[],
+  maxOutputTokens?: number,
 ): Promise<Record<string, unknown>> {
-  const { systemInstruction, contents } = splitGeminiMessages(messages);
-  return geminiGenerateJson(apiKey, model, { systemInstruction, contents });
+  return withAiProviderPool(env, async (provider) => {
+    if (provider.kind === "gemini") {
+      const { systemInstruction, contents } = splitGeminiMessages(messages);
+      return geminiGenerateJson(
+        provider.apiKey,
+        openAiModel(env),
+        { systemInstruction, contents },
+        maxOutputTokens,
+      );
+    }
+    return groqGenerateJson(
+      provider.apiKey,
+      groqModel(env),
+      messages.map((m) => ({ role: m.role, content: m.content })),
+      maxOutputTokens ?? OUTPUT_CAP_MARK,
+    );
+  });
 }
 
 async function chatJsonWithVision(
-  apiKey: string,
-  model: string,
+  env: OpenAiEnv,
   messages: VisionChatMessage[],
+  maxOutputTokens?: number,
 ): Promise<Record<string, unknown>> {
+  // Groq Cloud is text-only in our app; vision stays Gemini-only.
+  const providers = collectAiProviders(env).filter((p) => p.kind === "gemini");
+  if (!providers.length) throw new Error("GEMINI_API_KEY is not configured.");
+  const provider = providers[Math.floor(Math.random() * providers.length)]!;
   const { systemInstruction, contents } = splitGeminiVisionMessages(messages);
-  return geminiGenerateJson(apiKey, model, { systemInstruction, contents });
+  return geminiGenerateJson(
+    provider.apiKey,
+    openAiVisionModel(env),
+    { systemInstruction, contents },
+    maxOutputTokens,
+  );
+}
+
+async function chatText(
+  env: OpenAiEnv,
+  messages: ChatMessage[],
+  maxOutputTokens?: number,
+): Promise<string> {
+  return withAiProviderPool(env, async (provider) => {
+    if (provider.kind === "gemini") {
+      const { systemInstruction, contents } = splitGeminiMessages(messages);
+      return geminiGenerateText(
+        provider.apiKey,
+        openAiModel(env),
+        { systemInstruction, contents },
+        maxOutputTokens,
+      );
+    }
+    return groqGenerateText(
+      provider.apiKey,
+      groqModel(env),
+      messages.map((m) => ({ role: m.role, content: m.content })),
+      maxOutputTokens ?? OUTPUT_CAP_HELP,
+    );
+  });
 }
 
 function parseLongAnswerMarkResult(
@@ -446,8 +516,6 @@ export async function questionGenerationChat(
   env: OpenAiEnv,
   input: QuestionGenerationChatInput,
 ): Promise<QuestionGenerationChatResult> {
-  const apiKey = requireOpenAiKey(env);
-  const model = openAiModel(env);
   const subjectId = input.subjectId.trim() || "methods";
   const topics = (input.topicOptions ?? []).slice(0, 40);
   const resources = String(input.resources ?? "").trim().slice(0, 80000);
@@ -514,7 +582,7 @@ Rules:
     chatMessages.push({ role, content });
   }
 
-  const parsed = await chatJson(apiKey, model, chatMessages);
+  const parsed = await chatJson(env, chatMessages);
 
   const message = String(parsed.message ?? parsed.reply ?? "").trim()
     || "Done.";
@@ -531,12 +599,10 @@ export async function parseQuestionsFromText(
   rawText: string,
   defaultSubjectId: string,
 ): Promise<ParsedImportQuestion[]> {
-  const apiKey = requireOpenAiKey(env);
-  const model = openAiModel(env);
   const text = rawText.trim().slice(0, 120000);
   if (!text) throw new Error("Text is empty.");
 
-  const parsed = await chatJson(apiKey, model, [
+  const parsed = await chatJson(env, [
     {
       role: "system",
       content: `You extract exam questions into JSON for a VCE maths/english study app.
@@ -580,14 +646,17 @@ export function formatSubjectMarkingContextBlock(ctx?: SubjectMarkingContext | n
   if (!ctx) return "";
   const parts: string[] = [];
   const prompt = String(ctx.promptText ?? "").trim();
-  if (prompt) parts.push(`SUBJECT MARKING GUIDANCE:\n${prompt.slice(0, 12000)}`);
+  if (prompt) parts.push(`Notes: ${prompt.slice(0, 800)}`);
   const resources = (ctx.resources ?? []).map((r) => String(r ?? "").trim()).filter(Boolean);
   if (resources.length) {
     parts.push(
-      `REFERENCE RESOURCES:\n${resources.map((r, i) => `[${i + 1}] ${r.slice(0, 8000)}`).join("\n\n")}`,
+      resources
+        .slice(0, 2)
+        .map((r, i) => `[${i + 1}] ${r.slice(0, 600)}`)
+        .join("\n"),
     );
   }
-  return parts.length ? `\n\n${parts.join("\n\n")}` : "";
+  return parts.length ? `\n${parts.join("\n")}` : "";
 }
 
 export type MarkBreakdownStepInput = {
@@ -644,94 +713,39 @@ export async function markLongAnswer(
   env: OpenAiEnv,
   input: LongAnswerMarkInput,
 ): Promise<LongAnswerMarkResult> {
-  const apiKey = requireOpenAiKey(env);
-  const model = openAiModel(env);
   const subjectBlock = formatSubjectMarkingContextBlock(input.subjectContext);
 
   const payload = {
-    questionText: input.questionText.slice(0, 4000),
+    questionText: input.questionText.slice(0, 2000),
     questionType: input.questionType,
     topic: input.topic ?? "",
     maxMarks: input.marks,
-    guidance: input.guidance ?? "",
-    acceptedAnswers: (input.acceptedAnswers ?? []).slice(0, 20),
-    answerParts: (input.answerParts ?? []).slice(0, 12),
-    studentResponse: input.studentResponse.slice(0, 12000),
-    studentParts: (input.studentParts ?? []).map((p) => p.slice(0, 4000)),
-    studentSteps: (input.studentSteps ?? []).map((s) => s.slice(0, 2000)),
+    guidance: (input.guidance ?? "").slice(0, 800),
+    acceptedAnswers: (input.acceptedAnswers ?? []).slice(0, 8),
+    answerParts: (input.answerParts ?? []).slice(0, 8),
+    studentResponse: input.studentResponse.slice(0, 4000),
+    studentParts: (input.studentParts ?? []).map((p) => p.slice(0, 1500)).slice(0, 8),
+    studentSteps: (input.studentSteps ?? []).map((s) => s.slice(0, 800)).slice(0, 12),
     markBreakdown: input.markBreakdown ?? null,
     breakdownMode: Boolean(input.breakdownMode),
   };
 
   const breakdownPrompt = input.breakdownMode
-    ? `You mark using a VCAA-style MARK BREAKDOWN — each step earns its own mark(s).
-Return JSON only:
-{
-  "correct": boolean (true only if all marks earned),
-  "scorePercent": 0-100,
-  "marksAwarded": number (sum of step marksAwarded),
-  "maxMarks": number,
-  "feedback": "1-2 bullet overview when wrong",
-  "correctAnswers": ["final model answer(s)"],
-  "stepResults": [{
-    "index": 0,
-    "marks": 1,
-    "marksAwarded": 0,
-    "label": "criterion label from rubric",
-    "model": "model working for this mark",
-    "studentText": "what the student wrote for this step",
-    "awarded": false,
-    "feedback": "2-4 bullets comparing student vs model for THIS mark only — use LaTeX $...$ for maths"
-  }],
-  "partResults": []
-}
+    ? `Mark a VCE answer step-by-step using markBreakdown. Return JSON only:
+{"correct":bool,"scorePercent":0-100,"marksAwarded":n,"maxMarks":n,"feedback":"optional 1 line","stepResults":[{"index":0,"marks":1,"marksAwarded":0,"label":"","studentText":"","awarded":false,"feedback":"1 short bullet"}],"partResults":[]}
+One stepResults entry per markBreakdown step. Use guidance/acceptedAnswers as rubric.${subjectBlock}`
+    : `Mark a VCE student answer. Return JSON only:
+{"correct":bool,"scorePercent":0-100,"marksAwarded":n,"maxMarks":n,"feedback":"1-2 short bullets if wrong","correctAnswers":["..."],"partResults":[{"index":0,"correct":bool,"marksAwarded":n,"correctAnswer":"...","partFeedback":"1 bullet"}]}
+Use guidance and acceptedAnswers as rubric. Be fair; accept equivalent methods.${subjectBlock}`;
 
-Rules for stepResults:
-• One entry per markBreakdown step, same order and index.
-• studentText MUST quote/paraphrase the student's step from studentSteps.
-• If awarded is false, feedback MUST say exactly what was missing vs the model.
-• Use LaTeX in feedback: $10\\,\\text{am}$, $\\frac{dh}{dt}$, etc.
-• Be fair — accept equivalent correct methods.`
-    : `You mark student responses for VCE-style questions.
-Return JSON only:
-{
-  "correct": boolean (true if broadly correct for full credit),
-  "scorePercent": 0-100,
-  "marksAwarded": number (0 to maxMarks, can be fractional .5),
-  "maxMarks": number,
-  "feedback": "4-8 bullet points when wrong (each line starts with •); 2-3 bullets when correct",
-  "correctAnswers": ["authoritative model answer(s) in order when wrong or multipart"],
-  "partResults": [{
-    "index": 0,
-    "correct": true,
-    "marksAwarded": 1,
-    "correctAnswer": "model answer for this part",
-    "partFeedback": "3-6 bullet points for THIS part — each on its own line starting with • "
-  }]
-}
-
-When the student is WRONG, feedback MUST be specific and detailed:
-• Quote or paraphrase what they actually wrote.
-• Name the exact mistake (wrong formula, missing step, sign error, incomplete explanation, etc.).
-• Give a step-by-step model solution or reasoning chain for this question.
-• State the correct final answer clearly.
-• If multipart, put per-part detail in partResults.partFeedback (not only global feedback).
-
-When correct: still give 2-3 bullets on what they did well.
-
-Be fair: accept equivalent methods and reasonable rounding. For multipart, grade each part.
-Use guidance and acceptedAnswers as the rubric when provided; prefer those over inventing answers.`;
-
-  const parsed = await chatJson(apiKey, model, [
-    {
-      role: "system",
-      content: `${breakdownPrompt}${subjectBlock}`,
-    },
-    {
-      role: "user",
-      content: JSON.stringify(payload),
-    },
-  ]);
+  const parsed = await chatJson(
+    env,
+    [
+      { role: "system", content: breakdownPrompt },
+      { role: "user", content: JSON.stringify(payload) },
+    ],
+    OUTPUT_CAP_MARK,
+  );
 
   return parseLongAnswerMarkResult(parsed, input.marks);
 }
@@ -752,98 +766,55 @@ export async function markHandwritingAnswer(
   env: OpenAiEnv,
   input: HandwritingMarkInput,
 ): Promise<LongAnswerMarkResult> {
-  const apiKey = requireOpenAiKey(env);
-  const model = openAiVisionModel(env);
   const images = input.images
     .map((img) => String(img ?? "").trim())
     .filter((img) => /^data:image\//i.test(img))
-    .slice(0, 12);
+    .slice(0, MAX_HANDWRITING_IMAGES);
   if (!images.length) throw new Error("At least one handwriting image is required.");
 
   const rubric = {
-    questionText: input.questionText.slice(0, 4000),
+    questionText: input.questionText.slice(0, 2000),
     questionType: input.questionType,
     topic: input.topic ?? "",
     maxMarks: input.marks,
-    guidance: input.guidance ?? "",
-    acceptedAnswers: (input.acceptedAnswers ?? []).slice(0, 20),
-    answerParts: (input.answerParts ?? []).slice(0, 12),
+    guidance: (input.guidance ?? "").slice(0, 800),
+    acceptedAnswers: (input.acceptedAnswers ?? []).slice(0, 8),
+    answerParts: (input.answerParts ?? []).slice(0, 8),
     imageCount: images.length,
   };
 
   const userContent: VisionContentPart[] = [
     {
       type: "text",
-      text: `Mark this handwritten student response. JSON rubric:\n${JSON.stringify(rubric)}`,
+      text: `Mark this handwritten answer. Rubric JSON:\n${JSON.stringify(rubric)}`,
     },
     ...images.map((url) => ({
       type: "image_url" as const,
-      image_url: { url, detail: "high" as const },
+      image_url: { url },
     })),
   ];
   if (images.length > 1 && (input.answerParts ?? []).length > 0) {
     const labels = (input.answerParts ?? [])
-      .map((p, i) => `Image ${i + 1} — ${p.label}`)
+      .slice(0, images.length)
+      .map((p, i) => `Image ${i + 1}: ${p.label}`)
       .join("\n");
-    userContent.push({
-      type: "text",
-      text: `Multipart: ${images.length} images in order (one per subpart):\n${labels}`,
-    });
-  } else if (images.length > 1) {
-    userContent.push({
-      type: "text",
-      text: `There are ${images.length} images in order — image 1 is the first subpart, etc.`,
-    });
+    userContent.push({ type: "text", text: `Parts:\n${labels}` });
   }
 
-  const parsed = await chatJsonWithVision(apiKey, model, [
-    {
-      role: "system",
-      content: `You mark handwritten student responses on ruled paper for VCE-style maths questions.
-Carefully READ every stroke in each image — numbers, operators, graphs, lists of edges, and working lines.
-The final answer is usually on the last line of each image.
-${formatSubjectMarkingContextBlock(input.subjectContext)}
-
-Return JSON only:
-{
-  "correct": boolean (true only if fully correct for full credit),
-  "scorePercent": 0-100,
-  "marksAwarded": number (0 to maxMarks, can be fractional 0.5),
-  "maxMarks": number,
-  "feedback": "optional brief overall summary (1-2 bullets) for multipart; omit if partResults cover everything",
-  "correctAnswers": ["one authoritative answer per part in order"],
-  "partResults": [{
-    "index": 0,
-    "correct": true,
-    "marksAwarded": 1,
-    "studentAnswerRead": "REQUIRED — transcribe the final answer and main working you can read from their drawing",
-    "correctAnswer": "authoritative correct answer for this part",
-    "partFeedback": "3-5 bullet points for THIS part only — each bullet on its own line, starting with • "
-  }]
-}
-
-For EACH part in partResults, partFeedback MUST include:
-• Step-by-step model solution for this part
-• If wrong: the specific mistake; if right: what they did well
-(Do not repeat studentAnswerRead in partFeedback — it is shown separately in the UI.)
-
-studentAnswerRead is REQUIRED for every part — never leave it empty if anything is legible in the image.
-Use LaTeX for maths in studentAnswerRead, correctAnswer, and partFeedback: $10\\,\\text{am}$, $\\frac{dh}{dt}$, $4\\,\\text{m}$, etc.
-
-Global "feedback" is optional for multipart — put the detailed walkthrough in each part's partFeedback.
-
-When the student is WRONG:
-- correctAnswers must list every part's model answer in order.
-- Each partResults entry must include correctAnswer and partFeedback even when partially correct.
-
-When fully correct: partFeedback still has 2-3 bullets on what they did well.
-
-Be fair: accept equivalent methods and reasonable rounding.
-For multipart, one image per part in order (image 1 = index 0).
-Use guidance and acceptedAnswers as the rubric; prefer those over inventing answers.`,
-    },
-    { role: "user", content: userContent },
-  ]);
+  const subjectBlock = formatSubjectMarkingContextBlock(input.subjectContext);
+  const parsed = await chatJsonWithVision(
+    env,
+    [
+      {
+        role: "system",
+        content: `Read handwritten VCE answer(s) from the image(s). Return JSON only:
+{"correct":bool,"scorePercent":0-100,"marksAwarded":n,"maxMarks":n,"feedback":"optional 1 line","correctAnswers":["..."],"partResults":[{"index":0,"correct":bool,"marksAwarded":n,"studentAnswerRead":"what you read","correctAnswer":"...","partFeedback":"1 bullet"}]}
+Use guidance/acceptedAnswers as rubric. LaTeX ok.${subjectBlock}`,
+      },
+      { role: "user", content: userContent },
+    ],
+    OUTPUT_CAP_HANDWRITING,
+  );
 
   return parseLongAnswerMarkResult(parsed, input.marks, { maxFeedbackChars: 2000 });
 }
@@ -859,9 +830,7 @@ export async function generateMarkBreakdown(
     subjectContext?: SubjectMarkingContext;
   },
 ): Promise<{ steps: MarkBreakdownStepInput[] }> {
-  const apiKey = requireOpenAiKey(env);
-  const model = openAiModel(env);
-  const parsed = await chatJson(apiKey, model, [
+  const parsed = await chatJson(env, [
     {
       role: "system",
       content: `You create VCAA-style mark breakdowns for exam questions.
@@ -896,150 +865,6 @@ Rules:
     .slice(0, 24);
   if (!steps.length) throw new Error("Could not generate mark breakdown.");
   return { steps };
-}
-
-export type EnglishCriterionKey = "structure" | "evidence" | "expression" | "relevance";
-
-export type EnglishCriterionScore = {
-  score: number;
-  feedback: string;
-};
-
-export type EnglishHighlight = {
-  quote: string;
-  type: "strength" | "improvement";
-  criterion?: EnglishCriterionKey;
-  feedback: string;
-};
-
-export type EnglishScoreInput = {
-  promptText: string;
-  responseText: string;
-  subjectContext?: SubjectMarkingContext;
-};
-
-export type EnglishScoreResult = {
-  score: number;
-  summary: string;
-  criteria: Record<EnglishCriterionKey, EnglishCriterionScore>;
-  highlights: EnglishHighlight[];
-};
-
-const ENGLISH_CRITERIA_RUBRIC = `
-MARK ON FOUR CRITERIA (each 0–10):
-1. structure — clear introduction, body paragraphs, conclusion; logical flow; cohesive sequencing of ideas
-2. evidence — use of textual evidence, examples, or supporting detail; how well evidence is integrated
-3. expression — vocabulary, sentence variety, grammar, spelling, and conventions of Standard Australian English
-4. relevance — engagement with the prompt/topic; focus and appropriateness of ideas to the task
-
-OVERALL score (0–10): holistic VCE-style mark informed by the four criteria — do not simply average them.
-
-HIGHLIGHTS: Return 8–16 inline annotations on exact phrases copied verbatim from the student's essay.
-- type "strength" for effective writing (green in UI)
-- type "improvement" for weaknesses (red in UI)
-- Each highlight quote MUST appear exactly in the essay (copy-paste, preserve punctuation)
-- feedback: 1–3 sentences explaining why this phrase works or how to improve it
-`.trim();
-
-function clampCriterionScore(raw: unknown): number {
-  return Math.min(10, Math.max(0, Math.round(Number(raw ?? 0))));
-}
-
-function parseCriterionRow(raw: unknown): EnglishCriterionScore {
-  const row = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
-  return {
-    score: clampCriterionScore(row.score),
-    feedback: String(row.feedback ?? "").trim().slice(0, 800),
-  };
-}
-
-function parseEnglishHighlights(raw: unknown): EnglishHighlight[] {
-  if (!Array.isArray(raw)) return [];
-  const validCriteria = new Set<EnglishCriterionKey>([
-    "structure",
-    "evidence",
-    "expression",
-    "relevance",
-  ]);
-  return raw
-    .map((item) => {
-      if (!item || typeof item !== "object") return null;
-      const row = item as Record<string, unknown>;
-      const quote = String(row.quote ?? "").trim().slice(0, 500);
-      const typeRaw = String(row.type ?? "").trim().toLowerCase();
-      const type = typeRaw === "strength" ? "strength" : typeRaw === "improvement" ? "improvement" : null;
-      if (!quote || !type) return null;
-      const criterionRaw = String(row.criterion ?? "").trim().toLowerCase() as EnglishCriterionKey;
-      const criterion = validCriteria.has(criterionRaw) ? criterionRaw : undefined;
-      const feedback = String(row.feedback ?? "").trim().slice(0, 600);
-      if (!feedback) return null;
-      return { quote, type, criterion, feedback };
-    })
-    .filter((h): h is EnglishHighlight => h != null)
-    .slice(0, 20);
-}
-
-export async function scoreEnglishResponse(
-  env: OpenAiEnv,
-  input: EnglishScoreInput,
-): Promise<EnglishScoreResult> {
-  const apiKey = requireOpenAiKey(env);
-  const model = openAiModel(env);
-  const promptText = String(input.promptText ?? "").trim();
-
-  const parsed = await chatJson(apiKey, model, [
-    {
-      role: "system",
-      content: `You are a VCE English essay assessor (Study Design 2024–2027).
-${formatSubjectMarkingContextBlock(input.subjectContext)}
-
-Return JSON only:
-{
-  "score": integer 0-10,
-  "summary": "2-4 sentence overall assessment",
-  "criteria": {
-    "structure": { "score": 0-10, "feedback": "2-3 sentences" },
-    "evidence": { "score": 0-10, "feedback": "2-3 sentences" },
-    "expression": { "score": 0-10, "feedback": "2-3 sentences" },
-    "relevance": { "score": 0-10, "feedback": "2-3 sentences" }
-  },
-  "highlights": [
-    {
-      "quote": "exact substring from essay",
-      "type": "strength" | "improvement",
-      "criterion": "structure" | "evidence" | "expression" | "relevance",
-      "feedback": "specific feedback for this phrase"
-    }
-  ]
-}
-
-${ENGLISH_CRITERIA_RUBRIC}
-
-If no prompt was provided, assess relevance against the essay's own stated topic and internal coherence.
-Be fair, constructive, and specific — quote the student's words in highlights.`,
-    },
-    {
-      role: "user",
-      content: JSON.stringify({
-        prompt: promptText.slice(0, 6000) || "(No prompt provided — assess the essay on its own terms.)",
-        response: input.responseText.slice(0, 20000),
-      }),
-    },
-  ]);
-
-  const criteria = {
-    structure: parseCriterionRow((parsed.criteria as Record<string, unknown> | undefined)?.structure),
-    evidence: parseCriterionRow((parsed.criteria as Record<string, unknown> | undefined)?.evidence),
-    expression: parseCriterionRow((parsed.criteria as Record<string, unknown> | undefined)?.expression),
-    relevance: parseCriterionRow((parsed.criteria as Record<string, unknown> | undefined)?.relevance),
-  };
-  const score = Math.min(10, Math.max(0, Math.round(Number(parsed.score ?? 0))));
-  return {
-    score,
-    summary: String(parsed.summary ?? parsed.feedback ?? "").trim().slice(0, 2000),
-    criteria,
-    highlights: parseEnglishHighlights(parsed.highlights),
-  };
 }
 
 export type FillDraftAnswerSlot = {
@@ -1079,8 +904,6 @@ export async function fillDraftQuestionAnswers(
   env: OpenAiEnv,
   input: FillDraftAnswersInput,
 ): Promise<FillDraftAnswersResult> {
-  const apiKey = requireOpenAiKey(env);
-  const model = openAiModel(env);
   const solutionsText = String(input.solutionsText ?? "").trim().slice(0, 80000);
   if (!solutionsText) throw new Error("Solutions text is empty.");
 
@@ -1104,7 +927,7 @@ export async function fillDraftQuestionAnswers(
     solutionsText,
   };
 
-  const parsed = await chatJson(apiKey, model, [
+  const parsed = await chatJson(env, [
     {
       role: "system",
       content: `You extract FINAL accepted answers from official exam solutions for ONE question.
@@ -1197,32 +1020,16 @@ export async function questionHelpChat(
   env: OpenAiEnv,
   input: QuestionHelpInput,
 ): Promise<{ reply: string }> {
-  const apiKey = requireOpenAiKey(env);
-  const model = openAiModel(env);
-  const questionBlock = JSON.stringify(input.question, null, 2);
+  const questionBlock = JSON.stringify(input.question).slice(0, 2500);
   const subjectBlock = formatSubjectMarkingContextBlock(input.subjectContext);
 
-  const systemContent = `You are Nodent, a private VCE tutor helping a student with ONE practice question.
+  const systemContent = `VCE tutor for one practice question. Give one short hint (2-3 sentences). Do not give the final answer or restate the question.${subjectBlock ? `\n${subjectBlock}` : ""}
 
-CURRENT QUESTION (no model answers included):
-${questionBlock}
-${subjectBlock ? `\nSUBJECT NOTES:\n${subjectBlock}` : ""}
-
-Rules:
-- Only help with this question and its underlying topic. Briefly redirect off-topic questions.
-- Do NOT restate, summarise, or rephrase the question — the student can already read it.
-- Never open with "This question asks you to…" or quiz them with "Do you recall…?"
-- Give one concrete hint or first step they can do right now (e.g. identify givens, write a formula with their values, sketch a diagram, state what to substitute).
-- On the first reply: one focused starting move only — actionable, not a lecture.
-- Follow-ups: answer their specific question with the next small step.
-- Do NOT state the final numerical answer or the correct MCQ letter unless the student has clearly attempted the question and explicitly asks what they are missing — even then, prefer the next step over a full solution.
-- Never reveal mark-scheme model answers or accepted-answer lists.
-- Use Australian VCE terminology. Keep replies concise (2–4 short sentences or 2–3 bullets max).
-- Use LaTeX for maths: $...$ inline, $$...$$ display.`;
+Question: ${questionBlock}`;
 
   const chatMessages: ChatMessage[] = [{ role: "system", content: systemContent }];
-  for (const turn of input.messages.slice(-24)) {
-    const content = String(turn.content ?? "").trim().slice(0, 4000);
+  for (const turn of input.messages.slice(-6)) {
+    const content = String(turn.content ?? "").trim().slice(0, 600);
     if (!content) continue;
     chatMessages.push({
       role: turn.role === "assistant" ? "assistant" : "user",
@@ -1233,11 +1040,10 @@ Rules:
   if (chatMessages.length === 1) {
     chatMessages.push({
       role: "user",
-      content: "Give me one hint — a concrete first step to get started. Do not restate the question.",
+      content: "Give me one hint to get started.",
     });
   }
 
-  const { systemInstruction, contents } = splitGeminiMessages(chatMessages);
-  const reply = await geminiGenerateText(apiKey, model, { systemInstruction, contents });
-  return { reply: reply.trim().slice(0, 8000) };
+  const reply = await chatText(env, chatMessages, OUTPUT_CAP_HELP);
+  return { reply: reply.trim().slice(0, 1200) };
 }

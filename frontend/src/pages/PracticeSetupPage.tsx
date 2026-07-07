@@ -5,9 +5,9 @@ import { apiFetch, BOOTSTRAP_FETCH_TIMEOUT_MS } from "@/lib/api";
 import {
   API_PATHS,
   STORAGE_KEYS,
-  canAccessPracticeExams,
   isAdminUser,
 } from "@/lib/constants";
+import { canAccessPracticeExams, PREMIUM_PATH } from "@/lib/premium";
 import { baseSubjects, subjectsForUser } from "@/lib/subjects";
 import type { Question, Subject } from "@/lib/subjects";
 import { loadPracticeBank } from "@/lib/questionBankCache";
@@ -20,7 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { TopicPerformanceSelect } from "@/components/practice/TopicPerformanceSelect";
 import { CurriculumOverview } from "@/components/study/CurriculumOverview";
-import { Loader2, ArrowRight } from "lucide-react";
+import { ArrowRight, BookOpen, FileText, Loader2, Lock } from "lucide-react";
 import { generalMathsPracticeTopicOptions } from "@/lib/generalMathsAreaTopic";
 import { methodsPracticeTopicOptions } from "@/lib/methodsAreaTopic";
 import { specialistMathsPracticeTopicOptions } from "@/lib/specialistMathsAreaTopic";
@@ -37,10 +37,9 @@ export default function PracticeSetupPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const isAdmin = isAdminUser(user);
-  const showExamsEntry = canAccessPracticeExams(user);
-  const [searchParams] = useSearchParams();
+  const examsUnlocked = canAccessPracticeExams(user);
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  // Demo subject is admin-only (guard direct URL access).
   useEffect(() => {
     if (String(subjectId) === "demo" && !isAdmin) {
       navigate("/dashboard", { replace: true });
@@ -70,6 +69,24 @@ export default function PracticeSetupPage() {
 
   const initialTopic = String(searchParams.get("topic") ?? "all");
   const [topic, setTopic] = useState<string>(initialTopic || "all");
+
+  useEffect(() => {
+    const fromUrl = String(searchParams.get("topic") ?? "all") || "all";
+    setTopic((current) => (current === fromUrl ? current : fromUrl));
+  }, [searchParams]);
+
+  const handleTopicChange = (next: string) => {
+    setTopic(next);
+    setSearchParams(
+      (prev) => {
+        const params = new URLSearchParams(prev);
+        if (!next || next === "all") params.delete("topic");
+        else params.set("topic", next);
+        return params;
+      },
+      { replace: true },
+    );
+  };
 
   useEffect(() => {
     if (!subjectId) return;
@@ -160,109 +177,104 @@ export default function PracticeSetupPage() {
 
   return (
     <AppShell
-      title={subject ? `${subject.name} Practice` : "Practice"}
-      hideTitle
+      title="Practice"
       edgeToEdgeHeader
       edgeToEdgeMain
     >
-      <div className="mx-auto flex w-full min-h-[calc(100dvh-7rem)] max-w-7xl flex-col gap-6 px-1 py-4 sm:gap-8 sm:px-2 sm:py-6 lg:px-4">
-        <div className="text-center">
-          <h1 className="font-display text-[clamp(1.75rem,5vw,2.75rem)] font-bold tracking-tight text-[#0b0f19]">
-            {subject?.name ?? "Subject"}
-          </h1>
-          <p className="mx-auto mt-2 max-w-xl text-sm text-muted-foreground sm:text-base">
-            Pick a topic, then start questions — or browse past exams.
-          </p>
-        </div>
+      <div className="mx-auto w-full max-w-6xl space-y-5 sm:space-y-6">
+        <Card className="practice-card">
+          <CardContent className="bg-[#f3f4f6]/30 px-4 py-8 sm:px-7 sm:py-10">
+            <div className="mx-auto flex min-h-[min(32rem,70vh)] w-full max-w-4xl flex-col">
+              <div className="text-center">
+                <p className="font-display text-2xl font-semibold tracking-tight text-[#0b0f19] sm:text-3xl">
+                  {subject?.name ?? "Practice"}
+                </p>
+              </div>
 
-        <div className="flex flex-col gap-4 sm:gap-5">
-          {showExamsEntry && !isEnglish ? (
-            <Card className="practice-card overflow-hidden">
-              <button
-                type="button"
-                onClick={() => navigate(`/practice/${subjectId}/exams`)}
-                className="group w-full text-left"
-              >
-                <div className="practice-card-header !min-h-0 !justify-between !py-3.5 sm:!py-4">
-                  <p className="practice-card-header-title">Exams</p>
-                  <p className="practice-card-header-meta">Past papers by year</p>
-                </div>
-                <div className="flex items-center justify-between gap-4 bg-[#f3f4f6]/25 px-5 py-5 transition-colors group-hover:bg-[#f3f4f6]/45 sm:px-8 sm:py-6">
-                  <p className="text-sm text-muted-foreground sm:text-base">
-                    Open exam papers for this subject
-                  </p>
-                  <ArrowRight className="size-5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-[#0b0f19]" />
-                </div>
-              </button>
-            </Card>
-          ) : null}
-
-          <Card className="practice-card overflow-hidden">
-            <div className="practice-card-header !min-h-0 !justify-between !py-3.5 sm:!py-4">
-              <p className="practice-card-header-title">
-                {isEnglish ? "Essay upload" : "Questions"}
-              </p>
-              <p className="practice-card-header-meta">
-                {isEnglish ? "Smart feedback" : "Instant marking"}
-              </p>
-            </div>
-            <CardContent className="flex flex-col gap-5 bg-[#f3f4f6]/25 px-5 py-6 sm:gap-6 sm:px-8 sm:py-7 lg:flex-row lg:items-center lg:justify-between">
-              <p className="max-w-md text-sm leading-relaxed text-muted-foreground sm:text-base">
-                {isEnglish
-                  ? "Upload and get feedback on your writing."
-                  : "Choose a topic, then work through questions at your own pace."}
-              </p>
-
-              <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-end lg:w-auto lg:shrink-0">
+              <div className="mt-7 flex flex-1 flex-col sm:mt-9">
                 {loading ? (
-                  <div className="flex items-center gap-2 rounded-xl border border-black/8 bg-white px-4 py-3 text-sm text-muted-foreground">
+                  <div className="flex items-center justify-center gap-2 rounded-2xl border border-black/8 bg-white px-5 py-4 text-sm text-muted-foreground">
                     <Loader2 className="size-4 animate-spin" />
                     Loading…
                   </div>
                 ) : isEnglish ? (
-                  <p className="text-sm text-muted-foreground">Redirecting…</p>
+                  <p className="text-center text-sm text-muted-foreground">Redirecting…</p>
                 ) : (
-                  <TopicPerformanceSelect
-                    subjectId={subjectId}
-                    value={topic}
-                    onValueChange={setTopic}
-                    topics={topicOptions}
-                    includeAllOption
-                    placeholder="Choose topic"
-                    className="w-full sm:w-[min(100%,18rem)]"
-                  />
-                )}
-                <Button
-                  variant="accent"
-                  onClick={handleStart}
-                  className="h-12 w-full gap-2 rounded-xl px-6 text-base sm:w-auto sm:min-w-[10.5rem]"
-                >
-                  {isEnglish ? "Upload essay" : "Start"}
-                  <ArrowRight className="size-4" />
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+                  <>
+                    <div className="mx-auto flex w-full max-w-3xl flex-col items-center gap-4">
+                      <div className="flex w-full flex-col items-stretch gap-3 sm:flex-row sm:items-start sm:justify-center">
+                        <div className="w-full sm:w-[18rem]">
+                          <p className="mb-2 text-center text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                            Topic
+                          </p>
+                          <TopicPerformanceSelect
+                            subjectId={subjectId}
+                            value={topic}
+                            onValueChange={handleTopicChange}
+                            topics={topicOptions}
+                            includeAllOption
+                            placeholder="Choose topic"
+                            className="w-full sm:w-[18rem]"
+                          />
+                        </div>
 
-        {!isEnglish ? (
-          <Card className="practice-card flex min-h-[min(24rem,42vh)] flex-1 flex-col">
-            <div className="practice-card-header">
-              <p className="practice-card-header-title">Study overview</p>
+                        <div className="w-full sm:w-[18rem]">
+                          <p
+                            className="mb-2 text-center text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-transparent"
+                            aria-hidden
+                          >
+                            Topic
+                          </p>
+                          <Button
+                            variant="accent"
+                            onClick={handleStart}
+                            className="h-12 w-full gap-2 rounded-2xl text-base sm:w-[18rem]"
+                          >
+                            <BookOpen className="size-4" />
+                            Questions
+                            <ArrowRight className="size-4" />
+                          </Button>
+                        </div>
+                      </div>
+
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          if (!examsUnlocked) {
+                            navigate(PREMIUM_PATH);
+                            return;
+                          }
+                          navigate(`/practice/${subjectId}/exams`);
+                        }}
+                        className="h-12 w-full max-w-xs gap-2 rounded-2xl text-base"
+                        aria-label={examsUnlocked ? "Open past exams" : "Past exams — Premium required"}
+                      >
+                        {examsUnlocked ? (
+                          <FileText className="size-4" />
+                        ) : (
+                          <Lock className="size-4 text-muted-foreground" />
+                        )}
+                        Exams
+                        {examsUnlocked ? <ArrowRight className="size-4" /> : null}
+                      </Button>
+                    </div>
+
+                    <div className="mt-10 flex flex-1 flex-col justify-center">
+                      {overviewMarkdown ? (
+                        <CurriculumOverview markdown={overviewMarkdown} />
+                      ) : (
+                        <p className="text-center text-sm text-muted-foreground sm:text-base">
+                          Choose what to revise
+                        </p>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
-            <CardContent className="flex flex-1 flex-col px-5 py-6 sm:px-8 sm:py-7">
-              {overviewMarkdown ? (
-                <CurriculumOverview markdown={overviewMarkdown} />
-              ) : (
-                <div className="flex flex-1 items-center justify-center rounded-2xl border border-dashed border-black/15 bg-[#0b0f19]/[0.03] p-10 text-center">
-                  <p className="max-w-md text-sm font-medium text-muted-foreground sm:text-base">
-                    Choose a topic above to load overview notes for that area.
-                  </p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        ) : null}
+          </CardContent>
+        </Card>
       </div>
     </AppShell>
   );

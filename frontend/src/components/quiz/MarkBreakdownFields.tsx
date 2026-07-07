@@ -1,6 +1,5 @@
 import { RichQuestionContent } from "@/components/quiz/RichQuestionContent";
 import { QuizAnswerField } from "@/components/quiz/QuizAnswerField";
-import { useHandwritingModeActive } from "@/context/HandwritingModeContext";
 import { cn } from "@/lib/utils";
 import type { MarkBreakdown, MarkBreakdownStep } from "@/lib/markBreakdown";
 import { CheckCircle2, XCircle } from "lucide-react";
@@ -30,9 +29,6 @@ export function MarkBreakdownInputs({
   examPaperMode = false,
   flushKeyPrefix = "",
 }: MarkBreakdownInputsProps) {
-  const handwritingMode = useHandwritingModeActive(subjectId);
-  const ruledAnswer = examPaperMode || handwritingMode;
-
   return (
     <div className={cn("space-y-3", className)}>
       {breakdown.steps.map((step: MarkBreakdownStep, idx) => {
@@ -71,9 +67,9 @@ export function MarkBreakdownInputs({
               onChange={(value) => onChange(idx, value)}
               disabled={disabled}
               subjectId={subjectId}
-              examPaperMode={ruledAnswer}
+              examPaperMode={examPaperMode}
               multiline
-              rows={handwritingMode ? 4 : 2}
+              rows={2}
               handwritingSize="md"
               workingHint={false}
               flushKey={flushKeyPrefix ? `${flushKeyPrefix}:step-${idx}` : undefined}

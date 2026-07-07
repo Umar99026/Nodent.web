@@ -1,16 +1,10 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
-import { useAuth } from "@/context/AuthContext";
 import { cn, getQuestionTypeLabel, isAnswerCorrect } from "@/lib/utils";
 import type { ShortQuestion as ShortQuestionType } from "@/lib/subjects";
 import {
-  buildSmartMarkPayload,
   buildFallbackHandwritingMark,
   enrichHandwritingMarkResult,
-  enrichSmartMarkResult,
   partMarkAt,
-  requestHandwritingMark,
-  requestSmartMark,
   resolveAiMarking,
   qualifiesForOpenAiHandwriting,
 } from "@/lib/questionAiMarking";
@@ -45,11 +39,8 @@ import {
 } from "@/components/quiz/ExamPaperQuestionChrome";
 import { isExamPaperLayoutSubject } from "@/lib/examPaperLayout";
 import { RichQuestionContent } from "@/components/quiz/RichQuestionContent";
-import { useHandwritingModeActive } from "@/context/HandwritingModeContext";
-import { hasAnswerContent, isHandwritingValue, usesHandwritingMarking } from "@/lib/handwritingMode";
+import { hasAnswerContent, handwritingAllowedForSubject, isHandwritingValue, usesHandwritingMarking } from "@/lib/handwritingMode";
 import { isDiagramLabelQuestion, partHasOverlay, partUsesFigureLabels, partUsesInlineInputs, inlineInputsForPart, slotIndexForPartOverlay, slotsForPart, expectedAnswersForQuestionSlots, type DiagramLabelPart, type PartFigureLabelSource } from "@/lib/diagramLabels";
-import { handwritingMarkUserError } from "@/lib/userFacingErrors";
-import { isPremiumUser, PREMIUM_PATH } from "@/lib/premium";
 import { flushAllHandwriting, flushHandwriting } from "@/lib/handwritingFlush";
 import { CheckCircle2, XCircle, Send, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -227,8 +218,6 @@ export function ShortQuestion({
   persistedState,
   onStateChange,
 }: ShortQuestionProps) {
-  const { user } = useAuth();
-  const navigate = useNavigate();
   const [answer, setAnswer] = useState(persistedState?.answer ?? "");
   const [parts, setParts] = useState<string[]>(persistedState?.parts ?? []);
   const [submitted, setSubmitted] = useState(Boolean(persistedState?.submitted));
@@ -239,7 +228,7 @@ export function ShortQuestion({
   const [aiMark, setAiMark] = useState<SmartMarkResult | null>(null);
   const [stepAnswers, setStepAnswers] = useState<string[]>([]);
   const devPreloadAppliedRef = useRef(false);
-  const handwritingMode = useHandwritingModeActive(subjectId);
+  const handwritingUi = handwritingAllowedForSubject(subjectId);
   const examPaper = isExamPaperLayoutSubject(subjectId);
 
   const configuredParts: ShortQuestionType["answerParts"] =
@@ -337,6 +326,14 @@ export function ShortQuestion({
     partLabels: partDescriptors,
     acceptedAnswers: question.acceptedAnswers,
   });
+
+  const usesHandwritingAi = usesHandwritingMarking(
+    subjectId,
+    answer,
+    parts,
+    isMultipart,
+    openAiHandwritingEligible,
+  );
 
   const useTextArea = useSmartMarking && !isMultipart;
 
@@ -457,13 +454,6 @@ export function ShortQuestion({
   const handleSubmit = async () => {
     if (!canSubmit) return;
 
-    const requirePremiumForAi = () => {
-      if (isPremiumUser(user)) return true;
-      toast.error("AI marking requires Premium.");
-      navigate(PREMIUM_PATH);
-      return false;
-    };
-
     const { answer: resolvedAnswer, parts: resolvedParts, stepAnswers: resolvedSteps } =
       resolveHandwritingState();
     if (isMultipart) setParts(resolvedParts);
@@ -483,162 +473,34 @@ export function ShortQuestion({
       isMultipart,
       openAiHandwritingEligible,
     );
+    if (usesHandwritingAi || breakdownActive) {
+      toast.error(
+        breakdownActive
+          ? "Mark breakdown uses AI marking — only available on long-answer questions."
+          : "Short-answer questions use keyword matching. Type your answer instead of drawing.",
+      );
+    }
+
     let correct = false;
     let nextDpHint: number | null = null;
     let partCorrectFlags: boolean[] = [];
 
-    if (!usesHandwritingAi && !breakdownActive) {
-      if (isMultipart) {
-        const gradedParts = gradeMultipartAnswers(resolvedParts, accepted, configuredParts);
-        partCorrectFlags = gradedParts.map((g) => g.correct);
-        setPartResults(partCorrectFlags);
-        correct = multipartAllCorrect(partCorrectFlags);
-        nextDpHint = Math.max(...gradedParts.map((g) => g.dpHint ?? 0)) || null;
-      } else {
-        setPartResults([]);
-        const graded = isAnswerCorrect(resolvedComposite, accepted);
-        correct = graded.correct;
-        nextDpHint = graded.dpHint;
-      }
-      setDpHint(nextDpHint);
+    if (isMultipart) {
+      const gradedParts = gradeMultipartAnswers(resolvedParts, accepted, configuredParts);
+      partCorrectFlags = gradedParts.map((g) => g.correct);
+      setPartResults(partCorrectFlags);
+      correct = multipartAllCorrect(partCorrectFlags);
+      nextDpHint = Math.max(...gradedParts.map((g) => g.dpHint ?? 0)) || null;
+    } else if (!breakdownActive) {
+      setPartResults([]);
+      const graded = isAnswerCorrect(resolvedComposite, accepted);
+      correct = graded.correct;
+      nextDpHint = graded.dpHint;
     }
+    setDpHint(nextDpHint);
 
     let finalCorrect = correct;
-
-    if (usesHandwritingAi && subjectId && questionKey) {
-      if (!requirePremiumForAi()) return;
-      setAiMark(null);
-      setAiMarking(true);
-      try {
-        const devMock = devMockMarking
-          ? getDemoMathsDevMockMark(expectedAnswersForDisplay)
-          : null;
-        const enriched = devMock
-          ? devMock
-          : enrichHandwritingMarkResult(
-              (await requestHandwritingMark(subjectId, questionKey, {
-                answer: resolvedComposite,
-                parts: resolvedParts,
-                isMultipart,
-                question: buildSmartMarkPayload(question, {
-                  marks: effectiveTotalMarks,
-                  partDescriptors,
-                  partMarks,
-                  expectedAnswers: expectedAnswersForDisplay,
-                  configuredParts,
-                }),
-              })) ?? buildFallbackHandwritingMark(expectedAnswersForDisplay),
-              expectedAnswersForDisplay,
-            );
-        if (enriched.partResults?.length) {
-          partCorrectFlags = parts.map((_, idx) => {
-            const hit = enriched.partResults?.find((p) => p.index === idx);
-            return hit ? hit.correct : (partCorrectFlags[idx] ?? false);
-          });
-          setPartResults(partCorrectFlags);
-        }
-        finalCorrect = isMultipart
-          ? multipartAllCorrect(partCorrectFlags)
-          : enriched.correct;
-        setAiMark(enriched);
-      } catch (err) {
-        const msg = handwritingMarkUserError(err);
-        toast.error(msg);
-        const fallback = buildFallbackHandwritingMark(expectedAnswersForDisplay);
-        finalCorrect = false;
-        setAiMark(fallback);
-      } finally {
-        setAiMarking(false);
-      }
-    } else if (
-      breakdownActive &&
-      subjectId &&
-      questionKey &&
-      (!practiceOnly || repeatSandbox)
-    ) {
-      if (!requirePremiumForAi()) return;
-      setAiMark(null);
-      setAiMarking(true);
-      try {
-        const smartPayload = {
-          ...buildSmartMarkPayload(question, {
-            marks: effectiveTotalMarks,
-            partDescriptors,
-            partMarks,
-            expectedAnswers: expectedAnswersForDisplay,
-            configuredParts,
-          }),
-          markBreakdown,
-        };
-        const ai = await requestSmartMark(subjectId, questionKey, {
-          responseText: resolvedSteps.map((s, i) => `${i + 1}. ${s}`).join("\n"),
-          studentSteps: resolvedSteps,
-          question: smartPayload,
-        });
-        if (ai) {
-          setAiMark(ai);
-          finalCorrect = ai.correct;
-          if (ai.stepResults?.length) {
-            partCorrectFlags = ai.stepResults.map((s) => s.awarded);
-            setPartResults(partCorrectFlags);
-          } else {
-            setPartResults([]);
-          }
-        }
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Could not mark your answer.");
-        finalCorrect = false;
-      } finally {
-        setAiMarking(false);
-      }
-    } else if (
-      useSmartMarking &&
-      (!practiceOnly || repeatSandbox) &&
-      subjectId &&
-      questionKey &&
-      !correct
-    ) {
-      if (!requirePremiumForAi()) return;
-      setAiMarking(true);
-      try {
-        const responseText = isMultipart
-          ? partLabels.map((label, idx) => `${partSubmitLabel(label)} ${parts[idx] ?? ""}`.trim()).join("\n")
-          : compositeAnswer;
-        const ai = await requestSmartMark(subjectId, questionKey, {
-          responseText,
-          studentParts: isMultipart ? parts : undefined,
-          question: buildSmartMarkPayload(question, {
-            marks: effectiveTotalMarks,
-            partDescriptors,
-            partMarks,
-            expectedAnswers: expectedAnswersForDisplay,
-            configuredParts,
-          }),
-        });
-        if (ai) {
-          const enriched = enrichSmartMarkResult(ai, {
-            studentAnswer: compositeAnswer,
-            studentParts: isMultipart ? parts : undefined,
-            expectedAnswers: expectedAnswersForDisplay,
-            guidance: question.guidance,
-            questionText: question.question,
-          });
-          setAiMark(enriched);
-          if (enriched.partResults?.length) {
-            partCorrectFlags = parts.map((_, idx) => {
-              const hit = enriched.partResults?.find((p) => p.index === idx);
-              return hit ? hit.correct : (partCorrectFlags[idx] ?? false);
-            });
-            setPartResults(partCorrectFlags);
-          }
-          finalCorrect = isMultipart
-            ? multipartAllCorrect(partCorrectFlags)
-            : enriched.correct;
-        }
-      } finally {
-        setAiMarking(false);
-      }
-    }
+    setAiMark(null);
 
     if (isMultipart) {
       const slotCount = answerSlotCount || partLabels.length;
@@ -988,7 +850,7 @@ export function ShortQuestion({
                         questionType: "short",
                         subjectId,
                       })}
-                      rows={handwritingMode ? 4 : 3}
+                      rows={handwritingUi ? 4 : 3}
                       handwritingSize="md"
                       flushKey={handwritingFlushKey(`part-${slotBaseIndex}`)}
                       onKeyDown={handleKeyDown}
@@ -1000,25 +862,24 @@ export function ShortQuestion({
                     />
                   </div>
                   ) : null}
-                  {submitted && handwritingMode && aiMark && !hasMultiSlotInputs ? (
+                  {submitted && isHandwritingValue(parts[slotBaseIndex] ?? "") && aiMark && !hasMultiSlotInputs ? (
                     <AiMarkingPartFeedback
                       partResult={partMarkAt(aiMark, idx)}
-                      expectedAnswer={expectedAnswersForDisplay[slotBaseIndex]}
                     />
                   ) : submitted &&
                     !hasMultiSlotInputs &&
                     partResults[slotBaseIndex] === false &&
                     expectedAnswersForDisplay[slotBaseIndex] &&
-                    !handwritingMode ? (
-                    <p className="text-[11px] text-muted-foreground">
-                      Correct answer:{" "}
-                      <span className="text-[13px] font-semibold text-foreground">
-                        <RichQuestionContent
-                          text={expectedAnswersForDisplay[slotBaseIndex]}
-                          className="inline prose prose-sm max-w-none prose-p:my-0 [&_p]:inline"
-                        />
-                      </span>
-                    </p>
+                    !isHandwritingValue(parts[slotBaseIndex] ?? "") ? (
+                    <WrongAnswerFeedbackPanel
+                      title="Feedback"
+                      bullets={buildWrongAnswerBullets({
+                        studentAnswer: parts[slotBaseIndex] ?? "",
+                        expectedAnswers: [expectedAnswersForDisplay[slotBaseIndex] ?? ""].filter(Boolean),
+                        guidance: question.guidance,
+                        questionText: question.question,
+                      })}
+                    />
                   ) : null}
                       </>
                     );
@@ -1081,13 +942,13 @@ export function ShortQuestion({
               <div
                 className={cn(
                   "flex gap-2",
-                  examPaper || useTextArea || handwritingMode ? "flex-col" : "items-stretch",
+                  examPaper || useTextArea || handwritingUi ? "flex-col" : "items-stretch",
                 )}
               >
                 <div
                   className={cn(
                     "flex items-stretch",
-                    (examPaper || useTextArea || handwritingMode) && "w-full",
+                    (examPaper || useTextArea || handwritingUi) && "w-full",
                   )}
                 >
                   <QuizAnswerField
@@ -1098,13 +959,13 @@ export function ShortQuestion({
                     subjectId={subjectId}
                     examPaperMode={examPaper}
                     multiline={useTextArea}
-                    rows={handwritingMode ? 8 : useTextArea ? 5 : 1}
+                    rows={handwritingUi ? 8 : useTextArea ? 5 : 1}
                     handwritingSize={useTextArea ? "lg" : "md"}
                     flushKey={handwritingFlushKey("main")}
                     onKeyDown={handleKeyDown}
                     className={cn(
                       examPaper && "w-full min-w-0",
-                      useTextArea && !handwritingMode && "leading-relaxed",
+                      useTextArea && "leading-relaxed",
                       submitted && isCorrect && "border-success/60 bg-success/5",
                       submitted && !isCorrect && "border-danger/60 bg-danger/5",
                     )}
@@ -1115,7 +976,7 @@ export function ShortQuestion({
                   disabled={!canSubmit}
                   className={cn(
                     "shrink-0 gap-2 btn-accent",
-                    (examPaper || useTextArea || handwritingMode) && "w-full sm:w-auto",
+                    (examPaper || useTextArea || handwritingUi) && "w-full sm:w-auto",
                   )}
                 >
                   {aiMarking ? (
@@ -1130,16 +991,16 @@ export function ShortQuestion({
                       : "Submit"}
                 </Button>
               </div>
-              {submitted && !isCorrect && expectedAnswersForDisplay[0] ? (
-                <p className="text-[11px] text-muted-foreground">
-                  Correct answer:{" "}
-                  <span className="text-[13px] font-semibold text-foreground">
-                    <RichQuestionContent
-                      text={expectedAnswersForDisplay[0]}
-                      className="inline prose prose-sm max-w-none prose-p:my-0 [&_p]:inline"
-                    />
-                  </span>
-                </p>
+              {submitted && !isCorrect ? (
+                <WrongAnswerFeedbackPanel
+                  title="Feedback"
+                  bullets={buildWrongAnswerBullets({
+                    studentAnswer: answer,
+                    expectedAnswers: expectedAnswersForDisplay.filter(Boolean),
+                    guidance: question.guidance,
+                    questionText: question.question,
+                  })}
+                />
               ) : null}
             </div>
           )}
@@ -1200,7 +1061,7 @@ export function ShortQuestion({
               if (read) return read;
               return isHandwritingValue(part) ? "" : part;
             })}
-            guidance={handwritingMode && aiMark ? undefined : question.guidance}
+            guidance={usesHandwritingAi && aiMark ? undefined : question.guidance}
           />
         ) : null}
 
@@ -1232,7 +1093,7 @@ export function ShortQuestion({
             </div>
           </div>
         )}
-        {aiMark && submitted && !(isMultipart && handwritingMode) ? (
+        {aiMark && submitted && !(isMultipart && usesHandwritingAi) ? (
           <AiMarkingFeedbackPanel
             feedback={aiMark.feedback}
             correct={aiMark.correct}

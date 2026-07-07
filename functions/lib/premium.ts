@@ -11,6 +11,17 @@ export type PremiumUser = {
 
 const ADMIN_EMAIL_LC = "nodent.app@gmail.com";
 
+/** Per API key — total free daily limit = this × configured provider count. */
+export const FREE_DAILY_AI_MARKS_PER_PROVIDER = 3;
+
+export function freeDailyProseAiLimit(providerCount: number): number {
+  return FREE_DAILY_AI_MARKS_PER_PROVIDER * Math.max(1, providerCount);
+}
+
+export function freeDailyHandwritingAiLimit(providerCount: number): number {
+  return FREE_DAILY_AI_MARKS_PER_PROVIDER * Math.max(1, providerCount);
+}
+
 export function isAdminEmail(email: unknown): boolean {
   return String(email ?? "").trim().toLowerCase() === ADMIN_EMAIL_LC;
 }
@@ -35,9 +46,28 @@ export function premiumRequiredResponse() {
   };
 }
 
+export function quotaExceededResponse(message: string) {
+  return {
+    error: message,
+    code: PREMIUM_REQUIRED,
+  };
+}
+
 const MS_DAY = 24 * 60 * 60 * 1000;
 const PRACTICE_EXAM_WINDOW_MS = 7 * MS_DAY;
-const ENGLISH_MARK_WINDOW_MS = 3 * MS_DAY;
+
+export const USAGE_KIND_PROSE_AI = "prose_ai_mark";
+export const USAGE_KIND_HANDWRITING_AI = "handwriting_ai_mark";
+export const USAGE_KIND_ENGLISH_ESSAY_AI = "english_essay_ai";
+
+const ENGLISH_ESSAY_WINDOW_MS = 3 * MS_DAY;
+export const FREE_ENGLISH_ESSAY_LIMIT = 1;
+
+/** UTC midnight — same reset window for all users. */
+export function startOfUtcDayIso(): string {
+  const d = new Date();
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())).toISOString();
+}
 
 export async function countUsageSince(
   db: { execute: (q: ReturnType<typeof sql>) => Promise<{ rows?: unknown[] }> },
@@ -68,31 +98,14 @@ export async function recordUsage(
 }
 
 export async function hasPracticeExamAccess(
-  db: { execute: (q: ReturnType<typeof sql>) => Promise<{ rows?: unknown[] }> },
-  userId: number,
-  examRef: string,
+  _db: { execute: (q: ReturnType<typeof sql>) => Promise<{ rows?: unknown[] }> },
+  _userId: number,
+  _examRef: string,
 ): Promise<{ allowed: boolean; reason?: string }> {
-  const since = new Date(Date.now() - PRACTICE_EXAM_WINDOW_MS).toISOString();
-  const rows = await db.execute(sql`
-    SELECT ref_key
-    FROM user_usage_events
-    WHERE user_id = ${userId}
-      AND kind = 'practice_exam'
-      AND created_at >= ${since}
-    ORDER BY created_at DESC
-    LIMIT 5
-  `);
-  const refs = (rows.rows as { ref_key?: string | null }[]).map((r) =>
-    String(r.ref_key ?? ""),
-  );
-  if (refs.includes(examRef)) return { allowed: true };
-  if (refs.length >= 1) {
-    return {
-      allowed: false,
-      reason: "Free accounts get 1 practice exam per week. Upgrade for unlimited access.",
-    };
-  }
-  return { allowed: true };
+  return {
+    allowed: false,
+    reason: "Past practice exams require Premium.",
+  };
 }
 
 export async function ensurePracticeExamUsage(
@@ -113,16 +126,53 @@ export async function ensurePracticeExamUsage(
   await recordUsage(db, userId, "practice_exam", examRef);
 }
 
+/** Long-answer text AI on free accounts (maths etc. — not English essays). */
+export async function canRunProseAiMark(
+  db: { execute: (q: ReturnType<typeof sql>) => Promise<{ rows?: unknown[] }> },
+  userId: number,
+  providerCount = 1,
+): Promise<{ allowed: boolean; reason?: string }> {
+  const limit = freeDailyProseAiLimit(providerCount);
+  const since = startOfUtcDayIso();
+  const n = await countUsageSince(db, userId, USAGE_KIND_PROSE_AI, since);
+  if (n >= limit) {
+    return {
+      allowed: false,
+      reason: `Free accounts get ${limit} AI-marked long answers per day. Upgrade for unlimited marking.`,
+    };
+  }
+  return { allowed: true };
+}
+
+/** Handwritten working / draw marking — separate daily bucket on free accounts. */
+export async function canRunHandwritingAiMark(
+  db: { execute: (q: ReturnType<typeof sql>) => Promise<{ rows?: unknown[] }> },
+  userId: number,
+  providerCount = 1,
+): Promise<{ allowed: boolean; reason?: string }> {
+  const limit = freeDailyHandwritingAiLimit(providerCount);
+  const since = startOfUtcDayIso();
+  const n = await countUsageSince(db, userId, USAGE_KIND_HANDWRITING_AI, since);
+  if (n >= limit) {
+    return {
+      allowed: false,
+      reason: `Free accounts get ${limit} handwritten working-out marks per day. Upgrade for unlimited marking.`,
+    };
+  }
+  return { allowed: true };
+}
+
+/** English essay marking — separate 3-day bucket (uses paid OpenAI). */
 export async function canRunEnglishAiMark(
   db: { execute: (q: ReturnType<typeof sql>) => Promise<{ rows?: unknown[] }> },
   userId: number,
 ): Promise<{ allowed: boolean; reason?: string }> {
-  const since = new Date(Date.now() - ENGLISH_MARK_WINDOW_MS).toISOString();
-  const n = await countUsageSince(db, userId, "english_ai_mark", since);
-  if (n >= 1) {
+  const since = new Date(Date.now() - ENGLISH_ESSAY_WINDOW_MS).toISOString();
+  const n = await countUsageSince(db, userId, USAGE_KIND_ENGLISH_ESSAY_AI, since);
+  if (n >= FREE_ENGLISH_ESSAY_LIMIT) {
     return {
       allowed: false,
-      reason: "Free accounts get 1 AI-marked English response every 3 days. Upgrade for unlimited marking.",
+      reason: `Free accounts get ${FREE_ENGLISH_ESSAY_LIMIT} AI-marked English essay every 3 days. Upgrade for unlimited marking.`,
     };
   }
   return { allowed: true };
@@ -132,25 +182,48 @@ export async function getPremiumUsageSummary(
   db: { execute: (q: ReturnType<typeof sql>) => Promise<{ rows?: unknown[] }> },
   userId: number,
   isPremium: boolean,
+  providerCount = 1,
 ) {
   const examSince = new Date(Date.now() - PRACTICE_EXAM_WINDOW_MS).toISOString();
-  const englishSince = new Date(Date.now() - ENGLISH_MARK_WINDOW_MS).toISOString();
+  const daySince = startOfUtcDayIso();
+  const essaySince = new Date(Date.now() - ENGLISH_ESSAY_WINDOW_MS).toISOString();
   const examsUsed = await countUsageSince(db, userId, "practice_exam", examSince);
-  const englishUsed = await countUsageSince(db, userId, "english_ai_mark", englishSince);
+  const proseUsed = await countUsageSince(db, userId, USAGE_KIND_PROSE_AI, daySince);
+  const handwritingUsed = await countUsageSince(
+    db,
+    userId,
+    USAGE_KIND_HANDWRITING_AI,
+    daySince,
+  );
+  const englishEssaysUsed = await countUsageSince(
+    db,
+    userId,
+    USAGE_KIND_ENGLISH_ESSAY_AI,
+    essaySince,
+  );
   return {
     isPremium,
     practiceExams: {
-      used: examsUsed,
-      limit: isPremium ? null : 1,
+      used: isPremium ? examsUsed : 0,
+      limit: isPremium ? null : 0,
       windowDays: 7,
+      requiresPremium: !isPremium,
     },
-    englishAiMarks: {
-      used: englishUsed,
-      limit: isPremium ? null : 1,
+    proseAiMarks: {
+      used: proseUsed,
+      limit: isPremium ? null : freeDailyProseAiLimit(providerCount),
+      windowDays: 1,
+    },
+    handwritingAiMarks: {
+      used: handwritingUsed,
+      limit: isPremium ? null : freeDailyHandwritingAiLimit(providerCount),
+      windowDays: 1,
+    },
+    englishEssays: {
+      used: englishEssaysUsed,
+      limit: isPremium ? null : FREE_ENGLISH_ESSAY_LIMIT,
       windowDays: 3,
     },
-    aiMarking: { requiresPremium: !isPremium },
     questionHelp: { requiresPremium: !isPremium },
-    markBreakdown: { requiresPremium: !isPremium },
   };
 }
