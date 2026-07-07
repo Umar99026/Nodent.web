@@ -120,9 +120,14 @@ function paletteForAction(action: DashboardAction, index: number): TilePalette {
 type DashboardRecommendationsProps = {
   actions: DashboardAction[];
   loading?: boolean;
+  onActionOpen?: (action: DashboardAction) => void;
 };
 
-export function DashboardRecommendations({ actions, loading }: DashboardRecommendationsProps) {
+export function DashboardRecommendations({
+  actions,
+  loading,
+  onActionOpen,
+}: DashboardRecommendationsProps) {
   const navigate = useNavigate();
 
   const sectionIntro = (
@@ -181,7 +186,10 @@ export function DashboardRecommendations({ actions, loading }: DashboardRecommen
           <button
             key={action.id}
             type="button"
-            onClick={() => navigate(action.href)}
+            onClick={() => {
+              onActionOpen?.(action);
+              navigate(action.href);
+            }}
             className={cn(
               "group flex w-full items-center gap-4 overflow-hidden rounded-2xl border text-left shadow-sm transition-all sm:gap-5",
               palette.tileClass,

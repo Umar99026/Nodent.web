@@ -1,6 +1,6 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { apiFetch } from "@/lib/api";
+import { ApiError, apiFetch } from "@/lib/api";
 import { isAdminUser } from "@/lib/constants";
 import { getDashboardGreeting } from "@/lib/dashboardGreeting";
 import { AppShell } from "@/components/layout/AppShell";
@@ -15,6 +15,7 @@ import { DashboardSubjectRail } from "@/components/dashboard/DashboardSubjectRai
 import { DashboardHotFeatures } from "@/components/dashboard/DashboardHotFeatures";
 import {
   buildDashboardActions,
+  type DashboardAction,
   type DashboardScorecard,
 } from "@/lib/dashboardRecommendations";
 
@@ -22,6 +23,11 @@ export default function DashboardPage() {
   const { user } = useAuth();
   const isAdmin = isAdminUser(user);
   const userId = String(user?.id ?? "anonymous");
+  const lastScorecardToastAtRef = useRef<number>(0);
+  const dashboardActionStorageKey = useMemo(
+    () => `nodent:dashboard-actions:v1:${userId}`,
+    [userId],
+  );
   const initials = user?.username
     ? user.username
         .split(" ")
@@ -51,8 +57,16 @@ export default function DashboardPage() {
         `/api/scorecard?asOfDate=${encodeURIComponent(localDateISO())}`,
       );
       setScoreCard(data);
-    } catch {
-      toast.error("Failed to load your report card.");
+    } catch (err) {
+      // Avoid toast spam: scorecard is refreshed in multiple places (including after answer submits).
+      // Also avoid toasting on 401/session churn; AuthContext handles expiry.
+      if (err instanceof ApiError && err.status === 401) return;
+      const now = Date.now();
+      if (now - lastScorecardToastAtRef.current < 12_000) return;
+      lastScorecardToastAtRef.current = now;
+      toast.error(
+        err instanceof Error ? err.message : "Failed to load your report card.",
+      );
     } finally {
       setScoreCardLoading(false);
     }
@@ -77,7 +91,7 @@ export default function DashboardPage() {
     }
   }, [mySubjects, selectedSubjectId]);
 
-  const actions = useMemo(
+  const computedActions = useMemo(
     () =>
       buildDashboardActions({
         subjects: mySubjects,
@@ -85,6 +99,113 @@ export default function DashboardPage() {
         confidenceRanks,
       }),
     [mySubjects, scoreCard, confidenceRanks],
+  );
+
+  const [stableActions, setStableActions] = useState<DashboardAction[]>([]);
+
+  useEffect(() => {
+    if (!user) return;
+    if (!computedActions.length) {
+      setStableActions([]);
+      return;
+    }
+
+    const today = localDateISO();
+    type Stored = { date: string; actionIds: string[]; completedIds: string[] };
+
+    const parseStored = (): Stored | null => {
+      try {
+        const raw = localStorage.getItem(dashboardActionStorageKey);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw) as Partial<Stored>;
+        if (!parsed || typeof parsed !== "object") return null;
+        if (typeof parsed.date !== "string") return null;
+        if (!Array.isArray(parsed.actionIds) || !Array.isArray(parsed.completedIds)) return null;
+        return {
+          date: parsed.date,
+          actionIds: parsed.actionIds.filter((x): x is string => typeof x === "string"),
+          completedIds: parsed.completedIds.filter((x): x is string => typeof x === "string"),
+        };
+      } catch {
+        return null;
+      }
+    };
+
+    const writeStored = (next: Stored) => {
+      localStorage.setItem(dashboardActionStorageKey, JSON.stringify(next));
+    };
+
+    const byId = new Map(computedActions.map((a) => [a.id, a]));
+    const stored = parseStored();
+
+    const seedForToday = (): Stored => ({
+      date: today,
+      actionIds: computedActions.map((a) => a.id),
+      completedIds: [],
+    });
+
+    const effective = !stored || stored.date !== today ? seedForToday() : stored;
+
+    // If they finished the whole plan, refresh immediately (same day).
+    const completedSet = new Set(effective.completedIds);
+    const allCompleted =
+      effective.actionIds.length > 0 &&
+      effective.actionIds.every((id) => completedSet.has(id));
+    const finalStored = allCompleted ? seedForToday() : effective;
+    if (!stored || stored.date !== finalStored.date || allCompleted) writeStored(finalStored);
+
+    const picked: DashboardAction[] = [];
+    const used = new Set<string>();
+    for (const id of finalStored.actionIds) {
+      const action = byId.get(id);
+      if (!action) continue;
+      if (finalStored.completedIds.includes(id)) continue;
+      picked.push(action);
+      used.add(id);
+    }
+    // Fill any gaps (e.g. action ids no longer exist) with new suggestions,
+    // while still keeping the "daily plan" stable.
+    for (const action of computedActions) {
+      if (picked.length >= computedActions.length) break;
+      if (used.has(action.id)) continue;
+      if (finalStored.completedIds.includes(action.id)) continue;
+      picked.push(action);
+      used.add(action.id);
+    }
+
+    setStableActions(picked);
+  }, [user, computedActions, dashboardActionStorageKey]);
+
+  const markDashboardActionOpened = useCallback(
+    (action: DashboardAction) => {
+      if (!user) return;
+      const today = localDateISO();
+      type Stored = { date: string; actionIds: string[]; completedIds: string[] };
+      try {
+        const raw = localStorage.getItem(dashboardActionStorageKey);
+        const parsed = raw ? (JSON.parse(raw) as Partial<Stored>) : null;
+        const actionIds =
+          parsed?.date === today && Array.isArray(parsed.actionIds)
+            ? parsed.actionIds.filter((x): x is string => typeof x === "string")
+            : computedActions.map((a) => a.id);
+        const completedIds =
+          parsed?.date === today && Array.isArray(parsed.completedIds)
+            ? parsed.completedIds.filter((x): x is string => typeof x === "string")
+            : [];
+
+        const nextCompleted = new Set(completedIds);
+        nextCompleted.add(action.id);
+        const next: Stored = {
+          date: today,
+          actionIds,
+          completedIds: Array.from(nextCompleted),
+        };
+        localStorage.setItem(dashboardActionStorageKey, JSON.stringify(next));
+      } catch {
+        // Best-effort only; if storage fails, the UI still works.
+      }
+    },
+    [user, computedActions, dashboardActionStorageKey],
   );
 
   const greeting = useMemo(
@@ -121,8 +242,9 @@ export default function DashboardPage() {
       <div className="mt-4 grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(260px,320px)] lg:items-start">
         <section className="min-w-0 rounded-3xl border border-black/8 bg-white p-4 shadow-sm sm:p-6 lg:p-8">
           <DashboardRecommendations
-            actions={actions}
+            actions={stableActions.length ? stableActions : computedActions}
             loading={scoreCardLoading || subjectsLoading}
+            onActionOpen={markDashboardActionOpened}
           />
         </section>
 

@@ -194,7 +194,8 @@ export default function LandingPage() {
               <SectionEyebrow>Why it works</SectionEyebrow>
               <SectionTitle>Practice smarter. Recover more marks.</SectionTitle>
               <p className="mt-4 text-lg text-slate-600">
-                Three ways Nodent replaces the guesswork — and a lot of the tutoring bill.
+                Three ways Nodent turns VCE study resources into clearer next steps — without the
+                tutoring bill.
               </p>
             </Reveal>
 

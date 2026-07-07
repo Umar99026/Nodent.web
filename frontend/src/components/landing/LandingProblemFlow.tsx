@@ -92,8 +92,9 @@ export function LandingProblemFlow() {
           Feedback in seconds. Clarity on what to improve.
         </SectionTitle>
         <p className="mt-4 text-lg text-slate-600">
-          Practice VCE-style questions, get smart marking on written work, and see exactly where to
-          recover marks — without booking another tutoring session.
+          Practice VCE-style questions, get smart marking on written work, and use Nodent as a VCE
+          revision tool to see exactly where to recover marks — without booking another tutoring
+          session.
         </p>
         <Link
           to="/login"

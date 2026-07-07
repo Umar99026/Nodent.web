@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { apiFetch } from "@/lib/api";
+import { ApiError, apiFetch } from "@/lib/api";
 import { isAdminUser } from "@/lib/constants";
 import { AppShell } from "@/components/layout/AppShell";
 import { DashboardReportTable } from "@/components/dashboard/DashboardReportTable";
@@ -33,6 +33,7 @@ export default function ReportPage() {
   const { mySubjects } = useMySubjects(userId, isAdmin);
   const [loading, setLoading] = useState(true);
   const [scoreCard, setScoreCard] = useState<DashboardScorecard | null>(null);
+  const lastScorecardToastAtRef = useRef<number>(0);
 
   const fetchScorecard = useCallback(async () => {
     if (!user) return;
@@ -42,8 +43,12 @@ export default function ReportPage() {
         `/api/scorecard?asOfDate=${encodeURIComponent(localDateISO())}`,
       );
       setScoreCard(data);
-    } catch {
-      toast.error("Failed to load your report.");
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) return;
+      const now = Date.now();
+      if (now - lastScorecardToastAtRef.current < 12_000) return;
+      lastScorecardToastAtRef.current = now;
+      toast.error(err instanceof Error ? err.message : "Failed to load your report.");
     } finally {
       setLoading(false);
     }

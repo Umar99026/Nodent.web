@@ -13,7 +13,7 @@ export function LandingHeroPoster() {
         <div className="grid flex-1 items-center gap-10 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.15fr)] lg:gap-8">
           <div className="max-w-lg pl-1 sm:pl-0">
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/55">
-              VCE revision, without the tutor bill
+              A VCE revision tool — without the tutor bill
             </p>
             <h1 className="mt-4 font-display text-[clamp(2rem,5.5vw,3.25rem)] font-bold uppercase leading-[1.05] tracking-tight text-white">
               Practice smarter.
@@ -21,8 +21,8 @@ export function LandingHeroPoster() {
               Recover more marks.
             </h1>
             <p className="mt-5 max-w-md text-sm leading-relaxed text-white/75 sm:text-base">
-              Don&apos;t want to spend hundreds of dollars a week on tutoring? Nodent gives you
-              feedback in seconds — not days — so you stop guessing what to improve.
+              Nodent combines VCE study resources with instant feedback on VCE-style questions, so you
+              stop guessing what to improve — and spend less time waiting on tutoring.
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-4">
               <Link
