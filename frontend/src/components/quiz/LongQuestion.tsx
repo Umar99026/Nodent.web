@@ -65,6 +65,7 @@ import { buildWrongAnswerBullets } from "@/lib/wrongAnswerFeedback";
 import { toast } from "sonner";
 import { isPremiumError, PREMIUM_PATH } from "@/lib/premium";
 import { AiMarkingFeedbackPanel, AiMarkingPartFeedback } from "@/components/quiz/AiMarkingFeedbackPanel";
+import { PremiumGate } from "@/components/premium/GetPremiumButton";
 import {
   ExamPaperPartPrompt,
   ExamPaperQuestionHeading,
@@ -313,6 +314,7 @@ export function LongQuestion({
   }>({ average: null, count: 0 });
   const [aiMark, setAiMark] = useState<SmartMarkResult | null>(null);
   const [aiMarking, setAiMarking] = useState(false);
+  const [premiumLockedMessage, setPremiumLockedMessage] = useState<string | null>(null);
   const handwritingUi = handwritingAllowedForSubject(subjectId);
   const examPaper = examPaperLayoutProp ?? isExamPaperLayoutSubject(subjectId);
 
@@ -422,6 +424,7 @@ export function LongQuestion({
 
     if (!hasContent || saving || disabled || (!practiceOnly && saved)) return;
 
+    setPremiumLockedMessage(null);
     setSaving(true);
     try {
       if (!practiceOnly) {
@@ -510,7 +513,10 @@ export function LongQuestion({
         } catch (err) {
           const msg = handwritingMarkUserError(err);
           toast.error(msg);
-          if (isPremiumError(err)) navigate(PREMIUM_PATH);
+          if (isPremiumError(err)) {
+            setPremiumLockedMessage(msg);
+            return;
+          }
           const fallback = buildFallbackHandwritingMark(expectedAnswersForDisplay);
           finalResult = false;
           setAutoMarkResult(false);
@@ -556,7 +562,9 @@ export function LongQuestion({
         } catch (err) {
           const msg = err instanceof Error ? err.message : "Could not mark your answer.";
           toast.error(msg);
-          if (isPremiumError(err)) navigate(PREMIUM_PATH);
+          if (isPremiumError(err)) {
+            setPremiumLockedMessage(msg);
+          }
         } finally {
           setAiMarking(false);
         }
@@ -859,6 +867,7 @@ export function LongQuestion({
                 : hasAnswerContent(response)) ||
               saving ||
               aiMarking ||
+              Boolean(premiumLockedMessage) ||
               disabled ||
               (!practiceOnly && saved)
             }
@@ -877,7 +886,22 @@ export function LongQuestion({
                   ? "Submit all parts"
                   : submitLabel}
           </Button>
+          {premiumLockedMessage ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="gap-2 border-black/10"
+              onClick={() => navigate(PREMIUM_PATH)}
+            >
+              Locked
+            </Button>
+          ) : null}
         </div>
+        {premiumLockedMessage ? (
+          <div className="mt-3">
+            <PremiumGate allowed={false} message={premiumLockedMessage} />
+          </div>
+        ) : null}
         {isMultipart && (practiceOnly ? submitted : saved) && partResults.length > 0 ? (
           <div
             className={cn(

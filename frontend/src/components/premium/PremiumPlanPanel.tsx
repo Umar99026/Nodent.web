@@ -2,7 +2,9 @@ import { useAuth } from "@/context/AuthContext";
 import { isAdminUser } from "@/lib/constants";
 import { isPremiumUser } from "@/lib/premium";
 import {
+  formatCompactFreePlanDescription,
   formatFreePlanSummary,
+  FREE_DAILY_LONG_ANSWER_LIMIT,
   PREMIUM_FEATURE_ROWS,
   type PremiumUsageQuota,
   type PremiumUsageSummary,
@@ -16,16 +18,14 @@ function compactPlanBlurb(
   usage: PremiumUsageSummary | null,
   loading: boolean,
 ): string {
-  if (loading) return "Loading usage…";
-  if (!usage) return "Limited daily AI marking";
-  const prose = usage.proseAiMarks;
-  if (prose.limit != null) {
-    const left = Math.max(0, prose.limit - prose.used);
-    return left > 0
-      ? `${left} long-answer mark${left === 1 ? "" : "s"} left today`
-      : "Daily AI marking used up";
-  }
-  return "Limited daily AI marking";
+  if (loading) return "Loading plan details…";
+  const base = formatCompactFreePlanDescription();
+  if (!usage) return base;
+  const used = usage.proseAiMarks.used;
+  const left = Math.max(0, FREE_DAILY_LONG_ANSWER_LIMIT - used);
+  return left > 0
+    ? `${base}. ${left} long-answer mark${left === 1 ? "" : "s"} left today.`
+    : `${base}. Daily long-answer limit used up.`;
 }
 
 function QuotaMeter({
@@ -132,19 +132,29 @@ export function PremiumPlanPanel({ compact = false }: PremiumPlanPanelProps) {
 
   if (compact) {
     return (
-      <aside className="overflow-hidden rounded-3xl border border-black/8 bg-white shadow-sm">
-        <div className="practice-card-header !min-h-0 !py-3.5 sm:!py-4">
-          <p className="practice-card-header-title">Your plan</p>
-          <p className="practice-card-header-meta">{planLabel}</p>
-        </div>
-        {!premium && !admin ? (
-          <div className="flex items-center justify-between gap-3 border-t border-black/8 px-4 py-3 sm:px-5">
-            <p className="text-xs leading-snug text-muted-foreground">
-              {compactPlanBlurb(usage, loading)}
-            </p>
-            <GetPremiumButton size="sm" className="shrink-0" />
+      <aside className="practice-card">
+        <div className="px-4 py-4 sm:px-5">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                Your plan
+              </p>
+              <p className="mt-1 font-display text-lg font-bold tracking-tight text-[#0b0f19]">
+                {planLabel}
+              </p>
+              <p className="mt-1 text-xs leading-snug text-muted-foreground">
+                {premium || admin ? "Full access" : compactPlanBlurb(usage, loading)}
+              </p>
+            </div>
+            {!premium && !admin ? (
+              <GetPremiumButton size="sm" className="shrink-0" />
+            ) : (
+              <span className="shrink-0 rounded-full border border-black/10 bg-black/[0.04] px-2.5 py-1 text-xs font-semibold text-[#0b0f19]">
+                Included
+              </span>
+            )}
           </div>
-        ) : null}
+        </div>
       </aside>
     );
   }

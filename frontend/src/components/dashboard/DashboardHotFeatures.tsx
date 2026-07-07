@@ -37,15 +37,24 @@ export function DashboardHotFeatures() {
   return (
     <div className="flex flex-col gap-4">
       <PremiumPlanPanel compact />
-      <aside className="overflow-hidden rounded-3xl border border-black/8 bg-white shadow-sm">
-      <div className="practice-card-header !min-h-0 !py-3.5 sm:!py-4">
-        <div className="flex items-center gap-2">
-          <Flame className="size-4 shrink-0 text-gold" aria-hidden />
-          <p className="practice-card-header-title">What&apos;s hot</p>
+      <aside className="practice-card">
+        <div className="px-4 py-4 sm:px-5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                What&apos;s hot
+              </p>
+              <p className="mt-1 font-display text-lg font-bold tracking-tight text-[#0b0f19]">
+                What&apos;s hot
+              </p>
+            </div>
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gold/15 text-gold-dark">
+              <Flame className="size-4" aria-hidden />
+            </span>
+          </div>
         </div>
-      </div>
 
-      <div className="divide-y divide-black/8">
+        <div className="divide-y divide-black/8">
         {features.map((feature) => (
           <button
             key={feature.id}
@@ -53,7 +62,7 @@ export function DashboardHotFeatures() {
             onClick={feature.onClick}
             className={cn(
               "group flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left transition-colors sm:px-5 sm:py-4",
-              "hover:bg-[#f3f4f6]/70",
+              "hover:bg-black/[0.035]",
             )}
           >
             <div className="min-w-0">
@@ -66,7 +75,7 @@ export function DashboardHotFeatures() {
           </button>
         ))}
       </div>
-    </aside>
+      </aside>
     </div>
   );
 }

@@ -126,7 +126,6 @@ export function DashboardSubjectRail({
           ) : (
             sorted.map((subject) => {
               const isActive = subject.id === activeId;
-              const rank = confidenceRanks[subject.id];
               return (
                 <div key={subject.id} className="group relative">
                   <button
@@ -141,16 +140,6 @@ export function DashboardSubjectRail({
                   >
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-semibold">{subject.name}</p>
-                      {rank != null ? (
-                        <p
-                          className={cn(
-                            "text-[10px] uppercase tracking-wide",
-                            isActive ? "text-white/65" : "text-muted-foreground",
-                          )}
-                        >
-                          Confidence #{rank}
-                        </p>
-                      ) : null}
                     </div>
                     <ChevronRight
                       className={cn(

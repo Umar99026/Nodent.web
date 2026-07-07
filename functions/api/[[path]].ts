@@ -45,6 +45,7 @@ import {
   qualifiesForOpenAiHandwriting,
   qualifiesForOpenAiMarking,
 } from "../lib/wordedQuestion";
+import { isPlaceholderTopic } from "../lib/topicDisplay";
 
 // ---- Schema ----
 const users = pgTable("users", {
@@ -367,6 +368,18 @@ function canonicalSubjectId(raw: unknown): string {
     "specialist maths": "specialist-maths",
   };
   return aliases[s] || s;
+}
+
+function subjectIdEquivalents(canonical: string): string[] {
+  const sid = canonicalSubjectId(canonical);
+  const base = [sid];
+  const extra: Record<string, string[]> = {
+    methods: ["mathematical methods", "mathematical-methods", "math methods", "mm"],
+    "general-maths": ["general maths", "general mathematics", "general-mathematics"],
+    "further-maths": ["further maths", "further mathematics"],
+    "specialist-maths": ["specialist maths", "specialist mathematics"],
+  };
+  return Array.from(new Set([...base, ...(extra[sid] ?? [])]));
 }
 
 /** Match `frontend/src/lib/builtinQuestionsSeed.ts` — dedupe by subject + question stem. */
@@ -1043,6 +1056,86 @@ function cohortPercentileFromRank(rank: number, total: number): number {
   if (total < 1 || rank < 1 || rank > total) return 0;
   const raw = (rank / total) * 100;
   return Math.max(2, Math.min(100, roundPercentileToNearest2(raw)));
+}
+
+/** Minimum scored questions before a student appears in cohort rankings. */
+const MIN_RANKED_ATTEMPTS = 10;
+
+/**
+ * Rank a user by mark-weighted % (marks earned ÷ marks attempted) within a cohort.
+ * Everyone in the cohort must have at least `minAttempts` questions in the filter scope.
+ */
+async function getUserMarksRankInCohort(
+  db: any,
+  userId: number,
+  filters: { subjectId?: string; subjectIdOptions?: string[]; topic?: string; timeFilter?: ReturnType<typeof sql> },
+  minAttempts = MIN_RANKED_ATTEMPTS,
+): Promise<{ rank: number | null; rankedStudents: number; percentile: number | null }> {
+  const subjectFilter = filters.subjectIdOptions?.length
+    ? sql` AND subject_id IN (${sqlTextInList(filters.subjectIdOptions)}) `
+    : filters.subjectId
+      ? sql` AND subject_id = ${filters.subjectId} `
+      : sql``;
+  const topicFilter = filters.topic ? sql` AND topic = ${filters.topic} ` : sql``;
+  const timeFilter = filters.timeFilter ?? sql``;
+
+  const rows = await db.execute(sql`
+    WITH by_user AS (
+      SELECT user_id,
+        COALESCE(SUM(COALESCE(marks_earned, CASE WHEN is_correct = 1 THEN marks ELSE 0 END)), 0)::int AS marks_correct,
+        COALESCE(SUM(marks), 0)::int AS marks_attempted,
+        COUNT(*)::int AS attempt_count
+      FROM question_attempts
+      WHERE 1=1 ${subjectFilter} ${topicFilter} ${timeFilter}
+      GROUP BY user_id
+    ),
+    eligible AS (
+      SELECT user_id, marks_correct, marks_attempted,
+        CASE WHEN marks_attempted > 0
+          THEN marks_correct::float / marks_attempted::float
+          ELSE NULL
+        END AS pct
+      FROM by_user
+      WHERE attempt_count >= ${minAttempts} AND marks_attempted > 0
+    ),
+    ranked AS (
+      SELECT user_id,
+        DENSE_RANK() OVER (ORDER BY pct DESC, marks_attempted DESC, user_id ASC) AS rnk,
+        COUNT(*) OVER ()::int AS cnt
+      FROM eligible
+    )
+    SELECT rnk, cnt
+    FROM ranked
+    WHERE user_id = ${userId}
+    LIMIT 1
+  `);
+
+  const row = (rows.rows as any[])?.[0];
+  if (!row) {
+    const countRows = await db.execute(sql`
+      WITH by_user AS (
+        SELECT user_id,
+          COUNT(*)::int AS attempt_count,
+          COALESCE(SUM(marks), 0)::int AS marks_attempted
+        FROM question_attempts
+        WHERE 1=1 ${subjectFilter} ${topicFilter} ${timeFilter}
+        GROUP BY user_id
+      )
+      SELECT COUNT(*)::int AS cnt
+      FROM by_user
+      WHERE attempt_count >= ${minAttempts} AND marks_attempted > 0
+    `);
+    const rankedStudents = Number((countRows.rows as any[])?.[0]?.cnt ?? 0);
+    return { rank: null, rankedStudents, percentile: null };
+  }
+
+  const rank = Number(row.rnk ?? 0) || null;
+  const rankedStudents = Number(row.cnt ?? 0);
+  const percentile =
+    rank != null && rankedStudents > 1
+      ? cohortPercentileFromRank(rank, rankedStudents)
+      : null;
+  return { rank, rankedStudents, percentile };
 }
 
 /** Neon/Drizzle often wrap the real Postgres message in `cause`. */
@@ -2178,6 +2271,10 @@ async function ensureCoreTables(db: any) {
     ALTER TABLE question_attempts ADD COLUMN IF NOT EXISTS marks_earned integer
   `);
   await db.execute(sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS question_attempts_user_subject_question_idx
+    ON question_attempts (user_id, subject_id, question_key)
+  `);
+  await db.execute(sql`
     CREATE TABLE IF NOT EXISTS forum_posts (
       id serial PRIMARY KEY,
       subject_id text NOT NULL,
@@ -2526,39 +2623,51 @@ async function authMiddleware(c: any, next: any) {
   if (!authHeader?.startsWith("Bearer ")) return c.json({ error: "Authentication required." }, 401);
   const token = authHeader.slice(7);
   const db = c.get("db");
-  const result = await db.select({
-    userId: users.id,
-    email: users.email,
-    username: users.username,
-    profilePhoto: users.profilePhoto,
-    accountRole: users.accountRole,
-    onboardingCompletedAt: users.onboardingCompletedAt,
-    isVceStudent: users.isVceStudent,
-    plan: users.plan,
-    premiumUntil: users.premiumUntil,
-    expiresAt: sessions.expiresAt,
-  })
-    .from(sessions).innerJoin(users, eq(sessions.userId, users.id)).where(eq(sessions.token, token)).limit(1);
-  if (result.length === 0) return c.json({ error: "Invalid session." }, 401);
-  if (new Date(result[0].expiresAt) < new Date()) {
-    await db.delete(sessions).where(eq(sessions.token, token));
+  let row: any = null;
+  try {
+    const q = await db.execute(sql`
+      SELECT
+        u.id AS user_id,
+        u.email AS email,
+        u.username AS username,
+        u.profile_photo AS profile_photo,
+        u.account_role AS account_role,
+        u.onboarding_completed_at AS onboarding_completed_at,
+        u.is_vce_student AS is_vce_student,
+        u.plan AS plan,
+        u.premium_until AS premium_until,
+        s.expires_at AS expires_at
+      FROM sessions s
+      INNER JOIN users u ON s.user_id = u.id
+      WHERE s.token = ${token}
+      LIMIT 1
+    `);
+    row = (q.rows as any[] | undefined)?.[0] ?? null;
+  } catch (e) {
+    console.error("[authMiddleware] session lookup failed", errorChain(e));
+    // Treat as unauthenticated instead of 500s cascading through the app.
+    return c.json({ error: "Authentication required." }, 401);
+  }
+  if (!row) return c.json({ error: "Invalid session." }, 401);
+  if (new Date(String(row.expires_at)) < new Date()) {
+    await db.execute(sql`DELETE FROM sessions WHERE token = ${token}`);
     return c.json({ error: "Session expired." }, 401);
   }
   c.set("user", {
-    id: result[0].userId,
-    email: result[0].email,
-    username: result[0].username,
-    profilePhoto: result[0].profilePhoto ?? null,
-    accountRole: normalizeAccountRole(result[0].accountRole),
-    onboardingCompletedAt: result[0].onboardingCompletedAt ?? null,
+    id: Number(row.user_id),
+    email: String(row.email ?? ""),
+    username: String(row.username ?? ""),
+    profilePhoto: row.profile_photo ?? null,
+    accountRole: normalizeAccountRole(row.account_role),
+    onboardingCompletedAt: row.onboarding_completed_at ?? null,
     isVceStudent:
-      result[0].isVceStudent === 1
+      row.is_vce_student === 1
         ? true
-        : result[0].isVceStudent === 0
+        : row.is_vce_student === 0
           ? false
           : null,
-    plan: result[0].plan ?? "free",
-    premiumUntil: result[0].premiumUntil ?? null,
+    plan: row.plan ?? "free",
+    premiumUntil: row.premium_until ?? null,
     token,
   });
   await next();
@@ -2571,26 +2680,29 @@ async function resolveOptionalUser(
   if (!authHeader?.startsWith("Bearer ")) return null;
   const token = authHeader.slice(7);
   const db = c.get("db");
-  const result = await db
-    .select({
-      userId: users.id,
-      email: users.email,
-      username: users.username,
-      expiresAt: sessions.expiresAt,
-    })
-    .from(sessions)
-    .innerJoin(users, eq(sessions.userId, users.id))
-    .where(eq(sessions.token, token))
-    .limit(1);
-  if (result.length === 0) return null;
-  if (new Date(result[0].expiresAt) < new Date()) {
-    await db.delete(sessions).where(eq(sessions.token, token));
+  let row: any = null;
+  try {
+    const q = await db.execute(sql`
+      SELECT u.id AS user_id, u.email AS email, u.username AS username, s.expires_at AS expires_at
+      FROM sessions s
+      INNER JOIN users u ON s.user_id = u.id
+      WHERE s.token = ${token}
+      LIMIT 1
+    `);
+    row = (q.rows as any[] | undefined)?.[0] ?? null;
+  } catch (e) {
+    console.error("[resolveOptionalUser] session lookup failed", errorChain(e));
+    return null;
+  }
+  if (!row) return null;
+  if (new Date(String(row.expires_at)) < new Date()) {
+    await db.execute(sql`DELETE FROM sessions WHERE token = ${token}`);
     return null;
   }
   return {
-    id: result[0].userId,
-    email: result[0].email,
-    username: result[0].username,
+    id: Number(row.user_id),
+    email: String(row.email ?? ""),
+    username: String(row.username ?? ""),
   };
 }
 
@@ -2608,30 +2720,33 @@ async function adminAccessMiddleware(c: any, next: any) {
   }
   const token = authHeader.slice(7);
   const db = c.get("db");
-  const result = await db
-    .select({
-      userId: users.id,
-      email: users.email,
-      username: users.username,
-      expiresAt: sessions.expiresAt,
-    })
-    .from(sessions)
-    .innerJoin(users, eq(sessions.userId, users.id))
-    .where(eq(sessions.token, token))
-    .limit(1);
-  if (result.length === 0) return c.json({ error: "Invalid session." }, 401);
-  if (new Date(result[0].expiresAt) < new Date()) {
-    await db.delete(sessions).where(eq(sessions.token, token));
+  let row: any = null;
+  try {
+    const q = await db.execute(sql`
+      SELECT u.id AS user_id, u.email AS email, u.username AS username, s.expires_at AS expires_at
+      FROM sessions s
+      INNER JOIN users u ON s.user_id = u.id
+      WHERE s.token = ${token}
+      LIMIT 1
+    `);
+    row = (q.rows as any[] | undefined)?.[0] ?? null;
+  } catch (e) {
+    console.error("[adminAccessMiddleware] session lookup failed", errorChain(e));
+    return c.json({ error: "Admin access denied." }, 403);
+  }
+  if (!row) return c.json({ error: "Invalid session." }, 401);
+  if (new Date(String(row.expires_at)) < new Date()) {
+    await db.execute(sql`DELETE FROM sessions WHERE token = ${token}`);
     return c.json({ error: "Session expired." }, 401);
   }
-  const email = String(result[0].email || "").toLowerCase();
+  const email = String(row.email || "").toLowerCase();
   if (email !== ADMIN_EMAIL_LC) {
     return c.json({ error: "Admin access denied." }, 403);
   }
   c.set("user", {
-    id: result[0].userId,
-    email: result[0].email,
-    username: result[0].username,
+    id: Number(row.user_id),
+    email: String(row.email ?? ""),
+    username: String(row.username ?? ""),
     token,
   });
   await next();
@@ -2953,7 +3068,7 @@ async function studentOverallPercentile(
       pct: pctFromMarks(Number(r.marks_correct ?? 0), Number(r.marks_attempted ?? 0)),
       attempts: Number(r.attempt_count ?? 0),
     }))
-    .filter((r) => r.attempts >= 3);
+    .filter((r) => r.attempts >= MIN_RANKED_ATTEMPTS);
   if (eligible.length < 2) return null;
   const sorted = [...eligible].sort((a, b) => {
     if (b.pct !== a.pct) return b.pct - a.pct;
@@ -2969,6 +3084,15 @@ function sqlIntInList(ids: number[]) {
   if (!ids.length) return sql`-1`;
   return sql.join(
     ids.map((id) => sql`${id}`),
+    sql`, `,
+  );
+}
+
+/** Drizzle expands JS arrays as tuples — use IN (...) for text arrays too. */
+function sqlTextInList(values: string[]) {
+  if (!values.length) return sql`''`;
+  return sql.join(
+    values.map((v) => sql`${v}`),
     sql`, `,
   );
 }
@@ -3868,36 +3992,20 @@ app.get("/api/scorecard", authMiddleware, async (c: any) => {
   const db = c.get("db");
   const asOfDate = String(c.req.query("asOfDate") ?? "").trim();
   const date = /^\d{4}-\d{2}-\d{2}$/.test(asOfDate) ? asOfDate : null;
-  const MIN_SUBJECT_ATTEMPTS = 10;
 
   const totals = await db.execute(sql`
     SELECT
       COUNT(DISTINCT qa.user_id)::int AS total_students,
-      COALESCE(SUM(CASE WHEN qa.user_id = ${user.id} THEN COALESCE(qa.marks_earned, CASE WHEN qa.is_correct = 1 THEN qa.marks ELSE 0 END) ELSE 0 END), 0)::int AS my_points
+      COALESCE(SUM(CASE WHEN qa.user_id = ${user.id} THEN COALESCE(qa.marks_earned, CASE WHEN qa.is_correct = 1 THEN qa.marks ELSE 0 END) ELSE 0 END), 0)::int AS my_points,
+      COALESCE(SUM(CASE WHEN qa.user_id = ${user.id} THEN qa.marks ELSE 0 END), 0)::int AS my_marks_attempted
     FROM question_attempts qa
   `);
   const totalStudents = Number((totals.rows as any[])[0]?.total_students ?? 0);
   const points = Number((totals.rows as any[])[0]?.my_points ?? 0);
+  const marksAttemptedOverall = Number((totals.rows as any[])[0]?.my_marks_attempted ?? 0);
 
-  // Rank by points (marks correct) across all subjects.
-  const rankRows = await db.execute(sql`
-    WITH by_user AS (
-      SELECT user_id,
-             COALESCE(SUM(COALESCE(marks_earned, CASE WHEN is_correct = 1 THEN marks ELSE 0 END)), 0)::int AS points
-      FROM question_attempts
-      GROUP BY user_id
-    ),
-    ranked AS (
-      SELECT user_id, points,
-             DENSE_RANK() OVER (ORDER BY points DESC) AS rnk
-      FROM by_user
-    )
-    SELECT rnk
-    FROM ranked
-    WHERE user_id = ${user.id}
-    LIMIT 1
-  `);
-  const overallRank = rankRows.rows?.length ? Number((rankRows.rows as any[])[0]?.rnk ?? null) : null;
+  const overallCohort = await getUserMarksRankInCohort(db, user.id, {}, MIN_RANKED_ATTEMPTS);
+  const overallRank = overallCohort.rank;
 
   // Subjects the student "does" (dashboard selection).
   const subjectRows = await db.execute(sql`
@@ -3908,49 +4016,21 @@ app.get("/api/scorecard", authMiddleware, async (c: any) => {
   `);
   const subjectIds = (subjectRows.rows as any[]).map((r) => String(r.subject_id));
 
-  // Average percentile across the student's selected subjects.
-  // Percentile per subject is based on mark-weighted % (marks_correct / marks_attempted).
+  // Average percentile across the student's selected subjects (each needs MIN_RANKED_ATTEMPTS).
   let overallPercentile: number | null = null;
   if (subjectIds.length > 0) {
     let sum = 0;
     let n = 0;
     for (const sid of subjectIds) {
-      const rows = await db.execute(sql`
-        WITH by_user AS (
-          SELECT user_id,
-                 COALESCE(SUM(COALESCE(marks_earned, CASE WHEN is_correct = 1 THEN marks ELSE 0 END)), 0)::int AS marks_correct,
-                 COALESCE(SUM(marks), 0)::int AS marks_attempted
-          FROM question_attempts
-          WHERE subject_id = ${sid}
-          GROUP BY user_id
-        ),
-        scored AS (
-          SELECT user_id,
-                 CASE WHEN marks_attempted > 0
-                   THEN (marks_correct::float / marks_attempted::float)
-                   ELSE NULL
-                 END AS pct
-          FROM by_user
-          WHERE marks_attempted > 0
-        ),
-        ranked AS (
-          SELECT user_id,
-                 pct,
-                 DENSE_RANK() OVER (ORDER BY pct DESC) AS rnk,
-                 COUNT(*) OVER () AS cnt
-          FROM scored
-        )
-        SELECT rnk, cnt
-        FROM ranked
-        WHERE user_id = ${user.id}
-        LIMIT 1
-      `);
-      if (!rows.rows?.length) continue;
-      const rnk = Number((rows.rows as any[])[0]?.rnk ?? 0);
-      const cnt = Number((rows.rows as any[])[0]?.cnt ?? 0);
-      if (!rnk || cnt <= 1) continue;
-      const pct = cohortPercentileFromRank(rnk, cnt);
-      sum += pct;
+      const subjectIdOptions = subjectIdEquivalents(sid);
+      const { percentile } = await getUserMarksRankInCohort(
+        db,
+        user.id,
+        { subjectId: sid, subjectIdOptions },
+        MIN_RANKED_ATTEMPTS,
+      );
+      if (percentile == null) continue;
+      sum += percentile;
       n += 1;
     }
     overallPercentile = n > 0 ? sum / n : null;
@@ -3964,20 +4044,32 @@ app.get("/api/scorecard", authMiddleware, async (c: any) => {
     WHERE user_id = ${user.id}
     GROUP BY subject_id
   `);
-  const perSubject = (bestWeak.rows as any[]).map((r) => {
-    const attempted = Math.max(0, Number(r.marks_attempted ?? 0));
-    const correct = Math.max(0, Number(r.marks_correct ?? 0));
-    const pct = attempted > 0 ? Math.round((correct / attempted) * 100) : 0;
-    return { subjectId: String(r.subject_id), attempted, correct, pct };
+  const perSubjectRaw = (bestWeak.rows as any[]).map((r) => ({
+    subjectId: canonicalSubjectId(r.subject_id),
+    attempted: Math.max(0, Number(r.marks_attempted ?? 0)),
+    correct: Math.max(0, Number(r.marks_correct ?? 0)),
+  }));
+  const byCanonical = new Map<string, { attempted: number; correct: number }>();
+  for (const row of perSubjectRaw) {
+    const cur = byCanonical.get(row.subjectId) ?? { attempted: 0, correct: 0 };
+    cur.attempted += row.attempted;
+    cur.correct += row.correct;
+    byCanonical.set(row.subjectId, cur);
+  }
+  const perSubject = Array.from(byCanonical.entries()).map(([subjectId, v]) => {
+    const pct = v.attempted > 0 ? Math.round((v.correct / v.attempted) * 100) : 0;
+    return { subjectId, attempted: v.attempted, correct: v.correct, pct };
   }).filter((x) => x.attempted > 0);
   perSubject.sort((a, b) => b.pct - a.pct);
   const bestSubjectId = perSubject.length ? perSubject[0]!.subjectId : null;
   const weakestSubjectId = perSubject.length ? perSubject[perSubject.length - 1]!.subjectId : null;
 
-  // Per-subject "report card" rows: subjects where this student has attempted >= 10 questions.
+  // Per-subject report rows for every selected subject (and any attempted subject).
   const reportSubjects: Array<{
     subjectId: string;
     attempts: number;
+    marksCorrect: number;
+    marksAttempted: number;
     rank: number | null;
     rankedStudents: number;
     percentile: number | null;
@@ -4006,51 +4098,30 @@ app.get("/api/scorecard", authMiddleware, async (c: any) => {
   `);
   const attemptedBySubject = new Map<string, number>();
   for (const r of attemptedBySubjectRows.rows as any[]) {
-    attemptedBySubject.set(String(r.subject_id), Number(r.attempts ?? 0));
+    const sid = canonicalSubjectId(r.subject_id);
+    attemptedBySubject.set(sid, (attemptedBySubject.get(sid) ?? 0) + Number(r.attempts ?? 0));
   }
 
-  const eligibleSubjectIds = Array.from(attemptedBySubject.entries())
-    .filter(([, attempts]) => attempts >= MIN_SUBJECT_ATTEMPTS)
-    .map(([sid]) => sid)
-    .sort((a, b) => a.localeCompare(b));
+  const reportSubjectIds = Array.from(
+    new Set([
+      ...subjectIds,
+      ...Array.from(attemptedBySubject.keys()),
+    ]),
+  ).sort((a, b) => a.localeCompare(b));
 
-  for (const sid of eligibleSubjectIds) {
-    // Rank within this subject by mark-weighted % (marks_correct / marks_attempted), all time.
-    const rankInSubject = await db.execute(sql`
-      WITH by_user AS (
-        SELECT user_id,
-               COALESCE(SUM(COALESCE(marks_earned, CASE WHEN is_correct = 1 THEN marks ELSE 0 END)), 0)::int AS marks_correct,
-               COALESCE(SUM(marks), 0)::int AS marks_attempted
-        FROM question_attempts
-        WHERE subject_id = ${sid}
-        GROUP BY user_id
-      ),
-      scored AS (
-        SELECT user_id,
-               CASE WHEN marks_attempted > 0
-                 THEN (marks_correct::float / marks_attempted::float)
-                 ELSE NULL
-               END AS pct
-        FROM by_user
-        WHERE marks_attempted > 0
-      ),
-      ranked AS (
-        SELECT user_id,
-               DENSE_RANK() OVER (ORDER BY pct DESC) AS rnk,
-               COUNT(*) OVER () AS cnt
-        FROM scored
-      )
-      SELECT rnk, cnt
-      FROM ranked
-      WHERE user_id = ${user.id}
-      LIMIT 1
-    `);
-    const rank = rankInSubject.rows?.length ? Number((rankInSubject.rows as any[])[0]?.rnk ?? null) : null;
-    const total = rankInSubject.rows?.length ? Number((rankInSubject.rows as any[])[0]?.cnt ?? 0) : 0;
-    const percentile =
-      rank != null && total > 1
-        ? cohortPercentileFromRank(rank, total)
-        : null;
+  for (const sid of reportSubjectIds) {
+    const subjectMarks = perSubject.find((row) => row.subjectId === sid);
+    const subjectIdOptions = subjectIdEquivalents(sid);
+    const {
+      rank,
+      rankedStudents: total,
+      percentile,
+    } = await getUserMarksRankInCohort(
+      db,
+      user.id,
+      { subjectId: sid, subjectIdOptions },
+      MIN_RANKED_ATTEMPTS,
+    );
 
     // Weakest/strongest topic for this user in this subject (mark-weighted %).
     const topicRows = await db.execute(sql`
@@ -4058,7 +4129,7 @@ app.get("/api/scorecard", authMiddleware, async (c: any) => {
              SUM(COALESCE(marks_earned, CASE WHEN is_correct = 1 THEN marks ELSE 0 END))::int AS marks_correct,
              SUM(marks)::int AS marks_attempted
       FROM question_attempts
-      WHERE user_id = ${user.id} AND subject_id = ${sid}
+      WHERE user_id = ${user.id} AND subject_id IN (${sqlTextInList(subjectIdOptions)})
       GROUP BY topic
     `);
     const topics = (topicRows.rows as any[])
@@ -4073,7 +4144,7 @@ app.get("/api/scorecard", authMiddleware, async (c: any) => {
           percent,
         };
       })
-      .filter((t) => t.marksAttempted > 0);
+      .filter((t) => t.marksAttempted > 0 && !isPlaceholderTopic(t.topic));
 
     let weakest: (typeof topics)[number] | null = null;
     let strongest: (typeof topics)[number] | null = null;
@@ -4084,44 +4155,13 @@ app.get("/api/scorecard", authMiddleware, async (c: any) => {
 
     const getTopicPercentile = async (topic: string | null) => {
       if (!topic) return null;
-      const topicRank = await db.execute(sql`
-        WITH by_user AS (
-          SELECT user_id,
-                 COALESCE(SUM(COALESCE(marks_earned, CASE WHEN is_correct = 1 THEN marks ELSE 0 END)), 0)::int AS marks_correct,
-                 COALESCE(SUM(marks), 0)::int AS marks_attempted
-          FROM question_attempts
-          WHERE subject_id = ${sid} AND topic = ${topic}
-          GROUP BY user_id
-        ),
-        scored AS (
-          SELECT user_id,
-                 CASE WHEN marks_attempted > 0
-                   THEN (marks_correct::float / marks_attempted::float)
-                   ELSE NULL
-                 END AS pct
-          FROM by_user
-          WHERE marks_attempted > 0
-        ),
-        ranked AS (
-          SELECT user_id,
-                 DENSE_RANK() OVER (ORDER BY pct DESC) AS rnk,
-                 COUNT(*) OVER () AS cnt
-          FROM scored
-        )
-        SELECT rnk, cnt
-        FROM ranked
-        WHERE user_id = ${user.id}
-        LIMIT 1
-      `);
-      const topicRankValue = topicRank.rows?.length
-        ? Number((topicRank.rows as any[])[0]?.rnk ?? null)
-        : null;
-      const topicTotal = topicRank.rows?.length
-        ? Number((topicRank.rows as any[])[0]?.cnt ?? 0)
-        : 0;
-      return topicRankValue != null && topicTotal > 1
-        ? cohortPercentileFromRank(topicRankValue, topicTotal)
-        : null;
+      const { percentile: topicPercentile } = await getUserMarksRankInCohort(
+        db,
+        user.id,
+        { subjectId: sid, topic },
+        1,
+      );
+      return topicPercentile;
     };
 
     const weakestTopicPercentile = await getTopicPercentile(weakest?.topic ?? null);
@@ -4130,12 +4170,12 @@ app.get("/api/scorecard", authMiddleware, async (c: any) => {
     reportSubjects.push({
       subjectId: sid,
       attempts: attemptedBySubject.get(sid) ?? 0,
+      marksCorrect: subjectMarks?.correct ?? 0,
+      marksAttempted: subjectMarks?.attempted ?? 0,
       rank,
       rankedStudents: total,
       percentile,
-      subjectPercent:
-        perSubject.find((row) => row.subjectId === sid)?.pct ??
-        0,
+      subjectPercent: subjectMarks?.pct ?? 0,
       weakestTopic: weakest
         ? { ...weakest, percentile: weakestTopicPercentile }
         : null,
@@ -4172,7 +4212,10 @@ app.get("/api/scorecard", authMiddleware, async (c: any) => {
     totalStudents,
     overallRank,
     marks: points,
+    marksCorrect: points,
+    marksAttempted: marksAttemptedOverall,
     overallPercentile,
+    overallRankedStudents: overallCohort.rankedStudents,
     bestSubjectId,
     weakestSubjectId,
     studyStreak: streak,
@@ -4816,7 +4859,7 @@ app.get("/api/leaderboard/:subjectId", async (c) => {
 // ---- Competition ----
 app.post("/api/competition/answer", authMiddleware, async (c: any) => {
   const user = c.get("user"); const db = c.get("db"); const body = await c.req.json();
-  const subjectId = cleanText(body.subjectId, 80); const questionKey = cleanText(body.questionKey, 1000);
+  const subjectId = canonicalSubjectId(body.subjectId); const questionKey = cleanText(body.questionKey, 1000);
   const topic = cleanText(body.topic || "General", 100);
   const marksTotal = Math.max(1, Math.round(Number(body.marks ?? 1)));
   const isCorrectRaw = body.isCorrect ?? body.correct;
@@ -4834,18 +4877,13 @@ app.post("/api/competition/answer", authMiddleware, async (c: any) => {
 
 app.get("/api/competition/:subjectId/stats", authMiddleware, async (c: any) => {
   const user = c.get("user"); const db = c.get("db"); const subjectId = c.req.param("subjectId");
-  const MIN_RANKED_ATTEMPTS = 10;
+  const MIN_RANKED = MIN_RANKED_ATTEMPTS;
   const range = String(c.req.query("range") ?? "all");
   let timeFilter = sql``;
   if (range === "week") {
-    const now = new Date();
-    const day = now.getDay();
-    const diffToMonday = (day + 6) % 7;
-    const start = new Date(now);
-    start.setDate(now.getDate() - diffToMonday);
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(start);
-    end.setDate(start.getDate() + 7);
+    // Rolling last 7 days (more intuitive + makes week/all-time differ more often).
+    const end = new Date();
+    const start = new Date(end.getTime() - 7 * 24 * 60 * 60 * 1000);
     timeFilter = sql` AND answered_at >= ${start.toISOString()} AND answered_at < ${end.toISOString()} `;
   }
 
@@ -4883,7 +4921,7 @@ app.get("/api/competition/:subjectId/stats", authMiddleware, async (c: any) => {
     return ma > 0 ? Math.round((mc / ma) * 100) : 0;
   };
   // Eligibility should be all-time: once you’ve done 10 questions ever, you’re ranked.
-  const eligible = allScores.filter((r) => Number(r.attempt_count_all_time) >= MIN_RANKED_ATTEMPTS);
+  const eligible = allScores.filter((r) => Number(r.attempt_count_all_time) >= MIN_RANKED);
   const sortedEligible = [...eligible].sort((a, b) => {
     const d = pctRounded(b) - pctRounded(a);
     if (d !== 0) return d;
@@ -4898,7 +4936,7 @@ app.get("/api/competition/:subjectId/stats", authMiddleware, async (c: any) => {
 
   let rank: number | null = null;
   let percentile: number | null = null;
-  if (myAttempts >= MIN_RANKED_ATTEMPTS && sortedEligible.length >= 2) {
+  if (myAttempts >= MIN_RANKED && sortedEligible.length >= 2) {
     const idx = sortedEligible.findIndex((r) => r.user_id === user.id);
     rank = idx >= 0 ? idx + 1 : null;
     if (rank != null) {
@@ -5016,11 +5054,14 @@ app.get("/api/competition/:subjectId/stats", authMiddleware, async (c: any) => {
     rank,
     rankedStudents:
       rank != null && sortedEligible.length > 0 ? sortedEligible.length : null,
+    myMarksCorrect: myRow ? Number(myRow.marks_correct) : 0,
+    myMarksAttempted: myRow ? Number(myRow.marks_attempted) : 0,
+    myPercent: myPct,
     leaderboard: leaderboardData,
     questionStats,
     topicStats,
     myQuestionAttempts,
-    minRankedAttempts: MIN_RANKED_ATTEMPTS,
+    minRankedAttempts: MIN_RANKED,
   });
 });
 

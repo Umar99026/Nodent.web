@@ -2,6 +2,7 @@ import type { Subject } from "@/lib/subjects";
 import {
   displayTopicLabel,
   improvementTitleForTopic,
+  isPlaceholderTopic,
   isPracticeExamTopic,
   practiceHrefForTopic,
 } from "@/lib/topicDisplay";
@@ -21,11 +22,16 @@ export type DashboardScorecard = {
   studyStreak?: number;
   overallRank?: number | null;
   overallPercentile?: number | null;
+  overallRankedStudents?: number | null;
+  marksCorrect?: number;
+  marksAttempted?: number;
   weakestSubjectId?: string | null;
   bestSubjectId?: string | null;
   reportSubjects?: Array<{
     subjectId: string;
     attempts: number;
+    marksCorrect: number;
+    marksAttempted: number;
     rank: number | null;
     rankedStudents: number;
     percentile: number | null;
@@ -148,7 +154,7 @@ export function buildDashboardActions(input: {
   // Weak topics and poor overall subject rankings → practise that area.
   for (const row of report) {
     const weak = row.weakestTopic;
-    if (!weak) continue;
+    if (!weak || isPlaceholderTopic(weak.topic)) continue;
 
     const label = displayTopicLabel(weak.topic);
     const name = subjectName(subjects, row.subjectId);
@@ -183,11 +189,11 @@ export function buildDashboardActions(input: {
       push({
         id: `weak-subject-${sid}`,
         title: `Strengthen ${name}`,
-        subtitle: weak
+        subtitle: weak && !isPlaceholderTopic(weak.topic)
           ? `Your results here are lowest across subjects — begin with ${displayTopicLabel(weak.topic)}.`
           : "Your results here are lowest across subjects — build consistency with practice.",
         cta: "Start practice",
-        href: weak
+        href: weak && !isPlaceholderTopic(weak.topic)
           ? practiceHrefForTopic(sid, weak.topic)
           : `/practice/${sid}`,
         tone: "focus",

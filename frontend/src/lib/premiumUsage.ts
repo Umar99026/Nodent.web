@@ -26,19 +26,18 @@ export const FREE_DAILY_DRAWN_WORKING_LIMIT = 3;
 export const FREE_ENGLISH_ESSAY_LIMIT = 1;
 export const FREE_ENGLISH_ESSAY_WINDOW_DAYS = 3;
 
-export function formatFreePlanSummary(usage: PremiumUsageSummary | null): string {
-  const prose = usage?.proseAiMarks.limit ?? FREE_DAILY_LONG_ANSWER_LIMIT;
-  const handwriting = usage?.handwritingAiMarks.limit ?? FREE_DAILY_DRAWN_WORKING_LIMIT;
-  const essays = usage?.englishEssays.limit ?? FREE_ENGLISH_ESSAY_LIMIT;
-  const essayWindow = usage?.englishEssays.windowDays ?? FREE_ENGLISH_ESSAY_WINDOW_DAYS;
-
+export function formatFreePlanSummary(_usage: PremiumUsageSummary | null): string {
   return [
     "Short answers use instant keyword matching.",
-    `Free includes ${prose} long-answer mark${prose === 1 ? "" : "s"}/day,`,
-    `${essays} English essay every ${essayWindow} days,`,
-    `and ${handwriting} drawn-working mark${handwriting === 1 ? "" : "s"}/day.`,
+    `Free includes ${FREE_DAILY_LONG_ANSWER_LIMIT} long-answer marks/day,`,
+    `${FREE_ENGLISH_ESSAY_LIMIT} English essay every ${FREE_ENGLISH_ESSAY_WINDOW_DAYS} days,`,
+    `and ${FREE_DAILY_DRAWN_WORKING_LIMIT} drawn-working marks/day.`,
     "No Ask AI.",
   ].join(" ");
+}
+
+export function formatCompactFreePlanDescription(): string {
+  return `${FREE_DAILY_LONG_ANSWER_LIMIT} long-answer & ${FREE_DAILY_DRAWN_WORKING_LIMIT} drawn marks/day · ${FREE_ENGLISH_ESSAY_LIMIT} essay every ${FREE_ENGLISH_ESSAY_WINDOW_DAYS} days · no Ask AI`;
 }
 
 export type PremiumFeatureRow = {

@@ -2,7 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { PREMIUM_PATH } from "@/lib/premium";
 import { cn } from "@/lib/utils";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Lock } from "lucide-react";
 
 type GetPremiumButtonProps = {
   label?: string;
@@ -40,8 +40,17 @@ type PremiumGateProps = {
 
 export function PremiumGate({ allowed, message, children }: PremiumGateProps) {
   if (allowed) return <>{children}</>;
+  const navigate = useNavigate();
   return (
     <div className="rounded-xl border border-black/10 bg-[#f8fafc] p-4 text-center">
+      <button
+        type="button"
+        onClick={() => navigate(PREMIUM_PATH)}
+        className="mx-auto mb-2 flex size-10 items-center justify-center rounded-full border border-black/10 bg-white text-muted-foreground hover:bg-white/80"
+        aria-label="Locked — see Premium plans"
+      >
+        <Lock className="size-4" aria-hidden />
+      </button>
       <p className="text-sm text-[#0b0f19]">
         {message ?? "This feature is included with Premium."}
       </p>

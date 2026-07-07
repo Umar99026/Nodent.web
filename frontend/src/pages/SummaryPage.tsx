@@ -24,6 +24,7 @@ import { subjectsForUser } from "@/lib/subjects";
 import type { Question, Subject } from "@/lib/subjects";
 import { isAdminUser } from "@/lib/constants";
 import { formatPercentileBadge } from "@/lib/percentileDisplay";
+import { displayTopicLabel, isPlaceholderTopic } from "@/lib/topicDisplay";
 import type { EnglishEssayResponse } from "@/lib/englishEssay";
 import { AnnotatedEssayView } from "@/components/english/AnnotatedEssayView";
 import { EnglishCriteriaBreakdown } from "@/components/english/EnglishCriteriaBreakdown";
@@ -99,6 +100,9 @@ interface CompetitionStats {
   percentile: number | null;
   rankedStudents?: number;
   totalStudents: number;
+  myMarksCorrect?: number;
+  myMarksAttempted?: number;
+  myPercent?: number;
   leaderboard: LeaderboardEntry[];
   topicStats: TopicStat[];
   questionStats: QuestionStat[];
@@ -165,7 +169,11 @@ export default function SummaryPage() {
     "all",
   );
 
-  const [stats, setStats] = useState<CompetitionStats | null>(null);
+  const [statsByRange, setStatsByRange] = useState<Record<"all" | "week", CompetitionStats | null>>({
+    all: null,
+    week: null,
+  });
+  const stats = leaderboardRange === "week" ? statsByRange.week : statsByRange.all;
   const [loadingStats, setLoadingStats] = useState(true);
   const [statsError, setStatsError] = useState<string | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -509,13 +517,14 @@ export default function SummaryPage() {
           myTotal: useLocal ? loc.myTotal : (api?.myTotal ?? 0),
           topicPercentile: api?.topicPercentile,
         };
-      });
+      })
+      .filter((row) => !isPlaceholderTopic(row.topic));
   }, [stats, localTopicRollup]);
 
   /** Topic with the lowest your % (least marks) among topics you’ve attempted. */
   const weakestTopicInfo = useMemo(() => {
     const candidates = displayTopicStats.filter(
-      (t) => t.myTotal > 0 && t.myCorrect !== null,
+      (t) => t.myTotal > 0 && t.myCorrect !== null && !isPlaceholderTopic(t.topic),
     );
     if (candidates.length === 0) return null;
     return candidates.reduce((worst, t) => {
@@ -630,19 +639,20 @@ export default function SummaryPage() {
     extraQuestionsForResolve,
   ]);
 
-  // Fetch competition stats
+  // Fetch competition stats (cache both ranges for fast toggles)
   useEffect(() => {
     if (!subjectId) return;
 
     let cancelled = false;
     async function fetchStats() {
       try {
-        const rangeParam = leaderboardRange === "week" ? "week" : "all";
-        const data = await apiFetch<CompetitionStats>(
-          `/api/competition/${subjectId}/stats?range=${rangeParam}`
-        );
+        setLoadingStats(true);
+        const [allData, weekData] = await Promise.all([
+          apiFetch<CompetitionStats>(`/api/competition/${subjectId}/stats?range=all`),
+          apiFetch<CompetitionStats>(`/api/competition/${subjectId}/stats?range=week`),
+        ]);
         if (!cancelled) {
-          setStats(data);
+          setStatsByRange({ all: allData, week: weekData });
           setStatsError(null);
         }
       } catch (err) {
@@ -660,7 +670,7 @@ export default function SummaryPage() {
     return () => {
       cancelled = true;
     };
-  }, [subjectId, leaderboardRange]);
+  }, [subjectId]);
 
   if (!subjectId) {
     return (
@@ -877,8 +887,8 @@ export default function SummaryPage() {
           </Card>
         ) : stats ? (
           <div className="space-y-6">
-            {/* ---- Rank card ---- */}
-            <div className="grid gap-4 sm:grid-cols-3">
+            {/* ---- Rank / percentile ---- */}
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-2">
               <Card>
                 <CardContent className="flex flex-col items-center py-6 text-center">
                   <span className="font-display text-3xl font-bold text-brand-dark">
@@ -912,25 +922,7 @@ export default function SummaryPage() {
                   </p>
                 </CardContent>
               </Card>
-              <Card>
-                <CardContent className="flex flex-col items-center py-6 text-center">
-                  <span className="font-display text-3xl font-bold text-foreground">
-                    {stats.totalStudents}
-                  </span>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Total Students
-                  </p>
-                </CardContent>
-              </Card>
             </div>
-
-            {stats.rank == null && stats.percentile == null && (
-              <p className="text-center text-sm text-muted-foreground">
-                Rankings use your mark-weighted score (marks earned ÷ marks on questions you
-                tried). You need at least {minRanked} scored questions in this period to be
-                ranked.
-              </p>
-            )}
 
             {/* ---- Leaderboard ---- */}
             <Card>
@@ -941,11 +933,7 @@ export default function SummaryPage() {
                       <TrendingUp className="size-5 text-brand-dark" />
                       Leaderboard
                     </CardTitle>
-                    <CardDescription>
-                      Top performers by mark-weighted % (min. {minRanked} questions). Only fully
-                      correct responses count toward the “class fully correct” stats on each
-                      question.
-                    </CardDescription>
+                    <CardDescription>Top 10</CardDescription>
                   </div>
 
                   <div className="flex items-center gap-2">
@@ -1047,7 +1035,7 @@ export default function SummaryPage() {
                   Topic Breakdown
                 </CardTitle>
                 <CardDescription>
-                  Your mark-weighted % vs. class on each topic, plus your percentile among
+                  Your mark-weighted % vs. cohort on each topic, plus your percentile among
                   everyone who attempted that topic. Click a topic to practice it.
                 </CardDescription>
               </CardHeader>
@@ -1078,7 +1066,7 @@ export default function SummaryPage() {
                               )
                             }
                           >
-                            {weakestTopicInfo.topic}
+                            {displayTopicLabel(weakestTopicInfo.topic)}
                           </button>
                           <span className="text-muted-foreground">
                             {" "}
@@ -1129,7 +1117,7 @@ export default function SummaryPage() {
                         <div className="flex items-center justify-between">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="text-sm font-medium text-foreground">
-                              {topic.topic}
+                              {displayTopicLabel(topic.topic) || topic.topic}
                             </span>
                             {tpBadge && (
                               <Badge className={`text-xs ${tpBadge.className}`}>

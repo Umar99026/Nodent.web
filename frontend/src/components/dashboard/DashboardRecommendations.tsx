@@ -4,60 +4,118 @@ import { ArrowRight, BookOpen, Flame, Target, Zap, type LucideIcon } from "lucid
 import type { DashboardAction, DashboardActionTone } from "@/lib/dashboardRecommendations";
 import { cn } from "@/lib/utils";
 
-const toneStyles: Record<
+type TilePalette = {
+  tileClass: string;
+  tileHoverClass: string;
+  iconWrap: string;
+  iconColor: string;
+  ctaClass: string;
+  ctaHoverClass: string;
+};
+
+const tilePalettes: TilePalette[] = [
+  {
+    tileClass: "border-[#56abe6]/35 bg-[#56abe6]/12",
+    tileHoverClass: "hover:border-[#56abe6]/55 hover:shadow-md",
+    iconWrap: "bg-[#56abe6]/18 ring-[#56abe6]/30",
+    iconColor: "text-[#1a6fa8]",
+    ctaClass: "border-[#56abe6]/40 bg-white text-[#1a6fa8]",
+    ctaHoverClass: "group-hover:border-[#56abe6] group-hover:bg-[#56abe6] group-hover:text-white",
+  },
+  {
+    tileClass: "border-violet-200 bg-violet-50",
+    tileHoverClass: "hover:border-violet-300 hover:shadow-md",
+    iconWrap: "bg-violet-100 ring-violet-200",
+    iconColor: "text-violet-800",
+    ctaClass: "border-violet-200 bg-white text-violet-800",
+    ctaHoverClass: "group-hover:border-violet-700 group-hover:bg-violet-700 group-hover:text-white",
+  },
+  {
+    tileClass: "border-amber-200 bg-amber-50",
+    tileHoverClass: "hover:border-amber-300 hover:shadow-md",
+    iconWrap: "bg-amber-100 ring-amber-200",
+    iconColor: "text-amber-900",
+    ctaClass: "border-amber-200 bg-white text-amber-900",
+    ctaHoverClass: "group-hover:border-amber-700 group-hover:bg-amber-700 group-hover:text-white",
+  },
+  {
+    tileClass: "border-rose-200 bg-rose-50",
+    tileHoverClass: "hover:border-rose-300 hover:shadow-md",
+    iconWrap: "bg-rose-100 ring-rose-200",
+    iconColor: "text-rose-800",
+    ctaClass: "border-rose-200 bg-white text-rose-800",
+    ctaHoverClass: "group-hover:border-rose-700 group-hover:bg-rose-700 group-hover:text-white",
+  },
+  {
+    tileClass: "border-emerald-200 bg-emerald-50",
+    tileHoverClass: "hover:border-emerald-300 hover:shadow-md",
+    iconWrap: "bg-emerald-100 ring-emerald-200",
+    iconColor: "text-emerald-900",
+    ctaClass: "border-emerald-200 bg-white text-emerald-900",
+    ctaHoverClass: "group-hover:border-emerald-700 group-hover:bg-emerald-700 group-hover:text-white",
+  },
+  {
+    tileClass: "border-orange-200 bg-orange-50",
+    tileHoverClass: "hover:border-orange-300 hover:shadow-md",
+    iconWrap: "bg-orange-100 ring-orange-200",
+    iconColor: "text-orange-900",
+    ctaClass: "border-orange-200 bg-white text-orange-900",
+    ctaHoverClass: "group-hover:border-orange-700 group-hover:bg-orange-700 group-hover:text-white",
+  },
+  {
+    tileClass: "border-teal-200 bg-teal-50",
+    tileHoverClass: "hover:border-teal-300 hover:shadow-md",
+    iconWrap: "bg-teal-100 ring-teal-200",
+    iconColor: "text-teal-900",
+    ctaClass: "border-teal-200 bg-white text-teal-900",
+    ctaHoverClass: "group-hover:border-teal-700 group-hover:bg-teal-700 group-hover:text-white",
+  },
+  {
+    tileClass: "border-fuchsia-200 bg-fuchsia-50",
+    tileHoverClass: "hover:border-fuchsia-300 hover:shadow-md",
+    iconWrap: "bg-fuchsia-100 ring-fuchsia-200",
+    iconColor: "text-fuchsia-900",
+    ctaClass: "border-fuchsia-200 bg-white text-fuchsia-900",
+    ctaHoverClass: "group-hover:border-fuchsia-700 group-hover:bg-fuchsia-700 group-hover:text-white",
+  },
+];
+
+const toneMeta: Record<
   DashboardActionTone,
   {
     icon: LucideIcon;
-    iconWrap: string;
-    iconColor: string;
     label: string;
-    tileClass: string;
-    tileHoverClass: string;
-    ctaClass: string;
-    ctaHoverClass: string;
+    /** Pin urgent/celebrate tiles to a fixed palette so they still read clearly. */
+    paletteIndex?: number;
   }
 > = {
   urgent: {
     icon: Zap,
-    iconWrap: "bg-brand/12 ring-brand/20",
-    iconColor: "text-brand-deep",
     label: "Priority",
-    tileClass: "border-brand/25 bg-brand/12",
-    tileHoverClass: "hover:border-brand/40 hover:shadow-md",
-    ctaClass: "border-brand/30 bg-white text-brand-deep",
-    ctaHoverClass: "group-hover:border-brand group-hover:bg-brand group-hover:text-white",
+    paletteIndex: 3,
   },
   focus: {
     icon: Target,
-    iconWrap: "bg-sky-100 ring-sky-200",
-    iconColor: "text-sky-900",
     label: "Focus",
-    tileClass: "border-sky-200 bg-sky-50",
-    tileHoverClass: "hover:border-sky-300 hover:shadow-md",
-    ctaClass: "border-sky-200 bg-white text-sky-900",
-    ctaHoverClass: "group-hover:border-sky-700 group-hover:bg-sky-700 group-hover:text-white",
+    paletteIndex: 1,
   },
   steady: {
     icon: BookOpen,
-    iconWrap: "bg-emerald-100 ring-emerald-200",
-    iconColor: "text-emerald-900",
     label: "Practice",
-    tileClass: "border-emerald-200 bg-emerald-50",
-    tileHoverClass: "hover:border-emerald-300 hover:shadow-md",
-    ctaClass: "border-emerald-200 bg-white text-emerald-900",
-    ctaHoverClass: "group-hover:border-emerald-700 group-hover:bg-emerald-700 group-hover:text-white",
   },
   celebrate: {
     icon: Flame,
-    iconWrap: "bg-gold/12 ring-gold/25",
-    iconColor: "text-gold-dark",
     label: "Streak",
-    tileClass: "border-gold/30 bg-gold/15",
-    tileHoverClass: "hover:border-gold/45 hover:shadow-md",
-    ctaClass: "border-gold/35 bg-white text-gold-dark",
-    ctaHoverClass: "group-hover:border-gold-dark group-hover:bg-gold-dark group-hover:text-white",
+    paletteIndex: 2,
   },
 };
+
+function paletteForAction(action: DashboardAction, index: number): TilePalette {
+  const meta = toneMeta[action.tone];
+  const paletteIndex =
+    meta.paletteIndex != null ? meta.paletteIndex : index % tilePalettes.length;
+  return tilePalettes[paletteIndex]!;
+}
 
 type DashboardRecommendationsProps = {
   actions: DashboardAction[];
@@ -80,7 +138,10 @@ export function DashboardRecommendations({ actions, loading }: DashboardRecommen
         {Array.from({ length: 5 }).map((_, i) => (
           <div
             key={i}
-            className="flex h-[5.5rem] animate-pulse items-center gap-4 overflow-hidden rounded-2xl border border-brand/20 bg-brand/10 p-4 sm:p-5"
+            className={cn(
+              "flex h-[5.5rem] animate-pulse items-center gap-4 overflow-hidden rounded-2xl border p-4 sm:p-5",
+              tilePalettes[i % tilePalettes.length]!.tileClass,
+            )}
           >
             <div className="size-11 shrink-0 rounded-xl bg-black/8" />
             <div className="min-w-0 flex-1 space-y-2">
@@ -112,9 +173,10 @@ export function DashboardRecommendations({ actions, loading }: DashboardRecommen
     <div className="space-y-3">
       {sectionIntro}
 
-      {actions.map((action) => {
-        const style = toneStyles[action.tone];
-        const Icon = style.icon;
+      {actions.map((action, index) => {
+        const meta = toneMeta[action.tone];
+        const palette = paletteForAction(action, index);
+        const Icon = meta.icon;
         return (
           <button
             key={action.id}
@@ -122,24 +184,24 @@ export function DashboardRecommendations({ actions, loading }: DashboardRecommen
             onClick={() => navigate(action.href)}
             className={cn(
               "group flex w-full items-center gap-4 overflow-hidden rounded-2xl border text-left shadow-sm transition-all sm:gap-5",
-              style.tileClass,
-              style.tileHoverClass,
+              palette.tileClass,
+              palette.tileHoverClass,
             )}
           >
             <div className="flex min-w-0 flex-1 items-center gap-4 p-4 sm:gap-5 sm:p-5">
               <div
                 className={cn(
                   "flex size-11 shrink-0 items-center justify-center rounded-xl ring-1",
-                  style.iconWrap,
+                  palette.iconWrap,
                 )}
                 aria-hidden
               >
-                <Icon className={cn("size-5", style.iconColor)} strokeWidth={2.25} />
+                <Icon className={cn("size-5", palette.iconColor)} strokeWidth={2.25} />
               </div>
 
               <div className="min-w-0 flex-1">
                 <p className="text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                  {style.label}
+                  {meta.label}
                 </p>
                 <p className="mt-1 text-base font-semibold leading-snug text-[#0b0f19] sm:text-lg">
                   {action.title}
@@ -156,8 +218,8 @@ export function DashboardRecommendations({ actions, loading }: DashboardRecommen
                 <span
                   className={cn(
                     "flex size-9 items-center justify-center rounded-full border transition-colors",
-                    style.ctaClass,
-                    style.ctaHoverClass,
+                    palette.ctaClass,
+                    palette.ctaHoverClass,
                   )}
                   aria-hidden
                 >
