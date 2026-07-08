@@ -1,5 +1,246 @@
+import type { AnswerPart, LongQuestion, Question } from "@/lib/subjects";
+
+/**
+ * Built-in General Maths questions that ship with the app.
+ * These were previously used for the Demo subject and are now part of the
+ * normal General Maths bank (topic-labelled for filters/analytics).
+ */
+function longMultipart(
+  topic: string,
+  question: string,
+  answerParts: AnswerPart[],
+  marks?: number,
+  guidance?: string,
+): LongQuestion {
+  return {
+    type: "long",
+    topic,
+    question,
+    answerParts,
+    marks,
+    guidance,
+    useAiMarking: true,
+    acceptedAnswers: answerParts
+      .map((p) => String(p.acceptedAnswer ?? "").trim())
+      .filter(Boolean),
+  };
+}
+
+const GENERAL_MATHS_LONG_BUILTIN_QUESTIONS: Question[] = [
+  longMultipart(
+    "Data analysis",
+    "A study of $12$ students records weekly study time $x$ (hours) and test score $y$ (%). Summary statistics are:\n\\[\\sum x = 96,\\quad \\sum y = 852,\\quad \\sum x^2 = 838,\\quad \\sum y^2 = 62\\,184,\\quad \\sum xy = 6\\,972,\\quad \\bar x = 8.\\]\nAssume a linear model is appropriate.",
+    [
+      {
+        key: "a",
+        label:
+          "Calculate the correlation coefficient $r$, correct to 3 decimal places. Show full working.",
+        marks: 2,
+        placeholder: "Show formula and substitution…",
+        acceptedAnswer: "$r=0.857$ (to 3 d.p.). Accept equivalent correct working.",
+      },
+      {
+        key: "b",
+        label:
+          "Find the least-squares regression equation $\\hat y = a + bx$, giving $a$ and $b$ correct to 2 decimal places. Show working.",
+        marks: 3,
+        placeholder: "Find b first, then a…",
+        acceptedAnswer: "$\\hat y = 45.40 + 3.85x$ (accept $a\\approx 45.40$, $b\\approx 3.85$).",
+      },
+      {
+        key: "c",
+        label:
+          "A student studies $11$ hours and scores $68$%. Calculate the residual.",
+        marks: 1,
+        placeholder: "Residual = actual − predicted…",
+        acceptedAnswer: "Residual $= 68 - (45.40+3.85\\times 11) = 68-87.75=-19.75$ (approx).",
+      },
+      {
+        key: "d",
+        label: "Interpret the residual from part (c) in context.",
+        marks: 1,
+        placeholder: "Say what the residual means…",
+        acceptedAnswer:
+          "The score is about 19.75 percentage points lower than the value predicted by the regression line for 11 hours of study.",
+      },
+      {
+        key: "e",
+        label:
+          "Explain why predicting the score for $x=14$ hours may be unreliable.",
+        marks: 1,
+        placeholder: "Comment on extrapolation…",
+        acceptedAnswer:
+          "14 hours is outside (or at the extreme of) the observed range of $x$ (data mean 8 hours), so the prediction is an extrapolation and may be unreliable.",
+      },
+    ],
+    8,
+    "Use $r=\\frac{n\\sum xy-(\\sum x)(\\sum y)}{\\sqrt{[n\\sum x^2-(\\sum x)^2][n\\sum y^2-(\\sum y)^2]}}$. For regression, $b=\\frac{n\\sum xy-(\\sum x)(\\sum y)}{n\\sum x^2-(\\sum x)^2}$ and $a=\\bar y-b\\bar x$ with $\\bar y=71$. Award method marks for correct formulae/substitution even if arithmetic slips. Accept rounding close to model values.",
+  ),
+  longMultipart(
+    "Recursion and financial modelling",
+    "A business takes out a $\\$42\\,000$ loan with interest of $7.2\\%$ per annum compounded monthly. Repayments of $\\$720$ are made at the end of each month. The balance $B_n$ (in dollars) after $n$ months satisfies\n\\[B_{n+1} = 1.006\\,B_n - 720,\\quad B_0 = 42\\,000.\\]",
+    [
+      {
+        key: "a",
+        label: "Calculate $B_1$ and $B_2$, correct to the nearest cent.",
+        marks: 2,
+        placeholder: "Apply the recurrence twice…",
+        acceptedAnswer: "$B_1=41532.00$, $B_2=41061.19$ (nearest cent).",
+      },
+      {
+        key: "b",
+        label: "Find the equilibrium balance $B$ for this recurrence.",
+        marks: 1,
+        placeholder: "Solve B = 1.006B − 720…",
+        acceptedAnswer: "$B=120000$ (solve $B=1.006B-720$).",
+      },
+      {
+        key: "c",
+        label: "Explain what the equilibrium balance represents in this loan model.",
+        marks: 1,
+        placeholder: "Interpret in context…",
+        acceptedAnswer:
+          "It is the unpaid balance that would stay constant forever under this interest rate and repayment — here well above $0$, so the loan will never be paid off with $720$/month alone at this rate (unless payments increase / rate differs).",
+      },
+      {
+        key: "d",
+        label:
+          "Determine the smallest month $n$ for which $B_n < 500$. Show enough recurrence working (or clear calculator listing).",
+        marks: 4,
+        placeholder: "Continue the recurrence until below 500…",
+        acceptedAnswer:
+          "Continue $B_{n+1}=1.006B_n-720$ from $B_0=42000$ until first $B_n<500$. Accept the correct smallest $n$ with consistent working (model target depends on exact cent rounding).",
+      },
+      {
+        key: "e",
+        label:
+          "Calculate the total interest paid over the full term of the loan (to the nearest dollar).",
+        marks: 3,
+        placeholder: "Interest = (total repaid) − 42000…",
+        acceptedAnswer:
+          "Interest $=$ total repaid $-42000$. Accept a consistent method using the correct term length and final payment.",
+      },
+    ],
+    11,
+    "Equilibrium: $B=1.006B-720 \\Rightarrow B=120000$. Round money to cents. For lengthy recurrence, award marks for correct method and a coherent terminating month. Loan ends when balance reaches $0$ (or the final payment clears the loan).",
+  ),
+  longMultipart(
+    "Matrices",
+    "A species is modelled in three age classes (juvenile, adult, senior). The Leslie matrix is\n\\[L=\\begin{pmatrix}0&1.6&0.3\\\\0.55&0&0\\\\0&0.75&0.15\\end{pmatrix}\\]\nwhere $\\mathbf{x}_{n+1}=L\\mathbf{x}_n$ and $\\mathbf{x}_n=\\begin{pmatrix}J_n\\\\A_n\\\\S_n\\end{pmatrix}$ gives class counts after $n$ years.",
+    [
+      {
+        key: "a",
+        label:
+          "Explain what the entries $1.6$ and $0.3$ in the first row represent in this population model.",
+        marks: 2,
+        placeholder: "Interpret as births per individual…",
+        acceptedAnswer:
+          "$1.6$ is the average number of juveniles produced per adult per year; $0.3$ is the average number of juveniles produced per senior per year.",
+      },
+      {
+        key: "b",
+        label:
+          "If $\\mathbf{x}_0=\\begin{pmatrix}800\\\\500\\\\300\\end{pmatrix}$, find $\\mathbf{x}_1$ (round each entry to the nearest whole animal). Show matrix multiplication.",
+        marks: 2,
+        placeholder: "Compute L x0…",
+        acceptedAnswer: "$\\mathbf{x}_1=\\begin{pmatrix}890\\\\440\\\\420\\end{pmatrix}$.",
+      },
+      {
+        key: "c",
+        label:
+          "Using your result from part (b), find $\\mathbf{x}_2$ (round each entry to the nearest whole animal).",
+        marks: 2,
+        placeholder: "Compute L x1…",
+        acceptedAnswer: "$\\mathbf{x}_2=\\begin{pmatrix}830\\\\490\\\\393\\end{pmatrix}$ (accept nearby consistent rounding).",
+      },
+      {
+        key: "d",
+        label:
+          "Describe what the long-term yearly growth factor represents in this model.",
+        marks: 2,
+        placeholder: "Explain in words…",
+        acceptedAnswer:
+          "It is the dominant eigenvalue: in the long term the whole population multiplies by roughly this factor each year (stable age structure).",
+      },
+      {
+        key: "e",
+        label:
+          "A disease reduces senior survival by $20\\%$. Which single entry of $L$ should change, and what is its new value?",
+        marks: 2,
+        placeholder: "Identify survival entry for seniors…",
+        acceptedAnswer: "Entry $(3,3)$: $0.15\\to 0.12$ (20% reduction).",
+      },
+    ],
+    10,
+    "Column vectors: $\\mathbf{x}_{n+1}=L\\mathbf{x}_n$. Senior survival is the $(3,3)$ entry. Award marks for correct matrix multiplication even with minor rounding differences.",
+  ),
+  longMultipart(
+    "Networks and decision mathematics",
+    "A project has the following activities and immediate predecessors (durations in days):\n\n| Activity | Duration | Predecessors |\n|----------|----------|--------------|\n| A | 5 | — |\n| B | 4 | A |\n| C | 7 | A |\n| D | 3 | B |\n| E | 6 | B, C |\n| F | 4 | C |\n| G | 5 | D, E |\n| H | 2 | F |\n| I | 3 | G, H |\n\nAssume all activities start as soon as their predecessors finish.",
+    [
+      {
+        key: "a",
+        label:
+          "Draw a network (activity-on-node or activity-on-arrow) showing the dependencies for this project.",
+        marks: 3,
+        placeholder: "Draw the network diagram…",
+        acceptedAnswer:
+          "Correct dependency network: A→B, A→C; B→D, B→E; C→E, C→F; D→G; E→G; F→H; G→I; H→I. Accept clear AoN or AoA with correct predecessors.",
+      },
+      {
+        key: "b",
+        label:
+          "Complete a forward pass and list the earliest start (ES) and earliest finish (EF) of each activity A–I.",
+        marks: 3,
+        placeholder: "List ES/EF for A–I…",
+        acceptedAnswer:
+          "A: ES0 EF5; B: ES5 EF9; C: ES5 EF12; D: ES9 EF12; E: ES12 EF18; F: ES12 EF16; G: ES18 EF23; H: ES16 EF18; I: ES23 EF26.",
+      },
+      {
+        key: "c",
+        label: "State the minimum project completion time.",
+        marks: 1,
+        placeholder: "Project duration…",
+        acceptedAnswer: "26 days.",
+      },
+      {
+        key: "d",
+        label: "State the critical path.",
+        marks: 2,
+        placeholder: "List activities on the critical path…",
+        acceptedAnswer: "A–C–E–G–I.",
+      },
+      {
+        key: "e",
+        label: "Calculate the total float for activity F.",
+        marks: 1,
+        placeholder: "Float = LS − ES (or LF − EF)…",
+        acceptedAnswer: "Total float of F is 5 days.",
+      },
+      {
+        key: "f",
+        label: "Calculate the total float for activity D.",
+        marks: 1,
+        placeholder: "Float = LS − ES (or LF − EF)…",
+        acceptedAnswer: "Total float of D is 6 days.",
+      },
+      {
+        key: "g",
+        label:
+          "If activity F is delayed by 3 days, does the project completion time change? Give a one-sentence reason.",
+        marks: 1,
+        placeholder: "Use the float from part (e)…",
+        acceptedAnswer:
+          "No — a 3-day delay is within F’s 5-day float, so the 26-day project duration is unchanged.",
+      },
+    ],
+    12,
+    "Critical path A–C–E–G–I with duration 26. Critical activities have zero total float. Mark the drawn network for correct nodes/arcs and predecessor logic (layout may differ). Use ES/EF table and float = LS−ES or LF−EF.",
+  ),
+];
+
 import type { GeneralMathsAreaOfStudyTopic } from "@/lib/generalMathsAreaTopic";
-import type { McqQuestion, Question, ShortQuestion } from "@/lib/subjects";
+import type { McqQuestion, ShortQuestion } from "@/lib/subjects";
 
 type Topic = GeneralMathsAreaOfStudyTopic;
 
@@ -293,6 +534,7 @@ const NETWORKS: Question[] = [
 
 /** Built-in Units 3 & 4 practice bank (merged with sheet/DB questions; deduped by stem). */
 export const GENERAL_MATHS_BUILTIN_QUESTIONS: Question[] = [
+  ...GENERAL_MATHS_LONG_BUILTIN_QUESTIONS,
   ...DATA,
   ...RECURSION,
   ...MATRICES,

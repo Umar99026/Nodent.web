@@ -54,7 +54,11 @@ export function shouldUseAiForFigureLabels(_parts?: AnswerPart[]): boolean {
   return false;
 }
 
-/** Admin toggle wins when set; otherwise infer from stem / answers / type. */
+/** Admin toggle wins when set; otherwise infer from stem / answers / type.
+ * Long answers: forced on/off via useAiMarking, else worded/prose heuristics.
+ * Short answers are always AI-eligible when the admin toggle is not forced off
+ * (quota enforced separately for free).
+ */
 export function resolveAiMarking(input: {
   useAiMarking?: boolean | null;
   questionText: string;
@@ -64,6 +68,9 @@ export function resolveAiMarking(input: {
   subjectId?: string;
 }): boolean {
   if (input.useAiMarking === false) return false;
+  if (input.useAiMarking === true) return true;
+  const t = String(input.questionType ?? "").toLowerCase();
+  if (t === "short" || t === "short_answer") return true;
   if (!isLongType(input.questionType)) return false;
   return shouldUseAiMarking(input);
 }
@@ -111,6 +118,7 @@ export type SmartMarkQuestionPayload = {
   topic?: string;
   marks: number;
   guidance?: string;
+  useAiMarking?: boolean;
   acceptedAnswers?: string[];
   markBreakdown?: MarkBreakdown;
   answerParts?: Array<{
@@ -188,6 +196,7 @@ export async function requestSmartMark(
     (input.studentSteps?.some((s) => String(s ?? "").trim()) ?? false) &&
     Boolean(input.question.markBreakdown?.steps?.length);
   if (
+    q.useAiMarking !== true &&
     !qualifiesForOpenAiMarking({
       questionText: q.question,
       questionType: q.type,
@@ -433,6 +442,7 @@ export function buildSmartMarkPayload(
     marks?: number;
     guidance?: string;
     acceptedAnswers?: string[];
+    useAiMarking?: boolean;
     markBreakdown?: SmartMarkQuestionPayload["markBreakdown"];
     answerParts?: AnswerPart[];
   },
@@ -445,24 +455,38 @@ export function buildSmartMarkPayload(
   },
 ): SmartMarkQuestionPayload {
   const { marks, partMarks = [], expectedAnswers = [], configuredParts = [] } = options;
+  const partsForPayload =
+    configuredParts.length >= 1
+      ? configuredParts
+      : Array.isArray(question.answerParts)
+        ? question.answerParts
+        : [];
+  const partAccepted = partsForPayload.map((p, idx) =>
+    String(expectedAnswers[idx] ?? p.acceptedAnswer ?? "").trim(),
+  );
+  const topAccepted = [
+    ...(Array.isArray(question.acceptedAnswers) ? question.acceptedAnswers : []),
+    ...partAccepted,
+  ]
+    .map((a) => String(a ?? "").trim())
+    .filter(Boolean);
   return {
     type: question.type === "long" ? "long_answer" : "short_answer",
     question: question.question,
     topic: question.topic,
     marks,
     guidance: question.guidance,
-    acceptedAnswers: [
-      ...(Array.isArray(question.acceptedAnswers) ? question.acceptedAnswers : []),
-    ].filter(Boolean),
+    useAiMarking: question.useAiMarking,
+    acceptedAnswers: [...new Set(topAccepted)],
     markBreakdown: (question as { markBreakdown?: SmartMarkQuestionPayload["markBreakdown"] })
       .markBreakdown,
     answerParts:
-      configuredParts.length >= 2
-        ? configuredParts.map((p, idx) => ({
+      partsForPayload.length >= 2
+        ? partsForPayload.map((p, idx) => ({
             key: p.key,
             label: p.label,
             marks: partMarks[idx] ?? p.marks,
-            acceptedAnswer: expectedAnswers[idx],
+            acceptedAnswer: partAccepted[idx] || undefined,
           }))
         : undefined,
   };

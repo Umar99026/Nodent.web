@@ -27,8 +27,7 @@ import {
 import { englishAiConfigured, scoreEnglishResponse } from "../lib/englishOpenAi";
 import {
   canRunEnglishAiMark,
-  canRunHandwritingAiMark,
-  canRunProseAiMark,
+  canRunShortAiMark,
   ensurePracticeExamUsage,
   getPremiumUsageSummary,
   hasPracticeExamAccess,
@@ -37,8 +36,8 @@ import {
   PREMIUM_REQUIRED,
   quotaExceededResponse,
   recordUsage,
-  USAGE_KIND_HANDWRITING_AI,
   USAGE_KIND_PROSE_AI,
+  USAGE_KIND_SHORT_AI,
   USAGE_KIND_ENGLISH_ESSAY_AI,
 } from "../lib/premium";
 import {
@@ -5677,17 +5676,47 @@ app.post("/api/written/:subjectId/:questionKey/mark", authMiddleware, async (c: 
 
     const questionType = cleanText(String(q.type ?? "long_answer"), 40) || "long_answer";
     const qt = questionType.toLowerCase();
-    const isShortType = qt === "short" || qt === "short_answer" || qt === "mcq";
-    if (isShortType && handwritingImages.length === 0) {
+    const isShortType = qt === "short" || qt === "short_answer";
+    const isLongType = qt === "long" || qt === "long_answer";
+
+    if (qt === "mcq") {
+      return c.json({ error: "MCQ questions do not use AI marking." }, 400);
+    }
+
+    /** Free: no long-answer (typed or drawn). Premium: LA allowed. */
+    if (!isPremiumAccount(user) && isLongType) {
       return c.json(
-        { error: "Short-answer questions use instant keyword matching, not AI marking." },
-        400,
+        {
+          ...premiumRequiredResponse(),
+          error: "Long-answer questions require Premium.",
+        },
+        403,
       );
     }
+
+    /**
+     * Short-answer AI:
+     * - Free typed: up to daily short-AI quota, then clients must keyword-match.
+     * - Free drawn: not allowed (type your answer).
+     * - Premium: AI allowed for typed + drawn.
+     */
+    if (isShortType) {
+      if (handwritingImages.length > 0 && !isPremiumAccount(user)) {
+        return c.json(
+          {
+            error:
+              "Free accounts mark short answers by typing. Upgrade for drawn-answer AI marking.",
+            code: PREMIUM_REQUIRED,
+          },
+          403,
+        );
+      }
+    }
+
     const marksParsed = Math.round(Number(q.marks ?? 2));
     const marks = Number.isFinite(marksParsed) ? Math.max(1, marksParsed) : 2;
     const guidance = q.guidance ? cleanText(String(q.guidance), 2000) : undefined;
-    const acceptedAnswers = Array.isArray(q.acceptedAnswers)
+    let acceptedAnswers = Array.isArray(q.acceptedAnswers)
       ? q.acceptedAnswers.map((a: unknown) => String(a ?? "").trim()).filter(Boolean).slice(0, 20)
       : undefined;
     const answerParts = Array.isArray(q.answerParts)
@@ -5703,6 +5732,15 @@ app.post("/api/written/:subjectId/:questionKey/mark", authMiddleware, async (c: 
         })).filter((p) => p.label)
       : undefined;
     const partLabels = answerParts?.map((p) => p.label) ?? [];
+    const partAccepted = (answerParts ?? [])
+      .map((p) => String(p.acceptedAnswer ?? "").trim())
+      .filter(Boolean);
+    if ((!acceptedAnswers || acceptedAnswers.length === 0) && partAccepted.length) {
+      acceptedAnswers = partAccepted;
+    } else if (acceptedAnswers && partAccepted.length) {
+      acceptedAnswers = [...new Set([...acceptedAnswers, ...partAccepted])];
+    }
+    const forceAiMarking = q.useAiMarking === true || q.useAiMarking === 1;
     const openAiGate = {
       questionText,
       questionType,
@@ -5730,17 +5768,35 @@ app.post("/api/written/:subjectId/:questionKey/mark", authMiddleware, async (c: 
     );
 
     if (!isPremiumAccount(user)) {
-      const providerCount = aiProviderPoolSize(env);
-      if (handwritingImages.length > 0 || breakdownMark) {
-        const check = await canRunHandwritingAiMark(db, user.id, providerCount);
+      if (breakdownMark || handwritingImages.length > 0) {
+        return c.json(
+          {
+            ...premiumRequiredResponse(),
+            error: "Drawn and mark-breakdown AI require Premium.",
+          },
+          403,
+        );
+      }
+      if (isShortType) {
+        const check = await canRunShortAiMark(db, user.id, aiProviderPoolSize(env));
         if (!check.allowed) {
-          return c.json({ ...quotaExceededResponse(check.reason ?? ""), error: check.reason }, 403);
+          return c.json(
+            {
+              ...quotaExceededResponse(check.reason ?? ""),
+              error: check.reason,
+              code: "short_ai_quota",
+            },
+            403,
+          );
         }
       } else {
-        const check = await canRunProseAiMark(db, user.id, providerCount);
-        if (!check.allowed) {
-          return c.json({ ...quotaExceededResponse(check.reason ?? ""), error: check.reason }, 403);
-        }
+        return c.json(
+          {
+            ...premiumRequiredResponse(),
+            error: "Long-answer AI marking requires Premium.",
+          },
+          403,
+        );
       }
     }
 
@@ -5782,14 +5838,17 @@ app.post("/api/written/:subjectId/:questionKey/mark", authMiddleware, async (c: 
     } else {
       const responseText = cleanText(body?.responseText, 12000);
       if (!responseText) return c.json({ error: "responseText is required." }, 400);
-      const qt = questionType.toLowerCase();
-      if (qt !== "long_answer" && qt !== "long") {
+      const qtMark = questionType.toLowerCase();
+      const shortTextAi =
+        qtMark === "short" || qtMark === "short_answer";
+      const longTextAi = qtMark === "long_answer" || qtMark === "long";
+      if (!shortTextAi && !longTextAi) {
         return c.json(
-          { error: "AI text marking is only available for long-answer questions." },
+          { error: "AI text marking is only available for short-answer and long-answer questions." },
           400,
         );
       }
-      if (!qualifiesForOpenAiMarking(openAiGate)) {
+      if (longTextAi && !forceAiMarking && !qualifiesForOpenAiMarking(openAiGate)) {
         return c.json(
           {
             error:
@@ -5831,10 +5890,7 @@ app.post("/api/written/:subjectId/:questionKey/mark", authMiddleware, async (c: 
     `);
 
     if (!isPremiumAccount(user)) {
-      const usageKind =
-        handwritingImages.length > 0 || breakdownMark
-          ? USAGE_KIND_HANDWRITING_AI
-          : USAGE_KIND_PROSE_AI;
+      const usageKind = isShortType ? USAGE_KIND_SHORT_AI : USAGE_KIND_PROSE_AI;
       await recordUsage(db, user.id, usageKind, `${subjectId}:${questionKey}`);
     }
 

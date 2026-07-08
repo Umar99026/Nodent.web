@@ -13,6 +13,8 @@ type MultipartMarkBreakdownProps = {
   expectedAnswers: string[];
   studentAnswers?: string[];
   guidance?: string;
+  /** Free short-answer: skip bank guidance in wrong-answer bullets. */
+  genericOnly?: boolean;
   className?: string;
 };
 
@@ -23,6 +25,7 @@ export function MultipartMarkBreakdown({
   expectedAnswers,
   studentAnswers = [],
   guidance,
+  genericOnly = false,
   className,
 }: MultipartMarkBreakdownProps) {
   const slotCount = Math.max(partResults.length, partMarks.length, expectedAnswers.length);
@@ -58,7 +61,8 @@ export function MultipartMarkBreakdown({
               ? buildWrongAnswerBullets({
                   studentAnswer: student,
                   expectedAnswers: [expected],
-                  guidance,
+                  guidance: genericOnly ? undefined : guidance,
+                  genericOnly,
                 })
               : [];
           return (

@@ -31,6 +31,11 @@ type QuizAnswerFieldProps = {
   flushKey?: string;
   /** Ruled-pad hint above handwriting (default on for main answer areas). */
   workingHint?: boolean;
+  /**
+   * When false, hide the draw pad and only show typed input.
+   * Defaults to subject handwriting availability.
+   */
+  allowHandwriting?: boolean;
 };
 
 function initialInputMode(value: string): AnswerInputMode {
@@ -52,8 +57,10 @@ export function QuizAnswerField({
   examPaperMode = false,
   flushKey,
   workingHint = true,
+  allowHandwriting,
 }: QuizAnswerFieldProps) {
-  const handwritingAvailable = handwritingAllowedForSubject(subjectId);
+  const handwritingAvailable =
+    allowHandwriting !== false && handwritingAllowedForSubject(subjectId);
   const [inputMode, setInputMode] = useState<AnswerInputMode>(() => initialInputMode(value));
   const textValue = typedAnswerDisplay(value);
   const drawMode = inputMode === "pencil" || inputMode === "eraser";

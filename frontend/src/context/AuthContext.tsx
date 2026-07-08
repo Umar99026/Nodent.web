@@ -80,11 +80,23 @@ function withProfilePhoto(user: User): User {
 }
 
 function persistCurrentUser(user: User | null) {
-  if (!user) {
-    localStorage.removeItem(STORAGE_KEYS.currentUser);
-    return;
+  try {
+    if (!user) {
+      localStorage.removeItem(STORAGE_KEYS.currentUser);
+      return;
+    }
+    localStorage.setItem(STORAGE_KEYS.currentUser, JSON.stringify(user));
+  } catch {
+    // Private mode / storage blocked — keep in-memory session for this tab.
   }
-  localStorage.setItem(STORAGE_KEYS.currentUser, JSON.stringify(user));
+}
+
+function persistAuthToken(token: string) {
+  try {
+    localStorage.setItem(STORAGE_KEYS.authToken, token);
+  } catch {
+    // Private mode / storage blocked — keep in-memory session for this tab.
+  }
 }
 
 const SESSION_TIMEOUT_MS = 8_000;
@@ -249,7 +261,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
 
       const user = withProfilePhoto(data.user);
-      localStorage.setItem(STORAGE_KEYS.authToken, data.token);
+      persistAuthToken(data.token);
       persistCurrentUser(user);
 
       setState({
@@ -277,7 +289,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
 
       const user = withProfilePhoto(data.user);
-      localStorage.setItem(STORAGE_KEYS.authToken, data.token);
+      persistAuthToken(data.token);
       persistCurrentUser(user);
 
       setState({

@@ -5,7 +5,7 @@ import {
   getRawCustomQuestionsForSubject,
   practiceQuestionsForSubject,
 } from "@/lib/practiceQuestions";
-import { DEMO_MATHS_QUESTIONS } from "@/lib/demoMathsQuestions";
+import { GENERAL_MATHS_BUILTIN_QUESTIONS } from "@/lib/generalMathsBuiltinQuestions";
 import type { Question } from "@/lib/subjects";
 
 /** Fired after admin saves or bootstrap refreshes the global question bank. */
@@ -61,10 +61,22 @@ export function loadPracticeBank(
   cache?: Record<string, unknown[]>,
 ): Question[] {
   const sid = canonicalSubjectId(subjectId);
-  if (sid === "demo") {
-    return DEMO_MATHS_QUESTIONS;
-  }
   const map = cache ?? readCustomQuestionsCache();
   const raw = getRawCustomQuestionsForSubject(map, subjectId);
-  return practiceQuestionsForSubject(raw, subjectId);
+  const fromDb = practiceQuestionsForSubject(raw, subjectId);
+  const builtIn =
+    sid === "general-maths" || sid === "demo"
+      ? GENERAL_MATHS_BUILTIN_QUESTIONS
+      : [];
+  const merged = [...builtIn, ...fromDb];
+  // Lightweight dedupe: question stems can collide between built-ins and DB.
+  const seen = new Set<string>();
+  return merged.filter((q) => {
+    const key = `${q.type}:${String(q.topic ?? "").trim().toLowerCase()}:${String(q.question ?? "")
+      .trim()
+      .toLowerCase()}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }

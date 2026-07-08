@@ -12,6 +12,8 @@ export type WrongAnswerFeedbackInput = {
   expectedAnswers: string[];
   guidance?: string;
   questionText?: string;
+  /** Skip bank guidance — used for free short-answer (match-only) feedback. */
+  genericOnly?: boolean;
 };
 
 function primaryExpected(accepted: string[]): string {
@@ -134,11 +136,19 @@ export function buildWrongAnswerBullets(input: WrongAnswerFeedbackInput): string
     if (!bullets.includes(line)) bullets.push(line);
   }
 
-  const guidance = String(input.guidance ?? "").trim();
-  if (guidance) {
-    bullets.push(guidance.length > 400 ? `${guidance.slice(0, 397)}…` : guidance);
-  } else if (!diagnoses.length && expected) {
-    bullets.push("Review the question and compare each step of your method to the model answer.");
+  if (!input.genericOnly) {
+    const guidance = String(input.guidance ?? "").trim();
+    if (guidance) {
+      bullets.push(guidance.length > 400 ? `${guidance.slice(0, 397)}…` : guidance);
+    } else if (!diagnoses.length && expected) {
+      bullets.push("Review the question and compare each step of your method to the model answer.");
+    }
+  } else if (!diagnoses.length) {
+    bullets.push(
+      expected
+        ? "Check your answer against the expected form — spelling, units, and significant figures matter."
+        : "Review the question and try again with a clear final answer.",
+    );
   }
 
   return bullets;

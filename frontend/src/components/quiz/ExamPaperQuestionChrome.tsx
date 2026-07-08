@@ -11,7 +11,7 @@ export function ExamPaperQuestionHeading({
   marks: number;
   className?: string;
 }) {
-  const n = Math.max(1, Math.round(questionNumber));
+  void questionNumber;
   const m = Math.max(1, Math.round(marks));
   return (
     <p
@@ -20,7 +20,7 @@ export function ExamPaperQuestionHeading({
         className,
       )}
     >
-      Question {n} ({m} {m === 1 ? "mark" : "marks"})
+      {m} {m === 1 ? "mark" : "marks"}
     </p>
   );
 }

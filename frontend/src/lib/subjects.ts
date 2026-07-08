@@ -9,6 +9,8 @@ export interface AnswerPart {
   type?: "text" | "number";
   /** Grey hint shown in the answer input (PDF import / admin). */
   placeholder?: string;
+  /** Model / accepted answer for this subpart (AI marking rubric). */
+  acceptedAnswer?: string;
   /** Figure shown above this part's answer input (PDF import). */
   imageUrl?: string;
   /** Marks for this subpart (PDF import / multipart). */
@@ -80,10 +82,10 @@ export interface Subject {
 /** Local sandbox — admin-only subject (draw + AI marking demo). */
 export const demoSubject: Subject = {
   id: "demo",
-  name: "Maths",
+  name: "Demo",
   category: "Mathematics",
   description:
-    "Handwriting sandbox — draw worked solutions and get AI marking feedback.",
+    "Admin sandbox — hard General Maths multipart questions with handwriting and AI marking.",
   quiz: [],
 };
 

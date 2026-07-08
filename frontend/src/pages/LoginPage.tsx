@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
-import { ApiError, apiUnreachableMessage } from "@/lib/api";
+import { apiUnreachableMessage } from "@/lib/api";
+import { loginFormErrorMessage, signupFormErrorMessage } from "@/lib/userFacingErrors";
 import { STORAGE_KEYS, type AccountRole } from "@/lib/constants";
 import { AuthLayout } from "@/components/layout/AuthLayout";
 import { Button } from "@/components/ui/button";
@@ -93,11 +94,7 @@ export default function LoginPage() {
       await login(loginIdentity.trim(), loginPassword);
       navigate("/dashboard", { replace: true });
     } catch (err) {
-      if (err instanceof ApiError) {
-        setServerError(err.status === 0 ? apiUnreachableMessage() : err.message);
-      } else {
-        setServerError("Something went wrong. Please try again.");
-      }
+      setServerError(loginFormErrorMessage(err, apiUnreachableMessage()));
     } finally {
       setIsSubmitting(false);
     }
@@ -130,11 +127,7 @@ export default function LoginPage() {
         navigate("/dashboard", { replace: true });
       }
     } catch (err) {
-      if (err instanceof ApiError) {
-        setServerError(err.status === 0 ? apiUnreachableMessage() : err.message);
-      } else {
-        setServerError("Something went wrong. Please try again.");
-      }
+      setServerError(signupFormErrorMessage(err, apiUnreachableMessage()));
     } finally {
       setIsSubmitting(false);
     }

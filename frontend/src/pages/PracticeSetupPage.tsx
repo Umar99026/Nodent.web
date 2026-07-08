@@ -7,17 +7,15 @@ import {
   STORAGE_KEYS,
   isAdminUser,
 } from "@/lib/constants";
-import { canAccessPracticeExams, PREMIUM_PATH } from "@/lib/premium";
+import { canAccessPracticeExams, isPremiumUser, PREMIUM_PATH } from "@/lib/premium";
+import { formatCompactFreePlanDescription } from "@/lib/premiumUsage";
 import { baseSubjects, subjectsForUser } from "@/lib/subjects";
 import type { Question, Subject } from "@/lib/subjects";
 import { loadPracticeBank } from "@/lib/questionBankCache";
-import {
-  getRawCustomQuestionsForSubject,
-  practiceQuestionsForSubject,
-} from "@/lib/practiceQuestions";
 import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TopicPerformanceSelect } from "@/components/practice/TopicPerformanceSelect";
 import { CurriculumOverview } from "@/components/study/CurriculumOverview";
 import { ArrowRight, BookOpen, FileText, Loader2, Lock } from "lucide-react";
@@ -38,6 +36,7 @@ export default function PracticeSetupPage() {
   const { user } = useAuth();
   const isAdmin = isAdminUser(user);
   const examsUnlocked = canAccessPracticeExams(user);
+  const isPremium = isPremiumUser(user);
   const [searchParams, setSearchParams] = useSearchParams();
 
   useEffect(() => {
@@ -70,10 +69,50 @@ export default function PracticeSetupPage() {
   const initialTopic = String(searchParams.get("topic") ?? "all");
   const [topic, setTopic] = useState<string>(initialTopic || "all");
 
+  type PracticeKind = "mixed" | "mcq" | "sa" | "la" | "exams";
+  const initialKind = (String(searchParams.get("kind") ?? "mixed").trim() ||
+    "mixed") as PracticeKind;
+  const [kind, setKind] = useState<PracticeKind>(() => {
+    const k = ["mixed", "mcq", "sa", "la", "exams"].includes(initialKind)
+      ? initialKind
+      : "mixed";
+    if ((k === "la" && !isPremium) || (k === "exams" && !examsUnlocked)) return "mixed";
+    return k;
+  });
+
   useEffect(() => {
     const fromUrl = String(searchParams.get("topic") ?? "all") || "all";
     setTopic((current) => (current === fromUrl ? current : fromUrl));
   }, [searchParams]);
+
+  useEffect(() => {
+    const fromUrl = String(searchParams.get("kind") ?? "mixed")
+      .trim()
+      .toLowerCase();
+    if (!fromUrl) return;
+    if (fromUrl === kind) return;
+    if (fromUrl === "mixed" || fromUrl === "mcq" || fromUrl === "sa" || fromUrl === "la" || fromUrl === "exams") {
+      if (fromUrl === "la" && !isPremium) {
+        setKind("mixed");
+        return;
+      }
+      setKind(fromUrl as PracticeKind);
+    }
+  }, [searchParams, kind, isPremium]);
+
+  useEffect(() => {
+    if (isPremium) return;
+    if (kind !== "la") return;
+    setKind("mixed");
+    setSearchParams(
+      (prev) => {
+        const params = new URLSearchParams(prev);
+        params.delete("kind");
+        return params;
+      },
+      { replace: true },
+    );
+  }, [isPremium, kind, setSearchParams]);
 
   const handleTopicChange = (next: string) => {
     setTopic(next);
@@ -82,6 +121,27 @@ export default function PracticeSetupPage() {
         const params = new URLSearchParams(prev);
         if (!next || next === "all") params.delete("topic");
         else params.set("topic", next);
+        return params;
+      },
+      { replace: true },
+    );
+  };
+
+  const handleKindChange = (next: PracticeKind) => {
+    if (next === "la" && !isPremium) {
+      navigate(PREMIUM_PATH);
+      return;
+    }
+    if (next === "exams" && !examsUnlocked) {
+      navigate(PREMIUM_PATH);
+      return;
+    }
+    setKind(next);
+    setSearchParams(
+      (prev) => {
+        const params = new URLSearchParams(prev);
+        if (!next || next === "mixed") params.delete("kind");
+        else params.set("kind", next);
         return params;
       },
       { replace: true },
@@ -97,7 +157,7 @@ export default function PracticeSetupPage() {
       setQuestions(cached);
       setLoading(false);
     } else if (!user) {
-      setQuestions(practiceQuestionsForSubject([], subjectId));
+      setQuestions(loadPracticeBank(subjectId));
       setLoading(false);
       return;
     } else {
@@ -116,8 +176,7 @@ export default function PracticeSetupPage() {
         if (data.customQuestions) {
           localStorage.setItem(STORAGE_KEYS.customQuestions, JSON.stringify(data.customQuestions));
         }
-        const raw = getRawCustomQuestionsForSubject(data.customQuestions, subjectId);
-        setQuestions(practiceQuestionsForSubject(raw, subjectId));
+        setQuestions(loadPracticeBank(subjectId));
       } catch {
         if (cancelled) return;
         setQuestions(loadPracticeBank(subjectId));
@@ -171,7 +230,23 @@ export default function PracticeSetupPage() {
       navigate("/quiz/english");
       return;
     }
-    const qp = topic && topic !== "all" ? `?topic=${encodeURIComponent(topic)}` : "";
+    if (kind === "la" && !isPremium) {
+      navigate(PREMIUM_PATH);
+      return;
+    }
+    if (kind === "exams") {
+      if (!examsUnlocked) {
+        navigate(PREMIUM_PATH);
+        return;
+      }
+      navigate(`/practice/${subjectId}/exams`);
+      return;
+    }
+
+    const params = new URLSearchParams();
+    if (topic && topic !== "all") params.set("topic", topic);
+    if (kind && kind !== "mixed") params.set("kind", kind);
+    const qp = params.toString() ? `?${params.toString()}` : "";
     navigate(`/quiz/${subjectId}${qp}`);
   };
 
@@ -202,6 +277,93 @@ export default function PracticeSetupPage() {
                 ) : (
                   <>
                     <div className="mx-auto flex w-full max-w-3xl flex-col items-center gap-4">
+                      <div className="w-full">
+                        <p className="mb-2 text-center text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                          Practice mode
+                        </p>
+                        <Tabs value={kind} onValueChange={(v) => handleKindChange(v as PracticeKind)}>
+                          <TabsList className="mx-auto w-full max-w-3xl justify-between">
+                            <TabsTrigger value="mixed">Mixed</TabsTrigger>
+                            <TabsTrigger value="mcq">MCQ</TabsTrigger>
+                            <TabsTrigger value="sa">SA</TabsTrigger>
+                            <TabsTrigger value="la" aria-disabled={!isPremium}>
+                              {isPremium ? "LA" : "LA (Premium)"}
+                            </TabsTrigger>
+                            <TabsTrigger value="exams" aria-disabled={!examsUnlocked}>
+                              {examsUnlocked ? "Exams" : "Exams (Premium)"}
+                            </TabsTrigger>
+                          </TabsList>
+                          <TabsContent value={kind} className="mt-3">
+                            <div className="rounded-2xl border border-black/8 bg-white px-4 py-3 text-sm text-muted-foreground">
+                              {kind === "exams" ? (
+                                <div className="flex items-start gap-2">
+                                  <span className="mt-0.5">
+                                    {examsUnlocked ? (
+                                      <FileText className="size-4 text-foreground" />
+                                    ) : (
+                                      <Lock className="size-4" />
+                                    )}
+                                  </span>
+                                  <div className="min-w-0">
+                                    <p className="font-medium text-foreground">Past practice exams</p>
+                                    <p className="mt-0.5">
+                                      {examsUnlocked
+                                        ? "Browse past papers by topic and attempt them like the real exam."
+                                        : "Premium only. Free accounts can practice MCQ and short answers."}
+                                    </p>
+                                  </div>
+                                </div>
+                              ) : kind === "mcq" ? (
+                                <p>Multiple choice only. Fast reps + quick confidence building.</p>
+                              ) : kind === "sa" ? (
+                                <p>
+                                  Short answer only. Free includes 3 AI marks/day, then unlimited keyword
+                                  matching with generic feedback.
+                                </p>
+                              ) : kind === "la" ? (
+                                <div className="flex items-start gap-2">
+                                  <Lock className="mt-0.5 size-4 shrink-0" />
+                                  <div>
+                                    <p className="font-medium text-foreground">Long-answer practice</p>
+                                    <p className="mt-0.5">
+                                      {isPremium
+                                        ? "Full working, mark breakdown, and harder reasoning."
+                                        : "Premium only. Free accounts use MCQ and short-answer practice."}
+                                    </p>
+                                  </div>
+                                </div>
+                              ) : (
+                                <p>
+                                  {isPremium
+                                    ? "Mixed practice. We’ll rotate question styles while staying on your chosen topic."
+                                    : "Mixed MCQ and short answers (no long answers on Free)."}
+                                </p>
+                              )}
+                            </div>
+                          </TabsContent>
+                        </Tabs>
+
+                        <div className="mt-3 rounded-2xl border border-black/8 bg-white px-4 py-3 text-left text-sm">
+                          <p className="font-semibold text-[#0b0f19]">Your plan limits</p>
+                          {isPremium ? (
+                            <p className="mt-1 text-muted-foreground">
+                              Premium: Unlimited topic practice, unlimited AI marking, Ask AI, and full practice exams.
+                            </p>
+                          ) : (
+                            <p className="mt-1 text-muted-foreground">
+                              Free: {formatCompactFreePlanDescription()} · exams not included.
+                              <button
+                                type="button"
+                                className="ml-1 font-semibold text-brand-dark hover:underline"
+                                onClick={() => navigate(PREMIUM_PATH)}
+                              >
+                                View Premium
+                              </button>
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
                       <div className="flex w-full flex-col items-stretch gap-3 sm:flex-row sm:items-start sm:justify-center">
                         <div className="w-full sm:w-[18rem]">
                           <p className="mb-2 text-center text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
@@ -230,34 +392,20 @@ export default function PracticeSetupPage() {
                             onClick={handleStart}
                             className="h-12 w-full gap-2 rounded-2xl text-base sm:w-[18rem]"
                           >
-                            <BookOpen className="size-4" />
-                            Questions
+                            {kind === "exams" ? (
+                              examsUnlocked ? (
+                                <FileText className="size-4" />
+                              ) : (
+                                <Lock className="size-4" />
+                              )
+                            ) : (
+                              <BookOpen className="size-4" />
+                            )}
+                            {kind === "exams" ? (examsUnlocked ? "Open exams" : "Premium exams") : "Start practice"}
                             <ArrowRight className="size-4" />
                           </Button>
                         </div>
                       </div>
-
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => {
-                          if (!examsUnlocked) {
-                            navigate(PREMIUM_PATH);
-                            return;
-                          }
-                          navigate(`/practice/${subjectId}/exams`);
-                        }}
-                        className="h-12 w-full max-w-xs gap-2 rounded-2xl text-base"
-                        aria-label={examsUnlocked ? "Open past exams" : "Past exams — Premium required"}
-                      >
-                        {examsUnlocked ? (
-                          <FileText className="size-4" />
-                        ) : (
-                          <Lock className="size-4 text-muted-foreground" />
-                        )}
-                        Exams
-                        {examsUnlocked ? <ArrowRight className="size-4" /> : null}
-                      </Button>
                     </div>
 
                     <div className="mt-10 flex flex-1 flex-col justify-center">

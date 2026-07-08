@@ -1,5 +1,5 @@
 import { STORAGE_KEYS } from "@/lib/constants";
-import { sanitizeUserFacingError } from "@/lib/userFacingErrors";
+import { GENERIC_USER_ERROR, sanitizeUserFacingError } from "@/lib/userFacingErrors";
 
 function resolveApiBase(): string {
   const raw = (import.meta.env.VITE_API_URL || "").trim();
@@ -102,11 +102,13 @@ export function getApiBase(): string {
 
 export class ApiError extends Error {
   status: number;
+  code?: string;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, code?: string) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -169,7 +171,12 @@ export async function apiFetch<T>(
       (body as Record<string, unknown>).error ??
       (body as Record<string, unknown>).message ??
       "Session expired";
-    throw new ApiError(401, sanitizeUserFacingError(String(message), "Session expired"));
+    const code = (body as Record<string, unknown>).code;
+    throw new ApiError(
+      401,
+      sanitizeUserFacingError(String(message), "Session expired"),
+      code != null ? String(code) : undefined,
+    );
   }
 
   if (!response.ok) {
@@ -178,9 +185,11 @@ export async function apiFetch<T>(
       (body as Record<string, unknown>).error ??
       (body as Record<string, unknown>).message ??
       response.statusText;
+    const code = (body as Record<string, unknown>).code;
     throw new ApiError(
       response.status,
-      sanitizeUserFacingError(String(message), "Something went wrong. Please try again."),
+      sanitizeUserFacingError(String(message), GENERIC_USER_ERROR),
+      code != null ? String(code) : undefined,
     );
   }
 

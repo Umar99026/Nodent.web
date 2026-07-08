@@ -1,7 +1,6 @@
 import { Routes, Route, Navigate, useSearchParams } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { Toaster } from "@/components/ui/sonner";
 import { lazy, Suspense, type ReactNode } from "react";
 import { StudyTimerProvider } from "@/context/StudyTimerContext";
 import { HandwritingModeProvider } from "@/context/HandwritingModeContext";
@@ -398,7 +397,6 @@ export default function App() {
         <TooltipProvider>
           <StudyTimerProvider>
             <AppRoutes />
-            <Toaster richColors closeButton position="top-center" />
           </StudyTimerProvider>
         </TooltipProvider>
       </HandwritingModeProvider>

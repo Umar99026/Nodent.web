@@ -10,7 +10,6 @@ import {
 import {
   getRawCustomQuestionsForSubject,
   normalizeCustomQuestionsList,
-  practiceQuestionsForSubject,
   canonicalPracticeTopic,
   questionMatchesPracticeTopic,
 } from "@/lib/practiceQuestions";
@@ -53,6 +52,7 @@ import { AdminQuestionEditLink } from "@/components/admin/AdminQuestionEditLink"
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { scrollWithinAppShell } from "@/lib/scrollAppViewport";
 import { EnglishPracticePanel } from "@/pages/EnglishPracticePage";
 import { TopicPerformanceSelect } from "@/components/practice/TopicPerformanceSelect";
 import {
@@ -192,6 +192,8 @@ export default function QuizPage() {
   const [breakdownMode, setBreakdownMode] = useState(() => readBreakdownModePreference());
   const { isInactive, resetInactivity } = useInactivity();
   const [showInactivityDialog, setShowInactivityDialog] = useState(false);
+  const questionCardRef = useRef<HTMLDivElement>(null);
+  const shouldScrollToQuestionRef = useRef(false);
 
   useEffect(() => {
     if (!premium && breakdownMode) {
@@ -209,6 +211,17 @@ export default function QuizPage() {
   const [questionUiState, setQuestionUiState] = useState<Record<string, QuestionUiState>>({});
   const initialTopicParam = String(searchParams.get("topic") ?? "").trim();
   const [topicFilter, setTopicFilter] = useState<string>(initialTopicParam || "all");
+
+  type PracticeKind = "mixed" | "mcq" | "sa" | "la";
+  const initialKindParam = String(searchParams.get("kind") ?? "mixed")
+    .trim()
+    .toLowerCase();
+  const [kindFilter, setKindFilter] = useState<PracticeKind>(() => {
+    if (initialKindParam === "mcq" || initialKindParam === "sa" || initialKindParam === "la") {
+      return initialKindParam as PracticeKind;
+    }
+    return "mixed";
+  });
   const [pinnedGroupKey, setPinnedGroupKey] = useState<string | null>(null);
   const [answeredAtSessionStart, setAnsweredAtSessionStart] = useState<Set<string>>(new Set());
 
@@ -282,6 +295,33 @@ export default function QuizPage() {
     if (!t) return;
     setTopicFilter(t);
   }, [searchParams]);
+
+  // If the setup page passes ?kind=..., keep the UI in sync.
+  useEffect(() => {
+    const k = String(searchParams.get("kind") ?? "mixed").trim().toLowerCase();
+    if (!k) return;
+    if (k === "la" && !premium) {
+      setKindFilter("mixed");
+      setSearchParams(
+        (prev) => {
+          const params = new URLSearchParams(prev);
+          params.delete("kind");
+          return params;
+        },
+        { replace: true },
+      );
+      return;
+    }
+    if (k === "mcq" || k === "sa" || k === "la" || k === "mixed") {
+      setKindFilter(k as PracticeKind);
+    }
+  }, [searchParams, premium, setSearchParams]);
+
+  useEffect(() => {
+    if (premium) return;
+    if (kindFilter !== "la") return;
+    setKindFilter("mixed");
+  }, [premium, kindFilter]);
 
   const schedulePracticeSave = useCallback(
     (next: PracticeState) => {
@@ -376,13 +416,7 @@ export default function QuizPage() {
             JSON.stringify(data.customQuestions),
           );
         }
-        const raw = getRawCustomQuestionsForSubject(
-          data?.customQuestions,
-          subjectId,
-        );
-        setQuestions(
-          practiceQuestionsForSubject(raw, subjectId),
-        );
+        setQuestions(loadPracticeBank(subjectId));
       } catch {
         if (!cancelled) {
           const stored = getCustomQuestionsFromStorage(subjectId);
@@ -537,11 +571,18 @@ export default function QuizPage() {
   ]);
 
   const topicFilteredFlat = useMemo(() => {
-    if (!subjectId || topicFilter === "all") return randomizedQuestions;
-    return randomizedQuestions.filter((q) =>
-      questionMatchesPracticeTopic(subjectId, q, topicFilter),
-    );
-  }, [randomizedQuestions, topicFilter, subjectId]);
+    if (!subjectId) return randomizedQuestions;
+    return randomizedQuestions.filter((q) => {
+      if (!premium && q.type === "long") return false;
+      if (kindFilter === "mcq" && q.type !== "mcq") return false;
+      if (kindFilter === "sa" && q.type !== "short") return false;
+      if (kindFilter === "la" && q.type !== "long") return false;
+      if (topicFilter !== "all" && !questionMatchesPracticeTopic(subjectId, q, topicFilter)) {
+        return false;
+      }
+      return true;
+    });
+  }, [randomizedQuestions, topicFilter, subjectId, kindFilter, premium]);
 
   const allGroupsFlat = useMemo(
     () => buildGroupsFromOrderedFlat(topicFilteredFlat, questions),
@@ -722,15 +763,31 @@ export default function QuizPage() {
     [currentIndex, subjectId, isWrongReview, isDemoSandbox, schedulePracticeSave, allGroupsFlat, questions]
   );
 
+  const scrollToQuestion = useCallback(() => {
+    scrollWithinAppShell(questionCardRef.current, { behavior: "instant", offset: 20 });
+  }, []);
+
   // Navigation (index = stimulus group)
   const goTo = (index: number) => {
     const clamped = Math.max(0, Math.min(displayGroups.length - 1, index));
+    if (clamped === currentIndex) return;
+    shouldScrollToQuestionRef.current = true;
     setCurrentIndex(clamped);
     setPinnedGroupKey(null);
     if (!isWrongReview && user && subjectId && displayGroups.length > 0) {
       schedulePracticeSave({ currentIndex: clamped, answers });
     }
   };
+
+  useEffect(() => {
+    if (!shouldScrollToQuestionRef.current) return;
+    shouldScrollToQuestionRef.current = false;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        scrollToQuestion();
+      });
+    });
+  }, [currentIndex, scrollToQuestion]);
 
   // New topic filter → start at the first question in that topic (not the old index / end of list).
   useEffect(() => {
@@ -938,13 +995,13 @@ export default function QuizPage() {
           <p className="rounded-lg border border-brand/25 bg-brand/5 px-4 py-3 text-sm text-foreground">
             {useDemoMockFeedback ? (
               <>
-                Maths sandbox (mock preview) — preloaded wrong-answer feedback, no OpenAI. Remove{" "}
+                Demo sandbox (mock preview) — preloaded wrong-answer feedback, no OpenAI. Remove{" "}
                 <code className="rounded bg-black/5 px-1">?mockFeedback=1</code> from the URL for
                 live AI marking.
               </>
             ) : (
               <>
-                Maths sandbox — draw your working on the pad (one image per part). AI reads your
+                Demo sandbox — draw your working on the pad (one image per part). AI reads your
                 handwriting, shows what it interpreted, and marks with detailed formatted feedback.
                 Submit as many times as you like.
               </>
@@ -1040,6 +1097,7 @@ export default function QuizPage() {
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
           {/* Question column */}
           <div className="min-w-0 space-y-6">
+            <div ref={questionCardRef} className="scroll-mt-24">
             <Card className="practice-card">
               <div className="practice-card-accent" aria-hidden>
                 <div className="practice-card-accent-black" />
@@ -1177,10 +1235,12 @@ export default function QuizPage() {
                 )}
               </CardContent>
             </Card>
+            </div>
 
             {/* Navigation */}
             <div className="flex items-center justify-between gap-2">
               <Button
+                type="button"
                 variant="outline"
                 onClick={() => goTo(currentIndex - 1)}
                 disabled={currentIndex === 0 || displayGroups.length === 0}
@@ -1192,6 +1252,7 @@ export default function QuizPage() {
               </Button>
 
               <Button
+                type="button"
                 variant="outline"
                 onClick={() => goTo(currentIndex + 1)}
                 disabled={currentIndex === displayGroups.length - 1}

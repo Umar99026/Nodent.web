@@ -4,7 +4,7 @@ import { isPremiumUser } from "@/lib/premium";
 import {
   formatCompactFreePlanDescription,
   formatFreePlanSummary,
-  FREE_DAILY_LONG_ANSWER_LIMIT,
+  freeShortAiRemaining,
   PREMIUM_FEATURE_ROWS,
   type PremiumUsageQuota,
   type PremiumUsageSummary,
@@ -21,11 +21,11 @@ function compactPlanBlurb(
   if (loading) return "Loading plan details…";
   const base = formatCompactFreePlanDescription();
   if (!usage) return base;
-  const used = usage.proseAiMarks.used;
-  const left = Math.max(0, FREE_DAILY_LONG_ANSWER_LIMIT - used);
+  const left = freeShortAiRemaining(usage);
+  if (!Number.isFinite(left)) return base;
   return left > 0
-    ? `${base}. ${left} long-answer mark${left === 1 ? "" : "s"} left today.`
-    : `${base}. Daily long-answer limit used up.`;
+    ? `${base}. ${left} short-answer AI mark${left === 1 ? "" : "s"} left today.`
+    : `${base}. Daily SA AI used — further short answers use keyword match.`;
 }
 
 function QuotaMeter({
@@ -192,9 +192,8 @@ export function PremiumPlanPanel({ compact = false }: PremiumPlanPanelProps) {
           <p className="mt-6 text-sm text-danger">{error}</p>
         ) : usage && !premium && !admin ? (
           <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <QuotaMeter label="Long-answer AI marking" quota={usage.proseAiMarks} />
+            <QuotaMeter label="Short-answer AI marking" quota={usage.shortAiMarks ?? usage.proseAiMarks} />
             <QuotaMeter label="English essay marking" quota={usage.englishEssays} />
-            <QuotaMeter label="Drawn working-out marking" quota={usage.handwritingAiMarks} />
           </div>
         ) : null}
       </div>

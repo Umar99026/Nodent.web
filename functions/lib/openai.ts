@@ -736,7 +736,10 @@ export async function markLongAnswer(
 One stepResults entry per markBreakdown step. Use guidance/acceptedAnswers as rubric.${subjectBlock}`
     : `Mark a VCE student answer. Return JSON only:
 {"correct":bool,"scorePercent":0-100,"marksAwarded":n,"maxMarks":n,"feedback":"1-2 short bullets if wrong","correctAnswers":["..."],"partResults":[{"index":0,"correct":bool,"marksAwarded":n,"correctAnswer":"...","partFeedback":"1 bullet"}]}
-Use guidance and acceptedAnswers as rubric. Be fair; accept equivalent methods.${subjectBlock}`;
+Use guidance/acceptedAnswers / answerParts.acceptedAnswer as rubric.
+Be fair; accept equivalent methods, algebra forms, and clear diagram/network layouts that encode the same dependencies.
+For multipart items, mark each part against its own acceptedAnswer and fill partResults in order.
+Award partial marks where method is correct.${subjectBlock}`;
 
   const parsed = await chatJson(
     env,
@@ -807,9 +810,11 @@ export async function markHandwritingAnswer(
     [
       {
         role: "system",
-        content: `Read handwritten VCE answer(s) from the image(s). Return JSON only:
+        content: `Read handwritten / drawn VCE answer(s) from the image(s). Return JSON only:
 {"correct":bool,"scorePercent":0-100,"marksAwarded":n,"maxMarks":n,"feedback":"optional 1 line","correctAnswers":["..."],"partResults":[{"index":0,"correct":bool,"marksAwarded":n,"studentAnswerRead":"what you read","correctAnswer":"...","partFeedback":"1 bullet"}]}
-Use guidance/acceptedAnswers as rubric. LaTeX ok.${subjectBlock}`,
+Use guidance/acceptedAnswers/answerParts.acceptedAnswer as rubric.
+Images may contain algebra working, written explanations, tables (ES/EF), or diagrams/networks/graphs.
+Accept equivalent layouts if the maths / dependencies are correct. LaTeX ok in text fields.${subjectBlock}`,
       },
       { role: "user", content: userContent },
     ],

@@ -1,12 +1,10 @@
-import { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { ApiError, apiFetch } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
 import { isAdminUser } from "@/lib/constants";
 import { getDashboardGreeting } from "@/lib/dashboardGreeting";
 import { AppShell } from "@/components/layout/AppShell";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { toast } from "sonner";
-import { Star } from "lucide-react";
 import { localDateISO } from "@/lib/utils";
 import { useMySubjects } from "@/hooks/useMySubjects";
 import { DashboardRecommendations } from "@/components/dashboard/DashboardRecommendations";
@@ -24,7 +22,6 @@ export default function DashboardPage() {
   const { user } = useAuth();
   const isAdmin = isAdminUser(user);
   const userId = String(user?.id ?? "anonymous");
-  const lastScorecardToastAtRef = useRef<number>(0);
   const dashboardActionStorageKey = useMemo(
     () => `nodent:dashboard-actions:v1:${userId}`,
     [userId],
@@ -58,16 +55,8 @@ export default function DashboardPage() {
         `/api/scorecard?asOfDate=${encodeURIComponent(localDateISO())}`,
       );
       setScoreCard(data);
-    } catch (err) {
-      // Avoid toast spam: scorecard is refreshed in multiple places (including after answer submits).
-      // Also avoid toasting on 401/session churn; AuthContext handles expiry.
-      if (err instanceof ApiError && err.status === 401) return;
-      const now = Date.now();
-      if (now - lastScorecardToastAtRef.current < 12_000) return;
-      lastScorecardToastAtRef.current = now;
-      toast.error(
-        err instanceof Error ? err.message : "Failed to load your report card.",
-      );
+    } catch {
+      // Non-critical: dashboard still works without scorecard stats.
     } finally {
       setScoreCardLoading(false);
     }
@@ -237,7 +226,7 @@ export default function DashboardPage() {
           >
             <AvatarImage src={user?.profilePhoto ?? undefined} alt={user?.username ?? "User"} />
             <AvatarFallback className="bg-[#f4f7fb] text-xs font-bold text-[#0b0f19]">
-              {user?.profilePhoto ? initials : <Star className="size-4 text-[#0b0f19]" />}
+              {initials}
             </AvatarFallback>
           </Avatar>
         </div>

@@ -53,7 +53,12 @@ export function qualifiesForOpenAiMarking(input: {
 }): boolean {
   const qt = String(input.questionType ?? "").toLowerCase();
   if (qt === "mcq") return false;
-  if (qt !== "long" && qt !== "long_answer") return false;
+  const isLong = qt === "long" || qt === "long_answer";
+  const isShort = qt === "short" || qt === "short_answer";
+  if (!isLong && !isShort) return false;
+
+  /** Short answers: always eligible for free-tier AI (quota enforced separately). */
+  if (isShort) return true;
 
   const partLabels = input.partLabels ?? [];
   const accepted = input.acceptedAnswers ?? [];

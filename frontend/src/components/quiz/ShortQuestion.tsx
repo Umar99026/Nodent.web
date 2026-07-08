@@ -7,9 +7,13 @@ import {
   enrichHandwritingMarkResult,
   partMarkAt,
   requestHandwritingMark,
+  requestSmartMark,
   resolveAiMarking,
   qualifiesForOpenAiHandwriting,
 } from "@/lib/questionAiMarking";
+import { ApiError } from "@/lib/api";
+import { usePremiumUsage } from "@/hooks/usePremiumUsage";
+import { freeShortAiRemaining } from "@/lib/premiumUsage";
 import {
   collectFullQuestionStimulus,
   displayMarks,
@@ -46,8 +50,9 @@ import { isDiagramLabelQuestion, partHasOverlay, partUsesFigureLabels, partUsesI
 import { flushAllHandwriting, flushHandwriting } from "@/lib/handwritingFlush";
 import { CheckCircle2, XCircle, Send, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { useAuth } from "@/context/AuthContext";
 import { handwritingMarkUserError } from "@/lib/userFacingErrors";
-import { isPremiumError } from "@/lib/premium";
+import { isPremiumError, isPremiumUser } from "@/lib/premium";
 import {
   AiMarkingFeedbackPanel,
   AiMarkingPartFeedback,
@@ -232,8 +237,16 @@ export function ShortQuestion({
   const [aiMark, setAiMark] = useState<SmartMarkResult | null>(null);
   const [stepAnswers, setStepAnswers] = useState<string[]>([]);
   const devPreloadAppliedRef = useRef(false);
-  const handwritingUi = handwritingAllowedForSubject(subjectId);
+  const { user } = useAuth();
+  const premium = isPremiumUser(user);
+  const { usage, reload: reloadUsage } = usePremiumUsage(!!user && !premium);
+  const shortAiLeft = premium ? Number.POSITIVE_INFINITY : freeShortAiRemaining(usage);
+  /** Free SA: typed only. Premium may use drawn-answer AI. */
+  const handwritingUi = premium && handwritingAllowedForSubject(subjectId);
   const examPaper = isExamPaperLayoutSubject(subjectId);
+  /** Free: AI while quota remains, then keyword match + generic feedback. */
+  const canUseShortAi = premium || shortAiLeft > 0;
+  const genericMatchFeedback = !premium && shortAiLeft <= 0;
 
   const configuredParts: ShortQuestionType["answerParts"] =
     question.answerParts?.filter(
@@ -316,14 +329,17 @@ export function ShortQuestion({
       )
     : (question.acceptedAnswers ?? []).map(formatExpectedAnswer);
 
-  const useSmartMarking = resolveAiMarking({
-    useAiMarking: question.useAiMarking,
-    questionText: question.question,
-    partLabels: partDescriptors,
-    acceptedAnswers: question.acceptedAnswers,
-    questionType: question.type,
-    subjectId,
-  });
+  const useSmartMarking =
+    canUseShortAi &&
+    !practiceOnly &&
+    resolveAiMarking({
+      useAiMarking: question.useAiMarking,
+      questionText: question.question,
+      partLabels: partDescriptors,
+      acceptedAnswers: question.acceptedAnswers,
+      questionType: question.type,
+      subjectId,
+    });
 
   const openAiHandwritingEligible = qualifiesForOpenAiHandwriting({
     questionText: question.question,
@@ -331,13 +347,15 @@ export function ShortQuestion({
     acceptedAnswers: question.acceptedAnswers,
   });
 
-  const usesHandwritingAi = usesHandwritingMarking(
-    subjectId,
-    answer,
-    parts,
-    isMultipart,
-    openAiHandwritingEligible,
-  );
+  const usesHandwritingAi =
+    handwritingUi &&
+    usesHandwritingMarking(
+      subjectId,
+      answer,
+      parts,
+      isMultipart,
+      openAiHandwritingEligible,
+    );
 
   const useTextArea = useSmartMarking && !isMultipart;
 
@@ -469,17 +487,32 @@ export function ShortQuestion({
           .join("; ")
       : resolvedAnswer;
 
-    const usesHandwritingAiNow = usesHandwritingMarking(
-      subjectId,
-      resolvedAnswer,
-      resolvedParts,
-      isMultipart,
-      openAiHandwritingEligible,
-    );
+    const usesHandwritingAiNow =
+      handwritingUi &&
+      usesHandwritingMarking(
+        subjectId,
+        resolvedAnswer,
+        resolvedParts,
+        isMultipart,
+        openAiHandwritingEligible,
+      );
 
     if (breakdownActive) {
       toast.error("Mark breakdown uses AI marking — only available on long-answer questions.");
       return;
+    }
+
+    if (!premium) {
+      const hasDrawn =
+        isHandwritingValue(resolvedAnswer) ||
+        resolvedParts.some((p) => isHandwritingValue(p)) ||
+        resolvedSteps.some((p) => isHandwritingValue(p));
+      if (hasDrawn) {
+        toast.error(
+          "On Free, short answers are typed only. Type your answer to continue.",
+        );
+        return;
+      }
     }
 
     const accepted = question.acceptedAnswers ?? [];
@@ -488,6 +521,28 @@ export function ShortQuestion({
     let partCorrectFlags: boolean[] = [];
     setAiMark(null);
 
+    const markPayload = buildSmartMarkPayload(question, {
+      marks: effectiveTotalMarks,
+      partDescriptors,
+      partMarks,
+      expectedAnswers: expectedAnswersForDisplay,
+      configuredParts,
+    });
+
+    const tryShortAi =
+      canUseShortAi &&
+      !practiceOnly &&
+      Boolean(questionKey) &&
+      !isDiagramLabel &&
+      resolveAiMarking({
+        useAiMarking: question.useAiMarking,
+        questionText: question.question,
+        partLabels: partDescriptors,
+        acceptedAnswers: question.acceptedAnswers,
+        questionType: question.type,
+        subjectId,
+      });
+
     if (usesHandwritingAiNow && questionKey) {
       setAiMarking(true);
       try {
@@ -495,13 +550,7 @@ export function ShortQuestion({
           answer: resolvedComposite,
           parts: resolvedParts,
           isMultipart,
-          question: buildSmartMarkPayload(question, {
-            marks: effectiveTotalMarks,
-            partDescriptors,
-            partMarks,
-            expectedAnswers: expectedAnswersForDisplay,
-            configuredParts,
-          }),
+          question: markPayload,
         });
         const enriched = enrichHandwritingMarkResult(
           ai ?? buildFallbackHandwritingMark(expectedAnswersForDisplay),
@@ -526,6 +575,78 @@ export function ShortQuestion({
         const fallback = buildFallbackHandwritingMark(expectedAnswersForDisplay);
         correct = false;
         setAiMark(fallback);
+      } finally {
+        setAiMarking(false);
+      }
+    } else if (tryShortAi) {
+      setAiMarking(true);
+      try {
+        const ai = await requestSmartMark(subjectId, questionKey, {
+          responseText: resolvedComposite,
+          studentParts: isMultipart ? resolvedParts : undefined,
+          question: markPayload,
+        });
+        if (ai) {
+          if (ai.partResults?.length) {
+            partCorrectFlags = resolvedParts.map((_, idx) => {
+              const hit = ai.partResults?.find((p) => p.index === idx);
+              return hit ? hit.correct : false;
+            });
+            setPartResults(partCorrectFlags);
+            correct = multipartAllCorrect(partCorrectFlags);
+          } else {
+            setPartResults([]);
+            correct = ai.correct;
+          }
+          setDpHint(null);
+          setAiMark(ai);
+          void reloadUsage();
+        } else {
+          // Fall through to keyword match
+          if (isMultipart) {
+            const gradedParts = gradeMultipartAnswers(resolvedParts, accepted, configuredParts);
+            partCorrectFlags = gradedParts.map((g) => g.correct);
+            setPartResults(partCorrectFlags);
+            correct = multipartAllCorrect(partCorrectFlags);
+            nextDpHint = Math.max(...gradedParts.map((g) => g.dpHint ?? 0)) || null;
+            setDpHint(nextDpHint);
+          } else {
+            setPartResults([]);
+            const graded = isAnswerCorrect(resolvedComposite, accepted);
+            correct = graded.correct;
+            nextDpHint = graded.dpHint;
+            setDpHint(nextDpHint);
+          }
+        }
+      } catch (err) {
+        const quotaExhausted =
+          err instanceof ApiError &&
+          (err.code === "short_ai_quota" ||
+            /keyword matching/i.test(err.message) ||
+            /per day/i.test(err.message));
+        if (quotaExhausted) {
+          void reloadUsage();
+          toast.message("Daily short-answer AI used up — marking by keyword match.");
+        } else if (isPremiumError(err)) {
+          toast.error(err instanceof Error ? err.message : "Could not mark your answer.");
+          return;
+        } else {
+          toast.error(err instanceof Error ? err.message : "Could not mark your answer. Using keyword match.");
+        }
+        if (isMultipart) {
+          const gradedParts = gradeMultipartAnswers(resolvedParts, accepted, configuredParts);
+          partCorrectFlags = gradedParts.map((g) => g.correct);
+          setPartResults(partCorrectFlags);
+          correct = multipartAllCorrect(partCorrectFlags);
+          nextDpHint = Math.max(...gradedParts.map((g) => g.dpHint ?? 0)) || null;
+          setDpHint(nextDpHint);
+        } else {
+          setPartResults([]);
+          const graded = isAnswerCorrect(resolvedComposite, accepted);
+          correct = graded.correct;
+          nextDpHint = graded.dpHint;
+          setDpHint(nextDpHint);
+        }
       } finally {
         setAiMarking(false);
       }
@@ -887,6 +1008,7 @@ export function ShortQuestion({
                       disabled={disabled || (submitted && !allowRetry && !repeatSandbox)}
                       subjectId={subjectId}
                       examPaperMode={examPaper}
+                      allowHandwriting={handwritingUi}
                       multiline={resolveAiMarking({
                         useAiMarking: question.useAiMarking,
                         questionText: partDescriptors[idx] ?? "",
@@ -920,8 +1042,9 @@ export function ShortQuestion({
                       bullets={buildWrongAnswerBullets({
                         studentAnswer: parts[slotBaseIndex] ?? "",
                         expectedAnswers: [expectedAnswersForDisplay[slotBaseIndex] ?? ""].filter(Boolean),
-                        guidance: question.guidance,
+                        guidance: genericMatchFeedback ? undefined : question.guidance,
                         questionText: question.question,
+                        genericOnly: genericMatchFeedback,
                       })}
                     />
                   ) : null}
@@ -1002,6 +1125,7 @@ export function ShortQuestion({
                     disabled={disabled || (submitted && !allowRetry && !repeatSandbox)}
                     subjectId={subjectId}
                     examPaperMode={examPaper}
+                    allowHandwriting={handwritingUi}
                     multiline={useTextArea}
                     rows={handwritingUi ? 8 : useTextArea ? 5 : 1}
                     handwritingSize={useTextArea ? "lg" : "md"}
@@ -1041,8 +1165,9 @@ export function ShortQuestion({
                   bullets={buildWrongAnswerBullets({
                     studentAnswer: answer,
                     expectedAnswers: expectedAnswersForDisplay.filter(Boolean),
-                    guidance: question.guidance,
+                    guidance: genericMatchFeedback ? undefined : question.guidance,
                     questionText: question.question,
+                    genericOnly: genericMatchFeedback,
                   })}
                 />
               ) : null}
@@ -1105,7 +1230,14 @@ export function ShortQuestion({
               if (read) return read;
               return isHandwritingValue(part) ? "" : part;
             })}
-            guidance={usesHandwritingAi && aiMark ? undefined : question.guidance}
+            guidance={
+              usesHandwritingAi && aiMark
+                ? undefined
+                : genericMatchFeedback
+                  ? undefined
+                  : question.guidance
+            }
+            genericOnly={genericMatchFeedback}
           />
         ) : null}
 
@@ -1118,8 +1250,9 @@ export function ShortQuestion({
             bullets={buildWrongAnswerBullets({
               studentAnswer: compositeAnswer,
               expectedAnswers: expectedAnswersForDisplay,
-              guidance: question.guidance,
+              guidance: genericMatchFeedback ? undefined : question.guidance,
               questionText: question.question,
+              genericOnly: genericMatchFeedback,
             })}
           />
         ) : null}

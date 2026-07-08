@@ -14,6 +14,15 @@ const ADMIN_EMAIL_LC = "nodent.app@gmail.com";
 /** Per API key — total free daily limit = this × configured provider count. */
 export const FREE_DAILY_AI_MARKS_PER_PROVIDER = 3;
 
+/** Free-tier short-answer AI marks per UTC day (then keyword match only). */
+export const FREE_DAILY_SHORT_AI_LIMIT = 3;
+
+export function freeDailyShortAiLimit(_providerCount = 1): number {
+  void _providerCount;
+  return FREE_DAILY_SHORT_AI_LIMIT;
+}
+
+/** @deprecated Long-answer AI is Premium-only; kept for older call sites. */
 export function freeDailyProseAiLimit(providerCount: number): number {
   return FREE_DAILY_AI_MARKS_PER_PROVIDER * Math.max(1, providerCount);
 }
@@ -57,6 +66,8 @@ const MS_DAY = 24 * 60 * 60 * 1000;
 const PRACTICE_EXAM_WINDOW_MS = 7 * MS_DAY;
 
 export const USAGE_KIND_PROSE_AI = "prose_ai_mark";
+/** Free short-answer AI marks (typed). Separated from long-answer prose marks. */
+export const USAGE_KIND_SHORT_AI = "short_ai_mark";
 export const USAGE_KIND_HANDWRITING_AI = "handwriting_ai_mark";
 export const USAGE_KIND_ENGLISH_ESSAY_AI = "english_essay_ai";
 
@@ -126,40 +137,46 @@ export async function ensurePracticeExamUsage(
   await recordUsage(db, userId, "practice_exam", examRef);
 }
 
-/** Long-answer text AI on free accounts (maths etc. — not English essays). */
-export async function canRunProseAiMark(
+/** Short-answer AI on free accounts (then keyword match). */
+export async function canRunShortAiMark(
   db: { execute: (q: ReturnType<typeof sql>) => Promise<{ rows?: unknown[] }> },
   userId: number,
   providerCount = 1,
 ): Promise<{ allowed: boolean; reason?: string }> {
-  const limit = freeDailyProseAiLimit(providerCount);
+  const limit = freeDailyShortAiLimit(providerCount);
   const since = startOfUtcDayIso();
-  const n = await countUsageSince(db, userId, USAGE_KIND_PROSE_AI, since);
+  const n = await countUsageSince(db, userId, USAGE_KIND_SHORT_AI, since);
   if (n >= limit) {
     return {
       allowed: false,
-      reason: `Free accounts get ${limit} AI-marked long answers per day. Upgrade for unlimited marking.`,
+      reason: `Free accounts get ${limit} AI-marked short answers per day. Further short answers use keyword matching.`,
     };
   }
   return { allowed: true };
 }
 
-/** Handwritten working / draw marking — separate daily bucket on free accounts. */
-export async function canRunHandwritingAiMark(
-  db: { execute: (q: ReturnType<typeof sql>) => Promise<{ rows?: unknown[] }> },
-  userId: number,
-  providerCount = 1,
+/** Long-answer text AI — Premium only. */
+export async function canRunProseAiMark(
+  _db: { execute: (q: ReturnType<typeof sql>) => Promise<{ rows?: unknown[] }> },
+  _userId: number,
+  _providerCount = 1,
 ): Promise<{ allowed: boolean; reason?: string }> {
-  const limit = freeDailyHandwritingAiLimit(providerCount);
-  const since = startOfUtcDayIso();
-  const n = await countUsageSince(db, userId, USAGE_KIND_HANDWRITING_AI, since);
-  if (n >= limit) {
-    return {
-      allowed: false,
-      reason: `Free accounts get ${limit} handwritten working-out marks per day. Upgrade for unlimited marking.`,
-    };
-  }
-  return { allowed: true };
+  return {
+    allowed: false,
+    reason: "Long-answer questions require Premium.",
+  };
+}
+
+/** Handwritten working / draw marking — Premium only (long answers). */
+export async function canRunHandwritingAiMark(
+  _db: { execute: (q: ReturnType<typeof sql>) => Promise<{ rows?: unknown[] }> },
+  _userId: number,
+  _providerCount = 1,
+): Promise<{ allowed: boolean; reason?: string }> {
+  return {
+    allowed: false,
+    reason: "Drawn working-out marking requires Premium (long-answer practice).",
+  };
 }
 
 /** English essay marking — separate 3-day bucket (uses paid OpenAI). */
@@ -188,13 +205,7 @@ export async function getPremiumUsageSummary(
   const daySince = startOfUtcDayIso();
   const essaySince = new Date(Date.now() - ENGLISH_ESSAY_WINDOW_MS).toISOString();
   const examsUsed = await countUsageSince(db, userId, "practice_exam", examSince);
-  const proseUsed = await countUsageSince(db, userId, USAGE_KIND_PROSE_AI, daySince);
-  const handwritingUsed = await countUsageSince(
-    db,
-    userId,
-    USAGE_KIND_HANDWRITING_AI,
-    daySince,
-  );
+  const shortAiUsed = await countUsageSince(db, userId, USAGE_KIND_SHORT_AI, daySince);
   const englishEssaysUsed = await countUsageSince(
     db,
     userId,
@@ -209,15 +220,25 @@ export async function getPremiumUsageSummary(
       windowDays: 7,
       requiresPremium: !isPremium,
     },
+    shortAiMarks: {
+      used: shortAiUsed,
+      limit: isPremium ? null : freeDailyShortAiLimit(providerCount),
+      windowDays: 1,
+    },
+    /** @deprecated Alias — free tier tracks short AI; long-answer AI is Premium-only. */
     proseAiMarks: {
-      used: proseUsed,
-      limit: isPremium ? null : freeDailyProseAiLimit(providerCount),
+      used: shortAiUsed,
+      limit: isPremium ? null : freeDailyShortAiLimit(providerCount),
       windowDays: 1,
     },
     handwritingAiMarks: {
-      used: handwritingUsed,
-      limit: isPremium ? null : freeDailyHandwritingAiLimit(providerCount),
+      used: 0,
+      limit: isPremium ? null : 0,
       windowDays: 1,
+      requiresPremium: !isPremium,
+    },
+    longAnswer: {
+      requiresPremium: !isPremium,
     },
     englishEssays: {
       used: englishEssaysUsed,

@@ -1,7 +1,56 @@
+export const GENERIC_USER_ERROR = "Something went wrong. Please try again.";
+
+export function isGenericUserFacingError(message: string): boolean {
+  return message.trim() === GENERIC_USER_ERROR;
+}
+
+function readApiError(err: unknown): { status: number; message: string } | null {
+  if (
+    err &&
+    typeof err === "object" &&
+    (err as { name?: string }).name === "ApiError" &&
+    "status" in err &&
+    "message" in err
+  ) {
+    return {
+      status: Number((err as { status: number }).status),
+      message: String((err as { message: string }).message),
+    };
+  }
+  return null;
+}
+
+/** Login/signup forms — never show the generic fallback toast/banner copy. */
+export function loginFormErrorMessage(err: unknown, networkMessage: string): string {
+  const apiErr = readApiError(err);
+  if (apiErr) {
+    if (apiErr.status === 0) return networkMessage;
+    const msg = apiErr.message.trim();
+    if (!msg || isGenericUserFacingError(msg)) {
+      return "Check your email or username and password, then try again.";
+    }
+    return msg;
+  }
+  return "Check your email or username and password, then try again.";
+}
+
+export function signupFormErrorMessage(err: unknown, networkMessage: string): string {
+  const apiErr = readApiError(err);
+  if (apiErr) {
+    if (apiErr.status === 0) return networkMessage;
+    const msg = apiErr.message.trim();
+    if (!msg || isGenericUserFacingError(msg)) {
+      return "Couldn't create your account. Check your details and try again.";
+    }
+    return msg;
+  }
+  return "Couldn't create your account. Check your details and try again.";
+}
+
 /** Turn raw API / Gemini errors into short messages safe to show students. */
 export function sanitizeUserFacingError(
   raw: unknown,
-  fallback = "Something went wrong. Please try again.",
+  fallback = GENERIC_USER_ERROR,
 ): string {
   const text = String(raw ?? "").trim();
   if (!text) return fallback;

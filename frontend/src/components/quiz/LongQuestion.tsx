@@ -63,7 +63,7 @@ import { MultipartMarkBreakdown } from "@/components/quiz/MultipartMarkBreakdown
 import { WrongAnswerFeedbackPanel } from "@/components/quiz/WrongAnswerFeedbackPanel";
 import { buildWrongAnswerBullets } from "@/lib/wrongAnswerFeedback";
 import { toast } from "sonner";
-import { isPremiumError, PREMIUM_PATH } from "@/lib/premium";
+import { isPremiumError, isPremiumUser, PREMIUM_PATH } from "@/lib/premium";
 import { AiMarkingFeedbackPanel, AiMarkingPartFeedback } from "@/components/quiz/AiMarkingFeedbackPanel";
 import { PremiumGate } from "@/components/premium/GetPremiumButton";
 import {
@@ -230,6 +230,7 @@ export function LongQuestion({
   onStateChange,
 }: LongQuestionProps) {
   const { user } = useAuth();
+  const premium = isPremiumUser(user);
   const navigate = useNavigate();
   const configuredParts: LongQuestionType["answerParts"] =
     question.answerParts?.filter(
@@ -404,6 +405,11 @@ export function LongQuestion({
   }, [subjectId, questionKey, isMultipart, partLabels, practiceOnly]);
 
   const handleSave = async () => {
+    if (!premium) {
+      setPremiumLockedMessage("Long-answer questions require Premium.");
+      toast.error("Long-answer questions require Premium.");
+      return;
+    }
     const usesHandwritingAi = usesHandwritingMarking(
       subjectId,
       response,
