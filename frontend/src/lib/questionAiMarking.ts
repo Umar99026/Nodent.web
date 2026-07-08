@@ -88,7 +88,6 @@ export function inferUseAiMarkingForImport(input: {
 import type { AiMarkPartResult } from "@/components/quiz/AiMarkingFeedbackPanel";
 import type { MarkBreakdown, MarkStepResult } from "@/lib/markBreakdown";
 import { handwritingMarkUserError, sanitizeUserFacingError } from "@/lib/userFacingErrors";
-import { isDemoMathsSubject } from "@/lib/handwritingMode";
 import {
   buildWrongAnswerBullets,
   bulletsToFeedbackText,
@@ -184,8 +183,7 @@ export async function requestSmartMark(
 ): Promise<SmartMarkResult | null> {
   const q = input.question;
   const handwritingImages = (input.responseImages ?? []).filter(isHandwritingValue);
-  const demoHandwritingMark =
-    handwritingImages.length > 0 && isDemoMathsSubject(subjectId);
+  const hasHandwritingMark = handwritingImages.length > 0;
   const breakdownMark =
     (input.studentSteps?.some((s) => String(s ?? "").trim()) ?? false) &&
     Boolean(input.question.markBreakdown?.steps?.length);
@@ -196,7 +194,7 @@ export async function requestSmartMark(
       partLabels: q.answerParts?.map((p) => p.label),
       acceptedAnswers: q.acceptedAnswers,
     }) &&
-    !demoHandwritingMark &&
+    !hasHandwritingMark &&
     !breakdownMark
   ) {
     return null;
@@ -252,19 +250,9 @@ export async function requestHandwritingMark(
     question: SmartMarkQuestionPayload;
   },
 ): Promise<SmartMarkResult | null> {
-  if (
-    !qualifiesForOpenAiHandwriting({
-      questionText: input.question.question,
-      partLabels: input.question.answerParts?.map((p) => p.label),
-      acceptedAnswers: input.question.acceptedAnswers,
-    }) &&
-    !isDemoMathsSubject(subjectId)
-  ) {
-    return null;
-  }
-  if (!handwritingAllowedForSubject(subjectId)) return null;
   const images = collectHandwritingImages(input.answer, input.parts, input.isMultipart);
   if (!images.length) return null;
+  if (!handwritingAllowedForSubject(subjectId)) return null;
   try {
     return await requestSmartMark(subjectId, questionKey, {
       responseImages: images,

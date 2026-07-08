@@ -69,11 +69,11 @@ export function LandingProblemFlow() {
       <Reveal>
         <SectionEyebrow>Sound familiar?</SectionEyebrow>
         <SectionTitle>
-          You&apos;re working hard — but still guessing what to fix.
+          You&apos;re working hard — but the feedback is too slow.
         </SectionTitle>
         <p className="mt-4 text-lg leading-relaxed text-slate-600">
-          Tutors can cost hundreds of dollars a week. Teacher feedback often takes days. By then
-          you&apos;ve moved on — and the same mistakes show up again on SACs and exams.
+          Tutoring is expensive. Teacher feedback can take days. Meanwhile you keep practising the
+          same mistakes — and they show up again on SACs and exams.
         </p>
       </Reveal>
 
@@ -92,9 +92,8 @@ export function LandingProblemFlow() {
           Feedback in seconds. Clarity on what to improve.
         </SectionTitle>
         <p className="mt-4 text-lg text-slate-600">
-          Practice VCE-style questions, get smart marking on written work, and use Nodent as a VCE
-          revision tool to see exactly where to recover marks — without booking another tutoring
-          session.
+          Nodent is a VCE study platform: practice VCE-style questions, get smart marking on written
+          work, and see exactly where to recover marks — without booking another tutoring session.
         </p>
         <Link
           to="/login"

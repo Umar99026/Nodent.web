@@ -5678,7 +5678,7 @@ app.post("/api/written/:subjectId/:questionKey/mark", authMiddleware, async (c: 
     const questionType = cleanText(String(q.type ?? "long_answer"), 40) || "long_answer";
     const qt = questionType.toLowerCase();
     const isShortType = qt === "short" || qt === "short_answer" || qt === "mcq";
-    if (isShortType) {
+    if (isShortType && handwritingImages.length === 0) {
       return c.json(
         { error: "Short-answer questions use instant keyword matching, not AI marking." },
         400,
@@ -5764,9 +5764,6 @@ app.post("/api/written/:subjectId/:questionKey/mark", authMiddleware, async (c: 
       });
       storedResponseText = studentSteps!.join("\n");
     } else if (handwritingImages.length > 0) {
-      if (canonicalSubjectId(subjectId) !== "demo") {
-        return c.json({ error: "Handwriting marking is only available in the Maths sandbox." }, 400);
-      }
       const imageError = validateMarkingImageUrls(handwritingImages);
       if (imageError) return c.json({ error: imageError }, 400);
 

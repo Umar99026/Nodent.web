@@ -18,6 +18,7 @@ import {
   type DashboardAction,
   type DashboardScorecard,
 } from "@/lib/dashboardRecommendations";
+import { canAccessPracticeExams } from "@/lib/premium";
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -92,13 +93,16 @@ export default function DashboardPage() {
   }, [mySubjects, selectedSubjectId]);
 
   const computedActions = useMemo(
-    () =>
-      buildDashboardActions({
+    () => {
+      const actions = buildDashboardActions({
         subjects: mySubjects,
         scorecard: scoreCard,
         confidenceRanks,
-      }),
-    [mySubjects, scoreCard, confidenceRanks],
+      });
+      const examsUnlocked = canAccessPracticeExams(user);
+      return examsUnlocked ? actions : actions.filter((a) => !a.href.includes("/exams"));
+    },
+    [mySubjects, scoreCard, confidenceRanks, user],
   );
 
   const [stableActions, setStableActions] = useState<DashboardAction[]>([]);

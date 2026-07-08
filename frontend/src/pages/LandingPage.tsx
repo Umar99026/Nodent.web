@@ -194,8 +194,8 @@ export default function LandingPage() {
               <SectionEyebrow>Why it works</SectionEyebrow>
               <SectionTitle>Practice smarter. Recover more marks.</SectionTitle>
               <p className="mt-4 text-lg text-slate-600">
-                Three ways Nodent turns VCE study resources into clearer next steps — without the
-                tutoring bill.
+                Three ways Nodent turns VCE study resources into clearer next steps — faster feedback,
+                lower cost, and no waiting on weekly tutoring.
               </p>
             </Reveal>
 
@@ -235,7 +235,7 @@ export default function LandingPage() {
                 <p className="mt-4 text-lg leading-relaxed text-slate-600">
 
                   Pick a subject, answer VCE-style questions, get marked instantly, and see exactly
-                  what to improve — before you wait days for a teacher or tutor to get back to you.
+                  what to improve — without waiting days for a teacher or tutor to get back to you.
 
                 </p>
 
@@ -555,16 +555,12 @@ export default function LandingPage() {
                 <div className="max-w-xl text-left">
 
                   <h2 className="font-display text-3xl font-bold text-white sm:text-4xl">
-
-                    Stop guessing. Start recovering marks.
-
+                    Get better at VCE — without the big tutoring bill.
                   </h2>
 
                   <p className="mt-4 text-white/90">
-
-                    Feedback in seconds — not days. Create your free account and see what to fix
-                    before your next SAC.
-
+                    Instant feedback on VCE-style practice. Create your free account and start
+                    revising smarter tonight.
                   </p>
 
                 </div>

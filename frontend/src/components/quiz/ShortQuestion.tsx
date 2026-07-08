@@ -3,8 +3,10 @@ import { cn, getQuestionTypeLabel, isAnswerCorrect } from "@/lib/utils";
 import type { ShortQuestion as ShortQuestionType } from "@/lib/subjects";
 import {
   buildFallbackHandwritingMark,
+  buildSmartMarkPayload,
   enrichHandwritingMarkResult,
   partMarkAt,
+  requestHandwritingMark,
   resolveAiMarking,
   qualifiesForOpenAiHandwriting,
 } from "@/lib/questionAiMarking";
@@ -44,6 +46,8 @@ import { isDiagramLabelQuestion, partHasOverlay, partUsesFigureLabels, partUsesI
 import { flushAllHandwriting, flushHandwriting } from "@/lib/handwritingFlush";
 import { CheckCircle2, XCircle, Send, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { handwritingMarkUserError } from "@/lib/userFacingErrors";
+import { isPremiumError } from "@/lib/premium";
 import {
   AiMarkingFeedbackPanel,
   AiMarkingPartFeedback,
@@ -465,42 +469,82 @@ export function ShortQuestion({
           .join("; ")
       : resolvedAnswer;
 
-    const accepted = question.acceptedAnswers ?? [];
-    const usesHandwritingAi = usesHandwritingMarking(
+    const usesHandwritingAiNow = usesHandwritingMarking(
       subjectId,
       resolvedAnswer,
       resolvedParts,
       isMultipart,
       openAiHandwritingEligible,
     );
-    if (usesHandwritingAi || breakdownActive) {
-      toast.error(
-        breakdownActive
-          ? "Mark breakdown uses AI marking — only available on long-answer questions."
-          : "Short-answer questions use keyword matching. Type your answer instead of drawing.",
-      );
+
+    if (breakdownActive) {
+      toast.error("Mark breakdown uses AI marking — only available on long-answer questions.");
+      return;
     }
 
+    const accepted = question.acceptedAnswers ?? [];
     let correct = false;
     let nextDpHint: number | null = null;
     let partCorrectFlags: boolean[] = [];
+    setAiMark(null);
 
-    if (isMultipart) {
+    if (usesHandwritingAiNow && questionKey) {
+      setAiMarking(true);
+      try {
+        const ai = await requestHandwritingMark(subjectId, questionKey, {
+          answer: resolvedComposite,
+          parts: resolvedParts,
+          isMultipart,
+          question: buildSmartMarkPayload(question, {
+            marks: effectiveTotalMarks,
+            partDescriptors,
+            partMarks,
+            expectedAnswers: expectedAnswersForDisplay,
+            configuredParts,
+          }),
+        });
+        const enriched = enrichHandwritingMarkResult(
+          ai ?? buildFallbackHandwritingMark(expectedAnswersForDisplay),
+          expectedAnswersForDisplay,
+        );
+        if (enriched.partResults?.length) {
+          partCorrectFlags = resolvedParts.map((_, idx) => {
+            const hit = enriched.partResults?.find((p) => p.index === idx);
+            return hit ? hit.correct : false;
+          });
+          setPartResults(partCorrectFlags);
+        }
+        correct = isMultipart
+          ? multipartAllCorrect(partCorrectFlags)
+          : enriched.correct;
+        setDpHint(null);
+        setAiMark(enriched);
+      } catch (err) {
+        const msg = handwritingMarkUserError(err);
+        toast.error(msg);
+        if (isPremiumError(err)) return;
+        const fallback = buildFallbackHandwritingMark(expectedAnswersForDisplay);
+        correct = false;
+        setAiMark(fallback);
+      } finally {
+        setAiMarking(false);
+      }
+    } else if (isMultipart) {
       const gradedParts = gradeMultipartAnswers(resolvedParts, accepted, configuredParts);
       partCorrectFlags = gradedParts.map((g) => g.correct);
       setPartResults(partCorrectFlags);
       correct = multipartAllCorrect(partCorrectFlags);
       nextDpHint = Math.max(...gradedParts.map((g) => g.dpHint ?? 0)) || null;
-    } else if (!breakdownActive) {
+      setDpHint(nextDpHint);
+    } else {
       setPartResults([]);
       const graded = isAnswerCorrect(resolvedComposite, accepted);
       correct = graded.correct;
       nextDpHint = graded.dpHint;
+      setDpHint(nextDpHint);
     }
-    setDpHint(nextDpHint);
 
     let finalCorrect = correct;
-    setAiMark(null);
 
     if (isMultipart) {
       const slotCount = answerSlotCount || partLabels.length;

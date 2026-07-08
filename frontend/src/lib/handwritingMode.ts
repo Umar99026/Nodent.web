@@ -27,11 +27,10 @@ export function usesHandwritingMarking(
   answer: string,
   parts: string[],
   isMultipart: boolean,
-  openAiEligible = false,
+  _openAiEligible = false,
 ): boolean {
-  void openAiEligible;
-  const sid = String(subjectId ?? "").trim().toLowerCase();
-  if (sid !== "demo") return false;
+  void subjectId;
+  void _openAiEligible;
   return collectHandwritingImages(answer, parts, isMultipart).length > 0;
 }
 
@@ -72,7 +71,7 @@ export function writeHandwritingMode(enabled: boolean): void {
   }
 }
 
-/** Handwriting / draw answers with AI marking are enabled in the Maths sandbox (`demo` id). */
+/** Draw / handwriting pad is available on all practice subjects. */
 export function handwritingAllowedForSubject(subjectId: string | undefined): boolean {
   void subjectId;
   return true;
