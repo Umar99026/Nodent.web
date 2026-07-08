@@ -6,6 +6,8 @@ import {
   practiceQuestionsForSubject,
 } from "@/lib/practiceQuestions";
 import { GENERAL_MATHS_BUILTIN_QUESTIONS } from "@/lib/generalMathsBuiltinQuestions";
+import { METHODS_BUILTIN_QUESTIONS } from "@/lib/methodsBuiltInQuestions";
+import { SPECIALIST_BUILTIN_QUESTIONS } from "@/lib/demoSpecialistQuestions";
 import type { Question } from "@/lib/subjects";
 
 /** Fired after admin saves or bootstrap refreshes the global question bank. */
@@ -61,13 +63,20 @@ export function loadPracticeBank(
   cache?: Record<string, unknown[]>,
 ): Question[] {
   const sid = canonicalSubjectId(subjectId);
+  if (sid === "demo") {
+    return [];
+  }
   const map = cache ?? readCustomQuestionsCache();
   const raw = getRawCustomQuestionsForSubject(map, subjectId);
   const fromDb = practiceQuestionsForSubject(raw, subjectId);
   const builtIn =
     sid === "general-maths"
       ? GENERAL_MATHS_BUILTIN_QUESTIONS
-      : [];
+      : sid === "methods"
+        ? METHODS_BUILTIN_QUESTIONS
+        : sid === "specialist-maths"
+          ? SPECIALIST_BUILTIN_QUESTIONS
+        : [];
   const merged = [...builtIn, ...fromDb];
   // Lightweight dedupe: question stems can collide between built-ins and DB.
   const seen = new Set<string>();

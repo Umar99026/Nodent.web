@@ -197,6 +197,7 @@ export const API_PATHS = {
     books: "/api/english/books",
     prompts: "/api/english/prompts",
     responses: "/api/english/responses",
+    shared: "/api/english/shared",
     response: (responseId: number | string) =>
       `/api/english/responses/${encodeURIComponent(String(responseId))}`,
     aiScoreResponse: (responseId: number | string) =>

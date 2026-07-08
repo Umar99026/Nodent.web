@@ -2229,6 +2229,13 @@ async function ensureCoreTables(db: any) {
     ALTER TABLE english_responses ADD COLUMN IF NOT EXISTS ai_highlights_json text
   `);
   await db.execute(sql`
+    ALTER TABLE english_responses ADD COLUMN IF NOT EXISTS is_public integer NOT NULL DEFAULT 0
+  `);
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS english_responses_public_scored_idx
+    ON english_responses (is_public, ai_scored_at, updated_at)
+  `);
+  await db.execute(sql`
     ALTER TABLE english_responses ALTER COLUMN prompt_id DROP NOT NULL
   `);
   await db.execute(sql`
@@ -5196,6 +5203,7 @@ function mapEnglishResponseRow(r: Record<string, unknown>) {
     aiCriteria: parseEnglishCriteriaJson(r.ai_criteria_json),
     aiHighlights: parseEnglishHighlightsJson(r.ai_highlights_json),
     aiScoredAt: r.ai_scored_at != null ? String(r.ai_scored_at) : null,
+    isPublic: Number(r.is_public ?? 0) === 1,
   };
 }
 
@@ -6701,6 +6709,7 @@ app.post("/api/english/responses", authMiddleware, async (c: any) => {
     const responseTypeRaw = cleanText(body?.responseType, 40).toLowerCase();
     const responseType = responseTypeRaw === "paragraph" ? "paragraph" : "essay";
     const responseText = cleanText(body?.responseText, 20000);
+    const isPublic = Boolean(body?.isPublic);
     const imageUrls = Array.isArray(body?.imageUrls)
       ? body.imageUrls.map((u: unknown) => String(u ?? "").trim()).filter(Boolean).slice(0, 8)
       : [];
@@ -6725,11 +6734,11 @@ app.post("/api/english/responses", authMiddleware, async (c: any) => {
     const inserted = await db.execute(sql`
       INSERT INTO english_responses (
         prompt_id, user_id, response_type, response_text, image_urls,
-        custom_prompt_text, created_at, updated_at
+        custom_prompt_text, is_public, created_at, updated_at
       )
       VALUES (
         ${resolvedPromptId}, ${user.id}, ${responseType}, ${responseText || ""}, ${imageUrlsJson},
-        ${customPrompt || null}, ${now}, ${now}
+        ${customPrompt || null}, ${isPublic ? 1 : 0}, ${now}, ${now}
       )
       RETURNING id
     `);
@@ -7021,6 +7030,48 @@ app.post("/api/english/responses/:id/ai-score", authMiddleware, async (c: any) =
     const result = await afterScore();
     if (!result) return c.json({ error: "Could not score response (text too short or missing)." }, 400);
     return c.json({ ok: true, aiScore: result });
+  } catch (e) {
+    return c.json({ error: errorChain(e) }, 500);
+  }
+});
+
+/** Shared essays: anonymous feed of public, AI-scored responses. */
+app.get("/api/english/shared", authMiddleware, async (c: any) => {
+  try {
+    const db = c.get("db");
+    const user = c.get("user");
+    const limitRaw = Number(c.req.query("limit") ?? 30);
+    const offsetRaw = Number(c.req.query("offset") ?? 0);
+    const limit = Number.isFinite(limitRaw) ? Math.min(60, Math.max(1, Math.floor(limitRaw))) : 30;
+    const offset = Number.isFinite(offsetRaw) ? Math.max(0, Math.floor(offsetRaw)) : 0;
+
+    const rows = await db.execute(sql`
+      SELECT r.id, r.prompt_id, r.user_id, r.response_type, r.response_text, r.image_urls,
+             r.custom_prompt_text, r.updated_at, r.ai_score, r.ai_feedback, r.ai_criteria_json,
+             r.ai_highlights_json, r.ai_scored_at, r.is_public,
+             p.prompt_text, p.section
+      FROM english_responses r
+      LEFT JOIN english_prompts p ON p.id = r.prompt_id
+      WHERE r.is_public = 1
+        AND r.ai_scored_at IS NOT NULL
+        AND r.ai_score IS NOT NULL
+        AND r.user_id <> ${user.id}
+      ORDER BY r.updated_at DESC
+      LIMIT ${limit}
+      OFFSET ${offset}
+    `);
+
+    // Anonymous: do not include usernames/userIds for others.
+    const responses = (rows.rows as Record<string, unknown>[])
+      .map((r) => {
+        const mapped = mapEnglishResponseRow(r);
+        return {
+          ...mapped,
+          userId: 0,
+          username: "Student",
+        };
+      });
+    return c.json({ responses, limit, offset });
   } catch (e) {
     return c.json({ error: errorChain(e) }, 500);
   }

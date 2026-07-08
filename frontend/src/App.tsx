@@ -5,6 +5,7 @@ import { lazy, Suspense, type ReactNode } from "react";
 import { StudyTimerProvider } from "@/context/StudyTimerContext";
 import { HandwritingModeProvider } from "@/context/HandwritingModeContext";
 import { isAdminUser, canAccessTeacherNav, canAccessTrackNav, needsStudentOnboarding, STORAGE_KEYS } from "@/lib/constants";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import LandingPage from "@/pages/LandingPage";
 import FeedbackPage from "@/pages/FeedbackPage";
 
@@ -24,6 +25,9 @@ const QuestionForumThreadPage = lazy(
 );
 const EnglishPromptResponsesPage = lazy(
   () => import("@/pages/EnglishPromptResponsesPage"),
+);
+const EnglishSharedEssaysPage = lazy(
+  () => import("@/pages/EnglishSharedEssaysPage"),
 );
 const AdminPage = lazy(() => import("@/pages/AdminPage"));
 const CreatePage = lazy(() => import("@/pages/CreatePage"));
@@ -169,9 +173,10 @@ function RootRedirect() {
 
 function AppRoutes() {
   return (
-    <Suspense fallback={<LoadingFallback />}>
-      <Routes>
-        <Route path="/" element={<RootRedirect />} />
+    <ErrorBoundary>
+      <Suspense fallback={<LoadingFallback />}>
+        <Routes>
+          <Route path="/" element={<RootRedirect />} />
 
         <Route path="/feedback" element={<FeedbackPage />} />
 
@@ -317,6 +322,15 @@ function AppRoutes() {
         />
 
         <Route
+          path="/quiz/english/shared"
+          element={
+            <ProtectedRoute>
+              <EnglishSharedEssaysPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
           path="/quiz/:subjectId/summary"
           element={
             <ProtectedRoute>
@@ -383,10 +397,11 @@ function AppRoutes() {
         {/* Public upload page used by QR codes */}
         <Route path="/upload/:token" element={<UploadWrittenImagesPage />} />
 
-        {/* Catch-all: redirect to root */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </Suspense>
+          {/* Catch-all: redirect to root */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
+    </ErrorBoundary>
   );
 }
 

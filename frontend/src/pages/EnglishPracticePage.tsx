@@ -74,6 +74,7 @@ export function EnglishPracticePanel() {
   const navigate = useNavigate();
   const [essayText, setEssayText] = useState("");
   const [customPrompt, setCustomPrompt] = useState("");
+  const [sharePublic, setSharePublic] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [result, setResult] = useState<EnglishEssayResponse | null>(null);
@@ -141,6 +142,7 @@ export function EnglishPracticePanel() {
           customPrompt: customPrompt.trim() || undefined,
           responseType: "essay",
           responseText,
+          isPublic: sharePublic,
         }),
       });
 
@@ -164,6 +166,7 @@ export function EnglishPracticePanel() {
       setResult(base);
       setEssayText("");
       setCustomPrompt("");
+      setSharePublic(false);
 
       if (submitResult.premiumBlocked) {
         const msg =
@@ -337,6 +340,33 @@ export function EnglishPracticePanel() {
               <PremiumGate allowed={false} message={quotaMessage} />
             </div>
           ) : null}
+          <div className="flex w-full max-w-xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <label className="flex items-start gap-2 text-sm text-muted-foreground">
+              <input
+                type="checkbox"
+                className="mt-1 size-4 rounded border-black/20"
+                checked={sharePublic}
+                onChange={(e) => setSharePublic(e.target.checked)}
+                disabled={submitting || polling}
+              />
+              <span>
+                Allow others to view this essay after it’s marked (anonymous).
+                <span className="block text-xs text-muted-foreground/80">
+                  Shows your essay text plus the score and feedback you received.
+                </span>
+              </span>
+            </label>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-9 rounded-lg border-black/12 bg-white font-display text-xs"
+              onClick={() => navigate("/quiz/english/shared")}
+              disabled={submitting || polling}
+            >
+              View other essays
+            </Button>
+          </div>
           <Button
             type="button"
             variant="accent"

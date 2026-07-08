@@ -28,6 +28,7 @@ export type EnglishEssayResponse = {
   aiCriteria: Partial<Record<EnglishCriterionKey, EnglishCriterionScore>> | null;
   aiHighlights: EnglishHighlight[];
   aiScoredAt: string | null;
+  isPublic?: boolean;
 };
 
 export const ENGLISH_CRITERION_LABELS: Record<EnglishCriterionKey, string> = {

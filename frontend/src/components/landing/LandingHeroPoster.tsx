@@ -13,7 +13,7 @@ export function LandingHeroPoster() {
         <div className="grid flex-1 items-center gap-10 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.15fr)] lg:gap-8">
           <div className="max-w-lg pl-1 sm:pl-0">
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/55">
-              A VCE study platform — without the big tutoring bill
+              Replace your tutor with AI tools for VCE
             </p>
             <h1 className="mt-4 font-display text-[clamp(2rem,5.5vw,3.25rem)] font-bold uppercase leading-[1.05] tracking-tight text-white">
               Better feedback.
@@ -21,8 +21,8 @@ export function LandingHeroPoster() {
               Faster improvement.
             </h1>
             <p className="mt-5 max-w-md text-sm leading-relaxed text-white/75 sm:text-base">
-              Don&apos;t want to spend hundreds a week on tutoring? Nodent is a VCE revision tool
-              with study resources and instant marking — so you know what to fix before your next SAC.
+              Stop waiting days for feedback. Nodent is a VCE study platform with instant AI marking,
+              hints, and next steps — faster and cheaper than tutoring.
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-4">
               <Link

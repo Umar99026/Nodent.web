@@ -52,6 +52,7 @@ export function fixInlineMathDelimiters(text: string): string {
   const converted = convertLatexParenDelimiters(text);
   return converted.replace(/\$([^$]*)\$/g, (_, inner: string) => {
     let fixed = inner.replace(/\s*[\r\n]+\s*/g, "");
+    fixed = repairMathInner(fixed);
     // remark-math can treat `\)` as a delimiter; skip `\left...\right` and interval endpoints.
     if (!/\\left[\s\S]*\\right/.test(fixed)) {
       fixed = fixed.replace(
@@ -61,6 +62,31 @@ export function fixInlineMathDelimiters(text: string): string {
     }
     return `$${fixed}$`;
   });
+}
+
+function repairMathInner(src: string): string {
+  let out = String(src ?? "");
+
+  // Remove empty \text{} that sometimes appears in imported questions.
+  out = out.replace(/\\text\{\s*\}/g, "");
+
+  // If trig functions appear without a leading backslash, add it.
+  // (e.g. `sin\pi` → `\sin\pi`)
+  out = out.replace(/(^|[^\\])\b(sin|cos|tan)\b/gi, (_m, pre: string, fn: string) => {
+    return `${pre}\\${fn.toLowerCase()}`;
+  });
+
+  // Prefer parentheses for common constants: \sin\pi → \sin(\pi)
+  out = out.replace(/\\(sin|cos|tan)\s*\\(pi|theta|phi|alpha|beta|gamma|omega)\b/gi, (_m, fn: string, arg: string) => {
+    return `\\${fn.toLowerCase()}(\\${arg.toLowerCase()})`;
+  });
+
+  // If someone typed `\sinpi` (missing separator), fix it.
+  out = out.replace(/\\(sin|cos|tan)\s*(pi|theta|phi|alpha|beta|gamma|omega)\b/gi, (_m, fn: string, arg: string) => {
+    return `\\${fn.toLowerCase()}(\\${arg.toLowerCase()})`;
+  });
+
+  return out;
 }
 
 function looksLikeOcrCharLines(text: string): boolean {
@@ -330,6 +356,22 @@ export function simplifyFragileLatexDollars(text: string): string {
 /** Repair common import / authoring glitches that break remark-math $ pairing. */
 export function repairCommonMathGlitches(text: string): string {
   let out = String(text ?? "");
+
+  // PDF copy/paste sometimes injects "function application" characters (e.g. "Pr⁡").
+  out = out.replace(/[\u2061\u2062\u2063]/g, "");
+
+  // Repair mangled probability notation like:
+  //   "Find Pr Pr\\text{both aces}$$."
+  //   "Find Pr\\text{both aces}$$."
+  // → "Find $\\Pr(\\text{both aces})$."
+  out = out.replace(
+    /\bPr\s*Pr\s*\\text\{\s*([^}]+?)\s*\}\s*\$\$\.?/gi,
+    (_m, inner: string) => `$\\Pr(\\text{${inner.trim()}})$`,
+  );
+  out = out.replace(
+    /\bPr\s*\\text\{\s*([^}]+?)\s*\}\s*\$\$\.?/gi,
+    (_m, inner: string) => `$\\Pr(\\text{${inner.trim()}})$`,
+  );
 
   // VCE shorthand "($, 2 d.p.)" — lone $ before comma leaves an odd $ count.
   out = out.replace(/\(\s*\\?\$\s*,\s*/g, "(in dollars, ");

@@ -64,14 +64,8 @@ export function DashboardSubjectRail({
             <p className="text-xs text-muted-foreground">Practice & statistics</p>
           </div>
           <DropdownMenu>
-            <DropdownMenuTrigger>
-              <button
-                type="button"
-                aria-label="Add subject"
-                className="flex size-9 items-center justify-center rounded-full border border-black/10 bg-black/[0.04] text-[#0b0f19] hover:bg-black/[0.08]"
-              >
-                <Plus className="size-4" />
-              </button>
+            <DropdownMenuTrigger aria-label="Add subject" className="flex size-9 items-center justify-center rounded-full border border-black/10 bg-black/[0.04] text-[#0b0f19] hover:bg-black/[0.08]">
+              <Plus className="size-4" />
             </DropdownMenuTrigger>
             <DropdownMenuContent className="w-[min(100vw-1.5rem,360px)] p-0" align="end">
               <div className="px-3 pb-2 pt-3">

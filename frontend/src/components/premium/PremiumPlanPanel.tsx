@@ -199,9 +199,14 @@ export function PremiumPlanPanel({ compact = false }: PremiumPlanPanelProps) {
       </div>
 
       <div className="overflow-hidden rounded-3xl border border-black/8 bg-white shadow-sm">
-        <div className="practice-card-header !min-h-0 !py-3.5 sm:!py-4">
-          <p className="practice-card-header-title">Free vs Premium</p>
-          <p className="practice-card-header-meta">What&apos;s included</p>
+        <div className="border-b border-black/8 bg-[#f8fafc] px-6 py-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            Plans
+          </p>
+          <p className="mt-1 font-display text-xl font-bold tracking-tight text-[#0b0f19]">
+            Free vs Premium
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground">What&apos;s included</p>
         </div>
 
         <div className="hidden border-b border-black/8 sm:grid sm:grid-cols-[minmax(0,1.35fr)_7.5rem_7.5rem]">
