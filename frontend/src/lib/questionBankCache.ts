@@ -65,7 +65,7 @@ export function loadPracticeBank(
   const raw = getRawCustomQuestionsForSubject(map, subjectId);
   const fromDb = practiceQuestionsForSubject(raw, subjectId);
   const builtIn =
-    sid === "general-maths" || sid === "demo"
+    sid === "general-maths"
       ? GENERAL_MATHS_BUILTIN_QUESTIONS
       : [];
   const merged = [...builtIn, ...fromDb];
