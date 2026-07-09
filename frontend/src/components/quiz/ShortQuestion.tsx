@@ -241,8 +241,9 @@ export function ShortQuestion({
   const premium = isPremiumUser(user);
   const { usage, reload: reloadUsage } = usePremiumUsage(!!user && !premium);
   const shortAiLeft = premium ? Number.POSITIVE_INFINITY : freeShortAiRemaining(usage);
-  /** Free SA: typed only. Premium may use drawn-answer AI. */
-  const handwritingUi = premium && handwritingAllowedForSubject(subjectId);
+  /** Draw mode uses the same daily short-AI quota for free users. */
+  const handwritingUi = handwritingAllowedForSubject(subjectId);
+  const drawLocked = !premium && shortAiLeft <= 0;
   const examPaper = isExamPaperLayoutSubject(subjectId);
   /** Free: AI while quota remains, then keyword match + generic feedback. */
   const canUseShortAi = premium || shortAiLeft > 0;
@@ -1009,6 +1010,10 @@ export function ShortQuestion({
                       subjectId={subjectId}
                       examPaperMode={examPaper}
                       allowHandwriting={handwritingUi}
+                      drawLocked={drawLocked}
+                      modeNote={
+                        !premium ? "iPad users can draw in text mode for free" : undefined
+                      }
                       multiline={resolveAiMarking({
                         useAiMarking: question.useAiMarking,
                         questionText: partDescriptors[idx] ?? "",
@@ -1126,6 +1131,8 @@ export function ShortQuestion({
                     subjectId={subjectId}
                     examPaperMode={examPaper}
                     allowHandwriting={handwritingUi}
+                    drawLocked={drawLocked}
+                    modeNote={!premium ? "iPad users can draw in text mode for free" : undefined}
                     multiline={useTextArea}
                     rows={handwritingUi ? 8 : useTextArea ? 5 : 1}
                     handwritingSize={useTextArea ? "lg" : "md"}

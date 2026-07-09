@@ -170,6 +170,9 @@ export function buildMcqWrongFeedback(input: McqWrongFeedbackInput): string[] {
   const bullets: string[] = [];
   const correctIdx = input.options.findIndex((opt) => opt === input.correctOption);
   const letter = correctIdx >= 0 ? String.fromCharCode(65 + correctIdx) : "";
+  const stripOptionPrefix = (s: string) =>
+    String(s ?? "").replace(/^\(?\[?[A-H]\]?\)?\s*[\).:\-–—]?\s*/i, "").trim();
+  const correctText = stripOptionPrefix(input.correctOption);
 
   if (input.selectedOption && input.selectedOption !== input.correctOption) {
     const selectedIdx = input.options.findIndex((opt) => opt === input.selectedOption);
@@ -184,12 +187,24 @@ export function buildMcqWrongFeedback(input: McqWrongFeedbackInput): string[] {
     );
   }
 
+  if (letter) {
+    bullets.push(
+      correctText
+        ? `Correct answer: ${letter} (${correctText}).`
+        : `Correct answer: ${letter}.`,
+    );
+  } else if (correctText) {
+    bullets.push(`Correct answer: ${correctText}.`);
+  }
+
   const guidance = String(input.guidance ?? "").trim();
   if (guidance) {
-    bullets.push(guidance.length > 400 ? `${guidance.slice(0, 397)}…` : guidance);
+    const trimmed = guidance.length > 400 ? `${guidance.slice(0, 397)}…` : guidance;
+    // Prefer “how to get it” framing so the feedback is actionable.
+    bullets.push(`How to get it: ${trimmed}`);
   } else {
     bullets.push(
-      "Work through why each incorrect option fails — often one distractor matches a common slip from the question.",
+      "How to get it: write down the key relationship from the stem, substitute the given values carefully, and only round at the end. Then compare the computed value to the options.",
     );
   }
 

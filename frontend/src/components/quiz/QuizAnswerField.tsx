@@ -1,5 +1,5 @@
 import type { KeyboardEvent } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { AnswerInputToolbar, type AnswerInputMode } from "@/components/quiz/AnswerInputToolbar";
@@ -25,6 +25,10 @@ type QuizAnswerFieldProps = {
   handwritingSize?: HandwritingSize;
   label?: string;
   subjectId?: string;
+  /** When true, pencil/eraser are disabled but text remains available. */
+  drawLocked?: boolean;
+  /** Small helper note shown next to the mode toggle. */
+  modeNote?: string;
   /** VCE booklet: dotted ruling, Return for new line, serif typed math overlay */
   examPaperMode?: boolean;
   /** Sync export before submit (handwriting pads). */
@@ -54,6 +58,8 @@ export function QuizAnswerField({
   handwritingSize,
   label,
   subjectId,
+  drawLocked = false,
+  modeNote,
   examPaperMode = false,
   flushKey,
   workingHint = true,
@@ -64,6 +70,12 @@ export function QuizAnswerField({
   const [inputMode, setInputMode] = useState<AnswerInputMode>(() => initialInputMode(value));
   const textValue = typedAnswerDisplay(value);
   const drawMode = inputMode === "pencil" || inputMode === "eraser";
+
+  useEffect(() => {
+    if (drawLocked && (inputMode === "pencil" || inputMode === "eraser")) {
+      setInputMode("text");
+    }
+  }, [drawLocked, inputMode]);
 
   if (!handwritingAvailable) {
     if (examPaperMode) {
@@ -132,6 +144,8 @@ export function QuizAnswerField({
           mode={inputMode}
           onModeChange={setInputMode}
           disabled={disabled}
+          disabledModes={drawLocked ? { pencil: true, eraser: true } : undefined}
+          note={modeNote}
         />
         {drawMode ? (
           <div className="relative">

@@ -4858,8 +4858,24 @@ app.post("/api/quiz/submit", authMiddleware, async (c: any) => {
 // ---- Leaderboard ----
 app.get("/api/leaderboard/:subjectId", async (c) => {
   const db = c.get("db"); const subjectId = c.req.param("subjectId");
-  const rows = await db.execute(sql`SELECT u.username, MAX(qa.percent) AS best_percent, MAX(qa.score) AS best_score, MAX(qa.total_questions) AS best_total, COUNT(qa.id) AS attempts FROM quiz_attempts qa JOIN users u ON u.id = qa.user_id WHERE qa.subject_id = ${subjectId} GROUP BY qa.user_id, u.username ORDER BY best_percent DESC, best_score DESC LIMIT 10`);
-  return c.json({ leaderboard: rows.rows });
+  const rows = await db.execute(sql`
+    SELECT qa.user_id, u.username, u.email,
+           MAX(qa.percent) AS best_percent,
+           MAX(qa.score) AS best_score,
+           MAX(qa.total_questions) AS best_total,
+           COUNT(qa.id) AS attempts
+    FROM quiz_attempts qa
+    JOIN users u ON u.id = qa.user_id
+    WHERE qa.subject_id = ${subjectId}
+    GROUP BY qa.user_id, u.username, u.email
+    ORDER BY best_percent DESC, best_score DESC
+    LIMIT 10
+  `);
+  const leaderboard = (rows.rows as any[]).map((r) => ({
+    ...r,
+    username: publicLeaderboardUsername(r.user_id, r.email, r.username),
+  }));
+  return c.json({ leaderboard });
 });
 
 // ---- Competition ----
@@ -4898,14 +4914,14 @@ app.get("/api/competition/:subjectId/stats", authMiddleware, async (c: any) => {
 
   const allScoresRows = await db.execute(sql`
     WITH range_scores AS (
-      SELECT qa.user_id, u.username,
+      SELECT qa.user_id, u.username, u.email,
              SUM(COALESCE(qa.marks_earned, CASE WHEN qa.is_correct = 1 THEN qa.marks ELSE 0 END)) AS marks_correct,
              SUM(qa.marks) AS marks_attempted,
              COUNT(*)::int AS attempt_count_range
       FROM question_attempts qa
       JOIN users u ON u.id = qa.user_id
       WHERE qa.subject_id = ${subjectId} ${timeFilter}
-      GROUP BY qa.user_id, u.username
+      GROUP BY qa.user_id, u.username, u.email
     ),
     all_time_attempts AS (
       SELECT user_id, COUNT(*)::int AS attempt_count_all_time
@@ -4913,7 +4929,7 @@ app.get("/api/competition/:subjectId/stats", authMiddleware, async (c: any) => {
       WHERE subject_id = ${subjectId}
       GROUP BY user_id
     )
-    SELECT r.user_id, r.username, r.marks_correct, r.marks_attempted,
+    SELECT r.user_id, r.username, r.email, r.marks_correct, r.marks_attempted,
            r.attempt_count_range,
            COALESCE(a.attempt_count_all_time, 0)::int AS attempt_count_all_time
     FROM range_scores r
@@ -4952,7 +4968,7 @@ app.get("/api/competition/:subjectId/stats", authMiddleware, async (c: any) => {
 
   const leaderboardData = sortedEligible.slice(0, 10).map((r) => ({
     userId: r.user_id,
-    username: r.username,
+    username: publicLeaderboardUsername(r.user_id, r.email, r.username),
     correct: Number(r.marks_correct),
     total: Number(r.marks_attempted),
     attemptCount: Number(r.attempt_count_all_time),
@@ -5705,21 +5721,10 @@ app.post("/api/written/:subjectId/:questionKey/mark", authMiddleware, async (c: 
     /**
      * Short-answer AI:
      * - Free typed: up to daily short-AI quota, then clients must keyword-match.
-     * - Free drawn: not allowed (type your answer).
-     * - Premium: AI allowed for typed + drawn.
+     * - Free drawn: allowed up to the same daily short-AI quota.
+     * - Premium: AI allowed for typed + drawn (and mark-breakdown where applicable).
      */
-    if (isShortType) {
-      if (handwritingImages.length > 0 && !isPremiumAccount(user)) {
-        return c.json(
-          {
-            error:
-              "Free accounts mark short answers by typing. Upgrade for drawn-answer AI marking.",
-            code: PREMIUM_REQUIRED,
-          },
-          403,
-        );
-      }
-    }
+    // (Free accounts may send handwriting for short-answer marking, but are quota-limited below.)
 
     const marksParsed = Math.round(Number(q.marks ?? 2));
     const marks = Number.isFinite(marksParsed) ? Math.max(1, marksParsed) : 2;
@@ -5776,7 +5781,7 @@ app.post("/api/written/:subjectId/:questionKey/mark", authMiddleware, async (c: 
     );
 
     if (!isPremiumAccount(user)) {
-      if (breakdownMark || handwritingImages.length > 0) {
+      if (breakdownMark || (handwritingImages.length > 0 && !isShortType)) {
         return c.json(
           {
             ...premiumRequiredResponse(),
@@ -6273,6 +6278,83 @@ app.post(
 // ---- Admin ----
 const SMOKE_TEST_EMAIL_SUFFIX = "@nodent-smoke.test";
 const notSmokeTestUser = notIlike(users.email, `%${SMOKE_TEST_EMAIL_SUFFIX}`);
+const DEMO_TEST_EMAIL_SUFFIXES = ["@nodent-demo.test"] as const;
+const notDemoTestUser = and(
+  ...DEMO_TEST_EMAIL_SUFFIXES.map((suf) => notIlike(users.email, `%${suf}`)),
+  notIlike(users.username, "demo%"),
+  notIlike(users.username, "test%"),
+);
+
+const PSEUDONYM_FIRST_NAMES = [
+  "Ava",
+  "Noah",
+  "Mia",
+  "Leo",
+  "Zoe",
+  "Aria",
+  "Ethan",
+  "Liam",
+  "Sofia",
+  "Lucas",
+  "Isla",
+  "Oliver",
+  "Amelia",
+  "Jack",
+  "Ella",
+  "James",
+  "Grace",
+  "Henry",
+  "Chloe",
+  "Sam",
+] as const;
+
+const PSEUDONYM_LAST_NAMES = [
+  "Nguyen",
+  "Smith",
+  "Patel",
+  "Wong",
+  "Taylor",
+  "Brown",
+  "Wilson",
+  "Singh",
+  "Khan",
+  "Chen",
+  "Martin",
+  "Harris",
+  "Walker",
+  "Young",
+  "Scott",
+  "King",
+  "Lee",
+  "White",
+  "Clark",
+  "Wright",
+] as const;
+
+function isDemoLikeEmail(email: unknown): boolean {
+  const e = String(email ?? "").toLowerCase().trim();
+  if (!e) return false;
+  if (e.endsWith(SMOKE_TEST_EMAIL_SUFFIX)) return true;
+  for (const suf of DEMO_TEST_EMAIL_SUFFIXES) {
+    if (e.endsWith(String(suf).toLowerCase())) return true;
+  }
+  return false;
+}
+
+function realisticPseudonym(userId: unknown): string {
+  const id = Math.abs(Math.trunc(Number(userId) || 0));
+  const first = PSEUDONYM_FIRST_NAMES[id % PSEUDONYM_FIRST_NAMES.length] ?? "Student";
+  const last = PSEUDONYM_LAST_NAMES[Math.floor(id / 7) % PSEUDONYM_LAST_NAMES.length] ?? "User";
+  return `${first} ${last}`;
+}
+
+function publicLeaderboardUsername(userId: unknown, email: unknown, username: unknown): string {
+  const raw = String(username ?? "").trim();
+  if (isDemoLikeEmail(email) || /^demo\b/i.test(raw) || /^test\b/i.test(raw)) {
+    return realisticPseudonym(userId);
+  }
+  return raw || realisticPseudonym(userId);
+}
 
 app.get("/api/admin/users", adminAccessMiddleware, async (c: any) => {
   const db = c.get("db");
@@ -6288,11 +6370,16 @@ app.get("/api/admin/users", adminAccessMiddleware, async (c: any) => {
       createdAt: users.createdAt,
     })
     .from(users)
-    .where(notSmokeTestUser)
+    .where(and(notSmokeTestUser, notDemoTestUser))
     .orderBy(desc(users.createdAt))
     .limit(limit);
   const countResult = await db.execute(
-    sql`SELECT COUNT(*)::int AS count FROM users WHERE LOWER(email) NOT LIKE ${`%${SMOKE_TEST_EMAIL_SUFFIX}`}`,
+    sql`SELECT COUNT(*)::int AS count
+        FROM users
+        WHERE LOWER(email) NOT LIKE ${`%${SMOKE_TEST_EMAIL_SUFFIX}`}
+          AND LOWER(email) NOT LIKE '%@nodent-demo.test'
+          AND LOWER(username) NOT LIKE 'demo%'
+          AND LOWER(username) NOT LIKE 'test%'`,
   );
   const total = Number((countResult.rows?.[0] as { count?: number })?.count ?? 0);
   return c.json({ users: rows, total });

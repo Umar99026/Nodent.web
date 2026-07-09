@@ -239,12 +239,20 @@ export function McqQuestion({
       ) : null}
       {showResults && userWrong ? (
         <WrongAnswerFeedbackPanel
+          title="Feedback"
           bullets={buildMcqWrongFeedback({
             selectedOption: activeSelected,
             correctOption: question.answer,
             options: question.options,
             guidance: question.guidance,
           })}
+        />
+      ) : null}
+
+      {showResults && userWrong && question.answerImageUrls?.length ? (
+        <QuestionImageGrid
+          urls={question.answerImageUrls}
+          title="Worked solution"
         />
       ) : null}
 

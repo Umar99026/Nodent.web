@@ -72,7 +72,7 @@ const METHODS_BUILTIN_BANK: SingleShort[] = [
     topic: "Functions and transformations",
     question:
       "For $f(x)=\\sqrt{9-x^2}$, state the range of $f$.",
-    accepted: ["$0\\le y\\le 3$", "0<=y<=3", "0 ≤ y ≤ 3"],
+    accepted: ["$0\\le y\\le 3$", "0<=y<=3"],
   },
   {
     topic: "Functions and transformations",
@@ -104,7 +104,7 @@ const METHODS_BUILTIN_BANK: SingleShort[] = [
     topic: "Polynomial, power and rational functions",
     question:
       "Solve $x^{2/3}=4$ for real $x$.",
-    accepted: ["$\\pm 8$", "±8", "-8, 8", "(-8, 8)"],
+    accepted: ["$\\pm 8$", "-8, 8", "-8 and 8", "-8", "8"],
   },
   {
     topic: "Polynomial, power and rational functions",
@@ -113,11 +113,11 @@ const METHODS_BUILTIN_BANK: SingleShort[] = [
     accepted: ["-2", "$-2$"],
   },
   { topic: "Polynomial, power and rational functions", question: "Solve $\\dfrac{3}{x-1}=2$.", accepted: ["$\\frac{5}{2}$", "5/2"] },
-  { topic: "Polynomial, power and rational functions", question: "Find the value of $k$ such that $x^2+kx+9$ has a repeated root.", accepted: ["$\\pm 6$", "±6", "-6, 6"] },
-  { topic: "Polynomial, power and rational functions", question: "Solve $x^4-5x^2+4=0$ for real $x$.", accepted: ["$\\pm 1,\\ \\pm 2$", "±1, ±2", "-2, -1, 1, 2"] },
-  { topic: "Polynomial, power and rational functions", question: "If $f(x)=x^3-3x$, find all turning point $x$-values.", accepted: ["$\\pm 1$", "±1", "-1, 1"] },
+  { topic: "Polynomial, power and rational functions", question: "Find the value of $k$ such that $x^2+kx+9$ has a repeated root.", accepted: ["$\\pm 6$", "-6, 6", "-6 and 6", "-6", "6"] },
+  { topic: "Polynomial, power and rational functions", question: "Solve $x^4-5x^2+4=0$ for real $x$.", accepted: ["$\\pm 1,\\ \\pm 2$", "-2, -1, 1, 2", "-2", "-1", "1", "2"] },
+  { topic: "Polynomial, power and rational functions", question: "If $f(x)=x^3-3x$, find all turning point $x$-values.", accepted: ["$\\pm 1$", "-1, 1", "-1 and 1", "-1", "1"] },
   { topic: "Polynomial, power and rational functions", question: "Solve $\\sqrt{x+5}=x-1$ for real $x$.", accepted: ["4", "$4$"] },
-  { topic: "Polynomial, power and rational functions", question: "Find all real $x$ such that $|x^2-4|=0$.", accepted: ["$\\pm 2$", "±2", "-2, 2"] },
+  { topic: "Polynomial, power and rational functions", question: "Find all real $x$ such that $|x^2-4|=0$.", accepted: ["$\\pm 2$", "-2, 2", "-2 and 2", "-2", "2"] },
   { topic: "Polynomial, power and rational functions", question: "Simplify $\\dfrac{x^2-9}{x^2-6x+9}$ for $x\\ne 3$.", accepted: ["$\\frac{x+3}{x-3}$", "(x+3)/(x-3)"] },
 
   // --- Exponential and logarithmic functions (10)
@@ -129,7 +129,7 @@ const METHODS_BUILTIN_BANK: SingleShort[] = [
   { topic: "Exponential and logarithmic functions", question: "Simplify $\\log_a(a^3x)$ (assume $a>0$, $a\\ne 1$, $x>0$).", accepted: ["$3+\\log_a x$", "3+log_a x"] },
   { topic: "Exponential and logarithmic functions", question: "Solve $\\log_{10}(x)=2-\\log_{10}(x)$.", accepted: ["10", "$10$"] },
   { topic: "Exponential and logarithmic functions", question: "If $\\log_3 2 = a$, express $\\log_3 8$ in terms of $a$.", accepted: ["$3a$", "3a"] },
-  { topic: "Exponential and logarithmic functions", question: "Solve $\\ln(x^2)=\\ln 9$ for real $x$.", accepted: ["$\\pm 3$", "±3", "-3, 3"] },
+  { topic: "Exponential and logarithmic functions", question: "Solve $\\ln(x^2)=\\ln 9$ for real $x$.", accepted: ["$\\pm 3$", "-3, 3", "-3 and 3", "-3", "3"] },
   { topic: "Exponential and logarithmic functions", question: "Solve $5e^{2x}=20$.", accepted: ["$\\frac{\\ln 4}{2}$", "(ln 4)/2"] },
 
   // --- Circular functions (10)
@@ -147,7 +147,7 @@ const METHODS_BUILTIN_BANK: SingleShort[] = [
   // --- Algebra and equations (10)
   { topic: "Algebra and equations", question: "Solve for $x$: $|2x-3|=|x+5|$.", accepted: ["$-2,\\ \\frac{8}{3}$", "-2, 8/3"] },
   { topic: "Algebra and equations", question: "Solve $x^2-7x+12=0$.", accepted: ["3, 4", "$3,\\ 4$"] },
-  { topic: "Algebra and equations", question: "Solve $\\frac{1}{x}+\\frac{1}{x-1}=1$.", accepted: ["$\\frac{1\\pm \\sqrt{5}}{2}$", "(1±√5)/2"] },
+  { topic: "Algebra and equations", question: "Solve $\\frac{1}{x}+\\frac{1}{x-1}=1$.", accepted: ["$\\frac{1\\pm \\sqrt{5}}{2}$", "(1+sqrt(5))/2", "(1-sqrt(5))/2"] },
   { topic: "Algebra and equations", question: "Solve $2^{x+1}=8$.", accepted: ["2", "$2$"] },
   { topic: "Algebra and equations", question: "Solve $\\sqrt{2x+3}=x$ for real $x$.", accepted: ["3", "$3$"] },
   { topic: "Algebra and equations", question: "Solve $|x-1|+|x+1|=4$.", accepted: ["$[-3,-1]\\cup[1,3]$", "[-3,-1] U [1,3]"] },
@@ -174,11 +174,11 @@ const METHODS_BUILTIN_BANK: SingleShort[] = [
   { topic: "Applications of differentiation", question: "For $f(x)=x+\\frac{1}{x}$ ($x>0$), find the minimum value of $f(x)$.", accepted: ["2", "$2$"] },
   { topic: "Applications of differentiation", question: "Find the equation of the tangent to $y=\\ln x$ at $x=1$.", accepted: ["$y=x-1$", "y=x-1"] },
   { topic: "Applications of differentiation", question: "A rectangle has perimeter 20. Find the maximum possible area.", accepted: ["25", "$25$"] },
-  { topic: "Applications of differentiation", question: "Find the stationary points of $f(x)=x^4-4x^2$ (give $x$ values only).", accepted: ["$-\\sqrt{2},\\ 0,\\ \\sqrt{2}$", "-√2, 0, √2"] },
+  { topic: "Applications of differentiation", question: "Find the stationary points of $f(x)=x^4-4x^2$ (give $x$ values only).", accepted: ["$-\\sqrt{2},\\ 0,\\ \\sqrt{2}$", "-sqrt(2), 0, sqrt(2)"] },
   { topic: "Applications of differentiation", question: "For $f(x)=\\sin x$ on $[0,2\\pi]$, how many stationary points are there?", accepted: ["2", "$2$"] },
   { topic: "Applications of differentiation", question: "A particle has velocity $v(t)=3t^2-12t+9$. Find the time when $v$ is minimum.", accepted: ["2", "$2$"] },
   { topic: "Applications of differentiation", question: "Find the maximum value of $f(x)=-x^2+6x-5$.", accepted: ["4", "$4$"] },
-  { topic: "Applications of differentiation", question: "Find the smallest positive $x$ where the tangent to $y=x^2$ has gradient 10.", accepted: ["$\\sqrt{5}$", "√5"] },
+  { topic: "Applications of differentiation", question: "Find the smallest positive $x$ where the tangent to $y=x^2$ has gradient 10.", accepted: ["$\\sqrt{5}$", "sqrt(5)"] },
 
   // --- Integral calculus (10)
   { topic: "Integral calculus", question: "Evaluate $\\displaystyle\\int_0^1 \\frac{1}{1+x^2}\\,dx$ exactly.", accepted: ["$\\frac{\\pi}{4}$", "\\pi/4"] },
