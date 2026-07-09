@@ -1,1 +1,6 @@
+/assets/* /assets/:splat 200
+/logo.png /logo.png 200
+/icons.svg /icons.svg 200
+/sitemap.xml /sitemap.xml 200
+/robots.txt /robots.txt 200
 /* /index.html 200
