@@ -6,7 +6,7 @@ import {
   practiceQuestionsForSubject,
 } from "@/lib/practiceQuestions";
 import { GENERAL_MATHS_BUILTIN_QUESTIONS } from "@/lib/generalMathsBuiltinQuestions";
-import { METHODS_BUILTIN_QUESTIONS } from "@/lib/methodsBuiltInQuestions";
+import { METHODS_BUILTIN_QUESTIONS } from "@/lib/methodsBuiltinQuestions";
 import { SPECIALIST_BUILTIN_QUESTIONS } from "@/lib/demoSpecialistQuestions";
 import type { Question } from "@/lib/subjects";
 

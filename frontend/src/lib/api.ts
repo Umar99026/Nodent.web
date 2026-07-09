@@ -18,6 +18,10 @@ function resolveApiBase(): string {
       host === "nodentlearning.com" ||
       host === "www.nodentlearning.com"
     ) {
+      // If the custom domain is not wired to the same Pages Functions deployment,
+      // fall back to the known-good Pages domain for API calls.
+      // (CORS on the API explicitly allows nodentlearning.com origins.)
+      if (host.endsWith("nodentlearning.com")) return "https://nodent.pages.dev";
       return "";
     }
     // Vite dev: use proxy in vite.config.ts (same-origin /api → :8787)
@@ -52,6 +56,9 @@ export function apiUnreachableMessage(): string {
   }
   if (typeof window !== "undefined") {
     const host = window.location.hostname.toLowerCase();
+    if (host === "www.nodentlearning.com") {
+      return "Could not reach the server. If login is failing, the custom domain API may not be connected yet — try https://nodent.pages.dev instead.";
+    }
     if (host === "nodentlearning.com") {
       return "Could not reach the server. Use https://www.nodentlearning.com — the root domain is not connected to Nodent yet.";
     }
