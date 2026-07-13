@@ -116,6 +116,23 @@ export async function recordUsage(
   `);
 }
 
+/** Whether this exact question was one of today's successfully AI-marked responses. */
+export async function hasAiResponseUsageForRef(
+  db: { execute: (q: ReturnType<typeof sql>) => Promise<{ rows?: unknown[] }> },
+  userId: number,
+  refKey: string,
+): Promise<boolean> {
+  const rows = await db.execute(sql`
+    SELECT id FROM user_usage_events
+    WHERE user_id = ${userId}
+      AND kind = ${USAGE_KIND_AI_RESPONSE}
+      AND ref_key = ${refKey}
+      AND created_at >= ${startOfUtcDayIso()}
+    LIMIT 1
+  `);
+  return Boolean((rows.rows as unknown[] | undefined)?.length);
+}
+
 export async function hasPracticeExamAccess(
   _db: { execute: (q: ReturnType<typeof sql>) => Promise<{ rows?: unknown[] }> },
   _userId: number,
