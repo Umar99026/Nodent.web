@@ -110,6 +110,15 @@ if (!shortQuestionSource.includes("notifyPremiumUsageUpdated()")) {
 if (!shortQuestionSource.includes("requestShortAnswerAiMark")) {
   failures.push("Typed and drawn short answers must use the shared detailed AI marking path.");
 }
+if (shortQuestionSource.includes("if (!premium && aiResponsesLocked) {")) {
+  failures.push("Exhausted AI quota must never block typed instant-matching submissions.");
+}
+if (!shortQuestionSource.includes("aiResponsesLocked && hasDrawn")) {
+  failures.push("Only drawn submissions may be blocked when the free AI quota is exhausted.");
+}
+if (!shortQuestionSource.includes("Daily AI feedback used. Marking this typed answer with instant matching.")) {
+  failures.push("A typed submission racing the quota refresh must fall back to instant matching.");
+}
 if (!apiSource.includes("USAGE_KIND_AI_RESPONSE")) {
   failures.push("Typed and drawn detailed feedback must share one backend usage bucket.");
 }

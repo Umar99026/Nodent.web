@@ -54,7 +54,9 @@ export function AiResponseQuotaBar({ className }: { className?: string }) {
         />
       </div>
       <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-        Typed and drawn answers each use one response. Upgrade to Pro for unlimited feedback.
+        {remaining > 0
+          ? "Typed and drawn answers each use one response."
+          : "AI feedback used for today. Keep typing answers for unlimited instant matching, or upgrade to Pro."}
       </p>
     </aside>
   );

@@ -318,6 +318,7 @@ export default function PracticeSetupPage() {
                               ) : kind === "sa" ? (
                                 <p>
                                   Typed or drawn answers share 3 detailed AI responses each day.
+                                  After that, typed answers continue with unlimited instant matching.
                                 </p>
                               ) : kind === "la" ? (
                                 <div className="flex items-start gap-2">
