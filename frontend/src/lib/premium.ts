@@ -34,6 +34,7 @@ export function isPremiumError(err: unknown): boolean {
 }
 
 export const PREMIUM_PATH = "/premium";
+export const PREMIUM_CHECKOUT_URL = "https://buy.stripe.com/eVqaEW1vPfVF7m25NPgw000";
 
 /** Past practice exams — premium only (admin included). */
 export function canAccessPracticeExams(user: PremiumUser | null | undefined): boolean {
