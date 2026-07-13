@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { passwordPolicyError } from "@/lib/passwordPolicy";
+import { signupEmailError } from "@/lib/emailValidation";
 import { Eye, EyeOff, Loader2, AlertCircle, ArrowLeft, GraduationCap, BookOpen } from "lucide-react";
 
 interface FieldErrors {
@@ -19,18 +20,10 @@ interface FieldErrors {
   accountRole?: string;
 }
 
-function validateEmail(email: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
-
 function validateLogin(identity: string, password: string): FieldErrors {
   const errors: FieldErrors = {};
   if (!identity.trim()) errors.email = "Email or username is required";
   if (!password) errors.password = "Password is required";
-  else {
-    const pwErr = passwordPolicyError(password);
-    if (pwErr) errors.password = pwErr;
-  }
   return errors;
 }
 
@@ -44,8 +37,8 @@ function validateSignup(
   if (!username.trim()) errors.username = "Username is required";
   else if (username.trim().length < 2)
     errors.username = "Username must be at least 2 characters";
-  if (!email.trim()) errors.email = "Email is required";
-  else if (!validateEmail(email)) errors.email = "Enter a valid email address";
+  const emailError = signupEmailError(email);
+  if (emailError) errors.email = emailError;
   if (!password) errors.password = "Password is required";
   else {
     const pwErr = passwordPolicyError(password);
@@ -287,6 +280,8 @@ export default function LoginPage() {
                   type="email"
                   placeholder="you@example.com"
                   autoComplete="email"
+                  inputMode="email"
+                  spellCheck={false}
                   value={signupEmail}
                   onChange={(e) => setSignupEmail(e.target.value)}
                   aria-invalid={!!fieldErrors.email}
@@ -295,6 +290,11 @@ export default function LoginPage() {
                 {fieldErrors.email && (
                   <p className="text-xs text-danger">{fieldErrors.email}</p>
                 )}
+                {!fieldErrors.email ? (
+                  <p className="text-xs text-muted-foreground">
+                    Use a real school or email-provider domain.
+                  </p>
+                ) : null}
               </div>
 
               <div className="grid gap-2">
@@ -346,8 +346,9 @@ export default function LoginPage() {
                   <Input
                     id="signup-password"
                     type={showPassword ? "text" : "password"}
-                    placeholder="At least 4 characters"
+                    placeholder="At least 8 characters"
                     autoComplete="new-password"
+                    minLength={8}
                     value={signupPassword}
                     onChange={(e) => setSignupPassword(e.target.value)}
                     aria-invalid={!!fieldErrors.password}
@@ -366,6 +367,9 @@ export default function LoginPage() {
                 {fieldErrors.password && (
                   <p className="text-xs text-danger">{fieldErrors.password}</p>
                 )}
+                {!fieldErrors.password ? (
+                  <p className="text-xs text-muted-foreground">Use at least 8 characters.</p>
+                ) : null}
               </div>
 
               <Button
