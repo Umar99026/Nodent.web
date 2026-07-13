@@ -47,6 +47,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { McqQuestion } from "@/components/quiz/McqQuestion";
 import { ShortQuestion } from "@/components/quiz/ShortQuestion";
 import { LongQuestion } from "@/components/quiz/LongQuestion";
+import { AiDrawingQuotaBar } from "@/components/premium/AiDrawingQuotaBar";
 import { QuestionHelpChat } from "@/components/quiz/QuestionHelpChat";
 import { AdminQuestionEditLink } from "@/components/admin/AdminQuestionEditLink";
 import { Button } from "@/components/ui/button";
@@ -1097,6 +1098,7 @@ export default function QuizPage() {
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
           {/* Question column */}
           <div className="min-w-0 space-y-6">
+            <AiDrawingQuotaBar />
             <div ref={questionCardRef} className="scroll-mt-24">
             <Card className="practice-card">
               <div className="practice-card-accent" aria-hidden>
@@ -1310,4 +1312,3 @@ export default function QuizPage() {
     </AppShell>
   );
 }
-

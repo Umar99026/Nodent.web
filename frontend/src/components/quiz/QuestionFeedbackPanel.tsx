@@ -73,13 +73,16 @@ export function QuestionFeedbackPanel({
 }: QuestionFeedbackPanelProps) {
   const wrongParts = parts.filter((part) => !part.correct);
   const missedSteps = steps.filter((step) => !step.awarded);
+  const hasAuthoredSteps = missedSteps.length > 0;
   const baseLines = correct
     ? uniqueLines([...linesFromAi(aiFeedback), "Correct! Well done."])
     : uniqueLines([
         ...linesFromAi(aiFeedback),
         ...bullets,
         ...(parts.length || steps.length
-          ? []
+          ? !parts.length && correctAnswers[0]
+            ? [`Correct answer: ${correctAnswers[0]}`]
+            : []
           : buildWrongAnswerBullets({
               studentAnswer: interpretedAnswer || studentAnswer,
               expectedAnswers: correctAnswers,
@@ -146,7 +149,8 @@ export function QuestionFeedbackPanel({
                   ...buildWrongAnswerBullets({
                     studentAnswer: part.studentAnswer ?? "",
                     expectedAnswers: part.correctAnswer ? [part.correctAnswer] : [],
-                    guidance,
+                    guidance: hasAuthoredSteps ? undefined : guidance,
+                    suppressMissingStepsNotice: hasAuthoredSteps,
                     questionText,
                     genericOnly,
                   }),
@@ -178,7 +182,7 @@ export function QuestionFeedbackPanel({
           {missedSteps.length ? (
             <div className="mt-4 border-t border-black/10 pt-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-foreground">
-                Correct steps
+                How to get it
               </p>
               <ol className="mt-2 space-y-2 text-xs text-muted-foreground">
                 {missedSteps.map((step, index) => (

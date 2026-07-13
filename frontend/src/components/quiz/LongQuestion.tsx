@@ -59,6 +59,7 @@ import {
   type AnswerScoreDetail,
 } from "@/lib/questionDisplay";
 import { QuestionFeedbackPanel } from "@/components/quiz/QuestionFeedbackPanel";
+import { buildWorkedSolutionSteps } from "@/lib/wrongAnswerFeedback";
 import { toast } from "sonner";
 import { isPremiumError, isPremiumUser, PREMIUM_PATH } from "@/lib/premium";
 import { PremiumGate } from "@/components/premium/GetPremiumButton";
@@ -904,7 +905,11 @@ export function LongQuestion({
                   })
                 : undefined
             }
-            steps={aiMark?.stepResults}
+            steps={
+              aiMark?.stepResults?.length
+                ? aiMark.stepResults
+                : buildWorkedSolutionSteps(question.markBreakdown, question.guidance)
+            }
             score={{
               earned: isMultipart
                 ? marksEarnedFromPartResults(partResults, partMarks)
