@@ -1,5 +1,6 @@
 import { isProseModelAnswer } from "@/lib/wordedQuestion";
 import { isHandwritingValue } from "@/lib/handwritingMode";
+import { parseMarkBreakdown, type MarkBreakdown, type MarkStepResult } from "@/lib/markBreakdown";
 import {
   extractExplanationKeywords,
   normalizeAnswer,
@@ -14,6 +15,7 @@ export type WrongAnswerFeedbackInput = {
   questionText?: string;
   /** Skip bank guidance — used for free short-answer (match-only) feedback. */
   genericOnly?: boolean;
+  suppressMissingStepsNotice?: boolean;
 };
 
 function primaryExpected(accepted: string[]): string {
@@ -114,14 +116,44 @@ function diagnoseAlgebraicMismatch(student: string, expected: string): string | 
   return "Your expression does not match the model form — check factorisation, simplification, or which variable you solved for.";
 }
 
-function defaultCorrectMethod(expected: string): string {
-  if (isProseModelAnswer(expected)) {
-    return "Use the command word in the question, state each required idea clearly, then support it with the relevant reason, evidence, or example.";
+function guidanceLines(guidance: string): string[] {
+  return guidance
+    .replace(/\r/g, "\n")
+    .split(/\n+|\s*[•·]\s*|\s*;\s*|(?=\s*\b(?:step\s*)?\d+[.)\-:]\s+)/i)
+    .map((line) =>
+      line
+        .replace(/^\s*(?:[-–—]|(?:step\s*)?\d+[.)\-:])\s*/i, "")
+        .replace(/^how to get it:\s*/i, "")
+        .trim(),
+    )
+    .filter((line) => line.length > 3);
+}
+
+/** Use authored marking data only. Never invent a generic method for an unseen question. */
+export function buildWorkedSolutionSteps(
+  markBreakdown: MarkBreakdown | unknown,
+  guidance?: string,
+): MarkStepResult[] {
+  const stored = parseMarkBreakdown(markBreakdown);
+  if (stored?.steps.length && stored.source !== "inferred") {
+    return stored.steps.map((step, index) => ({
+      index,
+      marks: step.marks,
+      marksAwarded: 0,
+      label: step.label,
+      model: step.model,
+      awarded: false,
+    }));
   }
-  if (parseNumericAnswer(expected) != null) {
-    return "Identify the required relationship, substitute the given values carefully, show each calculation, include the correct unit, and only round at the end.";
-  }
-  return "Start from the information given, apply the relevant rule one step at a time, simplify carefully, and check that the final form answers exactly what was asked.";
+
+  return guidanceLines(String(guidance ?? "")).map((model, index) => ({
+    index,
+    marks: 1,
+    marksAwarded: 0,
+    label: `Step ${index + 1}`,
+    model,
+    awarded: false,
+  }));
 }
 
 /** Build specific bullet points explaining why a short/long answer was marked wrong. */
@@ -151,15 +183,9 @@ export function buildWrongAnswerBullets(input: WrongAnswerFeedbackInput): string
     bullets.push(`Correct answer: ${expected}`);
   }
 
-  const guidance = !input.genericOnly ? String(input.guidance ?? "").trim() : "";
-  const method = guidance
-    ? guidance.length > 400
-      ? `${guidance.slice(0, 397)}…`
-      : guidance
-    : expected
-      ? defaultCorrectMethod(expected)
-      : "Re-read the question, identify what it asks for, and show a clear method before writing your final answer.";
-  bullets.push(`How to get it: ${method}`);
+  if (!input.suppressMissingStepsNotice && !String(input.guidance ?? "").trim()) {
+    bullets.push("Worked steps are not available for this question yet.");
+  }
 
   return bullets;
 }
@@ -173,6 +199,7 @@ export type McqWrongFeedbackInput = {
   correctOption: string;
   options: string[];
   guidance?: string;
+  includeMethod?: boolean;
 };
 
 /** Specific feedback when an MCQ option is wrong. */
@@ -207,15 +234,14 @@ export function buildMcqWrongFeedback(input: McqWrongFeedbackInput): string[] {
     bullets.push(`Correct answer: ${correctText}.`);
   }
 
-  const guidance = String(input.guidance ?? "").trim();
-  if (guidance) {
-    const trimmed = guidance.length > 400 ? `${guidance.slice(0, 397)}…` : guidance;
-    // Prefer “how to get it” framing so the feedback is actionable.
-    bullets.push(`How to get it: ${trimmed}`);
-  } else {
-    bullets.push(
-      "How to get it: write down the key relationship from the stem, substitute the given values carefully, and only round at the end. Then compare the computed value to the options.",
-    );
+  if (input.includeMethod !== false) {
+    const guidance = String(input.guidance ?? "").trim();
+    if (guidance) {
+      const trimmed = guidance.length > 400 ? `${guidance.slice(0, 397)}…` : guidance;
+      bullets.push(`How to get it: ${trimmed}`);
+    } else {
+      bullets.push("Worked steps are not available for this question yet.");
+    }
   }
 
   return bullets;

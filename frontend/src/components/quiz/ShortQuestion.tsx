@@ -9,11 +9,8 @@ import {
   resolveAiMarking,
   qualifiesForOpenAiHandwriting,
 } from "@/lib/questionAiMarking";
-import { usePremiumUsage } from "@/hooks/usePremiumUsage";
-import {
-  FREE_DAILY_DRAWING_AI_LIMIT,
-  freeDrawingAiRemaining,
-} from "@/lib/premiumUsage";
+import { notifyPremiumUsageUpdated, usePremiumUsage } from "@/hooks/usePremiumUsage";
+import { freeDrawingAiRemaining } from "@/lib/premiumUsage";
 import {
   collectFullQuestionStimulus,
   displayMarks,
@@ -48,7 +45,7 @@ import { RichQuestionContent } from "@/components/quiz/RichQuestionContent";
 import { hasAnswerContent, handwritingAllowedForSubject, isHandwritingValue, usesHandwritingMarking } from "@/lib/handwritingMode";
 import { isDiagramLabelQuestion, partHasOverlay, partUsesFigureLabels, partUsesInlineInputs, inlineInputsForPart, slotIndexForPartOverlay, slotsForPart, expectedAnswersForQuestionSlots, type DiagramLabelPart, type PartFigureLabelSource } from "@/lib/diagramLabels";
 import { flushAllHandwriting, flushHandwriting } from "@/lib/handwritingFlush";
-import { CheckCircle2, Send, Loader2, PenLine } from "lucide-react";
+import { CheckCircle2, Send, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import { handwritingMarkUserError } from "@/lib/userFacingErrors";
@@ -66,6 +63,7 @@ import {
 import {
   MarkBreakdownInputs,
 } from "@/components/quiz/MarkBreakdownFields";
+import { buildWorkedSolutionSteps } from "@/lib/wrongAnswerFeedback";
 
 interface ShortQuestionProps {
   question: ShortQuestionType;
@@ -231,7 +229,7 @@ export function ShortQuestion({
   const devPreloadAppliedRef = useRef(false);
   const { user } = useAuth();
   const premium = isPremiumUser(user);
-  const { usage, loading: usageLoading, reload: reloadUsage } = usePremiumUsage(!!user && !premium);
+  const { usage, reload: reloadUsage } = usePremiumUsage(!!user && !premium);
   const drawingAiLeft = premium ? Number.POSITIVE_INFINITY : freeDrawingAiRemaining(usage);
   const handwritingUi = handwritingAllowedForSubject(subjectId);
   const drawLocked = !premium && drawingAiLeft <= 0;
@@ -531,7 +529,7 @@ export function ShortQuestion({
           : enriched.correct;
         setDpHint(null);
         setAiMark(enriched);
-        void reloadUsage();
+        notifyPremiumUsageUpdated();
       } catch (err) {
         const msg = handwritingMarkUserError(err);
         toast.error(msg);
@@ -670,36 +668,6 @@ export function ShortQuestion({
         />
       </div>
       )
-      ) : null}
-
-      {!premium && handwritingUi ? (
-        <div className="rounded-2xl border border-brand/15 bg-brand/[0.045] px-4 py-3">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-              <PenLine className="size-4 text-brand-deep" aria-hidden />
-              AI drawing marks
-            </div>
-            <span className="text-xs font-semibold tabular-nums text-brand-deep">
-              {usageLoading
-                ? "Checking…"
-                : `${drawingAiLeft} of ${FREE_DAILY_DRAWING_AI_LIMIT} left today`}
-            </span>
-          </div>
-          <div className="mt-2 h-2 overflow-hidden rounded-full bg-black/10">
-            <div
-              className="h-full rounded-full bg-brand transition-all"
-              style={{
-                width: `${Math.max(
-                  0,
-                  Math.min(100, (drawingAiLeft / FREE_DAILY_DRAWING_AI_LIMIT) * 100),
-                )}%`,
-              }}
-            />
-          </div>
-          <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-            Drawn answers use AI. Typed answers use instant matching and do not use this allowance.
-          </p>
-        </div>
       ) : null}
 
       {/* Answer input */}
@@ -1126,7 +1094,11 @@ export function ShortQuestion({
                   })
                 : undefined
             }
-            steps={aiMark?.stepResults}
+            steps={
+              aiMark?.stepResults?.length
+                ? aiMark.stepResults
+                : buildWorkedSolutionSteps(question.markBreakdown, question.guidance)
+            }
             score={{
               earned: isMultipart
                 ? marksEarnedFromPartResults(partResults, slotMarks.length ? slotMarks : partMarks)

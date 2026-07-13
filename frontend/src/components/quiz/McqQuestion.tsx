@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { PassageBlock, QuestionImageGrid } from "@/components/quiz/QuestionStimulus";
 import { RichQuestionContent } from "@/components/quiz/RichQuestionContent";
 import { QuestionFeedbackPanel } from "@/components/quiz/QuestionFeedbackPanel";
-import { buildMcqWrongFeedback } from "@/lib/wrongAnswerFeedback";
+import { buildMcqWrongFeedback, buildWorkedSolutionSteps } from "@/lib/wrongAnswerFeedback";
 import { CheckCircle2, XCircle } from "lucide-react";
 
 interface McqQuestionProps {
@@ -58,6 +58,10 @@ export function McqQuestion({
   onSelectOption,
   revealResults = false,
 }: McqQuestionProps) {
+  const workedSolutionSteps = buildWorkedSolutionSteps(
+    question.markBreakdown,
+    question.guidance,
+  );
   const [selectedOption, setSelectedOption] = useState<string | null>(
     persistedState?.selectedOption ?? null,
   );
@@ -234,6 +238,11 @@ export function McqQuestion({
       {showResults && activeSelected ? (
         <QuestionFeedbackPanel
           correct={!userWrong}
+          steps={
+            userWrong
+              ? workedSolutionSteps
+              : undefined
+          }
           bullets={
             userWrong
               ? buildMcqWrongFeedback({
@@ -241,6 +250,7 @@ export function McqQuestion({
                   correctOption: question.answer,
                   options: question.options,
                   guidance: question.guidance,
+                  includeMethod: workedSolutionSteps.length === 0,
                 })
               : []
           }

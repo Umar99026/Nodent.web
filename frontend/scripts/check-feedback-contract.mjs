@@ -45,9 +45,43 @@ if (!panelSource.includes(">\n              Feedback\n")) {
 }
 
 const builderSource = readFileSync(resolve(root, "src/lib/wrongAnswerFeedback.ts"), "utf8");
-for (const requiredPhrase of ["Correct answer:", "How to get it:"]) {
+for (const requiredPhrase of ["Correct answer:", "Worked steps are not available for this question yet."]) {
   if (!builderSource.includes(requiredPhrase)) {
     failures.push(`Wrong-answer feedback must include the permanent "${requiredPhrase}" step.`);
+  }
+}
+
+const forbiddenGenericMethod =
+  "Identify the required relationship, substitute the given values carefully";
+if (builderSource.includes(forbiddenGenericMethod)) {
+  failures.push("Wrong-answer feedback must not invent the generic calculation method.");
+}
+
+const quizPageSource = readFileSync(resolve(root, "src/pages/QuizPage.tsx"), "utf8");
+if ((quizPageSource.match(/<AiDrawingQuotaBar\b/g)?.length ?? 0) !== 1) {
+  failures.push("QuizPage must render the shared AI drawing quota bar exactly once.");
+}
+const shortQuestionSource = readFileSync(
+  resolve(root, "src/components/quiz/ShortQuestion.tsx"),
+  "utf8",
+);
+if (shortQuestionSource.includes("<AiDrawingQuotaBar")) {
+  failures.push("ShortQuestion must not render a second question-specific quota bar.");
+}
+if (!shortQuestionSource.includes("notifyPremiumUsageUpdated()")) {
+  failures.push("A successful AI drawing mark must refresh the shared quota bar.");
+}
+
+const practiceQuestionSource = readFileSync(
+  resolve(root, "src/lib/practiceQuestions.ts"),
+  "utf8",
+);
+for (const requiredGuidancePath of [
+  "options,\n      answer,\n      guidance,",
+  "acceptedAnswers,\n      guidance,",
+]) {
+  if (!practiceQuestionSource.includes(requiredGuidancePath)) {
+    failures.push("Question loading must preserve authored guidance for every question type.");
   }
 }
 
