@@ -1158,6 +1158,8 @@ export default function QuizPage() {
                           {part.type === "mcq" && (
                             <McqQuestion
                               question={part}
+                              subjectId={subjectId}
+                              questionKey={qk}
                               hidePassage={hidePassage}
                               lockedCorrect={false}
                               onAnswer={(correct) =>

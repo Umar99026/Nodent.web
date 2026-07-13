@@ -13,11 +13,14 @@ import { Badge } from "@/components/ui/badge";
 import { PassageBlock, QuestionImageGrid } from "@/components/quiz/QuestionStimulus";
 import { RichQuestionContent } from "@/components/quiz/RichQuestionContent";
 import { QuestionFeedbackPanel } from "@/components/quiz/QuestionFeedbackPanel";
-import { buildMcqWrongFeedback, buildWorkedSolutionSteps } from "@/lib/wrongAnswerFeedback";
+import { buildMcqWrongFeedback } from "@/lib/wrongAnswerFeedback";
+import { useWorkedSolution } from "@/hooks/useWorkedSolution";
 import { CheckCircle2, XCircle } from "lucide-react";
 
 interface McqQuestionProps {
   question: McqQuestionType;
+  subjectId?: string;
+  questionKey?: string;
   /** Practice exam: pick without locking; parent reveals results on submit. */
   deferFeedback?: boolean;
   controlledSelected?: string | null;
@@ -44,6 +47,8 @@ interface McqQuestionProps {
 
 export function McqQuestion({
   question,
+  subjectId,
+  questionKey,
   onAnswer,
   disabled = false,
   hidePassage = false,
@@ -58,10 +63,6 @@ export function McqQuestion({
   onSelectOption,
   revealResults = false,
 }: McqQuestionProps) {
-  const workedSolutionSteps = buildWorkedSolutionSteps(
-    question.markBreakdown,
-    question.guidance,
-  );
   const [selectedOption, setSelectedOption] = useState<string | null>(
     persistedState?.selectedOption ?? null,
   );
@@ -110,6 +111,12 @@ export function McqQuestion({
   };
 
   const userWrong = showResults && activeSelected !== question.answer;
+  const workedSolution = useWorkedSolution({
+    question,
+    subjectId,
+    questionKey,
+    enabled: Boolean(userWrong),
+  });
 
   const getOptionClasses = (option: string) => {
     const base =
@@ -240,9 +247,10 @@ export function McqQuestion({
           correct={!userWrong}
           steps={
             userWrong
-              ? workedSolutionSteps
+              ? workedSolution.steps
               : undefined
           }
+          stepsLoading={userWrong && workedSolution.loading}
           bullets={
             userWrong
               ? buildMcqWrongFeedback({
@@ -250,7 +258,7 @@ export function McqQuestion({
                   correctOption: question.answer,
                   options: question.options,
                   guidance: question.guidance,
-                  includeMethod: workedSolutionSteps.length === 0,
+                  includeMethod: false,
                 })
               : []
           }

@@ -2,7 +2,7 @@ import { SmartMarkingBulletList, parseMarkingBulletLines } from "@/components/qu
 import { RichQuestionContent } from "@/components/quiz/RichQuestionContent";
 import { buildWrongAnswerBullets } from "@/lib/wrongAnswerFeedback";
 import { cn } from "@/lib/utils";
-import { CheckCircle2, XCircle } from "lucide-react";
+import { CheckCircle2, Loader2, XCircle } from "lucide-react";
 
 export type QuestionFeedbackPart = {
   label: string;
@@ -33,6 +33,7 @@ type QuestionFeedbackPanelProps = {
   interpretedAnswer?: string;
   parts?: QuestionFeedbackPart[];
   steps?: QuestionFeedbackStep[];
+  stepsLoading?: boolean;
   score?: { earned: number; total: number };
   genericOnly?: boolean;
   bullets?: string[];
@@ -66,6 +67,7 @@ export function QuestionFeedbackPanel({
   interpretedAnswer,
   parts = [],
   steps = [],
+  stepsLoading = false,
   score,
   genericOnly = false,
   bullets = [],
@@ -150,7 +152,6 @@ export function QuestionFeedbackPanel({
                     studentAnswer: part.studentAnswer ?? "",
                     expectedAnswers: part.correctAnswer ? [part.correctAnswer] : [],
                     guidance: hasAuthoredSteps ? undefined : guidance,
-                    suppressMissingStepsNotice: hasAuthoredSteps,
                     questionText,
                     genericOnly,
                   }),
@@ -207,6 +208,18 @@ export function QuestionFeedbackPanel({
                   </li>
                 ))}
               </ol>
+            </div>
+          ) : null}
+
+          {!correct && stepsLoading && !missedSteps.length ? (
+            <div className="mt-4 border-t border-black/10 pt-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-foreground">
+                How to get it
+              </p>
+              <p className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                <Loader2 className="size-3.5 animate-spin text-brand" aria-hidden />
+                Generating the exact worked steps for this question…
+              </p>
             </div>
           ) : null}
         </div>

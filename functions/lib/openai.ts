@@ -844,7 +844,11 @@ ${formatSubjectMarkingContextBlock(input.subjectContext)}
 
 Rules:
 • Total marks across steps must equal maxMarks (${input.marks}).
-• Each step is one line of working or one criterion (e.g. "State both equations", "Substitute correctly", "Correct final answers").
+• Solve the exact question yourself using the supplied values and accepted answer.
+• Every model field must show concrete working: the actual formula, substitution, calculation, reasoning, and final answer needed for that question.
+• Never return generic study advice such as “identify the relationship”, “substitute carefully”, “show working”, or “check units”.
+• For a one-mark question, still show the shortest exact calculation or reasoning that produces the accepted answer.
+• For multiple choice, explain the calculation or fact that proves the correct option.
 • Use LaTeX in model fields where helpful: $...$
 • Prefer 1 mark per step unless exam guide groups marks.`,
     },

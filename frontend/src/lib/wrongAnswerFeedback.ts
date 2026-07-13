@@ -15,7 +15,6 @@ export type WrongAnswerFeedbackInput = {
   questionText?: string;
   /** Skip bank guidance — used for free short-answer (match-only) feedback. */
   genericOnly?: boolean;
-  suppressMissingStepsNotice?: boolean;
 };
 
 function primaryExpected(accepted: string[]): string {
@@ -183,10 +182,6 @@ export function buildWrongAnswerBullets(input: WrongAnswerFeedbackInput): string
     bullets.push(`Correct answer: ${expected}`);
   }
 
-  if (!input.suppressMissingStepsNotice && !String(input.guidance ?? "").trim()) {
-    bullets.push("Worked steps are not available for this question yet.");
-  }
-
   return bullets;
 }
 
@@ -239,8 +234,6 @@ export function buildMcqWrongFeedback(input: McqWrongFeedbackInput): string[] {
     if (guidance) {
       const trimmed = guidance.length > 400 ? `${guidance.slice(0, 397)}…` : guidance;
       bullets.push(`How to get it: ${trimmed}`);
-    } else {
-      bullets.push("Worked steps are not available for this question yet.");
     }
   }
 

@@ -192,6 +192,8 @@ export const API_PATHS = {
       `/api/written/${encodeURIComponent(subjectId)}/${encodeURIComponent(questionKey)}/mark`,
     help: (subjectId: string, questionKey: string) =>
       `/api/written/${encodeURIComponent(subjectId)}/${encodeURIComponent(questionKey)}/help`,
+    solution: (subjectId: string, questionKey: string) =>
+      `/api/written/${encodeURIComponent(subjectId)}/${encodeURIComponent(questionKey)}/solution`,
   },
   english: {
     books: "/api/english/books",
