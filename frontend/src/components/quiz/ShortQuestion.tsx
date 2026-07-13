@@ -5,7 +5,6 @@ import {
   buildFallbackHandwritingMark,
   buildSmartMarkPayload,
   enrichHandwritingMarkResult,
-  partMarkAt,
   requestHandwritingMark,
   resolveAiMarking,
   qualifiesForOpenAiHandwriting,
@@ -49,18 +48,12 @@ import { RichQuestionContent } from "@/components/quiz/RichQuestionContent";
 import { hasAnswerContent, handwritingAllowedForSubject, isHandwritingValue, usesHandwritingMarking } from "@/lib/handwritingMode";
 import { isDiagramLabelQuestion, partHasOverlay, partUsesFigureLabels, partUsesInlineInputs, inlineInputsForPart, slotIndexForPartOverlay, slotsForPart, expectedAnswersForQuestionSlots, type DiagramLabelPart, type PartFigureLabelSource } from "@/lib/diagramLabels";
 import { flushAllHandwriting, flushHandwriting } from "@/lib/handwritingFlush";
-import { CheckCircle2, XCircle, Send, Loader2, PenLine } from "lucide-react";
+import { CheckCircle2, Send, Loader2, PenLine } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import { handwritingMarkUserError } from "@/lib/userFacingErrors";
 import { isPremiumError, isPremiumUser } from "@/lib/premium";
-import {
-  AiMarkingFeedbackPanel,
-  AiMarkingPartFeedback,
-} from "@/components/quiz/AiMarkingFeedbackPanel";
-import { MultipartMarkBreakdown } from "@/components/quiz/MultipartMarkBreakdown";
-import { WrongAnswerFeedbackPanel } from "@/components/quiz/WrongAnswerFeedbackPanel";
-import { buildWrongAnswerBullets } from "@/lib/wrongAnswerFeedback";
+import { QuestionFeedbackPanel } from "@/components/quiz/QuestionFeedbackPanel";
 import type { SmartMarkResult } from "@/lib/questionAiMarking";
 import {
   DEMO_MATHS_DEV_PLACEHOLDER_DRAWING,
@@ -69,10 +62,8 @@ import {
 import {
   emptyStepAnswers,
   resolveMarkBreakdown,
-  type MarkStepResult,
 } from "@/lib/markBreakdown";
 import {
-  MarkBreakdownFeedbackPanel,
   MarkBreakdownInputs,
 } from "@/components/quiz/MarkBreakdownFields";
 
@@ -245,7 +236,6 @@ export function ShortQuestion({
   const handwritingUi = handwritingAllowedForSubject(subjectId);
   const drawLocked = !premium && drawingAiLeft <= 0;
   const examPaper = isExamPaperLayoutSubject(subjectId);
-  const genericMatchFeedback = false;
 
   const configuredParts: ShortQuestionType["answerParts"] =
     question.answerParts?.filter(
@@ -344,16 +334,6 @@ export function ShortQuestion({
     partLabels: partDescriptors,
     acceptedAnswers: question.acceptedAnswers,
   });
-
-  const usesHandwritingAi =
-    handwritingUi &&
-    usesHandwritingMarking(
-      subjectId,
-      answer,
-      parts,
-      isMultipart,
-      openAiHandwritingEligible,
-    );
 
   const useTextArea = useSmartMarking && !isMultipart;
 
@@ -975,26 +955,6 @@ export function ShortQuestion({
                     />
                   </div>
                   ) : null}
-                  {submitted && isHandwritingValue(parts[slotBaseIndex] ?? "") && aiMark && !hasMultiSlotInputs ? (
-                    <AiMarkingPartFeedback
-                      partResult={partMarkAt(aiMark, idx)}
-                    />
-                  ) : submitted &&
-                    !hasMultiSlotInputs &&
-                    partResults[slotBaseIndex] === false &&
-                    expectedAnswersForDisplay[slotBaseIndex] &&
-                    !isHandwritingValue(parts[slotBaseIndex] ?? "") ? (
-                    <WrongAnswerFeedbackPanel
-                      title="Feedback"
-                      bullets={buildWrongAnswerBullets({
-                        studentAnswer: parts[slotBaseIndex] ?? "",
-                        expectedAnswers: [expectedAnswersForDisplay[slotBaseIndex] ?? ""].filter(Boolean),
-                        guidance: genericMatchFeedback ? undefined : question.guidance,
-                        questionText: question.question,
-                        genericOnly: genericMatchFeedback,
-                      })}
-                    />
-                  ) : null}
                       </>
                     );
                   })()}
@@ -1108,18 +1068,6 @@ export function ShortQuestion({
                       : "Submit"}
                 </Button>
               </div>
-              {submitted && !isCorrect ? (
-                <WrongAnswerFeedbackPanel
-                  title="Feedback"
-                  bullets={buildWrongAnswerBullets({
-                    studentAnswer: answer,
-                    expectedAnswers: expectedAnswersForDisplay.filter(Boolean),
-                    guidance: genericMatchFeedback ? undefined : question.guidance,
-                    questionText: question.question,
-                    genericOnly: genericMatchFeedback,
-                  })}
-                />
-              ) : null}
             </div>
           )}
 
@@ -1144,88 +1092,47 @@ export function ShortQuestion({
           </Button>
         ) : null}
 
-        {/* Feedback */}
-        {submitted && isMultipart && (
-          <div
-            className={cn(
-              "flex items-start gap-3 rounded-lg px-4 py-3 text-sm",
-              multipartAllCorrect(partResults)
-                ? "bg-success/10 text-success"
-                : "bg-danger/10 text-danger",
-            )}
-          >
-            {multipartAllCorrect(partResults) ? (
-              <>
-                <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
-                <span className="font-medium">All parts correct!</span>
-              </>
-            ) : (
-              <>
-                <XCircle className="mt-0.5 size-4 shrink-0" />
-                <span className="font-medium">Some parts need work — see the mark breakdown below.</span>
-              </>
-            )}
-          </div>
-        )}
-
-        {submitted && isMultipart ? (
-          <MultipartMarkBreakdown
-            partLabels={slotBreakdownLabels(partLabels, partDescriptors, configuredParts)}
-            partResults={partResults}
-            partMarks={slotMarks.length ? slotMarks : partMarks}
-            expectedAnswers={expectedAnswersForDisplay}
-            studentAnswers={parts.map((part, idx) => {
-              const read = partMarkAt(aiMark, idx)?.studentAnswerRead?.trim();
-              if (read) return read;
-              return isHandwritingValue(part) ? "" : part;
-            })}
-            guidance={
-              usesHandwritingAi && aiMark
-                ? undefined
-                : genericMatchFeedback
-                  ? undefined
-                  : question.guidance
+        {submitted ? (
+          <QuestionFeedbackPanel
+            correct={isCorrect}
+            studentAnswer={compositeAnswer}
+            correctAnswers={aiMark?.correctAnswers ?? expectedAnswersForDisplay}
+            guidance={question.guidance}
+            questionText={question.question}
+            aiFeedback={aiMark?.feedback}
+            interpretedAnswer={
+              !isMultipart
+                ? aiMark?.partResults?.find((part) => part.index === 0)?.studentAnswerRead
+                : undefined
             }
-            genericOnly={genericMatchFeedback}
-          />
-        ) : null}
-
-        {submitted && breakdownActive && aiMark?.stepResults?.length ? (
-          <MarkBreakdownFeedbackPanel stepResults={aiMark.stepResults as MarkStepResult[]} />
-        ) : null}
-
-        {submitted && !isMultipart && !isCorrect && !aiMark && !breakdownActive ? (
-          <WrongAnswerFeedbackPanel
-            bullets={buildWrongAnswerBullets({
-              studentAnswer: compositeAnswer,
-              expectedAnswers: expectedAnswersForDisplay,
-              guidance: genericMatchFeedback ? undefined : question.guidance,
-              questionText: question.question,
-              genericOnly: genericMatchFeedback,
-            })}
-          />
-        ) : null}
-
-        {submitted && !isMultipart && isCorrect && (
-          <div
-            className={cn(
-              "flex items-start gap-3 rounded-lg px-4 py-3 text-sm",
-              "bg-success/10 text-success",
-            )}
-          >
-            <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
-            <div>
-              <span className="font-medium">Correct! Well done.</span>
-            </div>
-          </div>
-        )}
-        {aiMark && submitted && !(isMultipart && usesHandwritingAi) ? (
-          <AiMarkingFeedbackPanel
-            feedback={aiMark.feedback}
-            correct={aiMark.correct}
-            correctAnswers={aiMark.correctAnswers}
-            partResults={aiMark.partResults}
-            partLabels={partDescriptors}
+            parts={
+              isMultipart
+                ? partResults.map((result, idx) => {
+                    const aiPart = aiMark?.partResults?.find((part) => part.index === idx);
+                    const rawStudent = parts[idx] ?? "";
+                    return {
+                      label:
+                        slotBreakdownLabels(partLabels, partDescriptors, configuredParts)[idx] ??
+                        `Part ${idx + 1}`,
+                      correct: result === true,
+                      studentAnswer:
+                        aiPart?.studentAnswerRead ??
+                        (isHandwritingValue(rawStudent) ? "" : rawStudent),
+                      correctAnswer:
+                        aiPart?.correctAnswer ?? expectedAnswersForDisplay[idx] ?? "",
+                      feedback: aiPart?.partFeedback,
+                      marks: (slotMarks.length ? slotMarks : partMarks)[idx] ?? 1,
+                    };
+                  })
+                : undefined
+            }
+            steps={aiMark?.stepResults}
+            score={{
+              earned: isMultipart
+                ? marksEarnedFromPartResults(partResults, slotMarks.length ? slotMarks : partMarks)
+                : (aiMark?.marksAwarded ?? (isCorrect ? effectiveTotalMarks : 0)),
+              total: aiMark?.maxMarks ?? effectiveTotalMarks,
+            }}
           />
         ) : null}
       </div>
