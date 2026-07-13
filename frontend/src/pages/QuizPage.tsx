@@ -16,7 +16,7 @@ import {
 import { subjectsForUser } from "@/lib/subjects";
 import type { Question, Subject } from "@/lib/subjects";
 import { isAdminUser } from "@/lib/constants";
-import { isPremiumUser, PREMIUM_PATH } from "@/lib/premium";
+import { isPremiumUser } from "@/lib/premium";
 import {
   getStableQuestionIndex,
   normalizeAnswerMap,
@@ -68,17 +68,12 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useInactivity } from "@/hooks/useInactivity";
 import {
-  readBreakdownModePreference,
-  writeBreakdownModePreference,
-} from "@/lib/markBreakdown";
-import {
   ChevronLeft,
   ChevronRight,
   RotateCcw,
   Clock,
   BookOpen,
   Loader2,
-  ListChecks,
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
@@ -190,18 +185,10 @@ export default function QuizPage() {
   /** Opt-in localhost preview only — `?mockFeedback=1` on /quiz/demo */
   const useDemoMockFeedback =
     import.meta.env.DEV && isDemoSandbox && searchParams.get("mockFeedback") === "1";
-  const [breakdownMode, setBreakdownMode] = useState(() => readBreakdownModePreference());
   const { isInactive, resetInactivity } = useInactivity();
   const [showInactivityDialog, setShowInactivityDialog] = useState(false);
   const questionCardRef = useRef<HTMLDivElement>(null);
   const shouldScrollToQuestionRef = useRef(false);
-
-  useEffect(() => {
-    if (!premium && breakdownMode) {
-      setBreakdownMode(false);
-      writeBreakdownModePreference(false);
-    }
-  }, [premium, breakdownMode]);
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, boolean | null>>({});
@@ -1042,36 +1029,6 @@ export default function QuizPage() {
           </div>
 
           <div className="flex justify-end gap-2">
-            {!isWrongReview && (
-              <Button
-                type="button"
-                variant={breakdownMode ? "accent" : "outline"}
-                className="gap-2"
-                aria-pressed={breakdownMode}
-                aria-label={
-                  breakdownMode
-                    ? "Breakdown mode on — one working line per mark"
-                    : "Switch to mark breakdown mode"
-                }
-                onClick={() => {
-                  if (!breakdownMode && !premium) {
-                    navigate(PREMIUM_PATH);
-                    return;
-                  }
-                  setBreakdownMode((prev) => {
-                    const next = !prev;
-                    writeBreakdownModePreference(next);
-                    return next;
-                  });
-                }}
-              >
-                <ListChecks className="size-4" />
-                <span className="hidden sm:inline">
-                  {breakdownMode ? "Breakdown mode" : "Normal mode"}
-                </span>
-                <span className="sm:hidden">{breakdownMode ? "Steps" : "Normal"}</span>
-              </Button>
-            )}
             <Button
               variant="accent"
               disabled={!currentQuestionTopic}
@@ -1201,7 +1158,6 @@ export default function QuizPage() {
                               repeatSandbox={sandboxRepeat}
                               practiceOnly={isWrongReview || sandboxRepeat}
                               devMockMarking={useDemoMockFeedback}
-                              breakdownMode={breakdownMode}
                               classFullyCorrectPercent={partClass ?? null}
                               persistedState={questionUiState[qk]}
                               onStateChange={(state) => updateQuestionUiState(qk, state)}
