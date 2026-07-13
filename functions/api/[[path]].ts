@@ -27,7 +27,7 @@ import {
 import { englishAiConfigured, scoreEnglishResponse } from "../lib/englishOpenAi";
 import {
   canRunEnglishAiMark,
-  canRunShortAiMark,
+  canRunHandwritingAiMark,
   ensurePracticeExamUsage,
   getPremiumUsageSummary,
   hasPracticeExamAccess,
@@ -36,8 +36,7 @@ import {
   PREMIUM_REQUIRED,
   quotaExceededResponse,
   recordUsage,
-  USAGE_KIND_PROSE_AI,
-  USAGE_KIND_SHORT_AI,
+  USAGE_KIND_HANDWRITING_AI,
   USAGE_KIND_ENGLISH_ESSAY_AI,
 } from "../lib/premium";
 import {
@@ -5804,13 +5803,13 @@ app.post("/api/written/:subjectId/:questionKey/mark", authMiddleware, async (c: 
       );
     }
 
-    /**
-     * Short-answer AI:
-     * - Free typed: up to daily short-AI quota, then clients must keyword-match.
-     * - Free drawn: allowed up to the same daily short-AI quota.
-     * - Premium: AI allowed for typed + drawn (and mark-breakdown where applicable).
-     */
-    // (Free accounts may send handwriting for short-answer marking, but are quota-limited below.)
+    // Typed short answers are always marked locally by answer matching. Only drawings use AI.
+    if (isShortType && handwritingImages.length === 0) {
+      return c.json(
+        { error: "Typed short answers use instant answer matching and do not need AI marking." },
+        400,
+      );
+    }
 
     const marksParsed = Math.round(Number(q.marks ?? 2));
     const marks = Number.isFinite(marksParsed) ? Math.max(1, marksParsed) : 2;
@@ -5877,13 +5876,13 @@ app.post("/api/written/:subjectId/:questionKey/mark", authMiddleware, async (c: 
         );
       }
       if (isShortType) {
-        const check = await canRunShortAiMark(db, user.id, aiProviderPoolSize(env));
+        const check = await canRunHandwritingAiMark(db, user.id, aiProviderPoolSize(env));
         if (!check.allowed) {
           return c.json(
             {
               ...quotaExceededResponse(check.reason ?? ""),
               error: check.reason,
-              code: "short_ai_quota",
+              code: "handwriting_ai_quota",
             },
             403,
           );
@@ -5988,9 +5987,13 @@ app.post("/api/written/:subjectId/:questionKey/mark", authMiddleware, async (c: 
         ai_marked_at = EXCLUDED.ai_marked_at
     `);
 
-    if (!isPremiumAccount(user)) {
-      const usageKind = isShortType ? USAGE_KIND_SHORT_AI : USAGE_KIND_PROSE_AI;
-      await recordUsage(db, user.id, usageKind, `${subjectId}:${questionKey}`);
+    if (!isPremiumAccount(user) && isShortType && handwritingImages.length > 0) {
+      await recordUsage(
+        db,
+        user.id,
+        USAGE_KIND_HANDWRITING_AI,
+        `${subjectId}:${questionKey}`,
+      );
     }
 
     return c.json({

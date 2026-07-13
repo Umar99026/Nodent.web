@@ -7,13 +7,14 @@ import {
   enrichHandwritingMarkResult,
   partMarkAt,
   requestHandwritingMark,
-  requestSmartMark,
   resolveAiMarking,
   qualifiesForOpenAiHandwriting,
 } from "@/lib/questionAiMarking";
-import { ApiError } from "@/lib/api";
 import { usePremiumUsage } from "@/hooks/usePremiumUsage";
-import { freeShortAiRemaining } from "@/lib/premiumUsage";
+import {
+  FREE_DAILY_DRAWING_AI_LIMIT,
+  freeDrawingAiRemaining,
+} from "@/lib/premiumUsage";
 import {
   collectFullQuestionStimulus,
   displayMarks,
@@ -48,7 +49,7 @@ import { RichQuestionContent } from "@/components/quiz/RichQuestionContent";
 import { hasAnswerContent, handwritingAllowedForSubject, isHandwritingValue, usesHandwritingMarking } from "@/lib/handwritingMode";
 import { isDiagramLabelQuestion, partHasOverlay, partUsesFigureLabels, partUsesInlineInputs, inlineInputsForPart, slotIndexForPartOverlay, slotsForPart, expectedAnswersForQuestionSlots, type DiagramLabelPart, type PartFigureLabelSource } from "@/lib/diagramLabels";
 import { flushAllHandwriting, flushHandwriting } from "@/lib/handwritingFlush";
-import { CheckCircle2, XCircle, Send, Loader2 } from "lucide-react";
+import { CheckCircle2, XCircle, Send, Loader2, PenLine } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import { handwritingMarkUserError } from "@/lib/userFacingErrors";
@@ -239,15 +240,12 @@ export function ShortQuestion({
   const devPreloadAppliedRef = useRef(false);
   const { user } = useAuth();
   const premium = isPremiumUser(user);
-  const { usage, reload: reloadUsage } = usePremiumUsage(!!user && !premium);
-  const shortAiLeft = premium ? Number.POSITIVE_INFINITY : freeShortAiRemaining(usage);
-  /** Draw mode uses the same daily short-AI quota for free users. */
+  const { usage, loading: usageLoading, reload: reloadUsage } = usePremiumUsage(!!user && !premium);
+  const drawingAiLeft = premium ? Number.POSITIVE_INFINITY : freeDrawingAiRemaining(usage);
   const handwritingUi = handwritingAllowedForSubject(subjectId);
-  const drawLocked = !premium && shortAiLeft <= 0;
+  const drawLocked = !premium && drawingAiLeft <= 0;
   const examPaper = isExamPaperLayoutSubject(subjectId);
-  /** Free: AI while quota remains, then keyword match + generic feedback. */
-  const canUseShortAi = premium || shortAiLeft > 0;
-  const genericMatchFeedback = !premium && shortAiLeft <= 0;
+  const genericMatchFeedback = false;
 
   const configuredParts: ShortQuestionType["answerParts"] =
     question.answerParts?.filter(
@@ -331,7 +329,6 @@ export function ShortQuestion({
     : (question.acceptedAnswers ?? []).map(formatExpectedAnswer);
 
   const useSmartMarking =
-    canUseShortAi &&
     !practiceOnly &&
     resolveAiMarking({
       useAiMarking: question.useAiMarking,
@@ -503,17 +500,16 @@ export function ShortQuestion({
       return;
     }
 
-    if (!premium) {
-      const hasDrawn =
-        isHandwritingValue(resolvedAnswer) ||
-        resolvedParts.some((p) => isHandwritingValue(p)) ||
-        resolvedSteps.some((p) => isHandwritingValue(p));
-      if (hasDrawn) {
-        toast.error(
-          "On Free, short answers are typed only. Type your answer to continue.",
-        );
-        return;
-      }
+    const hasDrawn =
+      isHandwritingValue(resolvedAnswer) ||
+      resolvedParts.some((p) => isHandwritingValue(p)) ||
+      resolvedSteps.some((p) => isHandwritingValue(p));
+    if (!premium && hasDrawn && drawLocked) {
+      toast.error(
+        "You have used your 3 AI drawing marks for today. Type your answer for unlimited instant matching.",
+      );
+      void reloadUsage();
+      return;
     }
 
     const accepted = question.acceptedAnswers ?? [];
@@ -529,20 +525,6 @@ export function ShortQuestion({
       expectedAnswers: expectedAnswersForDisplay,
       configuredParts,
     });
-
-    const tryShortAi =
-      canUseShortAi &&
-      !practiceOnly &&
-      Boolean(questionKey) &&
-      !isDiagramLabel &&
-      resolveAiMarking({
-        useAiMarking: question.useAiMarking,
-        questionText: question.question,
-        partLabels: partDescriptors,
-        acceptedAnswers: question.acceptedAnswers,
-        questionType: question.type,
-        subjectId,
-      });
 
     if (usesHandwritingAiNow && questionKey) {
       setAiMarking(true);
@@ -569,85 +551,15 @@ export function ShortQuestion({
           : enriched.correct;
         setDpHint(null);
         setAiMark(enriched);
+        void reloadUsage();
       } catch (err) {
         const msg = handwritingMarkUserError(err);
         toast.error(msg);
+        if (/per day|drawing marks/i.test(msg)) void reloadUsage();
         if (isPremiumError(err)) return;
         const fallback = buildFallbackHandwritingMark(expectedAnswersForDisplay);
         correct = false;
         setAiMark(fallback);
-      } finally {
-        setAiMarking(false);
-      }
-    } else if (tryShortAi) {
-      setAiMarking(true);
-      try {
-        const ai = await requestSmartMark(subjectId, questionKey, {
-          responseText: resolvedComposite,
-          studentParts: isMultipart ? resolvedParts : undefined,
-          question: markPayload,
-        });
-        if (ai) {
-          if (ai.partResults?.length) {
-            partCorrectFlags = resolvedParts.map((_, idx) => {
-              const hit = ai.partResults?.find((p) => p.index === idx);
-              return hit ? hit.correct : false;
-            });
-            setPartResults(partCorrectFlags);
-            correct = multipartAllCorrect(partCorrectFlags);
-          } else {
-            setPartResults([]);
-            correct = ai.correct;
-          }
-          setDpHint(null);
-          setAiMark(ai);
-          void reloadUsage();
-        } else {
-          // Fall through to keyword match
-          if (isMultipart) {
-            const gradedParts = gradeMultipartAnswers(resolvedParts, accepted, configuredParts);
-            partCorrectFlags = gradedParts.map((g) => g.correct);
-            setPartResults(partCorrectFlags);
-            correct = multipartAllCorrect(partCorrectFlags);
-            nextDpHint = Math.max(...gradedParts.map((g) => g.dpHint ?? 0)) || null;
-            setDpHint(nextDpHint);
-          } else {
-            setPartResults([]);
-            const graded = isAnswerCorrect(resolvedComposite, accepted);
-            correct = graded.correct;
-            nextDpHint = graded.dpHint;
-            setDpHint(nextDpHint);
-          }
-        }
-      } catch (err) {
-        const quotaExhausted =
-          err instanceof ApiError &&
-          (err.code === "short_ai_quota" ||
-            /keyword matching/i.test(err.message) ||
-            /per day/i.test(err.message));
-        if (quotaExhausted) {
-          void reloadUsage();
-          toast.message("Daily short-answer AI used up — marking by keyword match.");
-        } else if (isPremiumError(err)) {
-          toast.error(err instanceof Error ? err.message : "Could not mark your answer.");
-          return;
-        } else {
-          toast.error(err instanceof Error ? err.message : "Could not mark your answer. Using keyword match.");
-        }
-        if (isMultipart) {
-          const gradedParts = gradeMultipartAnswers(resolvedParts, accepted, configuredParts);
-          partCorrectFlags = gradedParts.map((g) => g.correct);
-          setPartResults(partCorrectFlags);
-          correct = multipartAllCorrect(partCorrectFlags);
-          nextDpHint = Math.max(...gradedParts.map((g) => g.dpHint ?? 0)) || null;
-          setDpHint(nextDpHint);
-        } else {
-          setPartResults([]);
-          const graded = isAnswerCorrect(resolvedComposite, accepted);
-          correct = graded.correct;
-          nextDpHint = graded.dpHint;
-          setDpHint(nextDpHint);
-        }
       } finally {
         setAiMarking(false);
       }
@@ -778,6 +690,36 @@ export function ShortQuestion({
         />
       </div>
       )
+      ) : null}
+
+      {!premium && handwritingUi ? (
+        <div className="rounded-2xl border border-brand/15 bg-brand/[0.045] px-4 py-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              <PenLine className="size-4 text-brand-deep" aria-hidden />
+              AI drawing marks
+            </div>
+            <span className="text-xs font-semibold tabular-nums text-brand-deep">
+              {usageLoading
+                ? "Checking…"
+                : `${drawingAiLeft} of ${FREE_DAILY_DRAWING_AI_LIMIT} left today`}
+            </span>
+          </div>
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-black/10">
+            <div
+              className="h-full rounded-full bg-brand transition-all"
+              style={{
+                width: `${Math.max(
+                  0,
+                  Math.min(100, (drawingAiLeft / FREE_DAILY_DRAWING_AI_LIMIT) * 100),
+                )}%`,
+              }}
+            />
+          </div>
+          <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+            Drawn answers use AI. Typed answers use instant matching and do not use this allowance.
+          </p>
+        </div>
       ) : null}
 
       {/* Answer input */}
@@ -1012,7 +954,7 @@ export function ShortQuestion({
                       allowHandwriting={handwritingUi}
                       drawLocked={drawLocked}
                       modeNote={
-                        !premium ? "iPad users can draw in text mode for free" : undefined
+                        !premium ? "Drawing uses 1 of your 3 daily AI drawing marks." : undefined
                       }
                       multiline={resolveAiMarking({
                         useAiMarking: question.useAiMarking,
@@ -1132,7 +1074,7 @@ export function ShortQuestion({
                     examPaperMode={examPaper}
                     allowHandwriting={handwritingUi}
                     drawLocked={drawLocked}
-                    modeNote={!premium ? "iPad users can draw in text mode for free" : undefined}
+                    modeNote={!premium ? "Drawing uses 1 of your 3 daily AI drawing marks." : undefined}
                     multiline={useTextArea}
                     rows={handwritingUi ? 8 : useTextArea ? 5 : 1}
                     handwritingSize={useTextArea ? "lg" : "md"}
