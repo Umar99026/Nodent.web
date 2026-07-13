@@ -1055,7 +1055,6 @@ export default function QuizPage() {
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
           {/* Question column */}
           <div className="min-w-0 space-y-6">
-            <AiDrawingQuotaBar />
             <div ref={questionCardRef} className="scroll-mt-24">
             <Card className="practice-card">
               <div className="practice-card-accent" aria-hidden>
@@ -1063,6 +1062,7 @@ export default function QuizPage() {
                 <div className="practice-card-accent-pill" />
               </div>
               <CardContent className="bg-[#f3f4f6]/25 p-5 sm:p-6">
+                <AiDrawingQuotaBar className="mb-5" />
                 {currentGroup && subjectId && (
                   <div className="space-y-5">
                     {currentGroupStimulus && hasVisibleStimulus(currentGroupStimulus) && (
