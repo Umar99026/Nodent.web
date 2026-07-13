@@ -11,10 +11,11 @@ export type PremiumUsageQuota = {
 export type PremiumUsageSummary = {
   isPremium: boolean;
   practiceExams: PremiumUsageQuota;
-  /** Free: daily short-answer AI marks. Premium: unlimited (limit null). */
+  /** @deprecated Alias of handwritingAiMarks retained for older clients. */
   shortAiMarks: PremiumUsageQuota;
   /** @deprecated Alias of shortAiMarks for older UI. */
   proseAiMarks: PremiumUsageQuota;
+  /** Free: daily AI marks for drawn short answers. Premium: unlimited. */
   handwritingAiMarks: PremiumUsageQuota;
   englishEssays: PremiumUsageQuota;
   longAnswer?: { requiresPremium: boolean };
@@ -22,7 +23,9 @@ export type PremiumUsageSummary = {
 };
 
 /** Mirrors backend free-tier defaults (functions/lib/premium.ts). */
-export const FREE_DAILY_SHORT_AI_LIMIT = 3;
+export const FREE_DAILY_DRAWING_AI_LIMIT = 3;
+/** @deprecated Use FREE_DAILY_DRAWING_AI_LIMIT. */
+export const FREE_DAILY_SHORT_AI_LIMIT = FREE_DAILY_DRAWING_AI_LIMIT;
 export const FREE_ENGLISH_ESSAY_LIMIT = 1;
 export const FREE_ENGLISH_ESSAY_WINDOW_DAYS = 3;
 
@@ -33,32 +36,40 @@ export const FREE_DAILY_DRAWN_WORKING_LIMIT = 0;
 
 export async function fetchPremiumUsage(): Promise<PremiumUsageSummary> {
   const data = await apiFetch<PremiumUsageSummary>(API_PATHS.premium.usage);
-  const short =
+  const drawing =
+    data.handwritingAiMarks ??
     data.shortAiMarks ??
     data.proseAiMarks ?? {
       used: 0,
-      limit: FREE_DAILY_SHORT_AI_LIMIT,
+      limit: FREE_DAILY_DRAWING_AI_LIMIT,
       windowDays: 1,
     };
   return {
     ...data,
-    shortAiMarks: short,
-    proseAiMarks: data.proseAiMarks ?? short,
+    handwritingAiMarks: drawing,
+    shortAiMarks: drawing,
+    proseAiMarks: drawing,
   };
 }
 
-export function freeShortAiRemaining(usage: PremiumUsageSummary | null | undefined): number {
+export function freeDrawingAiRemaining(usage: PremiumUsageSummary | null | undefined): number {
   if (usage?.isPremium) return Number.POSITIVE_INFINITY;
-  if (!usage) return FREE_DAILY_SHORT_AI_LIMIT;
-  const q = usage.shortAiMarks ?? usage.proseAiMarks;
-  const limit = q.limit ?? FREE_DAILY_SHORT_AI_LIMIT;
+  if (!usage) return FREE_DAILY_DRAWING_AI_LIMIT;
+  const q = usage.handwritingAiMarks ?? usage.shortAiMarks ?? usage.proseAiMarks;
+  const limit = q.limit ?? FREE_DAILY_DRAWING_AI_LIMIT;
   return Math.max(0, limit - q.used);
 }
 
-export function formatFreePlanSummary(_usage: PremiumUsageSummary | null): string {
+/** @deprecated Use freeDrawingAiRemaining. */
+export function freeShortAiRemaining(usage: PremiumUsageSummary | null | undefined): number {
+  return freeDrawingAiRemaining(usage);
+}
+
+export function formatFreePlanSummary(usage: PremiumUsageSummary | null): string {
+  void usage;
   return [
-    `Unlimited MCQ & short answers.`,
-    `${FREE_DAILY_SHORT_AI_LIMIT} short-answer AI marks/day, then keyword matching + generic feedback.`,
+    "Unlimited MCQ & typed short answers with instant matching and feedback.",
+    `${FREE_DAILY_DRAWING_AI_LIMIT} AI-marked drawings/day.`,
     "No long-answer practice.",
     `${FREE_ENGLISH_ESSAY_LIMIT} English essay every ${FREE_ENGLISH_ESSAY_WINDOW_DAYS} days.`,
     "No Ask AI · exams not included.",
@@ -66,7 +77,7 @@ export function formatFreePlanSummary(_usage: PremiumUsageSummary | null): strin
 }
 
 export function formatCompactFreePlanDescription(): string {
-  return `${FREE_DAILY_SHORT_AI_LIMIT} SA AI marks/day then match-only · no long answers · ${FREE_ENGLISH_ESSAY_LIMIT} essay / ${FREE_ENGLISH_ESSAY_WINDOW_DAYS} days · no Ask AI`;
+  return `${FREE_DAILY_DRAWING_AI_LIMIT} AI drawing marks/day · unlimited typed-answer matching · no long answers · ${FREE_ENGLISH_ESSAY_LIMIT} essay / ${FREE_ENGLISH_ESSAY_WINDOW_DAYS} days · no Ask AI`;
 }
 
 export type PremiumFeatureRow = {
@@ -87,18 +98,18 @@ export const PREMIUM_FEATURE_ROWS: PremiumFeatureRow[] = [
     premium: "Unlimited",
   },
   {
-    id: "short-answer-marking",
-    label: "Short-answer AI marking",
-    description: "AI feedback on short answers",
+    id: "drawing-ai-marking",
+    label: "Drawn-answer AI marking",
+    description: "AI reads and marks handwritten short answers",
     free: "3 / day",
     premium: "Unlimited",
   },
   {
-    id: "short-answer-match",
-    label: "Short-answer after AI quota",
-    description: "Keyword match + generic feedback",
+    id: "typed-answer-match",
+    label: "Typed short answers",
+    description: "Instant matching and feedback without AI",
     free: "Unlimited",
-    premium: "N/A (AI unlimited)",
+    premium: "Unlimited",
   },
   {
     id: "long-answer",
