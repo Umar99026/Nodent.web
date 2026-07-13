@@ -1,9 +1,11 @@
 /**
- * English essay marking via OpenAI (gpt-4o-mini by default).
- * Kept separate from Gemini/Grok marking to control cost per essay.
+ * English essay marking via Gemini, with OpenAI as a fallback.
  *
  * Env:
- *   OPENAI_API_KEY          (required for English essay marking)
+ *   GEMINI_API_KEY          (preferred)
+ *   GEMINI_API_KEY_2        (optional fallback Gemini key)
+ *   GEMINI_ENGLISH_MODEL    (optional, default gemini-2.5-flash)
+ *   OPENAI_API_KEY          (optional fallback provider)
  *   OPENAI_ENGLISH_MODEL    (optional, default gpt-4o-mini)
  *
  * Cost controls (~fractions of a cent per essay on gpt-4o-mini):
@@ -16,38 +18,36 @@
 import { formatSubjectMarkingContextBlock, type SubjectMarkingContext } from "./openai";
 
 export type EnglishOpenAiEnv = {
+  GEMINI_API_KEY?: string;
+  GEMINI_API_KEY_2?: string;
+  GEMINI_ENGLISH_MODEL?: string;
   OPENAI_API_KEY?: string;
   OPENAI_ENGLISH_MODEL?: string;
 };
 
 const OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions";
 const DEFAULT_ENGLISH_MODEL = "gpt-4o-mini";
+const DEFAULT_GEMINI_ENGLISH_MODEL = "gemini-2.5-flash";
 
 /** ~$0.001 or less per essay on gpt-4o-mini at typical essay lengths. */
-const MAX_OUTPUT_TOKENS = 380;
+const MAX_OUTPUT_TOKENS = 900;
 const MAX_PROMPT_CHARS = 1200;
 const MAX_ESSAY_CHARS = 3500;
 const MAX_SUMMARY_CHARS = 400;
 const MAX_CRITERION_FEEDBACK_CHARS = 220;
 const MAX_HIGHLIGHT_FEEDBACK_CHARS = 180;
-const MAX_HIGHLIGHTS = 4;
+const MAX_HIGHLIGHTS = 6;
 
 function trim(s: string | undefined): string {
   return String(s ?? "").trim();
 }
 
 export function englishAiConfigured(env: EnglishOpenAiEnv): boolean {
-  return !!trim(env.OPENAI_API_KEY);
+  return !!trim(env.GEMINI_API_KEY) || !!trim(env.GEMINI_API_KEY_2) || !!trim(env.OPENAI_API_KEY);
 }
 
 export function englishAiModel(env: EnglishOpenAiEnv): string {
   return trim(env.OPENAI_ENGLISH_MODEL) || DEFAULT_ENGLISH_MODEL;
-}
-
-function requireEnglishApiKey(env: EnglishOpenAiEnv): string {
-  const key = trim(env.OPENAI_API_KEY);
-  if (!key) throw new Error("OPENAI_API_KEY is not configured.");
-  return key;
 }
 
 export type EnglishCriterionKey = "structure" | "evidence" | "expression" | "relevance";
@@ -78,7 +78,7 @@ export type EnglishScoreResult = {
 };
 
 const ENGLISH_CRITERIA_RUBRIC =
-  "Score structure, evidence, expression, relevance (each 0-10, one short sentence feedback). Overall score 0-10. Up to 4 highlights with exact quotes.";
+  "Score structure, evidence, expression, and relevance (each 0-10, with concise actionable feedback). Overall score 0-10. Return 4-6 exact-quote highlights. Unless the response is too short to support them, include at least 2 strengths AND at least 2 improvements. Improvement highlights must identify a specific weakness and explain how to revise it. A response containing only strengths is invalid.";
 
 function clampCriterionScore(raw: unknown): number {
   return Math.min(10, Math.max(0, Math.round(Number(raw ?? 0))));
@@ -161,16 +161,103 @@ async function openAiChatJson(
   }
 }
 
+async function geminiChatJson(
+  apiKey: string,
+  model: string,
+  messages: { role: "system" | "user" | "assistant"; content: string }[],
+): Promise<Record<string, unknown>> {
+  const system = messages
+    .filter((message) => message.role === "system")
+    .map((message) => message.content)
+    .join("\n");
+  const contents = messages
+    .filter((message) => message.role !== "system")
+    .map((message) => ({
+      role: message.role === "assistant" ? "model" : "user",
+      parts: [{ text: message.content }],
+    }));
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+      body: JSON.stringify({
+        systemInstruction: system ? { parts: [{ text: system }] } : undefined,
+        contents,
+        generationConfig: {
+          temperature: 0.2,
+          maxOutputTokens: MAX_OUTPUT_TOKENS,
+          responseMimeType: "application/json",
+        },
+      }),
+    },
+  );
+
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(`Gemini English error (${res.status}): ${detail.slice(0, 600)}`);
+  }
+  const data = (await res.json()) as {
+    candidates?: { content?: { parts?: { text?: string }[] } }[];
+    error?: { message?: string };
+  };
+  if (data.error?.message) throw new Error(`Gemini English error: ${data.error.message}`);
+  const content = data.candidates?.[0]?.content?.parts
+    ?.map((part) => String(part.text ?? "").trim())
+    .filter(Boolean)
+    .join("\n");
+  if (!content) throw new Error("Gemini returned an empty English marking response.");
+
+  try {
+    return JSON.parse(content) as Record<string, unknown>;
+  } catch {
+    throw new Error("Gemini returned invalid English marking JSON.");
+  }
+}
+
+type EnglishChatMessage = {
+  role: "system" | "user" | "assistant";
+  content: string;
+};
+
+async function callEnglishProvider(
+  env: EnglishOpenAiEnv,
+  messages: EnglishChatMessage[],
+): Promise<Record<string, unknown>> {
+  const geminiKeys = [
+    ...new Set([trim(env.GEMINI_API_KEY), trim(env.GEMINI_API_KEY_2)].filter(Boolean)),
+  ];
+  let lastGeminiError: unknown;
+  for (const apiKey of geminiKeys) {
+    try {
+      return await geminiChatJson(
+        apiKey,
+        trim(env.GEMINI_ENGLISH_MODEL) || DEFAULT_GEMINI_ENGLISH_MODEL,
+        messages,
+      );
+    } catch (error) {
+      lastGeminiError = error;
+      console.warn("[english-marking] Gemini key failed; trying the next provider.");
+    }
+  }
+
+  const openAiKey = trim(env.OPENAI_API_KEY);
+  if (openAiKey) {
+    return openAiChatJson(openAiKey, englishAiModel(env), messages);
+  }
+  throw lastGeminiError instanceof Error
+    ? lastGeminiError
+    : new Error("No English AI provider is configured.");
+}
+
 export async function scoreEnglishResponse(
   env: EnglishOpenAiEnv,
   input: EnglishScoreInput,
 ): Promise<EnglishScoreResult> {
-  const apiKey = requireEnglishApiKey(env);
-  const model = englishAiModel(env);
   const promptText = String(input.promptText ?? "").trim().slice(0, MAX_PROMPT_CHARS);
   const responseText = String(input.responseText ?? "").trim().slice(0, MAX_ESSAY_CHARS);
 
-  const parsed = await openAiChatJson(apiKey, model, [
+  const messages: EnglishChatMessage[] = [
     {
       role: "system",
       content: `VCE English essay assessor. ${ENGLISH_CRITERIA_RUBRIC}${formatSubjectMarkingContextBlock(input.subjectContext)}
@@ -183,7 +270,24 @@ Return compact JSON only: {"score":0-10,"summary":"max 2 short sentences","crite
         response: responseText,
       }),
     },
-  ]);
+  ];
+
+  let parsed = await callEnglishProvider(env, messages);
+  let highlights = parseEnglishHighlights(parsed.highlights);
+  const hasStrength = highlights.some((highlight) => highlight.type === "strength");
+  const hasImprovement = highlights.some((highlight) => highlight.type === "improvement");
+  if (responseText.length >= 80 && (!hasStrength || !hasImprovement)) {
+    parsed = await callEnglishProvider(env, [
+      ...messages,
+      { role: "assistant", content: JSON.stringify(parsed) },
+      {
+        role: "user",
+        content:
+          "Correct the full JSON. The highlights must include both exact-quote strengths and exact-quote improvements, with at least 2 of each. Keep all other required fields.",
+      },
+    ]);
+    highlights = parseEnglishHighlights(parsed.highlights);
+  }
 
   const criteria = {
     structure: parseCriterionRow((parsed.criteria as Record<string, unknown> | undefined)?.structure),
@@ -196,6 +300,6 @@ Return compact JSON only: {"score":0-10,"summary":"max 2 short sentences","crite
     score,
     summary: String(parsed.summary ?? parsed.feedback ?? "").trim().slice(0, MAX_SUMMARY_CHARS),
     criteria,
-    highlights: parseEnglishHighlights(parsed.highlights),
+    highlights,
   };
 }

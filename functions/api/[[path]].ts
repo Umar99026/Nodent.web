@@ -1760,6 +1760,7 @@ type Env = {
   GROQ_API_KEY_1?: string;
   GROQ_API_KEY_2?: string;
   GEMINI_MODEL?: string;
+  GEMINI_ENGLISH_MODEL?: string;
   GEMINI_VISION_MODEL?: string;
   GROQ_MODEL?: string;
   /** OpenAI — English essay marking only (gpt-4o-mini by default) */
@@ -7092,7 +7093,7 @@ app.post("/api/english/responses/:id/ai-score", authMiddleware, async (c: any) =
   try {
     const env = c.env as Env;
     if (!englishAiConfigured(env)) {
-      return c.json({ error: "AI scoring is not configured (OPENAI_API_KEY missing)." }, 503);
+      return c.json({ error: "AI scoring is not configured (GEMINI_API_KEY or OPENAI_API_KEY missing)." }, 503);
     }
     const db = c.get("db");
     const user = c.get("user");
