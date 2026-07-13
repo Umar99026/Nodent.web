@@ -224,6 +224,7 @@ export function ShortQuestion({
   const [partResults, setPartResults] = useState<(boolean | null)[]>(persistedState?.partResults ?? []);
   const [aiMarking, setAiMarking] = useState(false);
   const [aiMark, setAiMark] = useState<SmartMarkResult | null>(null);
+  const [detailedAiFeedbackUsed, setDetailedAiFeedbackUsed] = useState(false);
   const [stepAnswers, setStepAnswers] = useState<string[]>([]);
   const devPreloadAppliedRef = useRef(false);
   const { user } = useAuth();
@@ -237,7 +238,7 @@ export function ShortQuestion({
     question,
     subjectId,
     questionKey,
-    enabled: submitted && !isCorrect,
+    enabled: submitted && !isCorrect && detailedAiFeedbackUsed,
   });
 
   const configuredParts: ShortQuestionType["answerParts"] =
@@ -392,6 +393,7 @@ export function ShortQuestion({
     });
     setPartResults(partCorrectFlags);
     setAiMark(mock);
+    setDetailedAiFeedbackUsed(true);
     setSubmitted(true);
     setIsCorrect(false);
   }, [
@@ -485,6 +487,7 @@ export function ShortQuestion({
     let nextDpHint: number | null = null;
     let partCorrectFlags: boolean[] = [];
     setAiMark(null);
+    setDetailedAiFeedbackUsed(false);
 
     const markPayload = buildSmartMarkPayload(question, {
       marks: effectiveTotalMarks,
@@ -522,6 +525,7 @@ export function ShortQuestion({
           : enriched.correct;
         setDpHint(null);
         setAiMark(enriched);
+        setDetailedAiFeedbackUsed(Boolean(ai));
         notifyPremiumUsageUpdated();
       } catch (err) {
         const msg = aiResponseMarkUserError(err);
@@ -583,6 +587,7 @@ export function ShortQuestion({
     setIsCorrect(finalCorrect);
     setSubmitted(true);
     if (repeatSandbox && !finalCorrect) {
+      setDetailedAiFeedbackUsed(true);
       setAiMark((prev) =>
         enrichHandwritingMarkResult(
           prev ?? buildFallbackHandwritingMark(expectedAnswersForDisplay),
@@ -1080,6 +1085,7 @@ export function ShortQuestion({
             guidance={question.guidance}
             questionText={question.question}
             aiFeedback={aiMark?.feedback}
+            genericOnly={!detailedAiFeedbackUsed}
             interpretedAnswer={
               !isMultipart
                 ? aiMark?.partResults?.find((part) => part.index === 0)?.studentAnswerRead
@@ -1107,11 +1113,15 @@ export function ShortQuestion({
                 : undefined
             }
             steps={
-              aiMark?.stepResults?.length
-                ? aiMark.stepResults
-                : workedSolution.steps
+              detailedAiFeedbackUsed
+                ? aiMark?.stepResults?.length
+                  ? aiMark.stepResults
+                  : workedSolution.steps
+                : []
             }
-            stepsLoading={!aiMark?.stepResults?.length && workedSolution.loading}
+            stepsLoading={
+              detailedAiFeedbackUsed && !aiMark?.stepResults?.length && workedSolution.loading
+            }
             score={{
               earned: isMultipart
                 ? marksEarnedFromPartResults(partResults, slotMarks.length ? slotMarks : partMarks)

@@ -119,6 +119,12 @@ if (!shortQuestionSource.includes("aiResponsesLocked && hasDrawn")) {
 if (!shortQuestionSource.includes("Daily AI feedback used. Marking this typed answer with instant matching.")) {
   failures.push("A typed submission racing the quota refresh must fall back to instant matching.");
 }
+if (!shortQuestionSource.includes("submitted && !isCorrect && detailedAiFeedbackUsed")) {
+  failures.push("Local wrong answers must not call the generated worked-solution API.");
+}
+if (!shortQuestionSource.includes("detailedAiFeedbackUsed") || !shortQuestionSource.includes(": []")) {
+  failures.push("Local matching feedback must not display detailed worked steps.");
+}
 if (!apiSource.includes("USAGE_KIND_AI_RESPONSE")) {
   failures.push("Typed and drawn detailed feedback must share one backend usage bucket.");
 }
@@ -127,6 +133,9 @@ if (apiSource.includes("Typed short answers use instant answer matching and do n
 }
 if (!apiSource.includes("if (!isPremiumAccount(user) && isShortType)")) {
   failures.push("Every successful free typed-or-drawn short-answer AI mark must consume quota.");
+}
+if (!apiSource.includes("hasAiResponseUsageForRef")) {
+  failures.push("The worked-solution API must verify that the question consumed AI quota.");
 }
 
 const mathNormalizerSource = readFileSync(

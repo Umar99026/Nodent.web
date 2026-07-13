@@ -30,6 +30,7 @@ import {
   canRunAiResponse,
   ensurePracticeExamUsage,
   getPremiumUsageSummary,
+  hasAiResponseUsageForRef,
   hasPracticeExamAccess,
   isPremiumAccount,
   premiumRequiredResponse,
@@ -6012,6 +6013,22 @@ app.post("/api/written/:subjectId/:questionKey/solution", authMiddleware, async 
     const limited = rateLimitResponse(c, "worked-solution", 60);
     if (limited) return limited;
     const env = c.env as Env;
+    const user = c.get("user");
+    const db = c.get("db");
+    const subjectId = c.req.param("subjectId");
+    const questionKey = c.req.param("questionKey");
+    if (
+      !isPremiumAccount(user) &&
+      !(await hasAiResponseUsageForRef(db, user.id, `${subjectId}:${questionKey}`))
+    ) {
+      return c.json(
+        {
+          error: "Detailed worked steps are included only with an AI-marked response. Continue with instant matching or upgrade to Pro.",
+          code: "ai_response_required",
+        },
+        403,
+      );
+    }
     if (!openAiConfigured(env)) {
       return c.json({ error: "Worked solutions are not available right now." }, 503);
     }
@@ -6048,7 +6065,6 @@ app.post("/api/written/:subjectId/:questionKey/solution", authMiddleware, async 
       return c.json({ error: "A correct answer is required to generate worked steps." }, 400);
     }
 
-    const subjectId = c.req.param("subjectId");
     const subjectContext = await loadSubjectMarkingContext(c.get("db"), subjectId);
     const generated = await generateMarkBreakdown(env, {
       questionText,
