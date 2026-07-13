@@ -78,6 +78,15 @@ const quizPageSource = readFileSync(resolve(root, "src/pages/QuizPage.tsx"), "ut
 if ((quizPageSource.match(/<AiDrawingQuotaBar\b/g)?.length ?? 0) !== 1) {
   failures.push("QuizPage must render the shared AI drawing quota bar exactly once.");
 }
+for (const hiddenModeLabel of [
+  "Normal mode",
+  "Breakdown mode",
+  "Switch to mark breakdown mode",
+]) {
+  if (quizPageSource.includes(hiddenModeLabel)) {
+    failures.push(`QuizPage must not expose the hidden ${hiddenModeLabel} control.`);
+  }
+}
 const shortQuestionSource = readFileSync(
   resolve(root, "src/components/quiz/ShortQuestion.tsx"),
   "utf8",
