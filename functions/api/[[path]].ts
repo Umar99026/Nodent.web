@@ -1795,7 +1795,7 @@ app.onError((err: unknown, c) => {
 
 // Minimal endpoint for debugging local dev runtime (no DB required).
 app.get("/api/ping", (c) => c.json({ ok: true }));
-let englishResponsesConstraintDropped = false;
+let englishResponsesSchemaPatched = false;
 let usersTablePatched = false;
 let usersAccountRolePatched = false;
 let performanceIndexesPatched = false;
@@ -1872,16 +1872,40 @@ async function runDbMigrations(db: ReturnType<typeof createDb>): Promise<void> {
       usersAccountRolePatched = true;
     }
   }
-  if (!englishResponsesConstraintDropped) {
+  if (!englishResponsesSchemaPatched) {
     try {
       await db.execute(sql`
         ALTER TABLE english_responses
         DROP CONSTRAINT IF EXISTS english_responses_prompt_user_unique
       `);
-    } catch {
-      /* ignore */
-    } finally {
-      englishResponsesConstraintDropped = true;
+      await db.execute(sql`
+        ALTER TABLE english_responses
+        ALTER COLUMN prompt_id DROP NOT NULL
+      `);
+      await db.execute(sql`
+        ALTER TABLE english_responses ADD COLUMN IF NOT EXISTS ai_score integer
+      `);
+      await db.execute(sql`
+        ALTER TABLE english_responses ADD COLUMN IF NOT EXISTS ai_feedback text
+      `);
+      await db.execute(sql`
+        ALTER TABLE english_responses ADD COLUMN IF NOT EXISTS ai_scored_at text
+      `);
+      await db.execute(sql`
+        ALTER TABLE english_responses ADD COLUMN IF NOT EXISTS custom_prompt_text text
+      `);
+      await db.execute(sql`
+        ALTER TABLE english_responses ADD COLUMN IF NOT EXISTS ai_criteria_json text
+      `);
+      await db.execute(sql`
+        ALTER TABLE english_responses ADD COLUMN IF NOT EXISTS ai_highlights_json text
+      `);
+      await db.execute(sql`
+        ALTER TABLE english_responses ADD COLUMN IF NOT EXISTS is_public integer NOT NULL DEFAULT 0
+      `);
+      englishResponsesSchemaPatched = true;
+    } catch (error) {
+      console.error("[english responses schema patch]", errorChain(error));
     }
   }
   if (!performanceIndexesPatched) {
