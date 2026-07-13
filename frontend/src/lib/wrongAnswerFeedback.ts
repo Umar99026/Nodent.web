@@ -85,6 +85,7 @@ function missingRubricKeywords(student: string, expected: string): string[] {
 }
 
 function diagnoseProseMismatch(student: string, expected: string): string | null {
+  if (parseNumericAnswer(student) != null && parseNumericAnswer(expected) != null) return null;
   if (!isProseModelAnswer(expected)) return null;
   const missing = missingRubricKeywords(student, expected);
   if (!student.trim()) {
@@ -113,6 +114,16 @@ function diagnoseAlgebraicMismatch(student: string, expected: string): string | 
   return "Your expression does not match the model form — check factorisation, simplification, or which variable you solved for.";
 }
 
+function defaultCorrectMethod(expected: string): string {
+  if (isProseModelAnswer(expected)) {
+    return "Use the command word in the question, state each required idea clearly, then support it with the relevant reason, evidence, or example.";
+  }
+  if (parseNumericAnswer(expected) != null) {
+    return "Identify the required relationship, substitute the given values carefully, show each calculation, include the correct unit, and only round at the end.";
+  }
+  return "Start from the information given, apply the relevant rule one step at a time, simplify carefully, and check that the final form answers exactly what was asked.";
+}
+
 /** Build specific bullet points explaining why a short/long answer was marked wrong. */
 export function buildWrongAnswerBullets(input: WrongAnswerFeedbackInput): string[] {
   const student = String(input.studentAnswer ?? "").trim();
@@ -136,20 +147,19 @@ export function buildWrongAnswerBullets(input: WrongAnswerFeedbackInput): string
     if (!bullets.includes(line)) bullets.push(line);
   }
 
-  if (!input.genericOnly) {
-    const guidance = String(input.guidance ?? "").trim();
-    if (guidance) {
-      bullets.push(guidance.length > 400 ? `${guidance.slice(0, 397)}…` : guidance);
-    } else if (!diagnoses.length && expected) {
-      bullets.push("Review the question and compare each step of your method to the model answer.");
-    }
-  } else if (!diagnoses.length) {
-    bullets.push(
-      expected
-        ? "Check your answer against the expected form — spelling, units, and significant figures matter."
-        : "Review the question and try again with a clear final answer.",
-    );
+  if (expected) {
+    bullets.push(`Correct answer: ${expected}`);
   }
+
+  const guidance = !input.genericOnly ? String(input.guidance ?? "").trim() : "";
+  const method = guidance
+    ? guidance.length > 400
+      ? `${guidance.slice(0, 397)}…`
+      : guidance
+    : expected
+      ? defaultCorrectMethod(expected)
+      : "Re-read the question, identify what it asks for, and show a clear method before writing your final answer.";
+  bullets.push(`How to get it: ${method}`);
 
   return bullets;
 }
@@ -171,14 +181,14 @@ export function buildMcqWrongFeedback(input: McqWrongFeedbackInput): string[] {
   const correctIdx = input.options.findIndex((opt) => opt === input.correctOption);
   const letter = correctIdx >= 0 ? String.fromCharCode(65 + correctIdx) : "";
   const stripOptionPrefix = (s: string) =>
-    String(s ?? "").replace(/^\(?\[?[A-H]\]?\)?\s*[\).:\-–—]?\s*/i, "").trim();
+    String(s ?? "").replace(/^\(?\[?[A-H]\]?\)?\s*[).:\-–—]?\s*/i, "").trim();
   const correctText = stripOptionPrefix(input.correctOption);
 
   if (input.selectedOption && input.selectedOption !== input.correctOption) {
     const selectedIdx = input.options.findIndex((opt) => opt === input.selectedOption);
     const selectedLetter = selectedIdx >= 0 ? String.fromCharCode(65 + selectedIdx) : "";
     const selectedText =
-      input.selectedOption.replace(/^\(?\[?[A-H]\]?\)?\s*[\).:\-–—]?\s*/i, "").trim() ||
+      input.selectedOption.replace(/^\(?\[?[A-H]\]?\)?\s*[).:\-–—]?\s*/i, "").trim() ||
       input.selectedOption;
     bullets.push(
       selectedLetter

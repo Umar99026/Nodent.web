@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "node scripts/check-feedback-contract.mjs && tsc -b && vite build",
+    "check:feedback": "node scripts/check-feedback-contract.mjs",
     "lint": "eslint .",
     "preview": "vite preview"
   },

@@ -34,7 +34,6 @@ import {
   buildFallbackHandwritingMark,
   enrichHandwritingMarkResult,
   enrichSmartMarkResult,
-  partMarkAt,
   requestHandwritingMark,
   requestSmartMark,
   resolveAiMarking,
@@ -59,12 +58,9 @@ import {
   stripQuestionNumberPrefix,
   type AnswerScoreDetail,
 } from "@/lib/questionDisplay";
-import { MultipartMarkBreakdown } from "@/components/quiz/MultipartMarkBreakdown";
-import { WrongAnswerFeedbackPanel } from "@/components/quiz/WrongAnswerFeedbackPanel";
-import { buildWrongAnswerBullets } from "@/lib/wrongAnswerFeedback";
+import { QuestionFeedbackPanel } from "@/components/quiz/QuestionFeedbackPanel";
 import { toast } from "sonner";
 import { isPremiumError, isPremiumUser, PREMIUM_PATH } from "@/lib/premium";
-import { AiMarkingFeedbackPanel, AiMarkingPartFeedback } from "@/components/quiz/AiMarkingFeedbackPanel";
 import { PremiumGate } from "@/components/premium/GetPremiumButton";
 import {
   ExamPaperPartPrompt,
@@ -76,7 +72,6 @@ import {
   Save,
   Loader2,
   CheckCircle2,
-  XCircle,
 } from "lucide-react";
 
 interface LongQuestionProps {
@@ -318,14 +313,6 @@ export function LongQuestion({
   const [premiumLockedMessage, setPremiumLockedMessage] = useState<string | null>(null);
   const handwritingUi = handwritingAllowedForSubject(subjectId);
   const examPaper = examPaperLayoutProp ?? isExamPaperLayoutSubject(subjectId);
-
-  const usesHandwritingAi = usesHandwritingMarking(
-    subjectId,
-    response,
-    parts,
-    isMultipart,
-    openAiHandwritingEligible,
-  );
 
   useEffect(() => {
     onStateChange?.({
@@ -805,25 +792,6 @@ export function LongQuestion({
                   />
                 </div>
                 )}
-                {(practiceOnly ? submitted : saved) && isHandwritingValue(parts[idx] ?? "") && aiMark && !hasInlineInputs ? (
-                  <AiMarkingPartFeedback
-                    partResult={partMarkAt(aiMark, idx)}
-                  />
-                ) : submitted &&
-                  !hasInlineInputs &&
-                  partResults[idx] === false &&
-                  expectedAnswersForDisplay[idx] &&
-                  !isHandwritingValue(parts[idx] ?? "") ? (
-                  <WrongAnswerFeedbackPanel
-                    title="Feedback"
-                    bullets={buildWrongAnswerBullets({
-                      studentAnswer: parts[idx] ?? "",
-                      expectedAnswers: [expectedAnswersForDisplay[idx] ?? ""].filter(Boolean),
-                      guidance: question.guidance,
-                      questionText: question.question,
-                    })}
-                  />
-                ) : null}
                     </>
                   );
                 })()}
@@ -848,17 +816,6 @@ export function LongQuestion({
               examPaperMode={examPaper}
               className={cn("w-full min-w-0 resize-y", saved && !examPaper && "border-success/40")}
             />
-            {submitted && autoMarkResult === false ? (
-              <WrongAnswerFeedbackPanel
-                title="Feedback"
-                bullets={buildWrongAnswerBullets({
-                  studentAnswer: response,
-                  expectedAnswers: expectedAnswersForDisplay.filter(Boolean),
-                  guidance: question.guidance,
-                  questionText: question.question,
-                })}
-              />
-            ) : null}
           </div>
         )}
 
@@ -908,69 +865,53 @@ export function LongQuestion({
             <PremiumGate allowed={false} message={premiumLockedMessage} />
           </div>
         ) : null}
-        {isMultipart && (practiceOnly ? submitted : saved) && partResults.length > 0 ? (
-          <div
-            className={cn(
-              "flex items-start gap-3 rounded-lg px-4 py-3 text-sm",
-              multipartAllCorrect(partResults)
-                ? "bg-success/10 text-success"
-                : "bg-danger/10 text-danger",
-            )}
-          >
-            {multipartAllCorrect(partResults) ? (
-              <>
-                <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
-                <span className="font-medium">All parts correct!</span>
-              </>
-            ) : (
-              <>
-                <XCircle className="mt-0.5 size-4 shrink-0" />
-                <span className="font-medium">Some parts need work — see the mark breakdown below.</span>
-              </>
-            )}
-          </div>
-        ) : null}
-        {isMultipart && (practiceOnly ? submitted : saved) && partResults.length > 0 ? (
-          <MultipartMarkBreakdown
-            partLabels={slotBreakdownLabels(partLabels, partDescriptors, configuredParts)}
-            partResults={partResults}
-            partMarks={partMarks}
-            expectedAnswers={expectedAnswersForDisplay}
-            studentAnswers={parts}
-            guidance={question.guidance}
-          />
-        ) : null}
         {(practiceOnly ? submitted : saved) &&
-        autoMarkResult === false &&
-        !isMultipart &&
-        !aiMark ? (
-          <WrongAnswerFeedbackPanel
-            bullets={buildWrongAnswerBullets({
-              studentAnswer: displayStudentAnswer,
-              expectedAnswers: expectedAnswersForDisplay,
-              guidance: question.guidance,
-              questionText: question.question,
-            })}
-          />
-        ) : null}
-        {(practiceOnly ? submitted : saved) && autoMarkResult === true && !isMultipart && (
-          <div
-            className={cn(
-              "flex items-start gap-3 rounded-lg px-4 py-3 text-sm",
-              "bg-success/10 text-success",
-            )}
-          >
-            <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
-            <span className="font-medium">Correct! Well done.</span>
-          </div>
-        )}
-        {aiMark && (practiceOnly ? submitted : saved) && !(isMultipart && usesHandwritingAi) ? (
-          <AiMarkingFeedbackPanel
-            feedback={aiMark.feedback}
-            correct={aiMark.correct}
-            correctAnswers={aiMark.correctAnswers}
-            partResults={aiMark.partResults}
-            partLabels={partDescriptors}
+        (isMultipart ? partResults.length > 0 : autoMarkResult != null || aiMark != null) ? (
+          <QuestionFeedbackPanel
+            correct={
+              isMultipart
+                ? multipartAllCorrect(partResults)
+                : (autoMarkResult ?? aiMark?.correct ?? false)
+            }
+            studentAnswer={displayStudentAnswer}
+            correctAnswers={aiMark?.correctAnswers ?? expectedAnswersForDisplay}
+            guidance={question.guidance}
+            questionText={question.question}
+            aiFeedback={aiMark?.feedback}
+            interpretedAnswer={
+              !isMultipart
+                ? aiMark?.partResults?.find((part) => part.index === 0)?.studentAnswerRead
+                : undefined
+            }
+            parts={
+              isMultipart
+                ? partResults.map((result, idx) => {
+                    const aiPart = aiMark?.partResults?.find((part) => part.index === idx);
+                    const rawStudent = parts[idx] ?? "";
+                    return {
+                      label:
+                        slotBreakdownLabels(partLabels, partDescriptors, configuredParts)[idx] ??
+                        `Part ${idx + 1}`,
+                      correct: result === true,
+                      studentAnswer:
+                        aiPart?.studentAnswerRead ??
+                        (isHandwritingValue(rawStudent) ? "" : rawStudent),
+                      correctAnswer:
+                        aiPart?.correctAnswer ?? expectedAnswersForDisplay[idx] ?? "",
+                      feedback: aiPart?.partFeedback,
+                      marks: partMarks[idx] ?? 1,
+                    };
+                  })
+                : undefined
+            }
+            steps={aiMark?.stepResults}
+            score={{
+              earned: isMultipart
+                ? marksEarnedFromPartResults(partResults, partMarks)
+                : (aiMark?.marksAwarded ??
+                  ((autoMarkResult ?? aiMark?.correct) ? effectiveTotalMarks : 0)),
+              total: aiMark?.maxMarks ?? effectiveTotalMarks,
+            }}
           />
         ) : null}
       </div>
