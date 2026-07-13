@@ -2,6 +2,20 @@ import { STORAGE_KEYS } from "@/lib/constants";
 import { GENERIC_USER_ERROR, sanitizeUserFacingError } from "@/lib/userFacingErrors";
 
 function resolveApiBase(): string {
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname.toLowerCase();
+    if (
+      host === "nodent.pages.dev" ||
+      host.endsWith(".pages.dev") ||
+      host === "nodentlearning.com" ||
+      host === "www.nodentlearning.com"
+    ) {
+      // All production domains are attached to the same Pages Functions project.
+      // Keep auth requests same-origin so browser privacy/CORS rules cannot block signup.
+      return "";
+    }
+  }
+
   const raw = (import.meta.env.VITE_API_URL || "").trim();
   if (raw) {
     const normalized = raw.replace(/\/$/, "");
@@ -12,18 +26,6 @@ function resolveApiBase(): string {
 
   if (typeof window !== "undefined") {
     const host = window.location.hostname.toLowerCase();
-    if (
-      host === "nodent.pages.dev" ||
-      host.endsWith(".pages.dev") ||
-      host === "nodentlearning.com" ||
-      host === "www.nodentlearning.com"
-    ) {
-      // If the custom domain is not wired to the same Pages Functions deployment,
-      // fall back to the known-good Pages domain for API calls.
-      // (CORS on the API explicitly allows nodentlearning.com origins.)
-      if (host.endsWith("nodentlearning.com")) return "https://nodent.pages.dev";
-      return "";
-    }
     // Vite dev: use proxy in vite.config.ts (same-origin /api → :8787)
     if (import.meta.env.DEV) return "";
     // Built app opened on localhost without proxy (e.g. vite preview)
@@ -56,11 +58,8 @@ export function apiUnreachableMessage(): string {
   }
   if (typeof window !== "undefined") {
     const host = window.location.hostname.toLowerCase();
-    if (host === "www.nodentlearning.com") {
-      return "Could not reach the server. If login is failing, the custom domain API may not be connected yet — try https://nodent.pages.dev instead.";
-    }
-    if (host === "nodentlearning.com") {
-      return "Could not reach the server. Use https://www.nodentlearning.com — the root domain is not connected to Nodent yet.";
+    if (host === "www.nodentlearning.com" || host === "nodentlearning.com") {
+      return "Could not reach the server. Check your connection, refresh the page, and try again.";
     }
   }
   return "Could not reach the server. The connection timed out — wait a moment and refresh, or try again.";
@@ -147,7 +146,8 @@ export async function apiFetch<T>(
   const token = localStorage.getItem(STORAGE_KEYS.authToken);
   const method = options?.method?.toUpperCase() ?? "GET";
   const timeoutMs = options?.timeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS;
-  const { timeoutMs: _omit, ...fetchOptions } = options ?? {};
+  const fetchOptions = { ...(options ?? {}) };
+  delete fetchOptions.timeoutMs;
 
   const headers = new Headers(fetchOptions?.headers);
 
