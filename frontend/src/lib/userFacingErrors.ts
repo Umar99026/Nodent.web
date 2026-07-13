@@ -127,3 +127,10 @@ export function handwritingMarkUserError(raw?: unknown): string {
     "Could not read your drawing. Try again in a moment.",
   );
 }
+
+export function aiResponseMarkUserError(raw?: unknown): string {
+  return sanitizeUserFacingError(
+    raw,
+    "Could not mark your answer. Try again in a moment.",
+  );
+}

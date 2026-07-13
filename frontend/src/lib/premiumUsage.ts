@@ -11,11 +11,13 @@ export type PremiumUsageQuota = {
 export type PremiumUsageSummary = {
   isPremium: boolean;
   practiceExams: PremiumUsageQuota;
+  /** Shared daily detailed-feedback allowance for typed or drawn answers. */
+  aiResponses?: PremiumUsageQuota;
   /** @deprecated Alias of handwritingAiMarks retained for older clients. */
   shortAiMarks: PremiumUsageQuota;
   /** @deprecated Alias of shortAiMarks for older UI. */
   proseAiMarks: PremiumUsageQuota;
-  /** Free: daily AI marks for drawn short answers. Premium: unlimited. */
+  /** @deprecated Alias of aiResponses. */
   handwritingAiMarks: PremiumUsageQuota;
   englishEssays: PremiumUsageQuota;
   longAnswer?: { requiresPremium: boolean };
@@ -23,7 +25,9 @@ export type PremiumUsageSummary = {
 };
 
 /** Mirrors backend free-tier defaults (functions/lib/premium.ts). */
-export const FREE_DAILY_DRAWING_AI_LIMIT = 3;
+export const FREE_DAILY_AI_RESPONSE_LIMIT = 3;
+/** @deprecated Use FREE_DAILY_AI_RESPONSE_LIMIT. */
+export const FREE_DAILY_DRAWING_AI_LIMIT = FREE_DAILY_AI_RESPONSE_LIMIT;
 /** @deprecated Use FREE_DAILY_DRAWING_AI_LIMIT. */
 export const FREE_DAILY_SHORT_AI_LIMIT = FREE_DAILY_DRAWING_AI_LIMIT;
 export const FREE_ENGLISH_ESSAY_LIMIT = 1;
@@ -37,6 +41,7 @@ export const FREE_DAILY_DRAWN_WORKING_LIMIT = 0;
 export async function fetchPremiumUsage(): Promise<PremiumUsageSummary> {
   const data = await apiFetch<PremiumUsageSummary>(API_PATHS.premium.usage);
   const drawing =
+    data.aiResponses ??
     data.handwritingAiMarks ??
     data.shortAiMarks ??
     data.proseAiMarks ?? {
@@ -46,18 +51,24 @@ export async function fetchPremiumUsage(): Promise<PremiumUsageSummary> {
     };
   return {
     ...data,
+    aiResponses: drawing,
     handwritingAiMarks: drawing,
     shortAiMarks: drawing,
     proseAiMarks: drawing,
   };
 }
 
-export function freeDrawingAiRemaining(usage: PremiumUsageSummary | null | undefined): number {
+export function freeAiResponsesRemaining(usage: PremiumUsageSummary | null | undefined): number {
   if (usage?.isPremium) return Number.POSITIVE_INFINITY;
-  if (!usage) return FREE_DAILY_DRAWING_AI_LIMIT;
-  const q = usage.handwritingAiMarks ?? usage.shortAiMarks ?? usage.proseAiMarks;
-  const limit = q.limit ?? FREE_DAILY_DRAWING_AI_LIMIT;
+  if (!usage) return FREE_DAILY_AI_RESPONSE_LIMIT;
+  const q = usage.aiResponses ?? usage.handwritingAiMarks ?? usage.shortAiMarks ?? usage.proseAiMarks;
+  const limit = q.limit ?? FREE_DAILY_AI_RESPONSE_LIMIT;
   return Math.max(0, limit - q.used);
+}
+
+/** @deprecated Use freeAiResponsesRemaining. */
+export function freeDrawingAiRemaining(usage: PremiumUsageSummary | null | undefined): number {
+  return freeAiResponsesRemaining(usage);
 }
 
 /** @deprecated Use freeDrawingAiRemaining. */
@@ -68,8 +79,8 @@ export function freeShortAiRemaining(usage: PremiumUsageSummary | null | undefin
 export function formatFreePlanSummary(usage: PremiumUsageSummary | null): string {
   void usage;
   return [
-    "Unlimited MCQ & typed short answers with instant matching and feedback.",
-    `${FREE_DAILY_DRAWING_AI_LIMIT} AI-marked drawings/day.`,
+    "Unlimited MCQ practice.",
+    `${FREE_DAILY_AI_RESPONSE_LIMIT} detailed AI responses/day for typed or drawn answers.`,
     "No long-answer practice.",
     `${FREE_ENGLISH_ESSAY_LIMIT} English essay every ${FREE_ENGLISH_ESSAY_WINDOW_DAYS} days.`,
     "No Ask AI · exams not included.",
@@ -77,7 +88,7 @@ export function formatFreePlanSummary(usage: PremiumUsageSummary | null): string
 }
 
 export function formatCompactFreePlanDescription(): string {
-  return `${FREE_DAILY_DRAWING_AI_LIMIT} AI drawing marks/day · unlimited typed-answer matching · no long answers · ${FREE_ENGLISH_ESSAY_LIMIT} essay / ${FREE_ENGLISH_ESSAY_WINDOW_DAYS} days · no Ask AI`;
+  return `${FREE_DAILY_AI_RESPONSE_LIMIT} detailed AI responses/day (typed or drawn) · no long answers · ${FREE_ENGLISH_ESSAY_LIMIT} essay / ${FREE_ENGLISH_ESSAY_WINDOW_DAYS} days · no Ask AI`;
 }
 
 export type PremiumFeatureRow = {
@@ -98,17 +109,17 @@ export const PREMIUM_FEATURE_ROWS: PremiumFeatureRow[] = [
     premium: "Unlimited",
   },
   {
-    id: "drawing-ai-marking",
-    label: "Drawn-answer AI marking",
-    description: "AI reads and marks handwritten short answers",
+    id: "ai-response-marking",
+    label: "Detailed AI feedback",
+    description: "AI marks typed answers or scans handwritten answers",
     free: "3 / day",
     premium: "Unlimited",
   },
   {
     id: "typed-answer-match",
     label: "Typed short answers",
-    description: "Instant matching and feedback without AI",
-    free: "Unlimited",
+    description: "Detailed AI marking shares the daily response allowance",
+    free: "Included in 3 / day",
     premium: "Unlimited",
   },
   {

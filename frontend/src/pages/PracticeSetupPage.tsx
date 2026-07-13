@@ -317,8 +317,7 @@ export default function PracticeSetupPage() {
                                 <p>Multiple choice only. Fast reps + quick confidence building.</p>
                               ) : kind === "sa" ? (
                                 <p>
-                                  Typed answers use unlimited instant matching and feedback. Drawn answers
-                                  include 3 AI marks/day.
+                                  Typed or drawn answers share 3 detailed AI responses each day.
                                 </p>
                               ) : kind === "la" ? (
                                 <div className="flex items-start gap-2">

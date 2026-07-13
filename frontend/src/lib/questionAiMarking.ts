@@ -94,7 +94,7 @@ export function inferUseAiMarkingForImport(input: {
 
 import type { AiMarkPartResult } from "@/components/quiz/AiMarkingFeedbackPanel";
 import type { MarkBreakdown, MarkStepResult } from "@/lib/markBreakdown";
-import { handwritingMarkUserError, sanitizeUserFacingError } from "@/lib/userFacingErrors";
+import { aiResponseMarkUserError, handwritingMarkUserError, sanitizeUserFacingError } from "@/lib/userFacingErrors";
 import {
   buildWrongAnswerBullets,
   bulletsToFeedbackText,
@@ -269,6 +269,33 @@ export async function requestHandwritingMark(
     });
   } catch (err) {
     throw new Error(handwritingMarkUserError(err instanceof Error ? err.message : err));
+  }
+}
+
+/** Mark one short-answer submission with the shared detailed-feedback feature. */
+export async function requestShortAnswerAiMark(
+  subjectId: string,
+  questionKey: string,
+  input: {
+    answer: string;
+    parts: string[];
+    isMultipart: boolean;
+    question: SmartMarkQuestionPayload;
+  },
+): Promise<SmartMarkResult | null> {
+  const images = collectHandwritingImages(input.answer, input.parts, input.isMultipart);
+  if (images.length && !handwritingAllowedForSubject(subjectId)) return null;
+  const typedParts = input.parts.filter((part) => !isHandwritingValue(part));
+  const responseText = images.length ? undefined : input.answer;
+  try {
+    return await requestSmartMark(subjectId, questionKey, {
+      responseText,
+      responseImages: images,
+      studentParts: input.isMultipart && !images.length ? typedParts : undefined,
+      question: { ...input.question, useAiMarking: true },
+    });
+  } catch (err) {
+    throw new Error(aiResponseMarkUserError(err instanceof Error ? err.message : err));
   }
 }
 

@@ -9,6 +9,7 @@ const cases = [
   String.raw`$\frac{1-\\\log_{e} x}{x^{2}}$`,
   String.raw`A sample proportion is $\hat p=0.36$ from a sample of size $n=400$. Find the standard deviation of $\hat P$, assuming the population proportion is $0.36$.`,
   String.raw`For a sample proportion $\hat P$ with population proportion $p=0.2$, which sample size gives $\operatorname{sd}(\hat P)=0.04$?`,
+  String.raw`Find \frac{d}{dx}\left\frac{x^{2}+1}{e^x}\right$$.`,
 ];
 
 for (const c of cases) {

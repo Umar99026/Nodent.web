@@ -75,18 +75,18 @@ if (builderSource.includes(forbiddenGenericMethod)) {
 }
 
 const quizPageSource = readFileSync(resolve(root, "src/pages/QuizPage.tsx"), "utf8");
-if ((quizPageSource.match(/<AiDrawingQuotaBar\b/g)?.length ?? 0) !== 1) {
-  failures.push("QuizPage must render the shared AI drawing quota bar exactly once.");
+if ((quizPageSource.match(/<AiResponseQuotaBar\b/g)?.length ?? 0) !== 1) {
+  failures.push("QuizPage must render the shared AI response quota bar exactly once.");
 }
 const questionCardContentIndex = quizPageSource.indexOf("<CardContent");
-const quotaBarIndex = quizPageSource.indexOf("<AiDrawingQuotaBar");
+const quotaBarIndex = quizPageSource.indexOf("<AiResponseQuotaBar");
 const currentQuestionIndex = quizPageSource.indexOf("{currentGroup && subjectId", quotaBarIndex);
 if (
   questionCardContentIndex < 0 ||
   quotaBarIndex < questionCardContentIndex ||
   currentQuestionIndex < quotaBarIndex
 ) {
-  failures.push("The shared AI drawing quota bar must stay inside the question card.");
+  failures.push("The shared AI response quota bar must stay inside the question card.");
 }
 for (const hiddenModeLabel of [
   "Normal mode",
@@ -101,11 +101,38 @@ const shortQuestionSource = readFileSync(
   resolve(root, "src/components/quiz/ShortQuestion.tsx"),
   "utf8",
 );
-if (shortQuestionSource.includes("<AiDrawingQuotaBar")) {
+if (shortQuestionSource.includes("<AiResponseQuotaBar")) {
   failures.push("ShortQuestion must not render a second question-specific quota bar.");
 }
 if (!shortQuestionSource.includes("notifyPremiumUsageUpdated()")) {
-  failures.push("A successful AI drawing mark must refresh the shared quota bar.");
+  failures.push("A successful detailed AI mark must refresh the shared quota bar.");
+}
+if (!shortQuestionSource.includes("requestShortAnswerAiMark")) {
+  failures.push("Typed and drawn short answers must use the shared detailed AI marking path.");
+}
+if (!apiSource.includes("USAGE_KIND_AI_RESPONSE")) {
+  failures.push("Typed and drawn detailed feedback must share one backend usage bucket.");
+}
+if (apiSource.includes("Typed short answers use instant answer matching and do not need AI marking.")) {
+  failures.push("The backend must not reject typed short answers from detailed AI marking.");
+}
+if (!apiSource.includes("if (!isPremiumAccount(user) && isShortType)")) {
+  failures.push("Every successful free typed-or-drawn short-answer AI mark must consume quota.");
+}
+
+const mathNormalizerSource = readFileSync(
+  resolve(root, "src/lib/questionMathText.ts"),
+  "utf8",
+);
+const mathPipelineTestSource = readFileSync(
+  resolve(root, "scripts/test-math-pipeline.ts"),
+  "utf8",
+);
+if (!mathPipelineTestSource.includes(String.raw`Find \frac{d}{dx}\left\frac{x^{2}+1}{e^x}\right$$.`)) {
+  failures.push("The malformed derivative delimiter case must remain covered by the math pipeline.");
+}
+if (!mathNormalizerSource.includes(String.raw`out = out.replace(/\\right(?=\s*\$)/g, "\\right)");`)) {
+  failures.push("Question math normalization must repair missing right delimiters before KaTeX rendering.");
 }
 
 for (const relativePath of questionFiles) {

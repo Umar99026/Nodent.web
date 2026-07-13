@@ -5,12 +5,11 @@ import {
   buildFallbackHandwritingMark,
   buildSmartMarkPayload,
   enrichHandwritingMarkResult,
-  requestHandwritingMark,
+  requestShortAnswerAiMark,
   resolveAiMarking,
-  qualifiesForOpenAiHandwriting,
 } from "@/lib/questionAiMarking";
 import { notifyPremiumUsageUpdated, usePremiumUsage } from "@/hooks/usePremiumUsage";
-import { freeDrawingAiRemaining } from "@/lib/premiumUsage";
+import { freeAiResponsesRemaining } from "@/lib/premiumUsage";
 import {
   collectFullQuestionStimulus,
   displayMarks,
@@ -42,13 +41,13 @@ import {
 } from "@/components/quiz/ExamPaperQuestionChrome";
 import { isExamPaperLayoutSubject } from "@/lib/examPaperLayout";
 import { RichQuestionContent } from "@/components/quiz/RichQuestionContent";
-import { hasAnswerContent, handwritingAllowedForSubject, isHandwritingValue, usesHandwritingMarking } from "@/lib/handwritingMode";
+import { hasAnswerContent, handwritingAllowedForSubject, isHandwritingValue } from "@/lib/handwritingMode";
 import { isDiagramLabelQuestion, partHasOverlay, partUsesFigureLabels, partUsesInlineInputs, inlineInputsForPart, slotIndexForPartOverlay, slotsForPart, expectedAnswersForQuestionSlots, type DiagramLabelPart, type PartFigureLabelSource } from "@/lib/diagramLabels";
 import { flushAllHandwriting, flushHandwriting } from "@/lib/handwritingFlush";
 import { CheckCircle2, Send, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
-import { handwritingMarkUserError } from "@/lib/userFacingErrors";
+import { aiResponseMarkUserError } from "@/lib/userFacingErrors";
 import { isPremiumError, isPremiumUser } from "@/lib/premium";
 import { QuestionFeedbackPanel } from "@/components/quiz/QuestionFeedbackPanel";
 import type { SmartMarkResult } from "@/lib/questionAiMarking";
@@ -230,9 +229,9 @@ export function ShortQuestion({
   const { user } = useAuth();
   const premium = isPremiumUser(user);
   const { usage, reload: reloadUsage } = usePremiumUsage(!!user && !premium);
-  const drawingAiLeft = premium ? Number.POSITIVE_INFINITY : freeDrawingAiRemaining(usage);
+  const aiResponsesLeft = premium ? Number.POSITIVE_INFINITY : freeAiResponsesRemaining(usage);
   const handwritingUi = handwritingAllowedForSubject(subjectId);
-  const drawLocked = !premium && drawingAiLeft <= 0;
+  const aiResponsesLocked = !premium && aiResponsesLeft <= 0;
   const examPaper = isExamPaperLayoutSubject(subjectId);
   const workedSolution = useWorkedSolution({
     question,
@@ -332,12 +331,6 @@ export function ShortQuestion({
       questionType: question.type,
       subjectId,
     });
-
-  const openAiHandwritingEligible = qualifiesForOpenAiHandwriting({
-    questionText: question.question,
-    partLabels: partDescriptors,
-    acceptedAnswers: question.acceptedAnswers,
-  });
 
   const useTextArea = useSmartMarking && !isMultipart;
 
@@ -469,28 +462,14 @@ export function ShortQuestion({
           .join("; ")
       : resolvedAnswer;
 
-    const usesHandwritingAiNow =
-      handwritingUi &&
-      usesHandwritingMarking(
-        subjectId,
-        resolvedAnswer,
-        resolvedParts,
-        isMultipart,
-        openAiHandwritingEligible,
-      );
-
     if (breakdownActive) {
       toast.error("Mark breakdown uses AI marking — only available on long-answer questions.");
       return;
     }
 
-    const hasDrawn =
-      isHandwritingValue(resolvedAnswer) ||
-      resolvedParts.some((p) => isHandwritingValue(p)) ||
-      resolvedSteps.some((p) => isHandwritingValue(p));
-    if (!premium && hasDrawn && drawLocked) {
+    if (!premium && aiResponsesLocked) {
       toast.error(
-        "You have used your 3 AI drawing marks for today. Type your answer for unlimited instant matching.",
+        "You have used your 3 detailed AI responses for today. Upgrade to Pro for unlimited feedback.",
       );
       void reloadUsage();
       return;
@@ -510,10 +489,12 @@ export function ShortQuestion({
       configuredParts,
     });
 
-    if (usesHandwritingAiNow && questionKey) {
+    const useDetailedAiNow = !practiceOnly && Boolean(questionKey);
+
+    if (useDetailedAiNow && questionKey) {
       setAiMarking(true);
       try {
-        const ai = await requestHandwritingMark(subjectId, questionKey, {
+        const ai = await requestShortAnswerAiMark(subjectId, questionKey, {
           answer: resolvedComposite,
           parts: resolvedParts,
           isMultipart,
@@ -537,9 +518,9 @@ export function ShortQuestion({
         setAiMark(enriched);
         notifyPremiumUsageUpdated();
       } catch (err) {
-        const msg = handwritingMarkUserError(err);
+        const msg = aiResponseMarkUserError(err);
         toast.error(msg);
-        if (/per day|drawing marks/i.test(msg)) void reloadUsage();
+        if (/per day|AI responses/i.test(msg)) void reloadUsage();
         if (isPremiumError(err)) return;
         const fallback = buildFallbackHandwritingMark(expectedAnswersForDisplay);
         correct = false;
@@ -906,9 +887,9 @@ export function ShortQuestion({
                       subjectId={subjectId}
                       examPaperMode={examPaper}
                       allowHandwriting={handwritingUi}
-                      drawLocked={drawLocked}
+                      drawLocked={aiResponsesLocked}
                       modeNote={
-                        !premium ? "Drawing uses 1 of your 3 daily AI drawing marks." : undefined
+                        !premium ? "Typed or drawn submission: 1 of 3 daily detailed AI responses." : undefined
                       }
                       multiline={resolveAiMarking({
                         useAiMarking: question.useAiMarking,
@@ -1007,8 +988,8 @@ export function ShortQuestion({
                     subjectId={subjectId}
                     examPaperMode={examPaper}
                     allowHandwriting={handwritingUi}
-                    drawLocked={drawLocked}
-                    modeNote={!premium ? "Drawing uses 1 of your 3 daily AI drawing marks." : undefined}
+                    drawLocked={aiResponsesLocked}
+                    modeNote={!premium ? "Typed or drawn submission: 1 of 3 daily detailed AI responses." : undefined}
                     multiline={useTextArea}
                     rows={handwritingUi ? 8 : useTextArea ? 5 : 1}
                     handwritingSize={useTextArea ? "lg" : "md"}
