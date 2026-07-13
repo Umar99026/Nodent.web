@@ -63,7 +63,7 @@ import {
 import {
   MarkBreakdownInputs,
 } from "@/components/quiz/MarkBreakdownFields";
-import { buildWorkedSolutionSteps } from "@/lib/wrongAnswerFeedback";
+import { useWorkedSolution } from "@/hooks/useWorkedSolution";
 
 interface ShortQuestionProps {
   question: ShortQuestionType;
@@ -234,6 +234,12 @@ export function ShortQuestion({
   const handwritingUi = handwritingAllowedForSubject(subjectId);
   const drawLocked = !premium && drawingAiLeft <= 0;
   const examPaper = isExamPaperLayoutSubject(subjectId);
+  const workedSolution = useWorkedSolution({
+    question,
+    subjectId,
+    questionKey,
+    enabled: submitted && !isCorrect,
+  });
 
   const configuredParts: ShortQuestionType["answerParts"] =
     question.answerParts?.filter(
@@ -1097,8 +1103,9 @@ export function ShortQuestion({
             steps={
               aiMark?.stepResults?.length
                 ? aiMark.stepResults
-                : buildWorkedSolutionSteps(question.markBreakdown, question.guidance)
+                : workedSolution.steps
             }
+            stepsLoading={!aiMark?.stepResults?.length && workedSolution.loading}
             score={{
               earned: isMultipart
                 ? marksEarnedFromPartResults(partResults, slotMarks.length ? slotMarks : partMarks)

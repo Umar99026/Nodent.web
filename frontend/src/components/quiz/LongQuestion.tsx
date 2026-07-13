@@ -59,7 +59,7 @@ import {
   type AnswerScoreDetail,
 } from "@/lib/questionDisplay";
 import { QuestionFeedbackPanel } from "@/components/quiz/QuestionFeedbackPanel";
-import { buildWorkedSolutionSteps } from "@/lib/wrongAnswerFeedback";
+import { useWorkedSolution } from "@/hooks/useWorkedSolution";
 import { toast } from "sonner";
 import { isPremiumError, isPremiumUser, PREMIUM_PATH } from "@/lib/premium";
 import { PremiumGate } from "@/components/premium/GetPremiumButton";
@@ -314,6 +314,19 @@ export function LongQuestion({
   const [premiumLockedMessage, setPremiumLockedMessage] = useState<string | null>(null);
   const handwritingUi = handwritingAllowedForSubject(subjectId);
   const examPaper = examPaperLayoutProp ?? isExamPaperLayoutSubject(subjectId);
+  const feedbackCorrect = isMultipart
+    ? multipartAllCorrect(partResults)
+    : (autoMarkResult ?? aiMark?.correct ?? false);
+  const feedbackVisible = Boolean(
+    (practiceOnly ? submitted : saved) &&
+      (isMultipart ? partResults.length > 0 : autoMarkResult != null || aiMark != null),
+  );
+  const workedSolution = useWorkedSolution({
+    question,
+    subjectId,
+    questionKey,
+    enabled: feedbackVisible && !feedbackCorrect,
+  });
 
   useEffect(() => {
     onStateChange?.({
@@ -908,8 +921,9 @@ export function LongQuestion({
             steps={
               aiMark?.stepResults?.length
                 ? aiMark.stepResults
-                : buildWorkedSolutionSteps(question.markBreakdown, question.guidance)
+                : workedSolution.steps
             }
+            stepsLoading={!aiMark?.stepResults?.length && workedSolution.loading}
             score={{
               earned: isMultipart
                 ? marksEarnedFromPartResults(partResults, partMarks)

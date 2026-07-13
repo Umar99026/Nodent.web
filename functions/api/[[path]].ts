@@ -6015,6 +6015,66 @@ app.post("/api/written/:subjectId/:questionKey/mark", authMiddleware, async (c: 
   }
 });
 
+app.post("/api/written/:subjectId/:questionKey/solution", authMiddleware, async (c: any) => {
+  try {
+    const limited = rateLimitResponse(c, "worked-solution", 60);
+    if (limited) return limited;
+    const env = c.env as Env;
+    if (!openAiConfigured(env)) {
+      return c.json({ error: "Worked solutions are not available right now." }, 503);
+    }
+
+    const body = await c.req.json();
+    const q = (body?.question ?? {}) as Record<string, unknown>;
+    const stem = cleanText(String(q.question ?? q.questionText ?? ""), 4000);
+    if (!stem) return c.json({ error: "question.question is required." }, 400);
+
+    const passage = q.passage ? cleanText(String(q.passage), 3000) : "";
+    const options = Array.isArray(q.options)
+      ? q.options.map((option) => cleanText(String(option ?? ""), 500)).filter(Boolean).slice(0, 12)
+      : [];
+    const optionsBlock = options.length
+      ? `\nOptions:\n${options.map((option, index) => `${String.fromCharCode(65 + index)}. ${option}`).join("\n")}`
+      : "";
+    const questionText = `${passage ? `${passage}\n\n` : ""}${stem}${optionsBlock}`;
+    const marksParsed = Math.round(Number(q.marks ?? 1));
+    const marks = Number.isFinite(marksParsed) ? Math.max(1, marksParsed) : 1;
+    const guidance = q.guidance ? cleanText(String(q.guidance), 2000) : undefined;
+    const acceptedAnswers = [
+      ...(Array.isArray(q.acceptedAnswers) ? q.acceptedAnswers : []),
+      ...(q.answer != null ? [q.answer] : []),
+      ...(Array.isArray(q.answerParts)
+        ? (q.answerParts as Record<string, unknown>[]).map((part) =>
+            part.acceptedAnswer ?? part.accepted_answer ?? "",
+          )
+        : []),
+    ]
+      .map((answer) => cleanText(String(answer ?? ""), 1000))
+      .filter(Boolean)
+      .slice(0, 20);
+    if (!acceptedAnswers.length) {
+      return c.json({ error: "A correct answer is required to generate worked steps." }, 400);
+    }
+
+    const subjectId = c.req.param("subjectId");
+    const subjectContext = await loadSubjectMarkingContext(c.get("db"), subjectId);
+    const generated = await generateMarkBreakdown(env, {
+      questionText,
+      topic: q.topic ? cleanText(String(q.topic), 240) : undefined,
+      marks,
+      guidance,
+      acceptedAnswers,
+      subjectContext,
+    });
+    return c.json({
+      markBreakdown: { steps: generated.steps, source: "ai" },
+    });
+  } catch (e) {
+    console.error("[written/solution]", errorChain(e));
+    return c.json({ error: userFacingMarkError(e) }, 500);
+  }
+});
+
 function sanitizeQuestionForHelp(q: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {
     type: q.type != null ? String(q.type).trim() : undefined,
