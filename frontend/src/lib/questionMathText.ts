@@ -360,6 +360,14 @@ export function repairCommonMathGlitches(text: string): string {
   // PDF copy/paste sometimes injects "function application" characters (e.g. "Pr⁡").
   out = out.replace(/[\u2061\u2062\u2063]/g, "");
 
+  // A common Sheets/PDF import loses the opening `$` but keeps a trailing `$$`, e.g.
+  // `Find \frac{d}{dx}\left\frac{x^2+1}{e^x}\right$$.`. Restore a single
+  // inline pair before the normal left/right repair runs.
+  out = out.replace(
+    /(^|[\s:;(])(\\(?:frac|dfrac|tfrac|sqrt|operatorname|int|sum|lim)[^$\n]*?)\$\$(?=[.,;:!?)]|$)/g,
+    (_match, prefix: string, latex: string) => `${prefix}$${latex.trim()}$`,
+  );
+
   // Repair mangled probability notation like:
   //   "Find Pr Pr\\text{both aces}$$."
   //   "Find Pr\\text{both aces}$$."
@@ -405,6 +413,7 @@ export function repairLeftRightDelimiters(text: string): string {
   let out = String(text ?? "");
   out = out.replace(/\\left\\(dfrac|tfrac|frac|sin|cos|tan)/g, "\\left(\\$1");
   out = out.replace(/\\left\s+(\\(?:dfrac|tfrac|frac|sin|cos|tan))/g, "\\left($1");
+  out = out.replace(/\\right(?=\s*\$)/g, "\\right)");
   return out;
 }
 

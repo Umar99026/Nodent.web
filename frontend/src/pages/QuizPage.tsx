@@ -47,7 +47,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { McqQuestion } from "@/components/quiz/McqQuestion";
 import { ShortQuestion } from "@/components/quiz/ShortQuestion";
 import { LongQuestion } from "@/components/quiz/LongQuestion";
-import { AiDrawingQuotaBar } from "@/components/premium/AiDrawingQuotaBar";
+import { AiResponseQuotaBar } from "@/components/premium/AiDrawingQuotaBar";
 import { QuestionHelpChat } from "@/components/quiz/QuestionHelpChat";
 import { AdminQuestionEditLink } from "@/components/admin/AdminQuestionEditLink";
 import { Button } from "@/components/ui/button";
@@ -1062,7 +1062,7 @@ export default function QuizPage() {
                 <div className="practice-card-accent-pill" />
               </div>
               <CardContent className="bg-[#f3f4f6]/25 p-5 sm:p-6">
-                <AiDrawingQuotaBar className="mb-5" />
+                <AiResponseQuotaBar className="mb-5" />
                 {currentGroup && subjectId && (
                   <div className="space-y-5">
                     {currentGroupStimulus && hasVisibleStimulus(currentGroupStimulus) && (

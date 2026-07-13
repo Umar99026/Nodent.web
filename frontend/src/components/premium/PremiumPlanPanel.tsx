@@ -3,7 +3,7 @@ import { isAdminUser } from "@/lib/constants";
 import { isPremiumUser } from "@/lib/premium";
 import {
   formatCompactFreePlanDescription,
-  freeDrawingAiRemaining,
+  freeAiResponsesRemaining,
   PREMIUM_FEATURE_ROWS,
   type PremiumUsageQuota,
   type PremiumUsageSummary,
@@ -20,11 +20,11 @@ function compactPlanBlurb(
   if (loading) return "Loading plan details…";
   const base = formatCompactFreePlanDescription();
   if (!usage) return base;
-  const left = freeDrawingAiRemaining(usage);
+  const left = freeAiResponsesRemaining(usage);
   if (!Number.isFinite(left)) return base;
   return left > 0
-    ? `${base}. ${left} AI drawing mark${left === 1 ? "" : "s"} left today.`
-    : `${base}. Daily AI drawing allowance used — typed answers remain unlimited.`;
+    ? `${base}. ${left} detailed AI response${left === 1 ? "" : "s"} left today.`
+    : `${base}. Daily detailed AI responses used — upgrade for unlimited feedback.`;
 }
 
 function QuotaMeter({
@@ -212,7 +212,7 @@ export function PremiumPlanPanel({ compact = false }: PremiumPlanPanelProps) {
           </span>
           <div>
             <p className="font-display text-lg font-semibold tracking-tight text-[#0b0f19]">Your usage</p>
-            <p className="text-xs text-muted-foreground">Your free AI drawing allowance updates automatically.</p>
+            <p className="text-xs text-muted-foreground">Your shared typed-or-drawn AI allowance updates automatically.</p>
           </div>
         </div>
 
@@ -225,7 +225,7 @@ export function PremiumPlanPanel({ compact = false }: PremiumPlanPanelProps) {
           <p className="mt-5 text-sm text-danger">{error}</p>
         ) : usage && !premium && !admin ? (
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
-            <QuotaMeter label="AI drawing marking" quota={usage.handwritingAiMarks ?? usage.shortAiMarks ?? usage.proseAiMarks} />
+            <QuotaMeter label="Detailed AI responses" quota={usage.aiResponses ?? usage.handwritingAiMarks ?? usage.shortAiMarks ?? usage.proseAiMarks} />
             <QuotaMeter label="English essay marking" quota={usage.englishEssays} />
           </div>
         ) : premium || admin ? (
@@ -255,7 +255,7 @@ export function PremiumPlanPanel({ compact = false }: PremiumPlanPanelProps) {
               ) : null}
             </div>
             <ul className="mt-6 space-y-3 text-sm text-[#334155]">
-              {["Unlimited MCQ and typed short-answer matching", "3 AI drawing marks each day", "1 English essay mark every 3 days"].map((feature) => (
+              {["Unlimited MCQ practice", "3 detailed typed-or-drawn AI responses each day", "1 English essay mark every 3 days"].map((feature) => (
                 <li key={feature} className="flex gap-3">
                   <Check className="mt-0.5 size-4 shrink-0 text-brand-deep" aria-hidden />
                   {feature}

@@ -27,7 +27,7 @@ import {
 import { englishAiConfigured, scoreEnglishResponse } from "../lib/englishOpenAi";
 import {
   canRunEnglishAiMark,
-  canRunHandwritingAiMark,
+  canRunAiResponse,
   ensurePracticeExamUsage,
   getPremiumUsageSummary,
   hasPracticeExamAccess,
@@ -36,7 +36,7 @@ import {
   PREMIUM_REQUIRED,
   quotaExceededResponse,
   recordUsage,
-  USAGE_KIND_HANDWRITING_AI,
+  USAGE_KIND_AI_RESPONSE,
   USAGE_KIND_ENGLISH_ESSAY_AI,
 } from "../lib/premium";
 import {
@@ -5803,14 +5803,6 @@ app.post("/api/written/:subjectId/:questionKey/mark", authMiddleware, async (c: 
       );
     }
 
-    // Typed short answers are always marked locally by answer matching. Only drawings use AI.
-    if (isShortType && handwritingImages.length === 0) {
-      return c.json(
-        { error: "Typed short answers use instant answer matching and do not need AI marking." },
-        400,
-      );
-    }
-
     const marksParsed = Math.round(Number(q.marks ?? 2));
     const marks = Number.isFinite(marksParsed) ? Math.max(1, marksParsed) : 2;
     const guidance = q.guidance ? cleanText(String(q.guidance), 2000) : undefined;
@@ -5876,13 +5868,13 @@ app.post("/api/written/:subjectId/:questionKey/mark", authMiddleware, async (c: 
         );
       }
       if (isShortType) {
-        const check = await canRunHandwritingAiMark(db, user.id, aiProviderPoolSize(env));
+        const check = await canRunAiResponse(db, user.id, aiProviderPoolSize(env));
         if (!check.allowed) {
           return c.json(
             {
               ...quotaExceededResponse(check.reason ?? ""),
               error: check.reason,
-              code: "handwriting_ai_quota",
+              code: "ai_response_quota",
             },
             403,
           );
@@ -5987,11 +5979,11 @@ app.post("/api/written/:subjectId/:questionKey/mark", authMiddleware, async (c: 
         ai_marked_at = EXCLUDED.ai_marked_at
     `);
 
-    if (!isPremiumAccount(user) && isShortType && handwritingImages.length > 0) {
+    if (!isPremiumAccount(user) && isShortType) {
       await recordUsage(
         db,
         user.id,
-        USAGE_KIND_HANDWRITING_AI,
+        USAGE_KIND_AI_RESPONSE,
         `${subjectId}:${questionKey}`,
       );
     }
