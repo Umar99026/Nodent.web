@@ -79,8 +79,9 @@ export function freeShortAiRemaining(usage: PremiumUsageSummary | null | undefin
 export function formatFreePlanSummary(usage: PremiumUsageSummary | null): string {
   void usage;
   return [
-    "Unlimited MCQ practice.",
+    "Unlimited MCQ and typed short-answer practice.",
     `${FREE_DAILY_AI_RESPONSE_LIMIT} detailed AI responses/day for typed or drawn answers.`,
+    "After the AI allowance, typed answers continue with instant matching and basic feedback.",
     "No long-answer practice.",
     `${FREE_ENGLISH_ESSAY_LIMIT} English essay every ${FREE_ENGLISH_ESSAY_WINDOW_DAYS} days.`,
     "No Ask AI · exams not included.",
@@ -88,7 +89,7 @@ export function formatFreePlanSummary(usage: PremiumUsageSummary | null): string
 }
 
 export function formatCompactFreePlanDescription(): string {
-  return `${FREE_DAILY_AI_RESPONSE_LIMIT} detailed AI responses/day (typed or drawn) · no long answers · ${FREE_ENGLISH_ESSAY_LIMIT} essay / ${FREE_ENGLISH_ESSAY_WINDOW_DAYS} days · no Ask AI`;
+  return `${FREE_DAILY_AI_RESPONSE_LIMIT} detailed AI responses/day (typed or drawn) · unlimited typed instant matching afterwards · no long answers · ${FREE_ENGLISH_ESSAY_LIMIT} essay / ${FREE_ENGLISH_ESSAY_WINDOW_DAYS} days · no Ask AI`;
 }
 
 export type PremiumFeatureRow = {
@@ -118,8 +119,8 @@ export const PREMIUM_FEATURE_ROWS: PremiumFeatureRow[] = [
   {
     id: "typed-answer-match",
     label: "Typed short answers",
-    description: "Detailed AI marking shares the daily response allowance",
-    free: "Included in 3 / day",
+    description: "First 3 get detailed AI feedback; then instant matching continues",
+    free: "Unlimited",
     premium: "Unlimited",
   },
   {

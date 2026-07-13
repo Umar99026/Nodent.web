@@ -467,9 +467,14 @@ export function ShortQuestion({
       return;
     }
 
-    if (!premium && aiResponsesLocked) {
+    const hasDrawn =
+      isHandwritingValue(resolvedAnswer) ||
+      resolvedParts.some((part) => isHandwritingValue(part)) ||
+      resolvedSteps.some((step) => isHandwritingValue(step));
+
+    if (!premium && aiResponsesLocked && hasDrawn) {
       toast.error(
-        "You have used your 3 detailed AI responses for today. Upgrade to Pro for unlimited feedback.",
+        "You have used your 3 detailed AI responses for today. Type your answer for unlimited instant matching, or upgrade to Pro.",
       );
       void reloadUsage();
       return;
@@ -489,7 +494,8 @@ export function ShortQuestion({
       configuredParts,
     });
 
-    const useDetailedAiNow = !practiceOnly && Boolean(questionKey);
+    const useDetailedAiNow =
+      !practiceOnly && Boolean(questionKey) && (premium || !aiResponsesLocked);
 
     if (useDetailedAiNow && questionKey) {
       setAiMarking(true);
@@ -519,12 +525,31 @@ export function ShortQuestion({
         notifyPremiumUsageUpdated();
       } catch (err) {
         const msg = aiResponseMarkUserError(err);
-        toast.error(msg);
-        if (/per day|AI responses/i.test(msg)) void reloadUsage();
-        if (isPremiumError(err)) return;
-        const fallback = buildFallbackHandwritingMark(expectedAnswersForDisplay);
-        correct = false;
-        setAiMark(fallback);
+        const quotaReached = /per day|AI responses/i.test(msg);
+        if (quotaReached) void reloadUsage();
+        if (quotaReached && !hasDrawn) {
+          toast.info("Daily AI feedback used. Marking this typed answer with instant matching.");
+          if (isMultipart) {
+            const gradedParts = gradeMultipartAnswers(resolvedParts, accepted, configuredParts);
+            partCorrectFlags = gradedParts.map((gradedPart) => gradedPart.correct);
+            setPartResults(partCorrectFlags);
+            correct = multipartAllCorrect(partCorrectFlags);
+            nextDpHint = Math.max(...gradedParts.map((gradedPart) => gradedPart.dpHint ?? 0)) || null;
+            setDpHint(nextDpHint);
+          } else {
+            setPartResults([]);
+            const graded = isAnswerCorrect(resolvedComposite, accepted);
+            correct = graded.correct;
+            nextDpHint = graded.dpHint;
+            setDpHint(nextDpHint);
+          }
+        } else {
+          toast.error(msg);
+          if (isPremiumError(err)) return;
+          const fallback = buildFallbackHandwritingMark(expectedAnswersForDisplay);
+          correct = false;
+          setAiMark(fallback);
+        }
       } finally {
         setAiMarking(false);
       }

@@ -177,7 +177,7 @@ export async function canRunAiResponse(
   if (n >= limit) {
     return {
       allowed: false,
-      reason: `Free accounts get ${limit} detailed AI responses per day. Upgrade to Pro for unlimited AI feedback.`,
+      reason: `Free accounts get ${limit} detailed AI responses per day. Type answers for unlimited instant matching and basic feedback, or upgrade to Pro.`,
     };
   }
   return { allowed: true };
