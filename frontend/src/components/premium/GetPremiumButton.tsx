@@ -17,7 +17,7 @@ export function GetPremiumButton({
   className,
   size = "sm",
   variant = "outline",
-  destination = "checkout",
+  destination = "plans",
 }: GetPremiumButtonProps) {
   const navigate = useNavigate();
   const opensCheckout = destination === "checkout";
@@ -60,12 +60,12 @@ export function PremiumGate({ allowed, message, children }: PremiumGateProps) {
         type="button"
         onClick={() => navigate(PREMIUM_PATH)}
         className="mx-auto mb-2 flex size-10 items-center justify-center rounded-full border border-black/10 bg-white text-muted-foreground hover:bg-white/80"
-        aria-label="Locked — see Premium plans"
+        aria-label="Locked — see Pro plans"
       >
         <Lock className="size-4" aria-hidden />
       </button>
       <p className="text-sm text-[#0b0f19]">
-        {message ?? "This feature is included with Premium."}
+        {message ?? "This feature is included with Pro."}
       </p>
       <div className="mt-3 flex justify-center">
         <GetPremiumButton label="See plans" destination="plans" />

@@ -127,7 +127,7 @@ export function PremiumPlanPanel({ compact = false }: PremiumPlanPanelProps) {
   const admin = isAdminUser(user);
   const { usage, loading, error } = usePremiumUsage(!!user);
 
-  const planLabel = admin ? "Admin" : premium ? "Premium" : "Free";
+  const planLabel = admin ? "Admin" : premium ? "Pro" : "Free";
 
   if (compact) {
     return (
@@ -182,7 +182,7 @@ export function PremiumPlanPanel({ compact = false }: PremiumPlanPanelProps) {
               <span className="block text-brand-light">Know exactly what to improve.</span>
             </h2>
             <p className="mt-4 max-w-xl text-sm leading-6 text-white/65 sm:text-base">
-              Premium unlocks every practice format, unlimited AI marking, detailed essay feedback,
+              Pro unlocks every practice format, unlimited AI marking, detailed essay feedback,
               past exams, and Ask AI whenever you get stuck.
             </p>
           </div>
@@ -191,6 +191,7 @@ export function PremiumPlanPanel({ compact = false }: PremiumPlanPanelProps) {
             <div className="w-full shrink-0 lg:w-auto">
               <GetPremiumButton
                 label="Upgrade with Stripe"
+                destination="checkout"
                 size="lg"
                 variant="accent"
                 className="h-12 w-full rounded-xl bg-brand-light px-6 font-semibold text-[#0b0f19] shadow-lg shadow-black/20 hover:bg-white lg:w-auto"
@@ -239,7 +240,8 @@ export function PremiumPlanPanel({ compact = false }: PremiumPlanPanelProps) {
       <section>
         <div className="mb-4 px-1">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Compare plans</p>
-          <h3 className="mt-1 font-display text-2xl font-semibold tracking-tight text-[#0b0f19]">Choose the level that fits your study</h3>
+          <h3 className="mt-1 font-display text-2xl font-semibold tracking-tight text-[#0b0f19]">Free vs Pro</h3>
+          <p className="mt-1 text-sm text-muted-foreground">Compare every feature before you upgrade.</p>
         </div>
         <div className="grid gap-4 lg:grid-cols-2">
           <article className="rounded-3xl border border-black/10 bg-white p-6 shadow-sm sm:p-7">
@@ -267,7 +269,7 @@ export function PremiumPlanPanel({ compact = false }: PremiumPlanPanelProps) {
             <div className="relative flex items-start justify-between gap-4">
               <div>
                 <div className="flex items-center gap-2">
-                  <p className="font-display text-2xl font-semibold text-[#0b0f19]">Premium</p>
+                  <p className="font-display text-2xl font-semibold text-[#0b0f19]">Pro</p>
                   <Crown className="size-5 text-gold-dark" aria-hidden />
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">The complete Nodent experience.</p>
@@ -287,6 +289,7 @@ export function PremiumPlanPanel({ compact = false }: PremiumPlanPanelProps) {
             {!premium && !admin ? (
               <GetPremiumButton
                 label="Upgrade now"
+                destination="checkout"
                 size="lg"
                 variant="default"
                 className="relative mt-7 h-11 w-full rounded-xl bg-[#0b0f19] px-5 text-white hover:bg-[#1e293b]"
@@ -313,7 +316,7 @@ export function PremiumPlanPanel({ compact = false }: PremiumPlanPanelProps) {
                 <PlanCellValue value={row.free} excluded={row.freeExcluded} variant="free" />
               </div>
               <div className="flex items-center justify-between gap-2 sm:justify-center">
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-brand-deep sm:hidden">Premium</span>
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-brand-deep sm:hidden">Pro</span>
                 <PlanCellValue value={row.premium} variant="premium" />
               </div>
             </div>
@@ -327,7 +330,7 @@ export function PremiumPlanPanel({ compact = false }: PremiumPlanPanelProps) {
             <p className="text-sm font-semibold text-[#0b0f19]">Ready to unlock every feature?</p>
             <p className="mt-0.5 text-xs text-muted-foreground">You&apos;ll complete your purchase securely on Stripe.</p>
           </div>
-          <GetPremiumButton label="Continue to checkout" size="default" variant="outline" className="shrink-0" />
+          <GetPremiumButton label="Continue to checkout" destination="checkout" size="default" variant="outline" className="shrink-0" />
         </div>
       ) : null}
     </div>
