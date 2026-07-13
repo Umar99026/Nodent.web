@@ -78,6 +78,16 @@ const quizPageSource = readFileSync(resolve(root, "src/pages/QuizPage.tsx"), "ut
 if ((quizPageSource.match(/<AiDrawingQuotaBar\b/g)?.length ?? 0) !== 1) {
   failures.push("QuizPage must render the shared AI drawing quota bar exactly once.");
 }
+const questionCardContentIndex = quizPageSource.indexOf("<CardContent");
+const quotaBarIndex = quizPageSource.indexOf("<AiDrawingQuotaBar");
+const currentQuestionIndex = quizPageSource.indexOf("{currentGroup && subjectId", quotaBarIndex);
+if (
+  questionCardContentIndex < 0 ||
+  quotaBarIndex < questionCardContentIndex ||
+  currentQuestionIndex < quotaBarIndex
+) {
+  failures.push("The shared AI drawing quota bar must stay inside the question card.");
+}
 for (const hiddenModeLabel of [
   "Normal mode",
   "Breakdown mode",
