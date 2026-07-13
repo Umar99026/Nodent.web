@@ -2,8 +2,10 @@ import { useCallback, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { API_PATHS } from "@/lib/constants";
 import { apiFetch } from "@/lib/api";
-import { PREMIUM_PATH } from "@/lib/premium";
+import { isPremiumUser, PREMIUM_PATH } from "@/lib/premium";
 import { PremiumGate } from "@/components/premium/GetPremiumButton";
+import { usePremiumUsage } from "@/hooks/usePremiumUsage";
+import { useAuth } from "@/context/AuthContext";
 import { readImportTextFile } from "@/lib/readImportTextFile";
 import type { EnglishEssayResponse } from "@/lib/englishEssay";
 import { AnnotatedEssayView } from "@/components/english/AnnotatedEssayView";
@@ -72,6 +74,13 @@ async function loadEssayResponse(id: number): Promise<EnglishEssayResponse> {
 
 export function EnglishPracticePanel() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const premium = isPremiumUser(user);
+  const { usage, reload: reloadUsage } = usePremiumUsage(Boolean(user) && !premium);
+  const essayQuota = usage?.englishEssays;
+  const englishMarksLeft = premium
+    ? Number.POSITIVE_INFINITY
+    : Math.max(0, (essayQuota?.limit ?? 1) - (essayQuota?.used ?? 0));
   const [essayText, setEssayText] = useState("");
   const [customPrompt, setCustomPrompt] = useState("");
   const [sharePublic, setSharePublic] = useState(false);
@@ -115,6 +124,7 @@ export function EnglishPracticePanel() {
         const row = await loadEssayResponse(responseId);
         setResult((prev) => mergeResponse(prev, row));
         if (row.aiScore != null) {
+          void reloadUsage();
           toast.success(`Marked: ${row.aiScore}/10`);
           return;
         }
@@ -125,7 +135,7 @@ export function EnglishPracticePanel() {
     } finally {
       setPolling(false);
     }
-  }, []);
+  }, [reloadUsage]);
 
   const handleSubmit = async () => {
     const responseText = essayText.trim();
@@ -169,12 +179,14 @@ export function EnglishPracticePanel() {
       setSharePublic(false);
 
       if (submitResult.premiumBlocked) {
+        void reloadUsage();
         const msg =
           submitResult.premiumMessage ??
           "Free accounts get 1 AI-marked English response every 3 days.";
         setQuotaMessage(msg);
         toast.message("Essay saved without AI marking.", { description: msg });
       } else if (submitResult.aiScore?.score != null) {
+        void reloadUsage();
         toast.success(`Marked: ${submitResult.aiScore.score}/10`);
       } else if (submitResult.aiScoringPending && submitResult.id) {
         toast.message("Essay submitted. Marking in progress…");
@@ -335,6 +347,35 @@ export function EnglishPracticePanel() {
         </div>
 
         <div className="flex flex-col items-end gap-4 border-t border-black/6 pt-8">
+          {!premium ? (
+            <div
+              className={cn(
+                "w-full max-w-xl rounded-xl border px-4 py-3 text-sm",
+                englishMarksLeft > 0
+                  ? "border-brand/20 bg-brand/[0.04] text-muted-foreground"
+                  : "border-danger/25 bg-danger/[0.05] text-danger",
+              )}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <span className="font-semibold text-foreground">Free English AI marking</span>
+                <span className="font-semibold">{englishMarksLeft} of 1 left</span>
+              </div>
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-black/10">
+                <div
+                  className={cn(
+                    "h-full rounded-full transition-[width] duration-300",
+                    englishMarksLeft > 0 ? "w-full bg-brand" : "w-0 bg-danger",
+                  )}
+                />
+              </div>
+              {englishMarksLeft === 0 ? (
+                <p className="mt-2 font-medium">
+                  You have used your free essay mark for this 3-day period. A new submission can
+                  be saved, but it will not be AI-marked yet.
+                </p>
+              ) : null}
+            </div>
+          ) : null}
           {quotaMessage ? (
             <div className="w-full max-w-xl">
               <PremiumGate allowed={false} message={quotaMessage} />
