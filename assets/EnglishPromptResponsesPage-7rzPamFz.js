@@ -1,0 +1,1 @@
+import{n as e}from"./EnglishPracticePage-Buq6kHmY.js";var t=e;export{t as default};

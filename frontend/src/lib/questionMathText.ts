@@ -520,6 +520,12 @@ function fixFeedbackMathInner(inner: string): string {
   let out = String(inner ?? "").trim();
   out = out.replace(new RegExp(`\\\\{2,}(${FEEDBACK_MATH_CMD})\\b`, "g"), "\\$1");
   out = out.replace(/\\{2,},/g, "\\,");
+  // Repair a missing closing numerator brace, for example
+  // \frac{1^{2}+2^{2}+3^{2}+4^{2}{10} -> \frac{1^{2}+2^{2}+3^{2}+4^{2}}{10}.
+  out = out.replace(
+    /\\frac\{((?:[^{}=]|\{[^{}]*\})+)\{([^{}]+)\}(?=\s*(?:=|[.,;)]|$))/g,
+    "\\frac{$1}{$2}",
+  );
   return out;
 }
 

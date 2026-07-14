@@ -74,7 +74,7 @@ export function QuestionFeedbackPanel({
   className,
 }: QuestionFeedbackPanelProps) {
   const wrongParts = parts.filter((part) => !part.correct);
-  const missedSteps = steps.filter((step) => !step.awarded);
+  const missedSteps = correct ? [] : steps.filter((step) => !step.awarded);
   const hasAuthoredSteps = missedSteps.length > 0;
   const baseLines = correct
     ? uniqueLines([...linesFromAi(aiFeedback), "Correct! Well done."])
