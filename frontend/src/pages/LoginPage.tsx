@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { passwordPolicyError } from "@/lib/passwordPolicy";
 import { signupEmailError } from "@/lib/emailValidation";
-import { Eye, EyeOff, Loader2, AlertCircle, ArrowLeft, GraduationCap, BookOpen } from "lucide-react";
+import { Eye, EyeOff, Loader2, AlertCircle, ArrowLeft, GraduationCap, BookOpen, Lock } from "lucide-react";
 
 interface FieldErrors {
   username?: string;
@@ -44,8 +44,10 @@ function validateSignup(
     const pwErr = passwordPolicyError(password);
     if (pwErr) errors.password = pwErr;
   }
-  if (accountRole !== "student" && accountRole !== "teacher") {
-    errors.accountRole = "Please choose student or teacher";
+  if (accountRole === "teacher") {
+    errors.accountRole = "Teacher accounts are not available yet";
+  } else if (accountRole !== "student") {
+    errors.accountRole = "Please choose student";
   }
   return errors;
 }
@@ -104,7 +106,7 @@ export default function LoginPage() {
     );
     setFieldErrors(errors);
     if (Object.keys(errors).length) return;
-    if (signupRole !== "student" && signupRole !== "teacher") return;
+    if (signupRole !== "student") return;
 
     setIsSubmitting(true);
     try {
@@ -114,11 +116,7 @@ export default function LoginPage() {
         signupPassword,
         signupRole,
       );
-      if (signupRole === "student") {
-        navigate("/onboarding", { replace: true });
-      } else {
-        navigate("/dashboard", { replace: true });
-      }
+      navigate("/onboarding", { replace: true });
     } catch (err) {
       setServerError(signupFormErrorMessage(err, apiUnreachableMessage()));
     } finally {
@@ -319,19 +317,18 @@ export default function LoginPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setSignupRole("teacher")}
-                    className={[
-                      "flex min-h-24 flex-col items-center justify-center gap-2 rounded-xl border px-3 py-4 text-center transition-colors",
-                      signupRole === "teacher"
-                        ? "border-brand bg-brand/10 text-foreground"
-                        : "border-input bg-background text-muted-foreground hover:border-brand/40 hover:bg-muted/40",
-                    ].join(" ")}
-                    aria-pressed={signupRole === "teacher"}
+                    disabled
+                    className="relative flex min-h-24 cursor-not-allowed flex-col items-center justify-center gap-2 rounded-xl border border-input bg-muted/50 px-3 py-4 text-center text-muted-foreground opacity-65"
+                    aria-label="Teacher accounts — coming soon"
                   >
+                    <span className="absolute right-2.5 top-2.5 inline-flex items-center gap-1 rounded-full bg-background px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground shadow-sm">
+                      <Lock className="size-3" aria-hidden />
+                      Coming soon
+                    </span>
                     <GraduationCap className="size-5" />
                     <span className="text-sm font-semibold">Teacher</span>
                     <span className="text-xs leading-snug">
-                      Manage my class
+                      Teacher sign-up is currently locked
                     </span>
                   </button>
                 </div>
