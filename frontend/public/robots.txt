@@ -1,4 +1,18 @@
 User-agent: *
 Allow: /
+Disallow: /api/
+Disallow: /admin
+Disallow: /dashboard
+Disallow: /forgot-password
+Disallow: /join-class
+Disallow: /login
+Disallow: /onboarding
+Disallow: /practice/
+Disallow: /quiz/
+Disallow: /report
+Disallow: /reset-password
+Disallow: /teacher
+Disallow: /track
+Disallow: /upload/
 
 Sitemap: https://nodent.pages.dev/sitemap.xml

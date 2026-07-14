@@ -8,6 +8,8 @@ import { isAdminUser, canAccessTeacherNav, canAccessTrackNav, needsStudentOnboar
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import LandingPage from "@/pages/LandingPage";
 import FeedbackPage from "@/pages/FeedbackPage";
+import VceResourcesPage from "@/pages/VceResourcesPage";
+import FreeVcePracticeExamsPage from "@/pages/FreeVcePracticeExamsPage";
 
 // Lazy-load page components — stubs will be replaced with real implementations
 const LoginPage = lazy(() => import("@/pages/LoginPage"));
@@ -177,6 +179,9 @@ function AppRoutes() {
       <Suspense fallback={<LoadingFallback />}>
         <Routes>
           <Route path="/" element={<RootRedirect />} />
+
+        <Route path="/vce-resources" element={<VceResourcesPage />} />
+        <Route path="/free-vce-practice-exams" element={<FreeVcePracticeExamsPage />} />
 
         <Route path="/feedback" element={<FeedbackPage />} />
 

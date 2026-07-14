@@ -27,6 +27,8 @@ import { buttonVariants } from "@/components/ui/button";
 
 import { cn } from "@/lib/utils";
 
+import { Seo } from "@/components/seo/Seo";
+
 
 
 const PRICING = [
@@ -92,6 +94,15 @@ const PRICING = [
 ] as const;
 
 const INSTAGRAM_URL = "https://www.instagram.com/nodent.learning/";
+
+const LANDING_SCHEMA = {
+  "@context": "https://schema.org",
+  "@graph": [
+    { "@type": "Organization", "@id": "https://nodent.pages.dev/#organization", name: "Nodent", url: "https://nodent.pages.dev/", logo: "https://nodent.pages.dev/logo.png" },
+    { "@type": "WebSite", "@id": "https://nodent.pages.dev/#website", name: "Nodent", url: "https://nodent.pages.dev/", inLanguage: "en-AU", publisher: { "@id": "https://nodent.pages.dev/#organization" } },
+    { "@type": "WebApplication", name: "Nodent", url: "https://nodent.pages.dev/", applicationCategory: "EducationalApplication", operatingSystem: "Web", inLanguage: "en-AU", offers: { "@type": "Offer", price: "0", priceCurrency: "AUD", description: "Free tier available" } },
+  ],
+};
 
 
 
@@ -168,6 +179,12 @@ export default function LandingPage() {
   return (
 
     <div className="landing-root min-h-dvh overflow-x-clip text-[#0b0f19]">
+
+      <Seo
+        title="Free VCE Resources, Practice Questions & Exams | Nodent"
+        description="Free VCE resources and exam-style practice for Mathematical Methods, General Mathematics, Specialist Mathematics and English, with instant feedback from Nodent."
+        structuredData={LANDING_SCHEMA}
+      />
 
       <LandingNav />
 
@@ -309,6 +326,38 @@ export default function LandingPage() {
       </section>
 
 
+
+      {/* Public study resources */}
+
+      <section className="landing-section border-t border-black/8 bg-white py-20 sm:py-24">
+        <div className="mx-auto max-w-7xl px-5 sm:px-8">
+          <Reveal>
+            <SectionEyebrow>Explore</SectionEyebrow>
+            <SectionTitle>Free VCE resources for smarter revision.</SectionTitle>
+            <p className="mt-4 max-w-3xl text-lg leading-8 text-slate-600">
+              Find exam-style practice, subject coverage and a practical way to use feedback across VCE maths and English.
+            </p>
+          </Reveal>
+          <div className="mt-10 grid gap-6 md:grid-cols-2">
+            <Reveal>
+              <Link to="/vce-resources" className="group block h-full rounded-3xl border border-black/8 bg-[#faf9f7] p-8 transition hover:-translate-y-1 hover:border-brand/40 hover:shadow-lg">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-deep">Study tools</p>
+                <h3 className="mt-3 font-display text-2xl font-bold">Free VCE resources</h3>
+                <p className="mt-3 leading-7 text-slate-600">Explore practice and feedback for Methods, General Maths, Specialist Maths and English.</p>
+                <span className="mt-6 inline-flex items-center gap-2 font-semibold text-brand-deep">Explore resources <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" /></span>
+              </Link>
+            </Reveal>
+            <Reveal delayMs={80}>
+              <Link to="/free-vce-practice-exams" className="group block h-full rounded-3xl border border-black/8 bg-[#faf9f7] p-8 transition hover:-translate-y-1 hover:border-brand/40 hover:shadow-lg">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-deep">Exam preparation</p>
+                <h3 className="mt-3 font-display text-2xl font-bold">Free VCE practice exams</h3>
+                <p className="mt-3 leading-7 text-slate-600">Use timed, exam-style questions and a repeatable correction process to prepare effectively.</p>
+                <span className="mt-6 inline-flex items-center gap-2 font-semibold text-brand-deep">Prepare for exams <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" /></span>
+              </Link>
+            </Reveal>
+          </div>
+        </div>
+      </section>
 
       {/* Pricing */}
 
@@ -613,6 +662,14 @@ export default function LandingPage() {
 
             <div className="mt-8 flex flex-wrap items-center justify-center gap-6 text-sm text-slate-600 sm:justify-end">
 
+              <Link to="/vce-resources" className="hover:text-brand-dark">
+                VCE resources
+              </Link>
+
+              <Link to="/free-vce-practice-exams" className="hover:text-brand-dark">
+                Practice exams
+              </Link>
+
               <button
 
                 type="button"
@@ -684,5 +741,3 @@ export default function LandingPage() {
   );
 
 }
-
-

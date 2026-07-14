@@ -1,6 +1,7 @@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { scrollToSection } from "@/components/landing/useScrollReveal";
 import { InstagramIcon } from "@/components/icons/InstagramIcon";
+import { Link } from "react-router-dom";
 
 const INSTAGRAM_URL = "https://www.instagram.com/nodent.learning/";
 
@@ -28,6 +29,20 @@ export function LandingMenuSheet({ open, onOpenChange }: LandingMenuSheetProps) 
           <SheetTitle className="font-display text-lg font-semibold text-[#0b0f19]">Menu</SheetTitle>
         </SheetHeader>
         <nav className="flex flex-col px-4 py-3" aria-label="Site">
+          <Link
+            to="/vce-resources"
+            onClick={() => onOpenChange(false)}
+            className="flex min-h-12 items-center rounded-lg px-3 text-sm font-medium text-[#0b0f19]/80 transition-colors hover:bg-black/[0.04] hover:text-[#0b0f19]"
+          >
+            Free VCE resources
+          </Link>
+          <Link
+            to="/free-vce-practice-exams"
+            onClick={() => onOpenChange(false)}
+            className="flex min-h-12 items-center rounded-lg px-3 text-sm font-medium text-[#0b0f19]/80 transition-colors hover:bg-black/[0.04] hover:text-[#0b0f19]"
+          >
+            Practice exams
+          </Link>
           {MENU_ITEMS.map((item) => (
             <button
               key={item.id}
