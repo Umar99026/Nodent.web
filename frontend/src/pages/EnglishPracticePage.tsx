@@ -90,6 +90,7 @@ export function EnglishPracticePanel() {
   const [polling, setPolling] = useState(false);
   const [quotaMessage, setQuotaMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const submittingRef = useRef(false);
 
   const ingestFiles = useCallback(async (files: FileList | File[]) => {
     const list = Array.from(files).filter(
@@ -138,11 +139,13 @@ export function EnglishPracticePanel() {
   }, [reloadUsage]);
 
   const handleSubmit = async () => {
+    if (submittingRef.current) return;
     const responseText = essayText.trim();
     if (!responseText) {
       toast.error("Paste or upload your essay first.");
       return;
     }
+    submittingRef.current = true;
     setSubmitting(true);
     setQuotaMessage(null);
     try {
@@ -208,6 +211,7 @@ export function EnglishPracticePanel() {
       }
       toast.error(msg);
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   };

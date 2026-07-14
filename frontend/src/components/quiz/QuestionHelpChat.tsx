@@ -25,6 +25,7 @@ export function QuestionHelpChat({ subjectId, questionKey, question }: QuestionH
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
+  const sendingRef = useRef(false);
 
   useEffect(() => {
     setMessages([]);
@@ -41,7 +42,8 @@ export function QuestionHelpChat({ subjectId, questionKey, question }: QuestionH
       return;
     }
     const text = (overrideText ?? input).trim();
-    if (!text || sending) return;
+    if (!text || sendingRef.current) return;
+    sendingRef.current = true;
 
     const userTurn: HelpChatTurn = { role: "user", content: text };
     const nextMessages = [...messages, userTurn];
@@ -60,9 +62,10 @@ export function QuestionHelpChat({ subjectId, questionKey, question }: QuestionH
       if (!overrideText) setInput(text);
       toast.error(err instanceof Error ? err.message : "Could not get help.");
     } finally {
+      sendingRef.current = false;
       setSending(false);
     }
-  }, [input, sending, messages, subjectId, questionKey, question, premium, navigate]);
+  }, [input, messages, subjectId, questionKey, question, premium, navigate]);
 
   if (!premium) {
     return (

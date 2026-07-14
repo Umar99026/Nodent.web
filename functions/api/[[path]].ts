@@ -26,6 +26,15 @@ import {
 } from "../lib/openai";
 import { englishAiConfigured, scoreEnglishResponse } from "../lib/englishOpenAi";
 import {
+  AiSafetyError,
+  aiSafetyStatus,
+  beginAiRequest,
+  finishAiRequest,
+  openAiEnglishReservationUsd,
+  readCachedAiResult,
+  sha256Key,
+} from "../lib/aiSafety";
+import {
   canRunEnglishAiMark,
   canRunAiResponse,
   ensurePracticeExamUsage,
@@ -36,7 +45,11 @@ import {
   premiumRequiredResponse,
   PREMIUM_REQUIRED,
   quotaExceededResponse,
-  recordUsage,
+  reserveUsageSlot,
+  rollbackUsageSlot,
+  startOfUtcDayIso,
+  FREE_DAILY_AI_RESPONSE_LIMIT,
+  FREE_ENGLISH_ESSAY_LIMIT,
   USAGE_KIND_AI_RESPONSE,
   USAGE_KIND_ENGLISH_ESSAY_AI,
 } from "../lib/premium";
@@ -1826,6 +1839,17 @@ type Env = {
   /** OpenAI — English essay marking only (gpt-4o-mini by default) */
   OPENAI_API_KEY?: string;
   OPENAI_ENGLISH_MODEL?: string;
+  OPENAI_INPUT_USD_PER_MILLION?: string;
+  OPENAI_CACHED_INPUT_USD_PER_MILLION?: string;
+  OPENAI_OUTPUT_USD_PER_MILLION?: string;
+  AI_DISABLE_LIVE_CALLS?: string;
+  AI_DAILY_USER_REQUEST_LIMIT?: string;
+  AI_DAILY_APP_REQUEST_LIMIT?: string;
+  AI_SPEND_WARNING_PERCENT?: string;
+  OPENAI_DAILY_USER_USD_LIMIT?: string;
+  OPENAI_DAILY_APP_USD_LIMIT?: string;
+  OPENAI_ENGLISH_MAX_REQUEST_USD?: string;
+  AI_REQUEST_TIMEOUT_MS?: string;
 };
 type AccountRole = "student" | "teacher";
 
@@ -5225,6 +5249,7 @@ async function runEnglishAiScore(
   db: any,
   env: Env,
   responseId: number,
+  userId: number,
 ): Promise<{
   score: number;
   summary: string;
@@ -5233,7 +5258,8 @@ async function runEnglishAiScore(
 } | null> {
   if (!englishAiConfigured(env)) return null;
   const rows = await db.execute(sql`
-    SELECT r.response_text, r.custom_prompt_text, p.prompt_text
+    SELECT r.response_text, r.custom_prompt_text, p.prompt_text,
+           r.ai_score, r.ai_feedback, r.ai_criteria_json, r.ai_highlights_json, r.ai_scored_at
     FROM english_responses r
     LEFT JOIN english_prompts p ON p.id = r.prompt_id
     WHERE r.id = ${responseId}
@@ -5241,15 +5267,58 @@ async function runEnglishAiScore(
   `);
   const row = (rows.rows as any[])[0];
   if (!row) return null;
+  if (row.ai_scored_at && row.ai_score != null) {
+    return {
+      score: Number(row.ai_score),
+      summary: String(row.ai_feedback ?? ""),
+      criteria: parseEnglishCriteriaJson(row.ai_criteria_json) ?? {},
+      highlights: parseEnglishHighlightsJson(row.ai_highlights_json),
+    };
+  }
   const responseText = String(row.response_text ?? "").trim();
   if (responseText.length < 20) return null;
 
-  const promptText = String(row.custom_prompt_text ?? row.prompt_text ?? "").trim();
-  const result = await scoreEnglishResponse(env, {
-    promptText,
-    responseText,
-    subjectContext: await loadSubjectMarkingContext(db, "english"),
+  const reservation = await beginAiRequest({
+    db,
+    env,
+    requestKey: `english-score:${responseId}`,
+    userId,
+    route: "/api/english/responses/:id/ai-score",
+    feature: "english_essay_marking",
+    provider: "openai",
+    model: env.OPENAI_ENGLISH_MODEL || "gpt-4o-mini",
+    reservedCostUsd: openAiEnglishReservationUsd(env),
   });
+  const started = Date.now();
+  const telemetry: {
+    inputTokens: number; cachedInputTokens: number; outputTokens: number;
+    totalTokens: number; estimatedCostUsd: number;
+  }[] = [];
+  let result;
+  try {
+    const promptText = String(row.custom_prompt_text ?? row.prompt_text ?? "").trim();
+    result = await scoreEnglishResponse(env, {
+      promptText,
+      responseText,
+      subjectContext: await loadSubjectMarkingContext(db, "english"),
+    }, {
+      route: "/api/english/responses/:id/ai-score",
+      feature: "english_essay_marking",
+      userId,
+      onOpenAiRequest: (event) => telemetry.push(event),
+    });
+  } catch (error) {
+    await finishAiRequest({
+      db, reservation, success: false, latencyMs: Date.now() - started,
+      inputTokens: telemetry.reduce((n, row) => n + row.inputTokens, 0),
+      cachedInputTokens: telemetry.reduce((n, row) => n + row.cachedInputTokens, 0),
+      outputTokens: telemetry.reduce((n, row) => n + row.outputTokens, 0),
+      totalTokens: telemetry.reduce((n, row) => n + row.totalTokens, 0),
+      actualCostUsd: telemetry.reduce((n, row) => n + row.estimatedCostUsd, 0),
+      errorCode: error instanceof Error ? error.name : "ai_error",
+    });
+    throw error;
+  }
 
   const now = nowIso();
   await db.execute(sql`
@@ -5261,6 +5330,14 @@ async function runEnglishAiScore(
         ai_scored_at = ${now}
     WHERE id = ${responseId}
   `);
+  await finishAiRequest({
+    db, reservation, success: true, latencyMs: Date.now() - started,
+    inputTokens: telemetry.reduce((n, row) => n + row.inputTokens, 0),
+    cachedInputTokens: telemetry.reduce((n, row) => n + row.cachedInputTokens, 0),
+    outputTokens: telemetry.reduce((n, row) => n + row.outputTokens, 0),
+    totalTokens: telemetry.reduce((n, row) => n + row.totalTokens, 0),
+    actualCostUsd: telemetry.reduce((n, row) => n + row.estimatedCostUsd, 0),
+  });
   return result;
 }
 
@@ -5767,6 +5844,9 @@ app.put("/api/written/:subjectId/:questionKey", authMiddleware, async (c: any) =
 
 app.post("/api/written/:subjectId/:questionKey/mark", authMiddleware, async (c: any) => {
   let isHandwritingMark = false;
+  let aiReservation: Awaited<ReturnType<typeof beginAiRequest>> | null = null;
+  let reservedUsageId: number | null = null;
+  let aiStartedAt = 0;
   try {
     const env = c.env as Env;
     if (!openAiConfigured(env)) {
@@ -5891,6 +5971,39 @@ app.post("/api/written/:subjectId/:questionKey/mark", authMiddleware, async (c: 
       }
     }
 
+    const requestHash = await sha256Key([
+      user.id, subjectId, questionKey, body, Math.floor(Date.now() / 30_000),
+    ]);
+    aiReservation = await beginAiRequest({
+      db,
+      env,
+      requestKey: `written-mark:${requestHash}`,
+      userId: user.id,
+      route: "/api/written/:subjectId/:questionKey/mark",
+      feature: isHandwritingMark ? "handwriting_marking" : "written_marking",
+      provider: "model_pool",
+      model: isHandwritingMark ? (env.GEMINI_VISION_MODEL || "gemini-2.5-flash") : openAiModel(env),
+    });
+    aiStartedAt = Date.now();
+    if (!isPremiumAccount(user) && isShortType) {
+      reservedUsageId = await reserveUsageSlot(
+        db,
+        user.id,
+        USAGE_KIND_AI_RESPONSE,
+        `${subjectId}:${questionKey}`,
+        startOfUtcDayIso(),
+        FREE_DAILY_AI_RESPONSE_LIMIT,
+      );
+      if (!reservedUsageId) {
+        await finishAiRequest({ db, reservation: aiReservation, success: false, errorCode: "free_quota" });
+        aiReservation = null;
+        return c.json({
+          error: `Free accounts get ${FREE_DAILY_AI_RESPONSE_LIMIT} detailed AI responses per day. Type answers for unlimited instant matching and basic feedback, or upgrade to Pro.`,
+          code: "ai_response_quota",
+        }, 403);
+      }
+    }
+
     let result;
     let storedResponseText: string;
 
@@ -5980,14 +6093,13 @@ app.post("/api/written/:subjectId/:questionKey/mark", authMiddleware, async (c: 
         ai_marked_at = EXCLUDED.ai_marked_at
     `);
 
-    if (!isPremiumAccount(user) && isShortType) {
-      await recordUsage(
-        db,
-        user.id,
-        USAGE_KIND_AI_RESPONSE,
-        `${subjectId}:${questionKey}`,
-      );
-    }
+    await finishAiRequest({
+      db,
+      reservation: aiReservation,
+      success: true,
+      latencyMs: Date.now() - aiStartedAt,
+    });
+    aiReservation = null;
 
     return c.json({
       ok: true,
@@ -6003,12 +6115,28 @@ app.post("/api/written/:subjectId/:questionKey/mark", authMiddleware, async (c: 
       },
     });
   } catch (e) {
+    const db = c.get("db");
+    await rollbackUsageSlot(db, reservedUsageId).catch(() => undefined);
+    if (aiReservation) {
+      await finishAiRequest({
+        db,
+        reservation: aiReservation,
+        success: false,
+        latencyMs: aiStartedAt ? Date.now() - aiStartedAt : 0,
+        errorCode: e instanceof AiSafetyError ? e.code : "mark_failed",
+      }).catch(() => undefined);
+    }
     console.error("[written/mark]", errorChain(e));
+    if (e instanceof AiSafetyError) {
+      return c.json({ error: e.message, code: e.code }, aiSafetyStatus(e) as any);
+    }
     return c.json({ error: userFacingMarkError(e, isHandwritingMark) }, 500);
   }
 });
 
 app.post("/api/written/:subjectId/:questionKey/solution", authMiddleware, async (c: any) => {
+  let aiReservation: Awaited<ReturnType<typeof beginAiRequest>> | null = null;
+  let aiStartedAt = 0;
   try {
     const limited = rateLimitResponse(c, "worked-solution", 60);
     if (limited) return limited;
@@ -6065,6 +6193,26 @@ app.post("/api/written/:subjectId/:questionKey/solution", authMiddleware, async 
       return c.json({ error: "A correct answer is required to generate worked steps." }, 400);
     }
 
+    const requestKey = `worked-solution:${await sha256Key([
+      subjectId, questionKey, questionText, marks, guidance, acceptedAnswers,
+    ])}`;
+    const cached = await readCachedAiResult<{ markBreakdown: { steps: unknown[]; source: string } }>(
+      db,
+      requestKey,
+    );
+    if (cached) return c.json(cached);
+    aiReservation = await beginAiRequest({
+      db,
+      env,
+      requestKey,
+      userId: user.id,
+      route: "/api/written/:subjectId/:questionKey/solution",
+      feature: "worked_solution",
+      provider: "model_pool",
+      model: openAiModel(env),
+    });
+    aiStartedAt = Date.now();
+
     const subjectContext = await loadSubjectMarkingContext(c.get("db"), subjectId);
     const generated = await generateMarkBreakdown(env, {
       questionText,
@@ -6074,11 +6222,30 @@ app.post("/api/written/:subjectId/:questionKey/solution", authMiddleware, async 
       acceptedAnswers,
       subjectContext,
     });
-    return c.json({
+    const response = {
       markBreakdown: { steps: generated.steps, source: "ai" },
+    };
+    await finishAiRequest({
+      db,
+      reservation: aiReservation,
+      success: true,
+      result: response,
+      latencyMs: Date.now() - aiStartedAt,
     });
+    aiReservation = null;
+    return c.json(response);
   } catch (e) {
+    if (aiReservation) {
+      await finishAiRequest({
+        db: c.get("db"), reservation: aiReservation, success: false,
+        latencyMs: aiStartedAt ? Date.now() - aiStartedAt : 0,
+        errorCode: e instanceof AiSafetyError ? e.code : "solution_failed",
+      }).catch(() => undefined);
+    }
     console.error("[written/solution]", errorChain(e));
+    if (e instanceof AiSafetyError) {
+      return c.json({ error: e.message, code: e.code }, aiSafetyStatus(e) as any);
+    }
     return c.json({ error: userFacingMarkError(e) }, 500);
   }
 });
@@ -6126,7 +6293,11 @@ function sanitizeQuestionForHelp(q: Record<string, unknown>): Record<string, unk
 }
 
 app.post("/api/written/:subjectId/:questionKey/help", authMiddleware, async (c: any) => {
+  let aiReservation: Awaited<ReturnType<typeof beginAiRequest>> | null = null;
+  let aiStartedAt = 0;
   try {
+    const limited = rateLimitResponse(c, "question-help", 40);
+    if (limited) return limited;
     const env = c.env as Env;
     if (!openAiConfigured(env)) {
       return c.json(
@@ -6135,6 +6306,7 @@ app.post("/api/written/:subjectId/:questionKey/help", authMiddleware, async (c: 
       );
     }
     const user = c.get("user");
+    const db = c.get("db");
     if (!isPremiumAccount(user)) {
       return c.json(premiumRequiredResponse(), 403);
     }
@@ -6154,6 +6326,21 @@ app.post("/api/written/:subjectId/:questionKey/help", authMiddleware, async (c: 
       .slice(-6);
 
     const subjectId = c.req.param("subjectId");
+    const requestKey = `question-help:${await sha256Key([
+      user.id, subjectId, c.req.param("questionKey"), sanitizeQuestionForHelp({ ...q, question: questionText }),
+      messages, Math.floor(Date.now() / 30_000),
+    ])}`;
+    aiReservation = await beginAiRequest({
+      db,
+      env,
+      requestKey,
+      userId: user.id,
+      route: "/api/written/:subjectId/:questionKey/help",
+      feature: "question_help",
+      provider: "model_pool",
+      model: openAiModel(env),
+    });
+    aiStartedAt = Date.now();
     const subjectContext = await loadSubjectMarkingContext(c.get("db"), subjectId);
     const result = await questionHelpChat(env, {
       subjectId,
@@ -6161,9 +6348,24 @@ app.post("/api/written/:subjectId/:questionKey/help", authMiddleware, async (c: 
       messages,
       subjectContext,
     });
+    await finishAiRequest({
+      db, reservation: aiReservation, success: true,
+      latencyMs: Date.now() - aiStartedAt,
+    });
+    aiReservation = null;
     return c.json(result);
   } catch (e) {
+    if (aiReservation) {
+      await finishAiRequest({
+        db: c.get("db"), reservation: aiReservation, success: false,
+        latencyMs: aiStartedAt ? Date.now() - aiStartedAt : 0,
+        errorCode: e instanceof AiSafetyError ? e.code : "help_failed",
+      }).catch(() => undefined);
+    }
     console.error("[written/help]", errorChain(e));
+    if (e instanceof AiSafetyError) {
+      return c.json({ error: e.message, code: e.code }, aiSafetyStatus(e) as any);
+    }
     const msg = userFacingHelpError(e);
     const status = /\b429\b/.test(errorChain(e).toLowerCase()) ? 429 : 500;
     return c.json({ error: msg }, status);
@@ -6995,12 +7197,28 @@ app.post("/api/english/responses", authMiddleware, async (c: any) => {
     let premiumBlocked = false;
     let premiumMessage: string | null = null;
     let canAiScore = false;
+    let englishUsageId: number | null = null;
     if (responseId > 0 && responseText.length >= 20 && aiConfigured) {
       if (isPremiumAccount(user)) {
         canAiScore = true;
       } else {
         const check = await canRunEnglishAiMark(db, user.id);
         canAiScore = check.allowed;
+        if (canAiScore) {
+          englishUsageId = await reserveUsageSlot(
+            db,
+            user.id,
+            USAGE_KIND_ENGLISH_ESSAY_AI,
+            String(responseId),
+            new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+            FREE_ENGLISH_ESSAY_LIMIT,
+          );
+          canAiScore = Boolean(englishUsageId);
+          if (!canAiScore) {
+            premiumBlocked = true;
+            premiumMessage = "Free accounts get 1 AI-marked English essay every 3 days.";
+          }
+        }
         if (!check.allowed) {
           premiumBlocked = true;
           premiumMessage =
@@ -7012,11 +7230,14 @@ app.post("/api/english/responses", authMiddleware, async (c: any) => {
     if (canAiScore) {
       const execCtx = c.executionCtx as { waitUntil?: (p: Promise<unknown>) => void } | undefined;
       const afterScore = async () => {
-        const result = await runEnglishAiScore(db, env, responseId);
-        if (result && !isPremiumAccount(user)) {
-          await recordUsage(db, user.id, USAGE_KIND_ENGLISH_ESSAY_AI, String(responseId));
+        try {
+          const result = await runEnglishAiScore(db, env, responseId, user.id);
+          if (!result) await rollbackUsageSlot(db, englishUsageId);
+          return result;
+        } catch (error) {
+          await rollbackUsageSlot(db, englishUsageId);
+          throw error;
         }
-        return result;
       };
       if (execCtx?.waitUntil) {
         aiScoringPending = true;
@@ -7235,7 +7456,7 @@ app.post("/api/english/responses/:id/ai-score", authMiddleware, async (c: any) =
     }
 
     const target = await db
-      .select({ userId: englishResponses.userId })
+      .select({ userId: englishResponses.userId, aiScoredAt: englishResponses.aiScoredAt })
       .from(englishResponses)
       .where(eq(englishResponses.id, responseId))
       .limit(1);
@@ -7246,6 +7467,9 @@ app.post("/api/english/responses/:id/ai-score", authMiddleware, async (c: any) =
     if (!isOwner && !isAdmin) {
       return c.json({ error: "Not allowed to score this response." }, 403);
     }
+    if (target[0].aiScoredAt) {
+      return c.json({ ok: true, alreadyScored: true, aiScoringPending: false });
+    }
 
     if (!isPremiumAccount(user)) {
       const check = await canRunEnglishAiMark(db, user.id);
@@ -7254,13 +7478,31 @@ app.post("/api/english/responses/:id/ai-score", authMiddleware, async (c: any) =
       }
     }
 
+    let englishUsageId: number | null = null;
+    if (!isPremiumAccount(user)) {
+      englishUsageId = await reserveUsageSlot(
+        db,
+        user.id,
+        USAGE_KIND_ENGLISH_ESSAY_AI,
+        String(responseId),
+        new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+        FREE_ENGLISH_ESSAY_LIMIT,
+      );
+      if (!englishUsageId) {
+        return c.json({ error: "Free English AI marking limit reached.", code: "ai_response_quota" }, 429);
+      }
+    }
+
     const execCtx = c.executionCtx as { waitUntil?: (p: Promise<unknown>) => void } | undefined;
     const afterScore = async () => {
-      const result = await runEnglishAiScore(db, env, responseId);
-      if (result && !isPremiumAccount(user)) {
-        await recordUsage(db, user.id, USAGE_KIND_ENGLISH_ESSAY_AI, String(responseId));
+      try {
+        const result = await runEnglishAiScore(db, env, responseId, user.id);
+        if (!result) await rollbackUsageSlot(db, englishUsageId);
+        return result;
+      } catch (error) {
+        await rollbackUsageSlot(db, englishUsageId);
+        throw error;
       }
-      return result;
     };
     if (execCtx?.waitUntil) {
       execCtx.waitUntil(
@@ -7972,6 +8214,8 @@ app.put("/api/admin/prompting/:subjectId", adminAccessMiddleware, async (c: any)
 });
 
 app.post("/api/admin/ai/generate-mark-breakdown", adminAccessMiddleware, async (c: any) => {
+  let aiReservation: Awaited<ReturnType<typeof beginAiRequest>> | null = null;
+  let aiStartedAt = 0;
   try {
     const env = c.env as Env;
     if (!openAiConfigured(env)) {
@@ -7986,6 +8230,26 @@ app.post("/api/admin/ai/generate-mark-breakdown", adminAccessMiddleware, async (
     const subjectContext = subjectId
       ? await loadSubjectMarkingContext(db, subjectId)
       : undefined;
+    const requestKey = `admin-mark-breakdown:${await sha256Key([
+      subjectId, questionText, marks, body?.topic, body?.guidance, body?.acceptedAnswers,
+    ])}`;
+    const cached = await readCachedAiResult<{ markBreakdown: { steps: unknown[]; source: string } }>(
+      db,
+      requestKey,
+    );
+    if (cached) return c.json(cached);
+    const user = c.get("user");
+    aiReservation = await beginAiRequest({
+      db,
+      env,
+      requestKey,
+      userId: Number(user?.id ?? 0),
+      route: "/api/admin/ai/generate-mark-breakdown",
+      feature: "admin_mark_breakdown",
+      provider: "model_pool",
+      model: openAiModel(env),
+    });
+    aiStartedAt = Date.now();
     const generated = await generateMarkBreakdown(env, {
       questionText,
       topic: body?.topic ? cleanText(String(body.topic), 240) : undefined,
@@ -7996,10 +8260,26 @@ app.post("/api/admin/ai/generate-mark-breakdown", adminAccessMiddleware, async (
         : undefined,
       subjectContext,
     });
-    return c.json({
+    const response = {
       markBreakdown: { steps: generated.steps, source: "ai" },
+    };
+    await finishAiRequest({
+      db, reservation: aiReservation, success: true, result: response,
+      latencyMs: Date.now() - aiStartedAt,
     });
+    aiReservation = null;
+    return c.json(response);
   } catch (e) {
+    if (aiReservation) {
+      await finishAiRequest({
+        db: c.get("db"), reservation: aiReservation, success: false,
+        latencyMs: aiStartedAt ? Date.now() - aiStartedAt : 0,
+        errorCode: e instanceof AiSafetyError ? e.code : "admin_breakdown_failed",
+      }).catch(() => undefined);
+    }
+    if (e instanceof AiSafetyError) {
+      return c.json({ error: e.message, code: e.code }, aiSafetyStatus(e) as any);
+    }
     return c.json({ error: errorChain(e) }, 500);
   }
 });

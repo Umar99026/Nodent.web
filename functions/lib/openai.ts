@@ -26,6 +26,7 @@ import {
   withAiProviderPool,
   type AiProviderEnv,
 } from "./aiProviders";
+import { aiLiveCallsDisabled, aiRequestTimeoutMs } from "./aiSafety";
 
 export type OpenAiEnv = AiProviderEnv & {
   GEMINI_MODEL?: string;
@@ -56,6 +57,13 @@ function geminiRequestHeaders(apiKey: string): Record<string, string> {
 
 function trim(s: string | undefined): string {
   return String(s ?? "").trim();
+}
+
+async function providerFetch(env: OpenAiEnv, url: string, init: RequestInit): Promise<Response> {
+  if (aiLiveCallsDisabled(env)) throw new Error("AI calls are disabled in this environment.");
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), aiRequestTimeoutMs(env));
+  return fetch(url, { ...init, signal: controller.signal }).finally(() => clearTimeout(timeout));
 }
 
 export function openAiConfigured(env: OpenAiEnv): boolean {
@@ -192,6 +200,7 @@ function splitGeminiVisionMessages(messages: VisionChatMessage[]): {
 }
 
 async function geminiGenerateJson(
+  env: OpenAiEnv,
   apiKey: string,
   model: string,
   input: {
@@ -201,7 +210,7 @@ async function geminiGenerateJson(
   maxOutputTokens = OUTPUT_CAP_MARK,
 ): Promise<Record<string, unknown>> {
   const url = geminiGenerateContentUrl(model);
-  const res = await fetch(url, {
+  const res = await providerFetch(env, url, {
     method: "POST",
     headers: geminiRequestHeaders(apiKey),
     body: JSON.stringify({
@@ -244,6 +253,7 @@ async function geminiGenerateJson(
 }
 
 async function geminiGenerateText(
+  env: OpenAiEnv,
   apiKey: string,
   model: string,
   input: {
@@ -253,7 +263,7 @@ async function geminiGenerateText(
   maxOutputTokens = OUTPUT_CAP_HELP,
 ): Promise<string> {
   const url = geminiGenerateContentUrl(model);
-  const res = await fetch(url, {
+  const res = await providerFetch(env, url, {
     method: "POST",
     headers: geminiRequestHeaders(apiKey),
     body: JSON.stringify({
@@ -298,6 +308,7 @@ async function chatJson(
     if (provider.kind === "gemini") {
       const { systemInstruction, contents } = splitGeminiMessages(messages);
       return geminiGenerateJson(
+        env,
         provider.apiKey,
         openAiModel(env),
         { systemInstruction, contents },
@@ -305,6 +316,7 @@ async function chatJson(
       );
     }
     return groqGenerateJson(
+      env,
       provider.apiKey,
       groqModel(env),
       messages.map((m) => ({ role: m.role, content: m.content })),
@@ -324,6 +336,7 @@ async function chatJsonWithVision(
   const provider = providers[Math.floor(Math.random() * providers.length)]!;
   const { systemInstruction, contents } = splitGeminiVisionMessages(messages);
   return geminiGenerateJson(
+    env,
     provider.apiKey,
     openAiVisionModel(env),
     { systemInstruction, contents },
@@ -340,6 +353,7 @@ async function chatText(
     if (provider.kind === "gemini") {
       const { systemInstruction, contents } = splitGeminiMessages(messages);
       return geminiGenerateText(
+        env,
         provider.apiKey,
         openAiModel(env),
         { systemInstruction, contents },
@@ -347,6 +361,7 @@ async function chatText(
       );
     }
     return groqGenerateText(
+      env,
       provider.apiKey,
       groqModel(env),
       messages.map((m) => ({ role: m.role, content: m.content })),

@@ -9,6 +9,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync, copyFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { neon } from "@neondatabase/serverless";
+import { assertLiveOpenAiScript, openAiScriptFetch } from "./lib/openai-script-safety.mjs";
 
 const APPLY = process.argv.includes("--apply");
 const SKIP_IMAGE = process.argv.includes("--skip-image");
@@ -98,19 +99,19 @@ async function generateImage(apiKey) {
       };
       if (attempt.response_format) body.response_format = attempt.response_format;
 
-      const res = await fetch("https://api.openai.com/v1/images/generations", {
+      const res = await openAiScriptFetch("https://api.openai.com/v1/images/generations", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${apiKey}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify(body),
-      });
+      }, { feature: "generate_demo_question_image", maxAttempts: 1 });
 
       if (!res.ok) {
         lastErr = `OpenAI images ${attempt.model} (${res.status}): ${(await res.text()).slice(0, 300)}`;
         if ([429, 500, 502, 503, 520].includes(res.status) && tryNo === 0) {
-          await new Promise((r) => setTimeout(r, 3000));
+          await new Promise((r) => setTimeout(r, 1000 * 2 ** tryNo));
           continue;
         }
         break;
@@ -211,6 +212,14 @@ async function insertQuestion(sql, question) {
 }
 
 const env = loadEnv();
+const preview = buildQuestion(SUBJECTS[0]);
+if (!APPLY) {
+  console.log("Question preview:");
+  console.log(`  Subjects: ${SUBJECTS.join(", ")}`);
+  console.log(`  Stem: ${preview.question}`);
+  console.log("\nDry run only — no OpenAI request was made. Re-run with --apply to generate and insert.");
+  process.exit(0);
+}
 if (!SKIP_IMAGE && !env.OPENAI_API_KEY) {
   console.error("Missing OPENAI_API_KEY in .dev.vars or env.");
   process.exit(1);
@@ -225,6 +234,7 @@ if (SKIP_IMAGE && !existsSync(sourceImage)) {
 console.log(
   SKIP_IMAGE ? "Skipping image generation (using existing file)…" : "Generating network diagram with OpenAI…",
 );
+if (!SKIP_IMAGE) assertLiveOpenAiScript("generate_demo_question_image");
 const buffer = SKIP_IMAGE ? readFileSync(sourceImage) : await generateImage(env.OPENAI_API_KEY);
 if (!SKIP_IMAGE) saveImage(buffer, SUBJECTS);
 else ensureImageForSubjects(SUBJECTS);
@@ -236,11 +246,6 @@ console.log(`  Stem: ${sample.question}`);
 console.log(`  Image: ${sample.imageUrls[0]}`);
 console.log(`  a) ${sample.answerParts[0].label} → ${sample.answerParts[0].acceptedAnswer}`);
 console.log(`  b) ${sample.answerParts[1].label} → ${sample.answerParts[1].acceptedAnswer}`);
-
-if (!APPLY) {
-  console.log("\nDry run — re-run with --apply to insert into the database.");
-  process.exit(0);
-}
 
 if (!env.DATABASE_URL) {
   console.error("Missing DATABASE_URL for --apply.");

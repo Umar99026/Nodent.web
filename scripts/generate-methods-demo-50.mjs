@@ -9,6 +9,7 @@
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { neon } from "@neondatabase/serverless";
+import { assertLiveOpenAiScript, openAiScriptFetch } from "./lib/openai-script-safety.mjs";
 
 const APPLY = process.argv.includes("--apply");
 const IMPORT_ONLY = process.argv.includes("--import-only");
@@ -124,6 +125,7 @@ async function loadReferenceQuestions(sql) {
 }
 
 async function callOpenAiForTopic(env, referenceQuestions, topic, count) {
+  assertLiveOpenAiScript("generate_methods_demo_50");
   const model = env.OPENAI_MODEL || "gpt-4o-mini";
 
   const system = `You write original VCE Mathematical Methods (Units 3 & 4) exam-style questions for an Australian study app.
@@ -158,7 +160,7 @@ ${JSON.stringify(referenceQuestions, null, 2)}`;
 
   const user = `Generate exactly ${count} unique questions on topic "${topic}". At least one multipart if count >= 2.`;
 
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+  const res = await openAiScriptFetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${env.OPENAI_API_KEY}`,
@@ -166,6 +168,7 @@ ${JSON.stringify(referenceQuestions, null, 2)}`;
     },
     body: JSON.stringify({
       model,
+      max_tokens: 2500,
       temperature: 0.8,
       response_format: { type: "json_object" },
       messages: [
@@ -173,7 +176,7 @@ ${JSON.stringify(referenceQuestions, null, 2)}`;
         { role: "user", content: user },
       ],
     }),
-  });
+  }, { feature: "generate_methods_demo_50" });
 
   if (!res.ok) {
     throw new Error(`OpenAI ${res.status}: ${(await res.text()).slice(0, 500)}`);

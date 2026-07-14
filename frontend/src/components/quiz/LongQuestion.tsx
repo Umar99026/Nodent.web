@@ -1,4 +1,4 @@
-import { useEffect, useState, Fragment } from "react";
+import { useEffect, useRef, useState, Fragment } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { cn, getQuestionTypeLabel, isAnswerCorrect } from "@/lib/utils";
@@ -311,6 +311,7 @@ export function LongQuestion({
   }>({ average: null, count: 0 });
   const [aiMark, setAiMark] = useState<SmartMarkResult | null>(null);
   const [aiMarking, setAiMarking] = useState(false);
+  const saveInFlightRef = useRef(false);
   const [premiumLockedMessage, setPremiumLockedMessage] = useState<string | null>(null);
   const handwritingUi = handwritingAllowedForSubject(subjectId);
   const examPaper = examPaperLayoutProp ?? isExamPaperLayoutSubject(subjectId);
@@ -429,9 +430,10 @@ export function LongQuestion({
       ? handwritingResponseSummary(handwritingImages.length)
       : effectiveResponse;
 
-    if (!hasContent || saving || disabled || (!practiceOnly && saved)) return;
+    if (!hasContent || saveInFlightRef.current || disabled || (!practiceOnly && saved)) return;
 
     setPremiumLockedMessage(null);
+    saveInFlightRef.current = true;
     setSaving(true);
     try {
       if (!practiceOnly) {
@@ -611,6 +613,7 @@ export function LongQuestion({
         err instanceof Error ? err.message : "Failed to submit answer."
       );
     } finally {
+      saveInFlightRef.current = false;
       setSaving(false);
     }
   };

@@ -116,6 +116,40 @@ export async function recordUsage(
   `);
 }
 
+/** Atomically reserves a quota slot before a paid request starts. Roll it back on failure. */
+export async function reserveUsageSlot(
+  db: { execute: (q: ReturnType<typeof sql>) => Promise<{ rows?: unknown[] }> },
+  userId: number,
+  kind: string,
+  refKey: string | null,
+  sinceIso: string,
+  limit: number,
+): Promise<number | null> {
+  const now = new Date().toISOString();
+  const rows = await db.execute(sql`
+    WITH quota_lock AS (
+      SELECT pg_advisory_xact_lock(hashtext(${`nodent-quota:${userId}:${kind}`}))
+    ), current_usage AS (
+      SELECT COUNT(*)::int AS n
+      FROM user_usage_events, quota_lock
+      WHERE user_id = ${userId} AND kind = ${kind} AND created_at >= ${sinceIso}
+    )
+    INSERT INTO user_usage_events (user_id, kind, ref_key, created_at)
+    SELECT ${userId}, ${kind}, ${refKey}, ${now}
+    FROM current_usage WHERE n < ${Math.max(1, Math.round(limit))}
+    RETURNING id
+  `);
+  return Number((rows.rows as { id?: number }[] | undefined)?.[0]?.id ?? 0) || null;
+}
+
+export async function rollbackUsageSlot(
+  db: { execute: (q: ReturnType<typeof sql>) => Promise<unknown> },
+  usageId: number | null,
+): Promise<void> {
+  if (!usageId) return;
+  await db.execute(sql`DELETE FROM user_usage_events WHERE id = ${usageId}`);
+}
+
 /** Whether this exact question was one of today's successfully AI-marked responses. */
 export async function hasAiResponseUsageForRef(
   db: { execute: (q: ReturnType<typeof sql>) => Promise<{ rows?: unknown[] }> },

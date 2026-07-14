@@ -9,6 +9,7 @@
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { neon } from "@neondatabase/serverless";
+import { assertLiveOpenAiScript, openAiScriptFetch } from "./lib/openai-script-safety.mjs";
 
 const APPLY = process.argv.includes("--apply");
 const IMPORT_ONLY = process.argv.includes("--import-only");
@@ -156,6 +157,7 @@ function parseModelJson(content) {
 }
 
 async function callOpenAiForTopic(env, referenceQuestions, topic, count) {
+  assertLiveOpenAiScript("generate_general_maths_demo_50");
   const model = env.OPENAI_MODEL || "gpt-4o-mini";
   const topicRefs = referenceQuestions.filter((r) => r.topic === topic).slice(0, 5);
   const otherRefs = referenceQuestions.filter((r) => r.topic !== topic).slice(0, 3);
@@ -199,7 +201,7 @@ ${JSON.stringify(otherRefs, null, 2)}`;
 
   const user = `Generate exactly ${count} unique VERY DIFFICULT questions on topic "${topic}". At least one multipart long_answer if count >= 3.`;
 
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+  const res = await openAiScriptFetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${env.OPENAI_API_KEY}`,
@@ -207,6 +209,7 @@ ${JSON.stringify(otherRefs, null, 2)}`;
     },
     body: JSON.stringify({
       model,
+      max_tokens: 2500,
       temperature: 0.75,
       response_format: { type: "json_object" },
       messages: [
@@ -214,7 +217,7 @@ ${JSON.stringify(otherRefs, null, 2)}`;
         { role: "user", content: user },
       ],
     }),
-  });
+  }, { feature: "generate_general_maths_demo_50" });
 
   if (!res.ok) {
     throw new Error(`OpenAI ${res.status}: ${(await res.text()).slice(0, 500)}`);

@@ -227,6 +227,7 @@ export function ShortQuestion({
   const [detailedAiFeedbackUsed, setDetailedAiFeedbackUsed] = useState(false);
   const [stepAnswers, setStepAnswers] = useState<string[]>([]);
   const devPreloadAppliedRef = useRef(false);
+  const aiSubmitRef = useRef(false);
   const { user } = useAuth();
   const premium = isPremiumUser(user);
   const { usage, reload: reloadUsage } = usePremiumUsage(!!user && !premium);
@@ -501,6 +502,8 @@ export function ShortQuestion({
       !practiceOnly && Boolean(questionKey) && (premium || !aiResponsesLocked);
 
     if (useDetailedAiNow && questionKey) {
+      if (aiSubmitRef.current) return;
+      aiSubmitRef.current = true;
       setAiMarking(true);
       try {
         const ai = await requestShortAnswerAiMark(subjectId, questionKey, {
@@ -555,6 +558,7 @@ export function ShortQuestion({
           setAiMark(fallback);
         }
       } finally {
+        aiSubmitRef.current = false;
         setAiMarking(false);
       }
     } else if (isMultipart) {

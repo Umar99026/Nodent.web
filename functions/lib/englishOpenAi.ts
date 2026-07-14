@@ -16,13 +16,17 @@
  */
 
 import { formatSubjectMarkingContextBlock, type SubjectMarkingContext } from "./openai";
+import { aiLiveCallsDisabled, aiRequestTimeoutMs, type AiSafetyEnv } from "./aiSafety";
 
-export type EnglishOpenAiEnv = {
+export type EnglishOpenAiEnv = AiSafetyEnv & {
   GEMINI_API_KEY?: string;
   GEMINI_API_KEY_2?: string;
   GEMINI_ENGLISH_MODEL?: string;
   OPENAI_API_KEY?: string;
   OPENAI_ENGLISH_MODEL?: string;
+  OPENAI_INPUT_USD_PER_MILLION?: string;
+  OPENAI_CACHED_INPUT_USD_PER_MILLION?: string;
+  OPENAI_OUTPUT_USD_PER_MILLION?: string;
 };
 
 const OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions";
@@ -68,6 +72,30 @@ export type EnglishScoreInput = {
   promptText: string;
   responseText: string;
   subjectContext?: SubjectMarkingContext;
+};
+
+export type EnglishAiTelemetry = {
+  timestamp: string;
+  route: string;
+  feature: string;
+  userId: number;
+  provider: "openai";
+  model: string;
+  inputTokens: number;
+  cachedInputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  latencyMs: number;
+  success: boolean;
+  estimatedCostUsd: number;
+  errorCode?: string;
+};
+
+export type EnglishAiRequestContext = {
+  route: string;
+  feature: string;
+  userId: number;
+  onOpenAiRequest?: (event: EnglishAiTelemetry) => void;
 };
 
 export type EnglishScoreResult = {
@@ -119,53 +147,132 @@ function parseEnglishHighlights(raw: unknown): EnglishHighlight[] {
 }
 
 async function openAiChatJson(
+  env: EnglishOpenAiEnv,
   apiKey: string,
   model: string,
   messages: { role: "system" | "user" | "assistant"; content: string }[],
+  context?: EnglishAiRequestContext,
 ): Promise<Record<string, unknown>> {
-  const res = await fetch(OPENAI_CHAT_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      messages,
-      temperature: 0.2,
-      max_tokens: MAX_OUTPUT_TOKENS,
-      response_format: { type: "json_object" },
-    }),
-  });
-
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`OpenAI error (${res.status}): ${errText.slice(0, 600)}`);
+  if (aiLiveCallsDisabled(env)) throw new Error("AI calls are disabled in this environment.");
+  const approximateInputTokens = Math.ceil(
+    messages.reduce((sum, message) => sum + message.content.length, 0) / 4,
+  );
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const started = Date.now();
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), aiRequestTimeoutMs(env));
+    let status = 0;
+    try {
+      const res = await fetch(OPENAI_CHAT_URL, {
+        method: "POST",
+        signal: controller.signal,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          messages,
+          temperature: 0.2,
+          max_tokens: MAX_OUTPUT_TOKENS,
+          response_format: { type: "json_object" },
+        }),
+      });
+      status = res.status;
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`OpenAI error (${res.status}): ${errText.slice(0, 300)}`);
+      }
+      const data = (await res.json()) as {
+        choices?: { message?: { content?: string | null } }[];
+        error?: { message?: string };
+        usage?: {
+          prompt_tokens?: number;
+          completion_tokens?: number;
+          total_tokens?: number;
+          prompt_tokens_details?: { cached_tokens?: number };
+        };
+      };
+      if (data.error?.message) throw new Error(`OpenAI error: ${String(data.error.message).slice(0, 300)}`);
+      const content = String(data.choices?.[0]?.message?.content ?? "").trim();
+      if (!content) throw new Error("OpenAI returned an empty response.");
+      const parsed = JSON.parse(content) as Record<string, unknown>;
+      const inputTokens = Number(data.usage?.prompt_tokens ?? approximateInputTokens);
+      const cachedInputTokens = Number(data.usage?.prompt_tokens_details?.cached_tokens ?? 0);
+      const outputTokens = Number(data.usage?.completion_tokens ?? Math.ceil(content.length / 4));
+      const totalTokens = Number(data.usage?.total_tokens ?? inputTokens + outputTokens);
+      emitOpenAiTelemetry(env, context, {
+        model, inputTokens, cachedInputTokens, outputTokens, totalTokens,
+        latencyMs: Date.now() - started, success: true,
+      });
+      return parsed;
+    } catch (error) {
+      lastError = error;
+      emitOpenAiTelemetry(env, context, {
+        model,
+        inputTokens: approximateInputTokens,
+        cachedInputTokens: 0,
+        outputTokens: 0,
+        totalTokens: approximateInputTokens,
+        latencyMs: Date.now() - started,
+        success: false,
+        errorCode: error instanceof DOMException && error.name === "AbortError"
+          ? "timeout"
+          : status ? `http_${status}` : "request_failed",
+      });
+      const retryable = status === 408 || status === 409 || status === 429 || status >= 500 ||
+        (error instanceof DOMException && error.name === "AbortError");
+      if (!retryable || attempt === 1) break;
+      await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** attempt));
+    } finally {
+      clearTimeout(timeout);
+    }
   }
+  throw lastError instanceof Error ? lastError : new Error("OpenAI request failed.");
+}
 
-  const data = (await res.json()) as {
-    choices?: { message?: { content?: string | null } }[];
-    error?: { message?: string };
+function price(raw: string | undefined, fallback: number): number {
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+function emitOpenAiTelemetry(
+  env: EnglishOpenAiEnv,
+  context: EnglishAiRequestContext | undefined,
+  usage: Omit<EnglishAiTelemetry, "timestamp" | "route" | "feature" | "userId" | "provider" | "estimatedCostUsd">,
+): void {
+  const modelLc = usage.model.toLowerCase();
+  const defaults = modelLc.includes("gpt-4o-mini")
+    ? { input: 0.15, cached: 0.075, output: 0.6 }
+    : modelLc.startsWith("gpt-4o")
+      ? { input: 2.5, cached: 1.25, output: 10 }
+      : { input: 5, cached: 2.5, output: 20 };
+  const uncachedInput = Math.max(0, usage.inputTokens - usage.cachedInputTokens);
+  const estimatedCostUsd =
+    (uncachedInput * price(env.OPENAI_INPUT_USD_PER_MILLION, defaults.input) +
+      usage.cachedInputTokens * price(env.OPENAI_CACHED_INPUT_USD_PER_MILLION, defaults.cached) +
+      usage.outputTokens * price(env.OPENAI_OUTPUT_USD_PER_MILLION, defaults.output)) / 1_000_000;
+  const event: EnglishAiTelemetry = {
+    timestamp: new Date().toISOString(),
+    route: context?.route ?? "unknown",
+    feature: context?.feature ?? "english_marking",
+    userId: context?.userId ?? 0,
+    provider: "openai",
+    ...usage,
+    estimatedCostUsd,
   };
-  if (data.error?.message) {
-    throw new Error(`OpenAI error: ${String(data.error.message).slice(0, 600)}`);
-  }
-
-  const content = String(data.choices?.[0]?.message?.content ?? "").trim();
-  if (!content) throw new Error("OpenAI returned an empty response.");
-
-  try {
-    return JSON.parse(content) as Record<string, unknown>;
-  } catch {
-    throw new Error("OpenAI returned invalid JSON.");
-  }
+  console.log(JSON.stringify({ event: "ai_request", ...event }));
+  context?.onOpenAiRequest?.(event);
 }
 
 async function geminiChatJson(
+  env: EnglishOpenAiEnv,
   apiKey: string,
   model: string,
   messages: { role: "system" | "user" | "assistant"; content: string }[],
 ): Promise<Record<string, unknown>> {
+  if (aiLiveCallsDisabled(env)) throw new Error("AI calls are disabled in this environment.");
   const system = messages
     .filter((message) => message.role === "system")
     .map((message) => message.content)
@@ -176,10 +283,13 @@ async function geminiChatJson(
       role: message.role === "assistant" ? "model" : "user",
       parts: [{ text: message.content }],
     }));
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), aiRequestTimeoutMs(env));
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
     {
       method: "POST",
+      signal: controller.signal,
       headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
       body: JSON.stringify({
         systemInstruction: system ? { parts: [{ text: system }] } : undefined,
@@ -191,7 +301,7 @@ async function geminiChatJson(
         },
       }),
     },
-  );
+  ).finally(() => clearTimeout(timeout));
 
   if (!res.ok) {
     const detail = await res.text();
@@ -223,6 +333,7 @@ type EnglishChatMessage = {
 async function callEnglishProvider(
   env: EnglishOpenAiEnv,
   messages: EnglishChatMessage[],
+  context?: EnglishAiRequestContext,
 ): Promise<Record<string, unknown>> {
   const geminiKeys = [
     ...new Set([trim(env.GEMINI_API_KEY), trim(env.GEMINI_API_KEY_2)].filter(Boolean)),
@@ -231,19 +342,24 @@ async function callEnglishProvider(
   for (const apiKey of geminiKeys) {
     try {
       return await geminiChatJson(
+        env,
         apiKey,
         trim(env.GEMINI_ENGLISH_MODEL) || DEFAULT_GEMINI_ENGLISH_MODEL,
         messages,
       );
     } catch (error) {
       lastGeminiError = error;
-      console.warn("[english-marking] Gemini key failed; trying the next provider.");
+      const retryable = /\b(408|409|429|5\d\d)\b|quota|rate.?limit|overload|capacity|abort|timeout/i.test(
+        String(error instanceof Error ? error.message : error),
+      );
+      if (!retryable) throw error;
+      console.warn("[english-marking] Gemini temporarily failed; trying the next provider.");
     }
   }
 
   const openAiKey = trim(env.OPENAI_API_KEY);
   if (openAiKey) {
-    return openAiChatJson(openAiKey, englishAiModel(env), messages);
+    return openAiChatJson(env, openAiKey, englishAiModel(env), messages, context);
   }
   throw lastGeminiError instanceof Error
     ? lastGeminiError
@@ -253,6 +369,7 @@ async function callEnglishProvider(
 export async function scoreEnglishResponse(
   env: EnglishOpenAiEnv,
   input: EnglishScoreInput,
+  context?: EnglishAiRequestContext,
 ): Promise<EnglishScoreResult> {
   const promptText = String(input.promptText ?? "").trim().slice(0, MAX_PROMPT_CHARS);
   const responseText = String(input.responseText ?? "").trim().slice(0, MAX_ESSAY_CHARS);
@@ -272,7 +389,7 @@ Return compact JSON only: {"score":0-10,"summary":"max 2 short sentences","crite
     },
   ];
 
-  let parsed = await callEnglishProvider(env, messages);
+  let parsed = await callEnglishProvider(env, messages, context);
   let highlights = parseEnglishHighlights(parsed.highlights);
   const hasStrength = highlights.some((highlight) => highlight.type === "strength");
   const hasImprovement = highlights.some((highlight) => highlight.type === "improvement");
@@ -285,7 +402,7 @@ Return compact JSON only: {"score":0-10,"summary":"max 2 short sentences","crite
         content:
           "Correct the full JSON. The highlights must include both exact-quote strengths and exact-quote improvements, with at least 2 of each. Keep all other required fields.",
       },
-    ]);
+    ], context);
     highlights = parseEnglishHighlights(parsed.highlights);
   }
 

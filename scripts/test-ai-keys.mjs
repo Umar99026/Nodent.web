@@ -4,6 +4,9 @@
 import { readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
+import { assertLiveOpenAiScript, openAiScriptFetch } from "./lib/openai-script-safety.mjs";
+
+assertLiveOpenAiScript("test_ai_keys", "AI_ALLOW_LIVE_TESTS");
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const envText = readFileSync(resolve(root, ".dev.vars"), "utf8");
@@ -16,12 +19,6 @@ const env = Object.fromEntries(
       return [line.slice(0, i).trim(), line.slice(i + 1).trim()];
     }),
 );
-
-function mask(key) {
-  if (!key) return "(missing)";
-  if (key.length <= 8) return "***";
-  return `${key.slice(0, 4)}…${key.slice(-4)}`;
-}
 
 async function testGemini(name, apiKey, model) {
   if (!apiKey) return { name, ok: false, detail: "not set" };
@@ -62,7 +59,7 @@ async function testGroq(name, apiKey, model) {
 
 async function testOpenAi(name, apiKey, model) {
   if (!apiKey) return { name, ok: false, detail: "not set" };
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+  const res = await openAiScriptFetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -75,7 +72,7 @@ async function testOpenAi(name, apiKey, model) {
       temperature: 0,
       response_format: { type: "json_object" },
     }),
-  });
+  }, { feature: "test_ai_keys", maxAttempts: 1 });
   const text = await res.text();
   if (!res.ok) return { name, ok: false, detail: `HTTP ${res.status}: ${text.slice(0, 120)}` };
   return { name, ok: true, detail: `model ${model}` };
@@ -97,7 +94,7 @@ const checks = await Promise.all([
 
 for (const c of checks) {
   const icon = c.ok ? "OK" : "FAIL";
-  console.log(`[${icon}] ${c.name} (${mask(env[c.name] ?? env.GROQ_API_KEY)}) — ${c.detail}`);
+  console.log(`[${icon}] ${c.name} — ${c.detail}`);
 }
 
 const poolSize = [

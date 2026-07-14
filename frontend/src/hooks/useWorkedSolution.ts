@@ -10,6 +10,7 @@ type WorkedSolutionResponse = {
 };
 
 const memoryCache = new Map<string, MarkStepResult[]>();
+const inFlightRequests = new Map<string, Promise<{ breakdown: MarkBreakdown; steps: MarkStepResult[] }>>();
 
 function cacheKey(subjectId: string, questionKey: string): string {
   return `nodent_worked_solution:${subjectId}:${questionKey}`;
@@ -70,6 +71,32 @@ function questionPayload(question: Question): Record<string, unknown> {
   };
 }
 
+function requestWorkedSolution(
+  key: string,
+  subjectId: string,
+  questionKey: string,
+  question: Question,
+): Promise<{ breakdown: MarkBreakdown; steps: MarkStepResult[] }> {
+  const existing = inFlightRequests.get(key);
+  if (existing) return existing;
+  const request = apiFetch<WorkedSolutionResponse>(
+    API_PATHS.written.solution(subjectId, questionKey),
+    {
+      method: "POST",
+      timeoutMs: AI_FETCH_TIMEOUT_MS,
+      body: JSON.stringify({ question: questionPayload(question) }),
+    },
+  ).then((result) => {
+    const breakdown = result.markBreakdown;
+    const steps = buildWorkedSolutionSteps(breakdown);
+    if (!breakdown || !steps.length) throw new Error("The worked solution was empty.");
+    writeCached(key, breakdown, steps);
+    return { breakdown, steps };
+  }).finally(() => inFlightRequests.delete(key));
+  inFlightRequests.set(key, request);
+  return request;
+}
+
 export function useWorkedSolution(input: {
   question: Question;
   subjectId?: string;
@@ -101,32 +128,16 @@ export function useWorkedSolution(input: {
     const load = async () => {
       setLoading(true);
       setError(null);
-      let lastError: unknown;
-      for (let attempt = 0; attempt < 2; attempt += 1) {
-        try {
-          const result = await apiFetch<WorkedSolutionResponse>(
-            API_PATHS.written.solution(subjectId, questionKey),
-            {
-              method: "POST",
-              timeoutMs: AI_FETCH_TIMEOUT_MS,
-              body: JSON.stringify({ question: questionPayload(question) }),
-            },
-          );
-          const breakdown = result.markBreakdown;
-          const steps = buildWorkedSolutionSteps(breakdown);
-          if (!breakdown || !steps.length) throw new Error("The worked solution was empty.");
-          if (!cancelled) {
-            writeCached(key, breakdown, steps);
-            setGenerated({ key, steps });
-            setError(null);
-          }
-          return;
-        } catch (err) {
-          lastError = err;
+      try {
+        const { steps } = await requestWorkedSolution(key, subjectId, questionKey, question);
+        if (!cancelled) {
+          setGenerated({ key, steps });
+          setError(null);
         }
-      }
-      if (!cancelled) {
-        setError(lastError instanceof Error ? lastError.message : "Could not generate worked steps.");
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Could not generate worked steps.");
+        }
       }
     };
     void load().finally(() => {

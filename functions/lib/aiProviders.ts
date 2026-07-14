@@ -9,6 +9,8 @@
  *   GROQ_MODEL       (default llama-3.1-8b-instant)
  */
 
+import { aiLiveCallsDisabled, aiRequestTimeoutMs, type AiSafetyEnv } from "./aiSafety";
+
 export type AiProviderKind = "gemini" | "groq";
 
 export type AiProvider = {
@@ -17,7 +19,7 @@ export type AiProvider = {
   id: string;
 };
 
-export type AiProviderEnv = {
+export type AiProviderEnv = AiSafetyEnv & {
   GEMINI_API_KEY?: string;
   GEMINI_API_KEY_2?: string;
   GROQ_API_KEY?: string;
@@ -99,6 +101,7 @@ export async function withAiProviderPool<T>(
       const hasMore = offset < providers.length - 1;
       if (!retryable || !hasMore) break;
       console.warn(`[aiProviders] ${provider.id} failed, trying next provider:`, err);
+      await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** offset));
     }
   }
 
@@ -110,13 +113,18 @@ type GroqMessage =
   | { role: "user" | "assistant"; content: { type: "text"; text: string }[] };
 
 async function groqChat(
+  env: AiProviderEnv,
   apiKey: string,
   model: string,
   messages: GroqMessage[],
   opts: { json?: boolean; maxTokens: number; temperature?: number },
 ): Promise<string> {
+  if (aiLiveCallsDisabled(env)) throw new Error("AI calls are disabled in this environment.");
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), aiRequestTimeoutMs(env));
   const res = await fetch(GROQ_API_BASE, {
     method: "POST",
+    signal: controller.signal,
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`,
@@ -128,7 +136,7 @@ async function groqChat(
       max_tokens: opts.maxTokens,
       ...(opts.json ? { response_format: { type: "json_object" } } : {}),
     }),
-  });
+  }).finally(() => clearTimeout(timeout));
 
   if (!res.ok) {
     const errText = await res.text();
@@ -149,12 +157,13 @@ async function groqChat(
 }
 
 export async function groqGenerateJson(
+  env: AiProviderEnv,
   apiKey: string,
   model: string,
   messages: GroqMessage[],
   maxOutputTokens: number,
 ): Promise<Record<string, unknown>> {
-  const content = await groqChat(apiKey, model, messages, {
+  const content = await groqChat(env, apiKey, model, messages, {
     json: true,
     maxTokens: maxOutputTokens,
     temperature: 0.2,
@@ -167,12 +176,13 @@ export async function groqGenerateJson(
 }
 
 export async function groqGenerateText(
+  env: AiProviderEnv,
   apiKey: string,
   model: string,
   messages: GroqMessage[],
   maxOutputTokens: number,
 ): Promise<string> {
-  return groqChat(apiKey, model, messages, {
+  return groqChat(env, apiKey, model, messages, {
     json: false,
     maxTokens: maxOutputTokens,
     temperature: 0.35,
