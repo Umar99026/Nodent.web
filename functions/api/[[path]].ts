@@ -40,6 +40,7 @@ import {
   ensurePracticeExamUsage,
   getPremiumUsageSummary,
   hasAiResponseUsageForRef,
+  hasUsageForRefSince,
   hasPracticeExamAccess,
   isPremiumAccount,
   premiumRequiredResponse,
@@ -1986,6 +1987,15 @@ async function runDbMigrations(db: ReturnType<typeof createDb>): Promise<void> {
         ALTER TABLE english_responses ADD COLUMN IF NOT EXISTS ai_highlights_json text
       `);
       await db.execute(sql`
+        ALTER TABLE english_responses ADD COLUMN IF NOT EXISTS ai_scoring_status text
+      `);
+      await db.execute(sql`
+        ALTER TABLE english_responses ADD COLUMN IF NOT EXISTS ai_scoring_error text
+      `);
+      await db.execute(sql`
+        ALTER TABLE english_responses ADD COLUMN IF NOT EXISTS ai_scoring_started_at text
+      `);
+      await db.execute(sql`
         ALTER TABLE english_responses ADD COLUMN IF NOT EXISTS is_public integer NOT NULL DEFAULT 0
       `);
       englishResponsesSchemaPatched = true;
@@ -2336,6 +2346,15 @@ async function ensureCoreTables(db: any) {
   `);
   await db.execute(sql`
     ALTER TABLE english_responses ADD COLUMN IF NOT EXISTS ai_highlights_json text
+  `);
+  await db.execute(sql`
+    ALTER TABLE english_responses ADD COLUMN IF NOT EXISTS ai_scoring_status text
+  `);
+  await db.execute(sql`
+    ALTER TABLE english_responses ADD COLUMN IF NOT EXISTS ai_scoring_error text
+  `);
+  await db.execute(sql`
+    ALTER TABLE english_responses ADD COLUMN IF NOT EXISTS ai_scoring_started_at text
   `);
   await db.execute(sql`
     ALTER TABLE english_responses ADD COLUMN IF NOT EXISTS is_public integer NOT NULL DEFAULT 0
@@ -5278,24 +5297,33 @@ async function runEnglishAiScore(
   const responseText = String(row.response_text ?? "").trim();
   if (responseText.length < 20) return null;
 
-  const reservation = await beginAiRequest({
-    db,
-    env,
-    requestKey: `english-score:${responseId}`,
-    userId,
-    route: "/api/english/responses/:id/ai-score",
-    feature: "english_essay_marking",
-    provider: "openai",
-    model: env.OPENAI_ENGLISH_MODEL || "gpt-4o-mini",
-    reservedCostUsd: openAiEnglishReservationUsd(env),
-  });
   const started = Date.now();
+  let reservation: Awaited<ReturnType<typeof beginAiRequest>> | null = null;
   const telemetry: {
     inputTokens: number; cachedInputTokens: number; outputTokens: number;
     totalTokens: number; estimatedCostUsd: number;
   }[] = [];
   let result;
   try {
+    const scoringStartedAt = nowIso();
+    await db.execute(sql`
+      UPDATE english_responses
+      SET ai_scoring_status = 'pending',
+          ai_scoring_error = NULL,
+          ai_scoring_started_at = ${scoringStartedAt}
+      WHERE id = ${responseId}
+    `);
+    reservation = await beginAiRequest({
+      db,
+      env,
+      requestKey: `english-score:${responseId}`,
+      userId,
+      route: "/api/english/responses/:id/ai-score",
+      feature: "english_essay_marking",
+      provider: "openai",
+      model: env.OPENAI_ENGLISH_MODEL || "gpt-4o-mini",
+      reservedCostUsd: openAiEnglishReservationUsd(env),
+    });
     const promptText = String(row.custom_prompt_text ?? row.prompt_text ?? "").trim();
     result = await scoreEnglishResponse(env, {
       promptText,
@@ -5307,38 +5335,52 @@ async function runEnglishAiScore(
       userId,
       onOpenAiRequest: (event) => telemetry.push(event),
     });
-  } catch (error) {
+    const now = nowIso();
+    await db.execute(sql`
+      UPDATE english_responses
+      SET ai_score = ${result.score},
+          ai_feedback = ${result.summary},
+          ai_criteria_json = ${JSON.stringify(result.criteria)},
+          ai_highlights_json = ${JSON.stringify(result.highlights)},
+          ai_scored_at = ${now},
+          ai_scoring_status = 'complete',
+          ai_scoring_error = NULL
+      WHERE id = ${responseId}
+    `);
     await finishAiRequest({
-      db, reservation, success: false, latencyMs: Date.now() - started,
+      db, reservation, success: true, latencyMs: Date.now() - started,
       inputTokens: telemetry.reduce((n, row) => n + row.inputTokens, 0),
       cachedInputTokens: telemetry.reduce((n, row) => n + row.cachedInputTokens, 0),
       outputTokens: telemetry.reduce((n, row) => n + row.outputTokens, 0),
       totalTokens: telemetry.reduce((n, row) => n + row.totalTokens, 0),
       actualCostUsd: telemetry.reduce((n, row) => n + row.estimatedCostUsd, 0),
-      errorCode: error instanceof Error ? error.name : "ai_error",
     });
+    return result;
+  } catch (error) {
+    if (reservation) {
+      await finishAiRequest({
+        db, reservation, success: false, latencyMs: Date.now() - started,
+        inputTokens: telemetry.reduce((n, row) => n + row.inputTokens, 0),
+        cachedInputTokens: telemetry.reduce((n, row) => n + row.cachedInputTokens, 0),
+        outputTokens: telemetry.reduce((n, row) => n + row.outputTokens, 0),
+        totalTokens: telemetry.reduce((n, row) => n + row.totalTokens, 0),
+        actualCostUsd: telemetry.reduce((n, row) => n + row.estimatedCostUsd, 0),
+        errorCode: error instanceof AiSafetyError
+          ? error.code
+          : error instanceof Error ? error.name : "ai_error",
+      }).catch(() => undefined);
+    }
+    const safeError = error instanceof AiSafetyError
+      ? error.message
+      : "Essay marking failed. Please retry.";
+    await db.execute(sql`
+      UPDATE english_responses
+      SET ai_scoring_status = 'failed',
+          ai_scoring_error = ${safeError}
+      WHERE id = ${responseId}
+    `).catch(() => undefined);
     throw error;
   }
-
-  const now = nowIso();
-  await db.execute(sql`
-    UPDATE english_responses
-    SET ai_score = ${result.score},
-        ai_feedback = ${result.summary},
-        ai_criteria_json = ${JSON.stringify(result.criteria)},
-        ai_highlights_json = ${JSON.stringify(result.highlights)},
-        ai_scored_at = ${now}
-    WHERE id = ${responseId}
-  `);
-  await finishAiRequest({
-    db, reservation, success: true, latencyMs: Date.now() - started,
-    inputTokens: telemetry.reduce((n, row) => n + row.inputTokens, 0),
-    cachedInputTokens: telemetry.reduce((n, row) => n + row.cachedInputTokens, 0),
-    outputTokens: telemetry.reduce((n, row) => n + row.outputTokens, 0),
-    totalTokens: telemetry.reduce((n, row) => n + row.totalTokens, 0),
-    actualCostUsd: telemetry.reduce((n, row) => n + row.estimatedCostUsd, 0),
-  });
-  return result;
 }
 
 function parseEnglishCriteriaJson(raw: unknown): Record<string, { score: number; feedback: string }> | null {
@@ -5382,6 +5424,10 @@ function mapEnglishResponseRow(r: Record<string, unknown>) {
     aiCriteria: parseEnglishCriteriaJson(r.ai_criteria_json),
     aiHighlights: parseEnglishHighlightsJson(r.ai_highlights_json),
     aiScoredAt: r.ai_scored_at != null ? String(r.ai_scored_at) : null,
+    aiScoringStatus: r.ai_scoring_status != null ? String(r.ai_scoring_status) : null,
+    aiScoringError: r.ai_scoring_error != null ? String(r.ai_scoring_error) : null,
+    aiScoringStartedAt:
+      r.ai_scoring_started_at != null ? String(r.ai_scoring_started_at) : null,
     isPublic: Number(r.is_public ?? 0) === 1,
   };
 }
@@ -7194,6 +7240,7 @@ app.post("/api/english/responses", authMiddleware, async (c: any) => {
     const aiConfigured = englishAiConfigured(env);
     let aiScore: Awaited<ReturnType<typeof runEnglishAiScore>> = null;
     let aiScoringPending = false;
+    let aiScoringError: string | null = null;
     let premiumBlocked = false;
     let premiumMessage: string | null = null;
     let canAiScore = false;
@@ -7228,7 +7275,6 @@ app.post("/api/english/responses", authMiddleware, async (c: any) => {
       }
     }
     if (canAiScore) {
-      const execCtx = c.executionCtx as { waitUntil?: (p: Promise<unknown>) => void } | undefined;
       const afterScore = async () => {
         try {
           const result = await runEnglishAiScore(db, env, responseId, user.id);
@@ -7239,19 +7285,13 @@ app.post("/api/english/responses", authMiddleware, async (c: any) => {
           throw error;
         }
       };
-      if (execCtx?.waitUntil) {
-        aiScoringPending = true;
-        execCtx.waitUntil(
-          afterScore().catch((err) => {
-            console.error("[english/responses POST ai-score async]", errorChain(err));
-          }),
-        );
-      } else {
-        try {
-          aiScore = await afterScore();
-        } catch (err) {
-          console.error("[english/responses POST ai-score]", errorChain(err));
-        }
+      try {
+        aiScore = await afterScore();
+      } catch (err) {
+        aiScoringError = err instanceof AiSafetyError
+          ? err.message
+          : "Essay marking failed. Please retry.";
+        console.error("[english/responses POST ai-score]", errorChain(err));
       }
     }
 
@@ -7260,6 +7300,7 @@ app.post("/api/english/responses", authMiddleware, async (c: any) => {
       id: responseId || undefined,
       aiScore,
       aiScoringPending,
+      aiScoringError,
       aiConfigured,
       premiumBlocked,
       premiumMessage,
@@ -7281,7 +7322,8 @@ app.get("/api/english/responses/:id", authMiddleware, async (c: any) => {
     const rows = await db.execute(sql`
       SELECT r.id, r.prompt_id, r.user_id, r.response_type, r.response_text, r.image_urls,
              r.custom_prompt_text, r.updated_at, r.ai_score, r.ai_feedback, r.ai_criteria_json,
-             r.ai_highlights_json, r.ai_scored_at,
+             r.ai_highlights_json, r.ai_scored_at, r.ai_scoring_status,
+             r.ai_scoring_error, r.ai_scoring_started_at,
              p.prompt_text, p.section, u.username
       FROM english_responses r
       LEFT JOIN english_prompts p ON p.id = r.prompt_id
@@ -7471,53 +7513,52 @@ app.post("/api/english/responses/:id/ai-score", authMiddleware, async (c: any) =
       return c.json({ ok: true, alreadyScored: true, aiScoringPending: false });
     }
 
-    if (!isPremiumAccount(user)) {
-      const check = await canRunEnglishAiMark(db, user.id);
-      if (!check.allowed) {
-        return c.json({ ...premiumRequiredResponse(), error: check.reason ?? premiumRequiredResponse().error }, 403);
-      }
-    }
-
     let englishUsageId: number | null = null;
+    let ownsUsageReservation = false;
     if (!isPremiumAccount(user)) {
-      englishUsageId = await reserveUsageSlot(
-        db,
-        user.id,
-        USAGE_KIND_ENGLISH_ESSAY_AI,
-        String(responseId),
-        new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-        FREE_ENGLISH_ESSAY_LIMIT,
+      const usageSince = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+      const existingReservation = await hasUsageForRefSince(
+        db, user.id, USAGE_KIND_ENGLISH_ESSAY_AI, String(responseId), usageSince,
       );
-      if (!englishUsageId) {
-        return c.json({ error: "Free English AI marking limit reached.", code: "ai_response_quota" }, 429);
+      if (!existingReservation) {
+        const check = await canRunEnglishAiMark(db, user.id);
+        if (!check.allowed) {
+          return c.json({ ...premiumRequiredResponse(), error: check.reason ?? premiumRequiredResponse().error }, 403);
+        }
+        englishUsageId = await reserveUsageSlot(
+          db,
+          user.id,
+          USAGE_KIND_ENGLISH_ESSAY_AI,
+          String(responseId),
+          usageSince,
+          FREE_ENGLISH_ESSAY_LIMIT,
+        );
+        ownsUsageReservation = Boolean(englishUsageId);
+        if (!englishUsageId) {
+          return c.json({ error: "Free English AI marking limit reached.", code: "ai_response_quota" }, 429);
+        }
       }
     }
 
-    const execCtx = c.executionCtx as { waitUntil?: (p: Promise<unknown>) => void } | undefined;
     const afterScore = async () => {
       try {
         const result = await runEnglishAiScore(db, env, responseId, user.id);
-        if (!result) await rollbackUsageSlot(db, englishUsageId);
+        if (!result && ownsUsageReservation) await rollbackUsageSlot(db, englishUsageId);
         return result;
       } catch (error) {
-        await rollbackUsageSlot(db, englishUsageId);
+        if (ownsUsageReservation) await rollbackUsageSlot(db, englishUsageId);
         throw error;
       }
     };
-    if (execCtx?.waitUntil) {
-      execCtx.waitUntil(
-        afterScore().catch((err) => {
-          console.error("[english/responses ai-score async]", errorChain(err));
-        }),
-      );
-      return c.json({ ok: true, aiScoringPending: true });
-    }
-
     const result = await afterScore();
     if (!result) return c.json({ error: "Could not score response (text too short or missing)." }, 400);
     return c.json({ ok: true, aiScore: result });
   } catch (e) {
-    return c.json({ error: errorChain(e) }, 500);
+    console.error("[english/responses ai-score]", errorChain(e));
+    if (e instanceof AiSafetyError) {
+      return c.json({ error: e.message, code: e.code }, aiSafetyStatus(e) as any);
+    }
+    return c.json({ error: "Essay marking failed. Please retry." }, 500);
   }
 });
 

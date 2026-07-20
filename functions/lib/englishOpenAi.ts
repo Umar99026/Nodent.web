@@ -46,6 +46,31 @@ function trim(s: string | undefined): string {
   return String(s ?? "").trim();
 }
 
+function parseProviderJson(content: string, provider: string): Record<string, unknown> {
+  const cleaned = String(content ?? "")
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+  const candidates = [cleaned];
+  const firstBrace = cleaned.indexOf("{");
+  const lastBrace = cleaned.lastIndexOf("}");
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    candidates.push(cleaned.slice(firstBrace, lastBrace + 1));
+  }
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      // Try the extracted object before reporting a provider-format error.
+    }
+  }
+  throw new Error(`${provider} returned invalid English marking JSON.`);
+}
+
 export function englishAiConfigured(env: EnglishOpenAiEnv): boolean {
   return !!trim(env.GEMINI_API_KEY) || !!trim(env.GEMINI_API_KEY_2) || !!trim(env.OPENAI_API_KEY);
 }
@@ -197,7 +222,7 @@ async function openAiChatJson(
       if (data.error?.message) throw new Error(`OpenAI error: ${String(data.error.message).slice(0, 300)}`);
       const content = String(data.choices?.[0]?.message?.content ?? "").trim();
       if (!content) throw new Error("OpenAI returned an empty response.");
-      const parsed = JSON.parse(content) as Record<string, unknown>;
+      const parsed = parseProviderJson(content, "OpenAI");
       const inputTokens = Number(data.usage?.prompt_tokens ?? approximateInputTokens);
       const cachedInputTokens = Number(data.usage?.prompt_tokens_details?.cached_tokens ?? 0);
       const outputTokens = Number(data.usage?.completion_tokens ?? Math.ceil(content.length / 4));
@@ -318,11 +343,7 @@ async function geminiChatJson(
     .join("\n");
   if (!content) throw new Error("Gemini returned an empty English marking response.");
 
-  try {
-    return JSON.parse(content) as Record<string, unknown>;
-  } catch {
-    throw new Error("Gemini returned invalid English marking JSON.");
-  }
+  return parseProviderJson(content, "Gemini");
 }
 
 type EnglishChatMessage = {
@@ -394,16 +415,27 @@ Return compact JSON only: {"score":0-10,"summary":"max 2 short sentences","crite
   const hasStrength = highlights.some((highlight) => highlight.type === "strength");
   const hasImprovement = highlights.some((highlight) => highlight.type === "improvement");
   if (responseText.length >= 80 && (!hasStrength || !hasImprovement)) {
-    parsed = await callEnglishProvider(env, [
-      ...messages,
-      { role: "assistant", content: JSON.stringify(parsed) },
-      {
-        role: "user",
-        content:
-          "Correct the full JSON. The highlights must include both exact-quote strengths and exact-quote improvements, with at least 2 of each. Keep all other required fields.",
-      },
-    ], context);
-    highlights = parseEnglishHighlights(parsed.highlights);
+    // Keep the repair request narrow: resend only the bounded essay and ask for highlights,
+    // rather than paying to resend the rubric, prompt, criteria, and first full response.
+    try {
+      const repaired = await callEnglishProvider(env, [
+        {
+          role: "system",
+          content:
+            "Return compact JSON only: {\"highlights\":[{\"quote\":\"exact substring\",\"type\":\"strength\"|\"improvement\",\"criterion\":\"structure\"|\"evidence\"|\"expression\"|\"relevance\",\"feedback\":\"one actionable sentence\"}]}. Include at least 2 strengths and 2 improvements.",
+        },
+        { role: "user", content: JSON.stringify({ response: responseText }) },
+      ], context);
+      const combined = [...highlights, ...parseEnglishHighlights(repaired.highlights)];
+      const strengths = combined.filter((item) => item.type === "strength").slice(0, 3);
+      const improvements = combined.filter((item) => item.type === "improvement").slice(0, 3);
+      highlights = [...strengths, ...improvements].slice(0, MAX_HIGHLIGHTS);
+    } catch (error) {
+      // The core score and criterion feedback are still useful; a failed optional repair must
+      // never leave the essay stuck in a pending state.
+      console.warn("[english-marking] Optional highlight repair failed.",
+        error instanceof Error ? error.message : "unknown error");
+    }
   }
 
   const criteria = {

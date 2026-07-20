@@ -259,7 +259,7 @@ export function RichQuestionContent({
         rehypePlugins={[
           rehypeRaw,
           [rehypeSanitize, sanitizeSchema],
-          rehypeKatex,
+          [rehypeKatex, { throwOnError: false, strict: "ignore", errorColor: "#334155" }],
         ]}
         components={{
           ...(overviewMode
@@ -284,18 +284,22 @@ export function RichQuestionContent({
                 ),
               }
             : {}),
-          img: ({ node: _n, ...props }) => (
-            <img
-              {...props}
-              className={cn(
-                "max-h-[min(70vh,560px)] w-auto max-w-full rounded-lg border border-black/10 bg-muted/20 object-contain",
-                props.className,
-              )}
-              loading="lazy"
-              decoding="async"
-              alt={props.alt ?? ""}
-            />
-          ),
+          img: (imageProps) => {
+            const { node, ...props } = imageProps;
+            void node;
+            return (
+              <img
+                {...props}
+                className={cn(
+                  "max-h-[min(70vh,560px)] w-auto max-w-full rounded-lg border border-black/10 bg-muted/20 object-contain",
+                  props.className,
+                )}
+                loading="lazy"
+                decoding="async"
+                alt={props.alt ?? ""}
+              />
+            );
+          },
         }}
       >
         {body}

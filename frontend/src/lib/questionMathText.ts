@@ -70,6 +70,29 @@ function repairMathInner(src: string): string {
   // Remove empty \text{} that sometimes appears in imported questions.
   out = out.replace(/\\text\{\s*\}/g, "");
 
+  // Repair a missing numerator/denominator brace from AI or PDF imports.
+  // Valid fractions are untouched because they already contain the numerator's closing brace.
+  out = out.replace(
+    /\\frac\{((?:[^{}=]|\{[^{}]*\})+)\{([^{}]+)\}(?=\s*(?:=|[.,;)]|$))/g,
+    "\\frac{$1}{$2}",
+  );
+  out = out.replace(
+    /\\frac\{((?:[^{}]|\{[^{}]*\})+)\}\{([^{}$\n]+)(?=$)/g,
+    "\\frac{$1}{$2}",
+  );
+
+  // A lone \left or \right makes KaTeX reject the entire expression.
+  const leftCount = (out.match(/\\left\b/g) ?? []).length;
+  const rightCount = (out.match(/\\right\b/g) ?? []).length;
+  if (leftCount > rightCount) out = out.replace(/\\left\b/g, "");
+  if (rightCount > leftCount) out = out.replace(/\\right\b/g, "");
+
+  // Conservatively close one or two braces lost at the end of an imported expression.
+  const openBraces = (out.match(/(?<!\\)\{/g) ?? []).length;
+  const closeBraces = (out.match(/(?<!\\)\}/g) ?? []).length;
+  const missingBraces = openBraces - closeBraces;
+  if (missingBraces > 0 && missingBraces <= 2) out += "}".repeat(missingBraces);
+
   // If trig functions appear without a leading backslash, add it.
   // (e.g. `sin\pi` → `\sin\pi`)
   out = out.replace(/(^|[^\\])\b(sin|cos|tan)\b/gi, (_m, pre: string, fn: string) => {
@@ -360,6 +383,18 @@ export function repairCommonMathGlitches(text: string): string {
   // PDF copy/paste sometimes injects "function application" characters (e.g. "Pr⁡").
   out = out.replace(/[\u2061\u2062\u2063]/g, "");
 
+  // `$expression$$.` is a common one-extra-dollar import error. Keep it inline.
+  out = out.replace(
+    /(?<!\$)\$(?!\$)([^$\n]+)\$\$(?!\$)(?=[.,;:!?)]|$)/g,
+    (_match, inner: string) => `$${inner.trim()}$`,
+  );
+
+  // Apply the same missing-brace fraction repair used for feedback to stored questions.
+  out = out.replace(
+    /\\frac\{((?:[^{}=]|\{[^{}]*\})+)\{([^{}]+)\}(?=\s*(?:=|[.,;)]|\$|$))/g,
+    "\\frac{$1}{$2}",
+  );
+
   // A common Sheets/PDF import loses the opening `$` but keeps a trailing `$$`, e.g.
   // `Find \frac{d}{dx}\left\frac{x^2+1}{e^x}\right$$.`. Restore a single
   // inline pair before the normal left/right repair runs.
@@ -413,6 +448,7 @@ export function repairLeftRightDelimiters(text: string): string {
   let out = String(text ?? "");
   out = out.replace(/\\left\\(dfrac|tfrac|frac|sin|cos|tan)/g, "\\left(\\$1");
   out = out.replace(/\\left\s+(\\(?:dfrac|tfrac|frac|sin|cos|tan))/g, "\\left($1");
+  out = out.replace(/\\left\s*\\frac/g, "\\left(\\frac");
   out = out.replace(/\\right(?=\s*\$)/g, "\\right)");
   return out;
 }

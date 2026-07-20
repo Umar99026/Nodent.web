@@ -104,6 +104,39 @@ export async function countUsageSince(
   return Number((rows.rows as { n?: number }[] | undefined)?.[0]?.n ?? 0);
 }
 
+/**
+ * Reconcile English reservations that never produced a score. Older versions
+ * launched marking in a background task, so a killed task could consume the
+ * three-day allowance permanently even though the user received no result.
+ */
+async function countEnglishUsageSince(
+  db: { execute: (q: ReturnType<typeof sql>) => Promise<{ rows?: unknown[] }> },
+  userId: number,
+  sinceIso: string,
+): Promise<number> {
+  const staleBefore = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+  await db.execute(sql`
+    DELETE FROM user_usage_events AS event
+    WHERE event.user_id = ${userId}
+      AND event.kind = ${USAGE_KIND_ENGLISH_ESSAY_AI}
+      AND event.created_at >= ${sinceIso}
+      AND event.created_at < ${staleBefore}
+      AND NOT EXISTS (
+        SELECT 1
+        FROM english_responses AS response
+        WHERE response.id::text = event.ref_key
+          AND (
+            response.ai_scored_at IS NOT NULL
+            OR (
+              response.ai_scoring_status = 'pending'
+              AND response.ai_scoring_started_at >= ${staleBefore}
+            )
+          )
+      )
+  `);
+  return countUsageSince(db, userId, USAGE_KIND_ENGLISH_ESSAY_AI, sinceIso);
+}
+
 export async function recordUsage(
   db: { execute: (q: ReturnType<typeof sql>) => Promise<unknown> },
   userId: number,
@@ -162,6 +195,24 @@ export async function hasAiResponseUsageForRef(
       AND kind = ${USAGE_KIND_AI_RESPONSE}
       AND ref_key = ${refKey}
       AND created_at >= ${startOfUtcDayIso()}
+    LIMIT 1
+  `);
+  return Boolean((rows.rows as unknown[] | undefined)?.length);
+}
+
+export async function hasUsageForRefSince(
+  db: { execute: (q: ReturnType<typeof sql>) => Promise<{ rows?: unknown[] }> },
+  userId: number,
+  kind: string,
+  refKey: string,
+  sinceIso: string,
+): Promise<boolean> {
+  const rows = await db.execute(sql`
+    SELECT id FROM user_usage_events
+    WHERE user_id = ${userId}
+      AND kind = ${kind}
+      AND ref_key = ${refKey}
+      AND created_at >= ${sinceIso}
     LIMIT 1
   `);
   return Boolean((rows.rows as unknown[] | undefined)?.length);
@@ -249,7 +300,7 @@ export async function canRunEnglishAiMark(
   userId: number,
 ): Promise<{ allowed: boolean; reason?: string }> {
   const since = new Date(Date.now() - ENGLISH_ESSAY_WINDOW_MS).toISOString();
-  const n = await countUsageSince(db, userId, USAGE_KIND_ENGLISH_ESSAY_AI, since);
+  const n = await countEnglishUsageSince(db, userId, since);
   if (n >= FREE_ENGLISH_ESSAY_LIMIT) {
     return {
       allowed: false,
@@ -270,12 +321,7 @@ export async function getPremiumUsageSummary(
   const essaySince = new Date(Date.now() - ENGLISH_ESSAY_WINDOW_MS).toISOString();
   const examsUsed = await countUsageSince(db, userId, "practice_exam", examSince);
   const aiResponsesUsed = await countUsageSince(db, userId, USAGE_KIND_AI_RESPONSE, daySince);
-  const englishEssaysUsed = await countUsageSince(
-    db,
-    userId,
-    USAGE_KIND_ENGLISH_ESSAY_AI,
-    essaySince,
-  );
+  const englishEssaysUsed = await countEnglishUsageSince(db, userId, essaySince);
   return {
     isPremium,
     practiceExams: {

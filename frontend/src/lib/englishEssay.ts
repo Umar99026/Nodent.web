@@ -28,6 +28,9 @@ export type EnglishEssayResponse = {
   aiCriteria: Partial<Record<EnglishCriterionKey, EnglishCriterionScore>> | null;
   aiHighlights: EnglishHighlight[];
   aiScoredAt: string | null;
+  aiScoringStatus?: "pending" | "complete" | "failed" | null;
+  aiScoringError?: string | null;
+  aiScoringStartedAt?: string | null;
   isPublic?: boolean;
 };
 

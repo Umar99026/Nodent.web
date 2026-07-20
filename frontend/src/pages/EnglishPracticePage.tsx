@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { API_PATHS } from "@/lib/constants";
-import { apiFetch } from "@/lib/api";
+import { AI_FETCH_TIMEOUT_MS, apiFetch } from "@/lib/api";
 import { isPremiumUser, PREMIUM_PATH } from "@/lib/premium";
 import { PremiumGate } from "@/components/premium/GetPremiumButton";
 import { usePremiumUsage } from "@/hooks/usePremiumUsage";
@@ -19,6 +19,7 @@ import {
   Loader2,
   MessageSquareQuote,
   PenLine,
+  RefreshCw,
   SendHorizontal,
   Sparkles,
   Upload,
@@ -36,6 +37,7 @@ type SubmitResult = {
     highlights: EnglishEssayResponse["aiHighlights"];
   } | null;
   aiScoringPending?: boolean;
+  aiScoringError?: string | null;
   aiConfigured?: boolean;
   premiumBlocked?: boolean;
   premiumMessage?: string | null;
@@ -62,6 +64,18 @@ function mergeResponse(
     aiCriteria: patch.aiCriteria !== undefined ? patch.aiCriteria : (base?.aiCriteria ?? null),
     aiHighlights: patch.aiHighlights ?? base?.aiHighlights ?? [],
     aiScoredAt: patch.aiScoredAt !== undefined ? patch.aiScoredAt : (base?.aiScoredAt ?? null),
+    aiScoringStatus:
+      patch.aiScoringStatus !== undefined
+        ? patch.aiScoringStatus
+        : (base?.aiScoringStatus ?? null),
+    aiScoringError:
+      patch.aiScoringError !== undefined
+        ? patch.aiScoringError
+        : (base?.aiScoringError ?? null),
+    aiScoringStartedAt:
+      patch.aiScoringStartedAt !== undefined
+        ? patch.aiScoringStartedAt
+        : (base?.aiScoringStartedAt ?? null),
   };
 }
 
@@ -129,14 +143,68 @@ export function EnglishPracticePanel() {
           toast.success(`Marked: ${row.aiScore}/10`);
           return;
         }
+        if (row.aiScoringStatus === "failed") {
+          toast.error(row.aiScoringError || "Essay marking failed. Please retry.");
+          return;
+        }
       }
-      toast.message("Marking is taking longer than usual. Check back shortly.");
+      const timeoutMessage = "Marking timed out. Your essay is saved — retry when ready.";
+      setResult((prev) => mergeResponse(prev, {
+        aiScoringStatus: "failed",
+        aiScoringError: timeoutMessage,
+      }));
+      toast.error(timeoutMessage);
     } catch {
       toast.error("Could not load marking results.");
     } finally {
       setPolling(false);
     }
   }, [reloadUsage]);
+
+  const retryScore = useCallback(async () => {
+    const responseId = result?.id ?? 0;
+    if (!responseId || submittingRef.current) return;
+    submittingRef.current = true;
+    setSubmitting(true);
+    setResult((prev) => mergeResponse(prev, {
+      aiScoringStatus: "pending",
+      aiScoringError: null,
+    }));
+    try {
+      const retry = await apiFetch<SubmitResult>(
+        `${API_PATHS.english.responses}/${responseId}/ai-score`,
+        { method: "POST", timeoutMs: AI_FETCH_TIMEOUT_MS },
+      );
+      if (retry.aiScore?.score != null) {
+        setResult((prev) => mergeResponse(prev, {
+          aiScore: retry.aiScore?.score ?? null,
+          aiFeedback: retry.aiScore?.summary ?? null,
+          aiCriteria: retry.aiScore?.criteria ?? null,
+          aiHighlights: retry.aiScore?.highlights ?? [],
+          aiScoredAt: new Date().toISOString(),
+          aiScoringStatus: "complete",
+          aiScoringError: null,
+        }));
+        void reloadUsage();
+        toast.success(`Marked: ${retry.aiScore.score}/10`);
+      } else if (retry.aiScoringPending) {
+        void pollForScore(responseId);
+      } else {
+        const refreshed = await loadEssayResponse(responseId);
+        setResult((prev) => mergeResponse(prev, refreshed));
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Essay marking failed. Please retry.";
+      setResult((prev) => mergeResponse(prev, {
+        aiScoringStatus: "failed",
+        aiScoringError: message,
+      }));
+      toast.error(message);
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
+    }
+  }, [pollForScore, reloadUsage, result?.id]);
 
   const handleSubmit = async () => {
     if (submittingRef.current) return;
@@ -151,6 +219,7 @@ export function EnglishPracticePanel() {
     try {
       const submitResult = await apiFetch<SubmitResult>(API_PATHS.english.responses, {
         method: "POST",
+        timeoutMs: AI_FETCH_TIMEOUT_MS,
         body: JSON.stringify({
           customPrompt: customPrompt.trim() || undefined,
           responseType: "essay",
@@ -175,6 +244,15 @@ export function EnglishPracticePanel() {
         aiCriteria: submitResult.aiScore?.criteria ?? null,
         aiHighlights: submitResult.aiScore?.highlights ?? [],
         aiScoredAt: submitResult.aiScore ? new Date().toISOString() : null,
+        aiScoringStatus: submitResult.aiScore
+          ? "complete"
+          : submitResult.aiScoringError
+            ? "failed"
+            : submitResult.aiScoringPending
+              ? "pending"
+              : null,
+        aiScoringError: submitResult.aiScoringError ?? null,
+        aiScoringStartedAt: submitResult.aiScoringPending ? new Date().toISOString() : null,
       };
       setResult(base);
       setEssayText("");
@@ -194,6 +272,8 @@ export function EnglishPracticePanel() {
       } else if (submitResult.aiScoringPending && submitResult.id) {
         toast.message("Essay submitted. Marking in progress…");
         void pollForScore(submitResult.id);
+      } else if (submitResult.aiScoringError) {
+        toast.error(submitResult.aiScoringError);
       } else if (responseText.length < 20) {
         toast.success("Essay saved. Write at least 20 characters for marking.");
       } else if (submitResult.aiConfigured === false) {
@@ -455,7 +535,24 @@ export function EnglishPracticePanel() {
               criteria={result.aiCriteria}
               summary={result.aiFeedback}
             />
-          ) : polling ? (
+          ) : result.aiScoringStatus === "failed" ? (
+            <div className="flex flex-col gap-4 rounded-2xl border border-danger/20 bg-danger/[0.04] px-6 py-6 sm:flex-row sm:items-center sm:justify-between">
+              <p className="font-display text-sm text-danger">
+                {result.aiScoringError || "Essay marking failed. Your essay is saved."}
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="shrink-0 gap-2 border-danger/25 bg-white"
+                disabled={submitting || polling}
+                onClick={() => void retryScore()}
+              >
+                <RefreshCw className="size-4" />
+                Retry marking
+              </Button>
+            </div>
+          ) : polling || result.aiScoringStatus === "pending" ? (
             <div className="flex items-center gap-3 rounded-2xl border border-black/8 bg-[#f8fafc] px-6 py-8">
               <Loader2 className="size-5 animate-spin text-brand" />
               <p className="font-display text-sm text-[#475569]">Marking your essay…</p>

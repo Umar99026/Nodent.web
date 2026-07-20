@@ -127,10 +127,13 @@ export async function beginAiRequest(input: {
   }
   await ensureAiSafetyTable(db);
   // A deliberate user retry may replace a completed failed attempt; successful and pending
-  // requests remain immutable deduplication records.
+  // requests remain immutable deduplication records. A worker that was terminated before its
+  // finally block must not leave the feature locked forever.
+  const stalePendingBefore = new Date(Date.now() - 10 * 60 * 1000).toISOString();
   await db.execute(sql`
     DELETE FROM ai_request_events
-    WHERE request_key = ${input.requestKey} AND status = 'failed'
+    WHERE request_key = ${input.requestKey}
+      AND (status = 'failed' OR (status = 'pending' AND created_at < ${stalePendingBefore}))
   `);
 
   const userLimit = Math.round(

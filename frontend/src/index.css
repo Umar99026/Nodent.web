@@ -712,6 +712,11 @@
   -webkit-overflow-scrolling: touch;
 }
 
+/* Malformed legacy imports fall back to readable source text instead of KaTeX red. */
+.rich-question-content .katex-error {
+  color: inherit !important;
+}
+
 .rich-question-content table {
   display: block;
   width: max-content;
