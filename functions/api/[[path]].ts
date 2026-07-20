@@ -24,7 +24,12 @@ import {
   generateMarkBreakdown,
   type SubjectMarkingContext,
 } from "../lib/openai";
-import { englishAiConfigured, scoreEnglishResponse } from "../lib/englishOpenAi";
+import {
+  englishAiConfigured,
+  englishAiReservationDetails,
+  englishAiUserMessage,
+  scoreEnglishResponse,
+} from "../lib/englishOpenAi";
 import {
   AiSafetyError,
   aiSafetyStatus,
@@ -5313,6 +5318,7 @@ async function runEnglishAiScore(
           ai_scoring_started_at = ${scoringStartedAt}
       WHERE id = ${responseId}
     `);
+    const reservationDetails = englishAiReservationDetails(env);
     reservation = await beginAiRequest({
       db,
       env,
@@ -5320,9 +5326,11 @@ async function runEnglishAiScore(
       userId,
       route: "/api/english/responses/:id/ai-score",
       feature: "english_essay_marking",
-      provider: "openai",
-      model: env.OPENAI_ENGLISH_MODEL || "gpt-4o-mini",
-      reservedCostUsd: openAiEnglishReservationUsd(env),
+      provider: reservationDetails.provider,
+      model: reservationDetails.model,
+      reservedCostUsd: reservationDetails.provider === "openai"
+        ? openAiEnglishReservationUsd(env)
+        : 0,
     });
     const promptText = String(row.custom_prompt_text ?? row.prompt_text ?? "").trim();
     result = await scoreEnglishResponse(env, {
@@ -5372,7 +5380,7 @@ async function runEnglishAiScore(
     }
     const safeError = error instanceof AiSafetyError
       ? error.message
-      : "Essay marking failed. Please retry.";
+      : englishAiUserMessage(error);
     await db.execute(sql`
       UPDATE english_responses
       SET ai_scoring_status = 'failed',
@@ -7290,7 +7298,7 @@ app.post("/api/english/responses", authMiddleware, async (c: any) => {
       } catch (err) {
         aiScoringError = err instanceof AiSafetyError
           ? err.message
-          : "Essay marking failed. Please retry.";
+          : englishAiUserMessage(err);
         console.error("[english/responses POST ai-score]", errorChain(err));
       }
     }
@@ -7558,7 +7566,7 @@ app.post("/api/english/responses/:id/ai-score", authMiddleware, async (c: any) =
     if (e instanceof AiSafetyError) {
       return c.json({ error: e.message, code: e.code }, aiSafetyStatus(e) as any);
     }
-    return c.json({ error: "Essay marking failed. Please retry." }, 500);
+    return c.json({ error: englishAiUserMessage(e) }, 500);
   }
 });
 
