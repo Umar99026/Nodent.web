@@ -42,6 +42,52 @@ const MAX_CRITERION_FEEDBACK_CHARS = 220;
 const MAX_HIGHLIGHT_FEEDBACK_CHARS = 180;
 const MAX_HIGHLIGHTS = 6;
 
+const ENGLISH_RESPONSE_SCHEMA = {
+  type: "object",
+  properties: {
+    score: { type: "integer", minimum: 0, maximum: 10 },
+    summary: { type: "string" },
+    criteria: {
+      type: "object",
+      properties: {
+        structure: { $ref: "#/$defs/criterion" },
+        evidence: { $ref: "#/$defs/criterion" },
+        expression: { $ref: "#/$defs/criterion" },
+        relevance: { $ref: "#/$defs/criterion" },
+      },
+      required: ["structure", "evidence", "expression", "relevance"],
+    },
+    highlights: {
+      type: "array",
+      maxItems: MAX_HIGHLIGHTS,
+      items: {
+        type: "object",
+        properties: {
+          quote: { type: "string" },
+          type: { type: "string", enum: ["strength", "improvement"] },
+          criterion: {
+            type: "string",
+            enum: ["structure", "evidence", "expression", "relevance"],
+          },
+          feedback: { type: "string" },
+        },
+        required: ["quote", "type", "criterion", "feedback"],
+      },
+    },
+  },
+  required: ["score", "summary", "criteria", "highlights"],
+  $defs: {
+    criterion: {
+      type: "object",
+      properties: {
+        score: { type: "integer", minimum: 0, maximum: 10 },
+        feedback: { type: "string" },
+      },
+      required: ["score", "feedback"],
+    },
+  },
+} as const;
+
 function trim(s: string | undefined): string {
   return String(s ?? "").trim();
 }
@@ -77,6 +123,40 @@ export function englishAiConfigured(env: EnglishOpenAiEnv): boolean {
 
 export function englishAiModel(env: EnglishOpenAiEnv): string {
   return trim(env.OPENAI_ENGLISH_MODEL) || DEFAULT_ENGLISH_MODEL;
+}
+
+export function englishAiReservationDetails(env: EnglishOpenAiEnv): {
+  provider: "gemini" | "openai";
+  model: string;
+} {
+  if (trim(env.GEMINI_API_KEY) || trim(env.GEMINI_API_KEY_2)) {
+    return {
+      provider: "gemini",
+      model: trim(env.GEMINI_ENGLISH_MODEL) || DEFAULT_GEMINI_ENGLISH_MODEL,
+    };
+  }
+  return { provider: "openai", model: englishAiModel(env) };
+}
+
+/** A useful user-facing category without leaking provider payloads or credentials. */
+export function englishAiUserMessage(error: unknown): string {
+  const message = String(error instanceof Error ? error.message : error);
+  if (/abort|timeout/i.test(message)) {
+    return "Essay marking timed out. Please retry.";
+  }
+  if (/\b429\b|quota|rate.?limit|capacity|overload/i.test(message)) {
+    return "Essay marking is temporarily at capacity. Please retry shortly.";
+  }
+  if (/\b(401|403)\b|api.?key|permission/i.test(message)) {
+    return "Essay marking is temporarily unavailable because its AI connection was rejected.";
+  }
+  if (/\b404\b|model.+(?:missing|not found|unavailable)/i.test(message)) {
+    return "The configured essay-marking model is temporarily unavailable.";
+  }
+  if (/invalid.+json|empty.+response|max_tokens|finish reason/i.test(message)) {
+    return "The AI could not finish a valid essay mark. Please retry.";
+  }
+  return "Essay marking failed. Please retry.";
 }
 
 export type EnglishCriterionKey = "structure" | "evidence" | "expression" | "relevance";
@@ -323,6 +403,10 @@ async function geminiChatJson(
           temperature: 0.2,
           maxOutputTokens: MAX_OUTPUT_TOKENS,
           responseMimeType: "application/json",
+          responseJsonSchema: ENGLISH_RESPONSE_SCHEMA,
+          // Gemini 2.5 otherwise uses dynamic hidden thinking, which can consume the
+          // entire capped output budget before producing the JSON the user needs.
+          thinkingConfig: /^gemini-2\.5-/i.test(model) ? { thinkingBudget: 0 } : undefined,
         },
       }),
     },
@@ -333,15 +417,23 @@ async function geminiChatJson(
     throw new Error(`Gemini English error (${res.status}): ${detail.slice(0, 600)}`);
   }
   const data = (await res.json()) as {
-    candidates?: { content?: { parts?: { text?: string }[] } }[];
+    candidates?: {
+      finishReason?: string;
+      content?: { parts?: { text?: string }[] };
+    }[];
     error?: { message?: string };
   };
   if (data.error?.message) throw new Error(`Gemini English error: ${data.error.message}`);
-  const content = data.candidates?.[0]?.content?.parts
+  const candidate = data.candidates?.[0];
+  const content = candidate?.content?.parts
     ?.map((part) => String(part.text ?? "").trim())
     .filter(Boolean)
     .join("\n");
-  if (!content) throw new Error("Gemini returned an empty English marking response.");
+  if (!content) {
+    throw new Error(
+      `Gemini returned an empty English marking response (finish reason: ${candidate?.finishReason ?? "unknown"}).`,
+    );
+  }
 
   return parseProviderJson(content, "Gemini");
 }
@@ -360,21 +452,39 @@ async function callEnglishProvider(
     ...new Set([trim(env.GEMINI_API_KEY), trim(env.GEMINI_API_KEY_2)].filter(Boolean)),
   ];
   let lastGeminiError: unknown;
-  for (const apiKey of geminiKeys) {
+  const preferredGeminiModel = trim(env.GEMINI_ENGLISH_MODEL) || DEFAULT_GEMINI_ENGLISH_MODEL;
+  for (let index = 0; index < geminiKeys.length; index += 1) {
+    const apiKey = geminiKeys[index]!;
     try {
       return await geminiChatJson(
         env,
         apiKey,
-        trim(env.GEMINI_ENGLISH_MODEL) || DEFAULT_GEMINI_ENGLISH_MODEL,
+        preferredGeminiModel,
         messages,
       );
     } catch (error) {
       lastGeminiError = error;
-      const retryable = /\b(408|409|429|5\d\d)\b|quota|rate.?limit|overload|capacity|abort|timeout/i.test(
-        String(error instanceof Error ? error.message : error),
-      );
-      if (!retryable) throw error;
-      console.warn("[english-marking] Gemini temporarily failed; trying the next provider.");
+      const message = String(error instanceof Error ? error.message : error);
+      const retryable = /\b(401|403|408|409|429|5\d\d)\b|quota|rate.?limit|overload|capacity|abort|timeout/i.test(message);
+      if (!retryable || index === geminiKeys.length - 1) break;
+      console.warn("[english-marking] Gemini key failed; trying the next configured key.");
+    }
+  }
+
+  // One cheap, capped fallback model attempt handles a temporarily unavailable
+  // primary model or an exhausted primary-model quota without an unbounded retry loop.
+  const geminiFailure = String(
+    lastGeminiError instanceof Error ? lastGeminiError.message : lastGeminiError ?? "",
+  );
+  const canTryLiteFallback = geminiKeys.length > 0 &&
+    preferredGeminiModel === DEFAULT_GEMINI_ENGLISH_MODEL &&
+    /\b(404|408|409|429|5\d\d)\b|quota|rate.?limit|overload|capacity|empty|invalid.+json|abort|timeout/i.test(geminiFailure);
+  if (canTryLiteFallback) {
+    try {
+      return await geminiChatJson(env, geminiKeys[0]!, "gemini-2.5-flash-lite", messages);
+    } catch (error) {
+      lastGeminiError = error;
+      console.warn("[english-marking] Gemini fallback model failed.");
     }
   }
 
