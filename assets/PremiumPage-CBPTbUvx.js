@@ -1,1 +1,0 @@
-import{z as e}from"./button-PA9U5EVN.js";import{t}from"./AppShell-WHp4kuw2.js";import{t as n}from"./PremiumPlanPanel-CU431qOo.js";var r=e();function i(){return(0,r.jsx)(t,{title:`Plan & limits`,subtitle:`Compare Free and Pro, then upgrade securely with Stripe`,children:(0,r.jsx)(`div`,{className:`mx-auto max-w-5xl`,children:(0,r.jsx)(n,{})})})}export{i as default};

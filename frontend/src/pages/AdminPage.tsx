@@ -163,11 +163,12 @@ type AdminRecentUser = {
   username: string;
   email: string;
   createdAt: string;
+  questionsCompleted: number;
 };
 
 function formatSignupWhen(createdAt: string): string {
   const d = new Date(createdAt);
-  if (Number.isNaN(d.getTime())) return createdAt || "â€”";
+  if (Number.isNaN(d.getTime())) return createdAt || "—";
   return d.toLocaleString(undefined, {
     dateStyle: "medium",
     timeStyle: "short",
@@ -678,7 +679,7 @@ export default function AdminPage() {
     try {
       setRecentUsersLoading(true);
       const data = await apiFetchAdmin<{ users?: AdminRecentUser[]; total?: number }>(
-        `${API_PATHS.admin.users}?limit=10`,
+        API_PATHS.admin.users,
       );
       setRecentUsers(Array.isArray(data?.users) ? data.users : []);
       setTotalUsers(Number(data?.total ?? 0));
@@ -1796,10 +1797,10 @@ export default function AdminPage() {
             <div className="space-y-1">
               <CardTitle className="flex items-center gap-2 font-display text-lg">
                 <UserPlus className="size-5 text-brand" />
-                Recent signups
+                Users
               </CardTitle>
               <p className="text-sm text-muted-foreground">
-                {totalUsers} real account{totalUsers === 1 ? "" : "s"} â€” latest 10 shown
+                {totalUsers} real account{totalUsers === 1 ? "" : "s"} — newest first
               </p>
             </div>
             <Button
@@ -1822,28 +1823,36 @@ export default function AdminPage() {
             {recentUsersLoading && recentUsers.length === 0 ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="size-4 animate-spin" />
-                Loading signupsâ€¦
+                Loading users…
               </div>
             ) : recentUsers.length === 0 ? (
               <p className="text-sm text-muted-foreground">No signups yet.</p>
             ) : (
-              <div className="overflow-x-auto rounded-lg border border-black/10">
+              <div className="max-h-[28rem] overflow-auto rounded-lg border border-black/10">
                 <table className="w-full min-w-[520px] text-left text-sm">
-                  <thead className="bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
+                  <thead className="sticky top-0 z-10 bg-muted text-xs uppercase tracking-wide text-muted-foreground shadow-[0_1px_0_rgba(0,0,0,0.08)]">
                     <tr>
                       <th className="px-3 py-2 font-medium">When</th>
                       <th className="px-3 py-2 font-medium">Username</th>
                       <th className="px-3 py-2 font-medium">Email</th>
+                      <th className="whitespace-nowrap px-3 py-2 text-right font-medium">
+                        Questions completed
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
                     {recentUsers.map((u) => (
-                      <tr key={u.id} className="border-t border-black/5">
+                      <tr key={u.id} className="border-t border-black/5 even:bg-muted/20">
                         <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">
                           {formatSignupWhen(u.createdAt)}
                         </td>
-                        <td className="px-3 py-2 font-medium">{u.username || "â€”"}</td>
+                        <td className="px-3 py-2 font-medium">{u.username || "—"}</td>
                         <td className="px-3 py-2">{u.email}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">
+                          <span className="inline-flex min-w-8 justify-center rounded-full bg-brand/10 px-2 py-0.5 font-semibold text-brand">
+                            {u.questionsCompleted}
+                          </span>
+                        </td>
                       </tr>
                     ))}
                   </tbody>

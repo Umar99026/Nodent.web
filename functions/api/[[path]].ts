@@ -6771,31 +6771,30 @@ function publicLeaderboardUsername(userId: unknown, email: unknown, username: un
 
 app.get("/api/admin/users", adminAccessMiddleware, async (c: any) => {
   const db = c.get("db");
-  const limitRaw = Number(c.req.query("limit") ?? 10);
-  const limit = Number.isFinite(limitRaw)
-    ? Math.min(Math.max(Math.trunc(limitRaw), 1), 50)
-    : 10;
-  const rows = await db
-    .select({
-      id: users.id,
-      username: users.username,
-      email: users.email,
-      createdAt: users.createdAt,
-    })
-    .from(users)
-    .where(and(notSmokeTestUser, notDemoTestUser))
-    .orderBy(desc(users.createdAt))
-    .limit(limit);
-  const countResult = await db.execute(
-    sql`SELECT COUNT(*)::int AS count
-        FROM users
-        WHERE LOWER(email) NOT LIKE ${`%${SMOKE_TEST_EMAIL_SUFFIX}`}
-          AND LOWER(email) NOT LIKE '%@nodent-demo.test'
-          AND LOWER(username) NOT LIKE 'demo%'
-          AND LOWER(username) NOT LIKE 'test%'`,
-  );
-  const total = Number((countResult.rows?.[0] as { count?: number })?.count ?? 0);
-  return c.json({ users: rows, total });
+  const result = await db.execute(sql`
+    SELECT
+      u.id,
+      u.username,
+      u.email,
+      u.created_at,
+      COUNT(qa.id)::int AS questions_completed
+    FROM users AS u
+    LEFT JOIN question_attempts AS qa ON qa.user_id = u.id
+    WHERE LOWER(COALESCE(u.email, '')) NOT LIKE ${`%${SMOKE_TEST_EMAIL_SUFFIX}`}
+      AND LOWER(COALESCE(u.email, '')) NOT LIKE '%@nodent-demo.test'
+      AND LOWER(COALESCE(u.username, '')) NOT LIKE 'demo%'
+      AND LOWER(COALESCE(u.username, '')) NOT LIKE 'test%'
+    GROUP BY u.id, u.username, u.email, u.created_at
+    ORDER BY u.created_at DESC, u.id DESC
+  `);
+  const rows = (result.rows as Array<Record<string, unknown>>).map((row) => ({
+    id: Number(row.id),
+    username: String(row.username ?? ""),
+    email: String(row.email ?? ""),
+    createdAt: String(row.created_at ?? ""),
+    questionsCompleted: Number(row.questions_completed ?? 0),
+  }));
+  return c.json({ users: rows, total: rows.length });
 });
 
 app.get("/api/admin/feedback", adminAccessMiddleware, async (c: any) => {
